@@ -1,0 +1,18 @@
+# Generated tables
+src/tables.asm
+src/uifont.asm
+
+# Build outputs
+*.prg
+*.lbl
+*.o
+*.sym
+__pycache__/
+*.pyc
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/

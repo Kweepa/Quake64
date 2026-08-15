@@ -1,0 +1,2067 @@
+
+; ******** Source: quake64.asm
+     1                          ; Quake64 — Step 1 core line engine (VIC Bank 3, raster split, Bresenham cube)
+     2                          !cpu 6510
+     3                          !to "quake64.prg", cbm
+     4                          
+
+; ******** Source: mem.asm
+     1                          ; VIC Bank 3 layout (c64_quake_architecture.md)
+     2                          ; $C000 screen A  $C400 screen B
+     3                          ; $C800 dirty lists / projected verts (not displayed)
+     4                          ; $D000/$D800 charset A top/bot  $E000/$E800 charset B top/bot
+     5                          ; $F800 log / alog / sin / cos LUTs (copied at init)
+     6                          
+     7                          COL_BORDER	= 0
+     8                          COL_BG		= 9			; brown sandbox
+     9                          COL_HUD_BG	= 0
+    10                          COL_LINE	= 8			; orange vectors
+    11                          COL_OUTSIDE	= 9			; hide non-viewport cells
+    12                          
+    13                          VIEW_COL	= 4
+    14                          VIEW_ROW	= 0
+    15                          VIEW_W		= 32
+    16                          VIEW_H		= 16
+    17                          
+    18                          ; PAL text starts at raster 51 (YSCROLL=3). Top 8 char rows → last line 114.
+    19                          ; Plan said "line 100"; hardware mid-window is 114/115.
+    20                          RASTER_SPLIT	= 114
+    21                          RASTER_HUD	= 179			; 51 + 128
+    22                          RASTER_TOP	= 50
+    23                          
+    24                          D018_A_TOP	= $04			; matrix $C000, charset $D000
+    25                          D018_A_BOT	= $06			; matrix $C000, charset $D800
+    26                          D018_B_TOP	= $18			; matrix $C400, charset $E000
+    27                          D018_B_BOT	= $1A			; matrix $C400, charset $E800
+    28                          D018_A_UI	= $0C			; matrix $C000, UI charset $F000
+    29                          D018_B_UI	= $1C			; matrix $C400, UI charset $F000
+    30                          
+    31                          UI_CHARSET	= $F000
+    32                          HUD_ROW		= 18
+    33                          HUD_COL		= 4
+    34                          HUD_OFF		= HUD_ROW * 40 + HUD_COL
+    35                          HUD_CH_SP	= 10
+    36                          HUD_CH_M	= 11
+    37                          HUD_CH_S	= 12
+    38                          COL_HUD		= 8			; orange digits
+    39                          COL_HUD_DIM	= 2			; dark red "MS"
+    40                          
+    41                          LOGTAB		= $F800
+    42                          ALOGTAB		= $F900			; 512 bytes
+    43                          SINTAB		= $FB00
+    44                          COSTAB		= $FC00
+    45                          LUT_PAGES	= 5			; 1280 bytes
+    46                          
+    47                          SCR_A		= $C000
+    48                          SCR_B		= $C400
+    49                          CH_A_TOP	= $D000
+    50                          CH_A_BOT	= $D800
+    51                          CH_B_TOP	= $E000
+    52                          CH_B_BOT	= $E800
+    53                          
+    54                          ; Bank 0 screen RAM is free after VIC leaves bank 0
+    55                          VIS_A		= $0400			; 512 bytes (top then bottom char vis)
+    56                          VIS_B		= $0600
+    57                          
+    58                          ; Unused strip in bank 3 between matrices and charsets
+    59                          DIRTY_A		= $C800			; 128 × (char, half)
+    60                          DIRTY_B		= $C900
+    61                          PROJ_X		= $CA00
+    62                          PROJ_Y		= $CA08
+    63                          PROJ_Z		= $CA20			; per-vertex z_eye
+    64                          frame_t0	= $CA10			; 4-byte CIA2 cascade snapshot
+    65                          frame_cy	= $CA14
+    66                          casc_now	= $CA18
+    67                          
+    68                          FOCAL		= 100
+    69                          CAMZ		= 160
+    70                          CUBE_H		= 32
+    71                          PERSP_MAX	= 80
+    72                          ZCLIP		= 72
+
+; ******** Source: quake64.asm
+
+; ******** Source: zp.asm
+     1                          ; Zero page — line engine / cube
+     2                          !zone zp
+     3                          
+     4                          tmp0		= $02
+     5                          tmp1		= $03
+     6                          tmp2		= $04
+     7                          tmp3		= $05
+     8                          plotptr		= $06			; + $07
+     9                          mul_a		= $08
+    10                          mul_b		= $09
+    11                          prod_l		= $0a
+    12                          prod_h		= $0b
+    13                          mul_sign	= $0c
+    14                          mc_l		= $0d
+    15                          mc_h		= $0e
+    16                          mr		= $0f
+    17                          
+    18                          px		= $10
+    19                          py		= $11
+    20                          x0		= $12
+    21                          y0		= $13
+    22                          x1		= $14
+    23                          y1		= $15
+    24                          dx		= $16
+    25                          dy		= $17
+    26                          sx		= $18
+    27                          sy		= $19
+    28                          err_l		= $1a
+    29                          linect		= $1b
+    30                          last_ch		= $1c
+    31                          last_half	= $1d
+    32                          
+    33                          draw_buf	= $1e			; 0 = A, 1 = B
+    34                          show_buf	= $1f
+    35                          pending_show	= $20
+    36                          draw_top_hi	= $21
+    37                          draw_bot_hi	= $22
+    38                          tile_ch		= $23
+    39                          tile_half	= $24			; 0 top charset, 1 bottom
+    40                          dirty_count	= $25
+    41                          vis_ptr		= $26			; + $27 → 512-byte vis
+    42                          dirty_ptr	= $28			; + $29
+    43                          show_d018_bot	= $2a
+    44                          irq_phase	= $2b
+    45                          frame_flag	= $2c
+    46                          yaw		= $2d
+    47                          pitch		= $2e
+    48                          z_eye		= $2f
+    49                          rx		= $30
+    50                          ry		= $31
+    51                          rz		= $32
+    52                          cs		= $33
+    53                          sn		= $34
+    54                          vindex		= $35
+    55                          dirty_a_n	= $36
+    56                          dirty_b_n	= $37
+    57                          dt_ms		= $38
+    58                          curcol		= $39
+    59                          colptr		= plotptr			; column base (64-byte strip)
+
+; ******** Source: quake64.asm
+     7                          
+     8                          *= $0801
+     9  0801 0b080a009e323036...!byte $0b, $08, $0a, $00, $9e, $32, $30, $36, $31, $00, $00, $00	; SYS 2061
+    10                          
+    11                          *= $080d
+    12                          start
+    13  080d 78                 	sei
+    14  080e d8                 	cld
+    15  080f a2ff               	ldx #$ff
+    16  0811 9a                 	txs
+    17  0812 a935               	lda #$35
+    18  0814 8501               	sta $01
+    19                          
+    20  0816 a900               	lda #0
+    21  0818 8525               	sta dirty_count
+    22  081a 8536               	sta dirty_a_n
+    23  081c 8537               	sta dirty_b_n
+    24  081e 852d               	sta yaw
+    25  0820 852e               	sta pitch
+    26                          
+    27  0822 20ec08             	jsr fill_colour
+    28  0825 20bb08             	jsr init_vic
+    29  0828 202609             	jsr fill_screens
+    30  082b 205f09             	jsr stamp_viewport
+    31  082e 20bd09             	jsr clear_charsets
+    32  0831 208508             	jsr copy_luts
+    33  0834 20a808             	jsr zero_vis
+    34  0837 20b30b             	jsr init_hud
+    35  083a 20220a             	jsr init_irq
+    36  083d 20e40a             	jsr prof_init
+    37  0840 58                 	cli
+    38                          
+    39                          main
+    40  0841 a934               	lda #$34
+    41  0843 8501               	sta $01
+    42  0845 20500e             	jsr clear_dirty
+    43  0848 208314             	jsr render_cube
+    44  084b a935               	lda #$35
+    45  084d 8501               	sta $01
+    46                          
+    47  084f a51e               	lda draw_buf
+    48  0851 d007               	bne .savb
+    49  0853 a525               	lda dirty_count
+    50  0855 8536               	sta dirty_a_n
+    51  0857 4c5e08             	jmp .pend
+    52                          .savb
+    53  085a a525               	lda dirty_count
+    54  085c 8537               	sta dirty_b_n
+    55                          .pend
+    56  085e a51e               	lda draw_buf
+    57  0860 8520               	sta pending_show
+    58  0862 20d50a             	jsr wait_frame
+    59  0865 20880b             	jsr prof_frame_sample
+    60  0868 201d0b             	jsr calc_frame_dt
+    61  086b 202a0c             	jsr hud_print
+    62                          
+    63  086e a51e               	lda draw_buf
+    64  0870 4901               	eor #1
+    65  0872 851e               	sta draw_buf
+    66  0874 20dd09             	jsr set_draw_ptrs
+    67                          
+    68  0877 18                 	clc
+    69  0878 a52d               	lda yaw
+    70  087a 6903               	adc #3
+    71  087c 852d               	sta yaw
+    72  087e a918               	lda #24				; slight pitch so all 12 edges read
+    73  0880 852e               	sta pitch
+    74  0882 4c4108             	jmp main
+    75                          
+    76                          copy_luts
+    77  0885 a9b9               	lda #<lut_src
+    78  0887 8502               	sta tmp0
+    79  0889 a915               	lda #>lut_src
+    80  088b 8503               	sta tmp1
+    81  088d a900               	lda #<LOGTAB
+    82  088f 8504               	sta tmp2
+    83  0891 a9f8               	lda #>LOGTAB
+    84  0893 8505               	sta tmp3
+    85  0895 a205               	ldx #LUT_PAGES
+    86  0897 a000               	ldy #0
+    87                          .copy
+    88  0899 b102               	lda (tmp0),y
+    89  089b 9104               	sta (tmp2),y
+    90  089d c8                 	iny
+    91  089e d0f9               	bne .copy
+    92  08a0 e603               	inc tmp1
+    93  08a2 e605               	inc tmp3
+    94  08a4 ca                 	dex
+    95  08a5 d0f2               	bne .copy
+    96  08a7 60                 	rts
+    97                          
+    98                          zero_vis
+    99  08a8 a900               	lda #0
+   100  08aa aa                 	tax
+   101  08ab 9d0004             -	sta VIS_A,x
+   102  08ae 9d0005             	sta VIS_A+$100,x
+   103  08b1 9d0006             	sta VIS_B,x
+   104  08b4 9d0007             	sta VIS_B+$100,x
+   105  08b7 e8                 	inx
+   106  08b8 d0f1               	bne -
+   107  08ba 60                 	rts
+   108                          
+
+; ******** Source: vic.asm
+     1                          ; VIC Bank 3, 32×16 unique-char viewport, double-buffer swap
+     2                          !zone vic
+     3                          
+     4                          init_vic
+     5  08bb ad00dd             	lda $dd00
+     6  08be 29fc               	and #%11111100			; VIC bank 3 = $C000–$FFFF
+     7  08c0 8d00dd             	sta $dd00
+     8                          
+     9  08c3 a91b               	lda #$1b				; DEN, 25 rows, YSCROLL=3, text mode
+    10  08c5 8d11d0             	sta $d011
+    11  08c8 a908               	lda #$08				; 40 cols, no MCM
+    12  08ca 8d16d0             	sta $d016
+    13                          
+    14  08cd a904               	lda #D018_A_TOP
+    15  08cf 8d18d0             	sta $d018
+    16  08d2 a900               	lda #COL_BORDER
+    17  08d4 8d20d0             	sta $d020
+    18  08d7 a909               	lda #COL_BG
+    19  08d9 8d21d0             	sta $d021
+    20                          
+    21  08dc a900               	lda #0
+    22  08de 851e               	sta draw_buf
+    23  08e0 851f               	sta show_buf
+    24  08e2 8520               	sta pending_show
+    25  08e4 a906               	lda #D018_A_BOT
+    26  08e6 852a               	sta show_d018_bot
+    27  08e8 20dd09             	jsr set_draw_ptrs
+    28  08eb 60                 	rts
+    29                          
+    30                          ; Colour RAM: outside = background (invisible), viewport = vector colour
+    31                          fill_colour
+    32  08ec a200               	ldx #0
+    33  08ee a909               	lda #COL_OUTSIDE
+    34                          -
+    35  08f0 9d00d8             	sta $d800,x
+    36  08f3 9d00d9             	sta $d900,x
+    37  08f6 9d00da             	sta $da00,x
+    38  08f9 9d00db             	sta $db00,x
+    39  08fc e8                 	inx
+    40  08fd d0f1               	bne -
+    41                          
+    42  08ff a904               	lda #<($d800 + VIEW_COL)
+    43  0901 8506               	sta plotptr
+    44  0903 a9d8               	lda #>($d800 + VIEW_COL)
+    45  0905 8507               	sta plotptr+1
+    46  0907 a910               	lda #VIEW_H
+    47  0909 8502               	sta tmp0
+    48                          .row
+    49  090b a000               	ldy #0
+    50  090d a908               	lda #COL_LINE
+    51                          .col
+    52  090f 9106               	sta (plotptr),y
+    53  0911 c8                 	iny
+    54  0912 c020               	cpy #VIEW_W
+    55  0914 d0f9               	bne .col
+    56  0916 18                 	clc
+    57  0917 a506               	lda plotptr
+    58  0919 6928               	adc #40
+    59  091b 8506               	sta plotptr
+    60  091d 9002               	bcc +
+    61  091f e607               	inc plotptr+1
+    62                          +
+    63  0921 c602               	dec tmp0
+    64  0923 d0e6               	bne .row
+    65  0925 60                 	rts
+    66                          
+    67                          ; Unique 0–255 char codes in both matrices (top 8 rows + bottom 8 rows)
+    68                          fill_screens
+    69  0926 a900               	lda #<SCR_A
+    70  0928 8506               	sta plotptr
+    71  092a a9c0               	lda #>SCR_A
+    72  092c 8507               	sta plotptr+1
+    73  092e 203909             	jsr .fill_one
+    74  0931 a900               	lda #<SCR_B
+    75  0933 8506               	sta plotptr
+    76  0935 a9c4               	lda #>SCR_B
+    77  0937 8507               	sta plotptr+1
+    78                          .fill_one
+    79  0939 a900               	lda #0
+    80  093b 8502               	sta tmp0				; row 0..24
+    81                          .sr
+    82  093d a502               	lda tmp0
+    83  093f c919               	cmp #25
+    84  0941 b01b               	bcs .srdone
+    85  0943 a000               	ldy #0
+    86  0945 a900               	lda #0
+    87                          .sc
+    88  0947 9106               	sta (plotptr),y
+    89  0949 c8                 	iny
+    90  094a c028               	cpy #40
+    91  094c d0f9               	bne .sc
+    92  094e 18                 	clc
+    93  094f a506               	lda plotptr
+    94  0951 6928               	adc #40
+    95  0953 8506               	sta plotptr
+    96  0955 9002               	bcc +
+    97  0957 e607               	inc plotptr+1
+    98                          +
+    99  0959 e602               	inc tmp0
+   100  095b 4c3d09             	jmp .sr
+   101                          .srdone
+   102  095e 60                 	rts
+   103                          
+   104                          ; After zero fill, stamp viewport char codes on A and B
+   105                          stamp_viewport
+   106  095f a900               	lda #<SCR_A
+   107  0961 8502               	sta tmp0
+   108  0963 a9c0               	lda #>SCR_A
+   109  0965 8503               	sta tmp1
+   110  0967 207209             	jsr .stamp
+   111  096a a900               	lda #<SCR_B
+   112  096c 8502               	sta tmp0
+   113  096e a9c4               	lda #>SCR_B
+   114  0970 8503               	sta tmp1
+   115                          .stamp
+   116  0972 a900               	lda #0
+   117  0974 8504               	sta tmp2				; viewport row 0..15
+   118                          .strow
+   119  0976 a504               	lda tmp2
+   120  0978 c910               	cmp #VIEW_H
+   121  097a b040               	bcs .stdone
+   122                          	; dest = base + row*40 + VIEW_COL
+   123  097c a502               	lda tmp0
+   124  097e 8506               	sta plotptr
+   125  0980 a503               	lda tmp1
+   126  0982 8507               	sta plotptr+1
+   127  0984 a604               	ldx tmp2
+   128  0986 f00e               	beq .addcol
+   129                          .add40
+   130  0988 18                 	clc
+   131  0989 a506               	lda plotptr
+   132  098b 6928               	adc #40
+   133  098d 8506               	sta plotptr
+   134  098f 9002               	bcc +
+   135  0991 e607               	inc plotptr+1
+   136                          +
+   137  0993 ca                 	dex
+   138  0994 d0f2               	bne .add40
+   139                          .addcol
+   140  0996 18                 	clc
+   141  0997 a506               	lda plotptr
+   142  0999 6904               	adc #VIEW_COL
+   143  099b 8506               	sta plotptr
+   144  099d 9002               	bcc +
+   145  099f e607               	inc plotptr+1
+   146                          +
+   147  09a1 a504               	lda tmp2
+   148  09a3 2907               	and #7
+   149  09a5 8505               	sta tmp3				; row in half → char = col*8 + row
+   150  09a7 a000               	ldy #0
+   151                          .stcol
+   152  09a9 98                 	tya
+   153  09aa 0a                 	asl
+   154  09ab 0a                 	asl
+   155  09ac 0a                 	asl					; col*8
+   156  09ad 18                 	clc
+   157  09ae 6505               	adc tmp3
+   158  09b0 9106               	sta (plotptr),y
+   159  09b2 c8                 	iny
+   160  09b3 c020               	cpy #VIEW_W
+   161  09b5 d0f2               	bne .stcol
+   162  09b7 e604               	inc tmp2
+   163  09b9 4c7609             	jmp .strow
+   164                          .stdone
+   165  09bc 60                 	rts
+   166                          
+   167                          clear_charsets
+   168  09bd a934               	lda #$34
+   169  09bf 8501               	sta $01
+   170  09c1 a900               	lda #0
+   171  09c3 8506               	sta plotptr
+   172  09c5 a9d0               	lda #>CH_A_TOP
+   173  09c7 8507               	sta plotptr+1
+   174  09c9 a220               	ldx #$20				; 8K = 32 pages
+   175  09cb a000               	ldy #0
+   176  09cd 98                 	tya
+   177                          .cl
+   178  09ce 9106               	sta (plotptr),y
+   179  09d0 c8                 	iny
+   180  09d1 d0fb               	bne .cl
+   181  09d3 e607               	inc plotptr+1
+   182  09d5 ca                 	dex
+   183  09d6 d0f6               	bne .cl
+   184  09d8 a935               	lda #$35
+   185  09da 8501               	sta $01
+   186  09dc 60                 	rts
+   187                          
+   188                          set_draw_ptrs
+   189  09dd a51e               	lda draw_buf
+   190  09df d01d               	bne .b
+   191  09e1 a536               	lda dirty_a_n
+   192  09e3 8525               	sta dirty_count
+   193  09e5 a9d0               	lda #>CH_A_TOP
+   194  09e7 8521               	sta draw_top_hi
+   195  09e9 a9d8               	lda #>CH_A_BOT
+   196  09eb 8522               	sta draw_bot_hi
+   197  09ed a900               	lda #<VIS_A
+   198  09ef 8526               	sta vis_ptr
+   199  09f1 a904               	lda #>VIS_A
+   200  09f3 8527               	sta vis_ptr+1
+   201  09f5 a900               	lda #<DIRTY_A
+   202  09f7 8528               	sta dirty_ptr
+   203  09f9 a9c8               	lda #>DIRTY_A
+   204  09fb 8529               	sta dirty_ptr+1
+   205  09fd 60                 	rts
+   206                          .b
+   207  09fe a537               	lda dirty_b_n
+   208  0a00 8525               	sta dirty_count
+   209  0a02 a9e0               	lda #>CH_B_TOP
+   210  0a04 8521               	sta draw_top_hi
+   211  0a06 a9e8               	lda #>CH_B_BOT
+   212  0a08 8522               	sta draw_bot_hi
+   213  0a0a a900               	lda #<VIS_B
+   214  0a0c 8526               	sta vis_ptr
+   215  0a0e a906               	lda #>VIS_B
+   216  0a10 8527               	sta vis_ptr+1
+   217  0a12 a900               	lda #<DIRTY_B
+   218  0a14 8528               	sta dirty_ptr
+   219  0a16 a9c9               	lda #>DIRTY_B
+   220  0a18 8529               	sta dirty_ptr+1
+   221  0a1a 60                 	rts
+   222                          
+   223                          show_top_tab
+   224  0a1b 0418               	!byte D018_A_TOP, D018_B_TOP
+   225                          show_bot_tab
+   226  0a1d 061a               	!byte D018_A_BOT, D018_B_BOT
+   227                          show_ui_tab
+   228  0a1f 0c1c               	!byte D018_A_UI, D018_B_UI
+
+; ******** Source: quake64.asm
+
+; ******** Source: irq.asm
+     1                          ; Raster chain: charset split, HUD background, frame top
+     2                          !zone irq
+     3                          
+     4                          nmi_rti
+     5  0a21 40                 	rti
+     6                          
+     7                          init_irq
+     8  0a22 a97f               	lda #$7f
+     9  0a24 8d0ddc             	sta $dc0d
+    10  0a27 8d0ddd             	sta $dd0d
+    11  0a2a ad0ddc             	lda $dc0d
+    12  0a2d ad0ddd             	lda $dd0d
+    13                          
+    14  0a30 a921               	lda #<nmi_rti
+    15  0a32 8dfaff             	sta $fffa
+    16  0a35 8d1803             	sta $0318
+    17  0a38 a90a               	lda #>nmi_rti
+    18  0a3a 8dfbff             	sta $fffb
+    19  0a3d 8d1903             	sta $0319
+    20                          
+    21  0a40 a969               	lda #<raster_irq
+    22  0a42 8dfeff             	sta $fffe
+    23  0a45 8d1403             	sta $0314
+    24  0a48 a90a               	lda #>raster_irq
+    25  0a4a 8dffff             	sta $ffff
+    26  0a4d 8d1503             	sta $0315
+    27                          
+    28  0a50 a900               	lda #0
+    29  0a52 852b               	sta irq_phase
+    30  0a54 852c               	sta frame_flag
+    31  0a56 a972               	lda #RASTER_SPLIT
+    32  0a58 8d12d0             	sta $d012
+    33  0a5b ad11d0             	lda $d011
+    34  0a5e 297f               	and #$7f
+    35  0a60 8d11d0             	sta $d011
+    36  0a63 a901               	lda #1
+    37  0a65 8d1ad0             	sta $d01a
+    38  0a68 60                 	rts
+    39                          
+    40                          raster_irq
+    41  0a69 48                 	pha
+    42  0a6a 8a                 	txa
+    43  0a6b 48                 	pha
+    44  0a6c 98                 	tya
+    45  0a6d 48                 	pha
+    46  0a6e a501               	lda $01
+    47  0a70 48                 	pha
+    48  0a71 a935               	lda #$35
+    49  0a73 8501               	sta $01
+    50  0a75 a9ff               	lda #$ff
+    51  0a77 8d19d0             	sta $d019
+    52                          
+    53  0a7a a52b               	lda irq_phase
+    54  0a7c f027               	beq .split
+    55  0a7e c901               	cmp #1
+    56  0a80 f034               	beq .hud
+    57                          
+    58                          	; phase 2: top of frame — commit pending flip
+    59  0a82 a520               	lda pending_show
+    60  0a84 851f               	sta show_buf
+    61  0a86 aa                 	tax
+    62  0a87 bd1b0a             	lda show_top_tab,x
+    63  0a8a 8d18d0             	sta $d018
+    64  0a8d bd1d0a             	lda show_bot_tab,x
+    65  0a90 852a               	sta show_d018_bot
+    66  0a92 a909               	lda #COL_BG
+    67  0a94 8d21d0             	sta $d021
+    68  0a97 a972               	lda #RASTER_SPLIT
+    69  0a99 8d12d0             	sta $d012
+    70  0a9c a900               	lda #0
+    71  0a9e 852b               	sta irq_phase
+    72  0aa0 e62c               	inc frame_flag
+    73  0aa2 4ccc0a             	jmp .out
+    74                          
+    75                          .split
+    76  0aa5 a52a               	lda show_d018_bot
+    77  0aa7 8d18d0             	sta $d018
+    78  0aaa a9b3               	lda #RASTER_HUD
+    79  0aac 8d12d0             	sta $d012
+    80  0aaf a901               	lda #1
+    81  0ab1 852b               	sta irq_phase
+    82  0ab3 4ccc0a             	jmp .out
+    83                          
+    84                          .hud
+    85  0ab6 a61f               	ldx show_buf
+    86  0ab8 bd1f0a             	lda show_ui_tab,x
+    87  0abb 8d18d0             	sta $d018
+    88  0abe a900               	lda #COL_HUD_BG
+    89  0ac0 8d21d0             	sta $d021
+    90  0ac3 a932               	lda #RASTER_TOP
+    91  0ac5 8d12d0             	sta $d012
+    92  0ac8 a902               	lda #2
+    93  0aca 852b               	sta irq_phase
+    94                          
+    95                          .out
+    96  0acc 68                 	pla
+    97  0acd 8501               	sta $01
+    98  0acf 68                 	pla
+    99  0ad0 a8                 	tay
+   100  0ad1 68                 	pla
+   101  0ad2 aa                 	tax
+   102  0ad3 68                 	pla
+   103  0ad4 40                 	rti
+   104                          
+   105                          ; VBlank wait via raster (does not depend on the 3-phase IRQ flag)
+   106                          wait_frame
+   107  0ad5 a935               	lda #$35
+   108  0ad7 8501               	sta $01
+   109  0ad9 ad11d0             -	lda $d011
+   110  0adc 10fb               	bpl -
+   111  0ade ad11d0             -	lda $d011
+   112  0ae1 30fb               	bmi -
+   113  0ae3 60                 	rts
+
+; ******** Source: quake64.asm
+
+; ******** Source: profil.asm
+     1                          ; CIA2 cascade frame timer (Wolf64 / SquareDoom)
+     2                          ; Do not touch $dd00 — VIC bank lives there.
+     3                          !zone profil
+     4                          
+     5                          CIA2_TA_LO	= $dd04
+     6                          CIA2_TA_HI	= $dd05
+     7                          CIA2_TB_LO	= $dd06
+     8                          CIA2_TB_HI	= $dd07
+     9                          CIA2_ICR	= $dd0d
+    10                          CIA2_CRA	= $dd0e
+    11                          CIA2_CRB	= $dd0f
+    12                          
+    13                          prof_init
+    14  0ae4 a97f               	lda #$7f
+    15  0ae6 8d0ddd             	sta CIA2_ICR
+    16  0ae9 ad0ddd             	lda CIA2_ICR
+    17  0aec a9ff               	lda #$ff
+    18  0aee 8d04dd             	sta CIA2_TA_LO
+    19  0af1 8d05dd             	sta CIA2_TA_HI
+    20  0af4 8d06dd             	sta CIA2_TB_LO
+    21  0af7 8d07dd             	sta CIA2_TB_HI
+    22  0afa a911               	lda #$11				; TA start + force load, ϕ2
+    23  0afc 8d0edd             	sta CIA2_CRA
+    24  0aff a951               	lda #$51				; TB start + force load, count TA underflows
+    25  0b01 8d0fdd             	sta CIA2_CRB
+    26  0b04 203c0b             	jsr prof_read_casc
+    27  0b07 206f0b             	jsr prof_store_t0
+    28  0b0a a900               	lda #0
+    29  0b0c 8d14ca             	sta frame_cy
+    30  0b0f 8d15ca             	sta frame_cy + 1
+    31  0b12 8d16ca             	sta frame_cy + 2
+    32  0b15 8d17ca             	sta frame_cy + 3
+    33  0b18 a914               	lda #20
+    34  0b1a 8538               	sta dt_ms
+    35  0b1c 60                 	rts
+    36                          
+    37                          ; frame_cy >> 10 → dt_ms. 0 → 20; saturate at 255.
+    38                          calc_frame_dt
+    39  0b1d ad15ca             	lda frame_cy + 1
+    40  0b20 8502               	sta tmp0
+    41  0b22 ad16ca             	lda frame_cy + 2
+    42  0b25 4a                 	lsr
+    43  0b26 6602               	ror tmp0
+    44  0b28 4a                 	lsr
+    45  0b29 6602               	ror tmp0
+    46  0b2b a8                 	tay
+    47  0b2c d009               	bne .sat
+    48  0b2e a502               	lda tmp0
+    49  0b30 d002               	bne .ok
+    50  0b32 a914               	lda #20
+    51                          .ok
+    52  0b34 8538               	sta dt_ms
+    53  0b36 60                 	rts
+    54                          .sat
+    55  0b37 a9ff               	lda #255
+    56  0b39 8538               	sta dt_ms
+    57  0b3b 60                 	rts
+    58                          
+    59                          prof_read_casc
+    60  0b3c a501               	lda $01
+    61  0b3e 48                 	pha
+    62  0b3f a935               	lda #$35
+    63  0b41 8501               	sta $01
+    64                          .retry
+    65  0b43 ad07dd             	lda CIA2_TB_HI
+    66  0b46 8d1bca             	sta casc_now + 3
+    67  0b49 ad06dd             	lda CIA2_TB_LO
+    68  0b4c 8d1aca             	sta casc_now + 2
+    69  0b4f ad05dd             	lda CIA2_TA_HI
+    70  0b52 8d19ca             	sta casc_now + 1
+    71  0b55 ad04dd             	lda CIA2_TA_LO
+    72  0b58 8d18ca             	sta casc_now
+    73  0b5b ad07dd             	lda CIA2_TB_HI
+    74  0b5e cd1bca             	cmp casc_now + 3
+    75  0b61 d0e0               	bne .retry
+    76  0b63 ad06dd             	lda CIA2_TB_LO
+    77  0b66 cd1aca             	cmp casc_now + 2
+    78  0b69 d0d8               	bne .retry
+    79  0b6b 68                 	pla
+    80  0b6c 8501               	sta $01
+    81  0b6e 60                 	rts
+    82                          
+    83                          prof_store_t0
+    84  0b6f ad18ca             	lda casc_now
+    85  0b72 8d10ca             	sta frame_t0
+    86  0b75 ad19ca             	lda casc_now + 1
+    87  0b78 8d11ca             	sta frame_t0 + 1
+    88  0b7b ad1aca             	lda casc_now + 2
+    89  0b7e 8d12ca             	sta frame_t0 + 2
+    90  0b81 ad1bca             	lda casc_now + 3
+    91  0b84 8d13ca             	sta frame_t0 + 3
+    92  0b87 60                 	rts
+    93                          
+    94                          ; Period since last call → frame_cy (countdown timers: t0 − now)
+    95                          prof_frame_sample
+    96  0b88 203c0b             	jsr prof_read_casc
+    97  0b8b 38                 	sec
+    98  0b8c ad10ca             	lda frame_t0
+    99  0b8f ed18ca             	sbc casc_now
+   100  0b92 8d14ca             	sta frame_cy
+   101  0b95 ad11ca             	lda frame_t0 + 1
+   102  0b98 ed19ca             	sbc casc_now + 1
+   103  0b9b 8d15ca             	sta frame_cy + 1
+   104  0b9e ad12ca             	lda frame_t0 + 2
+   105  0ba1 ed1aca             	sbc casc_now + 2
+   106  0ba4 8d16ca             	sta frame_cy + 2
+   107  0ba7 ad13ca             	lda frame_t0 + 3
+   108  0baa ed1bca             	sbc casc_now + 3
+   109  0bad 8d17ca             	sta frame_cy + 3
+   110  0bb0 4c6f0b             	jmp prof_store_t0
+
+; ******** Source: quake64.asm
+
+; ******** Source: hud.asm
+     1                          ; HUD ms readout — own 8×8 glyphs in UI charset $F000, not Wolf64 bitmap blit
+     2                          !zone hud
+     3                          
+     4                          init_hud
+     5  0bb3 a935               	lda #$35
+     6  0bb5 8501               	sta $01
+     7  0bb7 a95f               	lda #<hud_font
+     8  0bb9 8502               	sta tmp0
+     9  0bbb a90c               	lda #>hud_font
+    10  0bbd 8503               	sta tmp1
+    11  0bbf a900               	lda #<UI_CHARSET
+    12  0bc1 8504               	sta tmp2
+    13  0bc3 a9f0               	lda #>UI_CHARSET
+    14  0bc5 8505               	sta tmp3
+    15  0bc7 a268               	ldx #hud_font_end - hud_font
+    16  0bc9 a000               	ldy #0
+    17                          .copy
+    18  0bcb b102               	lda (tmp0),y
+    19  0bcd 9104               	sta (tmp2),y
+    20  0bcf c8                 	iny
+    21  0bd0 ca                 	dex
+    22  0bd1 d0f8               	bne .copy
+    23                          
+    24  0bd3 a900               	lda #0
+    25  0bd5 8dd4c2             	sta SCR_A + HUD_OFF + 0
+    26  0bd8 8dd4c6             	sta SCR_B + HUD_OFF + 0
+    27  0bdb 8dd5c2             	sta SCR_A + HUD_OFF + 1
+    28  0bde 8dd5c6             	sta SCR_B + HUD_OFF + 1
+    29  0be1 8dd6c2             	sta SCR_A + HUD_OFF + 2
+    30  0be4 8dd6c6             	sta SCR_B + HUD_OFF + 2
+    31  0be7 a90a               	lda #HUD_CH_SP
+    32  0be9 8dd7c2             	sta SCR_A + HUD_OFF + 3
+    33  0bec 8dd7c6             	sta SCR_B + HUD_OFF + 3
+    34  0bef a90b               	lda #HUD_CH_M
+    35  0bf1 8dd8c2             	sta SCR_A + HUD_OFF + 4
+    36  0bf4 8dd8c6             	sta SCR_B + HUD_OFF + 4
+    37  0bf7 a90c               	lda #HUD_CH_S
+    38  0bf9 8dd9c2             	sta SCR_A + HUD_OFF + 5
+    39  0bfc 8dd9c6             	sta SCR_B + HUD_OFF + 5
+    40                          
+    41                          	; HUD band (rows 16–24): black fg so leftover cells vanish on $d021=0
+    42  0bff a200               	ldx #0
+    43  0c01 8a                 	txa
+    44  0c02 9d80da             -	sta $da80,x
+    45  0c05 e8                 	inx
+    46  0c06 d0fa               	bne -
+    47  0c08 a200               	ldx #0
+    48                          -
+    49  0c0a 9d80db             	sta $db80,x
+    50  0c0d e8                 	inx
+    51  0c0e e068               	cpx #104
+    52  0c10 d0f8               	bne -
+    53                          
+    54  0c12 a202               	ldx #2
+    55  0c14 a908               	lda #COL_HUD
+    56                          -
+    57  0c16 9dd4da             	sta $d800 + HUD_OFF,x
+    58  0c19 ca                 	dex
+    59  0c1a 10fa               	bpl -
+    60  0c1c a902               	lda #COL_HUD_DIM
+    61  0c1e 8dd8da             	sta $d800 + HUD_OFF + 4
+    62  0c21 8dd9da             	sta $d800 + HUD_OFF + 5
+    63  0c24 a900               	lda #0
+    64  0c26 8dd7da             	sta $d800 + HUD_OFF + 3
+    65  0c29 60                 	rts
+    66                          
+    67                          ; 3 decimal digits from dt_ms into both matrices
+    68                          hud_print
+    69  0c2a a538               	lda dt_ms
+    70  0c2c a200               	ldx #0
+    71                          .hund
+    72  0c2e c964               	cmp #100
+    73  0c30 9005               	bcc .tens
+    74  0c32 e964               	sbc #100
+    75  0c34 e8                 	inx
+    76  0c35 d0f7               	bne .hund
+    77                          .tens
+    78  0c37 8502               	sta tmp0
+    79  0c39 8a                 	txa
+    80  0c3a 8dd4c2             	sta SCR_A + HUD_OFF
+    81  0c3d 8dd4c6             	sta SCR_B + HUD_OFF
+    82  0c40 a502               	lda tmp0
+    83  0c42 a200               	ldx #0
+    84                          .tenlp
+    85  0c44 c90a               	cmp #10
+    86  0c46 9005               	bcc .ones
+    87  0c48 e90a               	sbc #10
+    88  0c4a e8                 	inx
+    89  0c4b d0f7               	bne .tenlp
+    90                          .ones
+    91  0c4d 8502               	sta tmp0
+    92  0c4f 8a                 	txa
+    93  0c50 8dd5c2             	sta SCR_A + HUD_OFF + 1
+    94  0c53 8dd5c6             	sta SCR_B + HUD_OFF + 1
+    95  0c56 a502               	lda tmp0
+    96  0c58 8dd6c2             	sta SCR_A + HUD_OFF + 2
+    97  0c5b 8dd6c6             	sta SCR_B + HUD_OFF + 2
+    98  0c5e 60                 	rts
+    99                          
+   100                          ; Chunky 8×8 HUD font (hi-bit left). 0–9, space, M, S
+   101                          hud_font
+   102  0c5f 3c66666666663c00   	!byte %00111100,%01100110,%01100110,%01100110,%01100110,%01100110,%00111100,%00000000
+   103  0c67 1838181818183c00   	!byte %00011000,%00111000,%00011000,%00011000,%00011000,%00011000,%00111100,%00000000
+   104  0c6f 3c66060c18307e00   	!byte %00111100,%01100110,%00000110,%00001100,%00011000,%00110000,%01111110,%00000000
+   105  0c77 3c66061c06663c00   	!byte %00111100,%01100110,%00000110,%00011100,%00000110,%01100110,%00111100,%00000000
+   106  0c7f 0c1c3c6c7e0c0c00   	!byte %00001100,%00011100,%00111100,%01101100,%01111110,%00001100,%00001100,%00000000
+   107  0c87 7e607c0606663c00   	!byte %01111110,%01100000,%01111100,%00000110,%00000110,%01100110,%00111100,%00000000
+   108  0c8f 1c30607c66663c00   	!byte %00011100,%00110000,%01100000,%01111100,%01100110,%01100110,%00111100,%00000000
+   109  0c97 7e060c1830303000   	!byte %01111110,%00000110,%00001100,%00011000,%00110000,%00110000,%00110000,%00000000
+   110  0c9f 3c66663c66663c00   	!byte %00111100,%01100110,%01100110,%00111100,%01100110,%01100110,%00111100,%00000000
+   111  0ca7 3c66663e060c3800   	!byte %00111100,%01100110,%01100110,%00111110,%00000110,%00001100,%00111000,%00000000
+   112  0caf 0000000000000000   	!byte %00000000,%00000000,%00000000,%00000000,%00000000,%00000000,%00000000,%00000000
+   113  0cb7 63777f6b63636300   	!byte %01100011,%01110111,%01111111,%01101011,%01100011,%01100011,%01100011,%00000000
+   114  0cbf 3e60603c06067c00   	!byte %00111110,%01100000,%01100000,%00111100,%00000110,%00000110,%01111100,%00000000
+   115                          hud_font_end
+
+; ******** Source: quake64.asm
+
+; ******** Source: math.asm
+     1                          ; 8×8 → 16 multiply and signed (A*Y)>>7 ; perspective via log LUTs
+     2                          !zone math
+     3                          
+     4                          umul8					; A * Y → prod_l/prod_h
+     5  0cc7 8508               	sta mul_a
+     6  0cc9 8409               	sty mul_b
+     7  0ccb a509               	lda mul_b
+     8  0ccd 850d               	sta mc_l
+     9  0ccf a900               	lda #0
+    10  0cd1 850e               	sta mc_h
+    11  0cd3 850a               	sta prod_l
+    12  0cd5 850b               	sta prod_h
+    13  0cd7 a508               	lda mul_a
+    14  0cd9 850f               	sta mr
+    15  0cdb a208               	ldx #8
+    16                          .um
+    17  0cdd 460f               	lsr mr
+    18  0cdf 900d               	bcc .no
+    19  0ce1 a50a               	lda prod_l
+    20  0ce3 18                 	clc
+    21  0ce4 650d               	adc mc_l
+    22  0ce6 850a               	sta prod_l
+    23  0ce8 a50b               	lda prod_h
+    24  0cea 650e               	adc mc_h
+    25  0cec 850b               	sta prod_h
+    26                          .no
+    27  0cee 060d               	asl mc_l
+    28  0cf0 260e               	rol mc_h
+    29  0cf2 ca                 	dex
+    30  0cf3 d0e8               	bne .um
+    31  0cf5 60                 	rts
+    32                          
+    33                          ; signed A * signed Y / 128 → A
+    34                          smul7
+    35  0cf6 8508               	sta mul_a
+    36  0cf8 8409               	sty mul_b
+    37  0cfa a508               	lda mul_a
+    38  0cfc 4509               	eor mul_b
+    39  0cfe 850c               	sta mul_sign
+    40  0d00 a508               	lda mul_a
+    41  0d02 1007               	bpl +
+    42  0d04 49ff               	eor #$ff
+    43  0d06 18                 	clc
+    44  0d07 6901               	adc #1
+    45  0d09 8508               	sta mul_a
+    46                          +
+    47  0d0b a509               	lda mul_b
+    48  0d0d 1007               	bpl +
+    49  0d0f 49ff               	eor #$ff
+    50  0d11 18                 	clc
+    51  0d12 6901               	adc #1
+    52  0d14 8509               	sta mul_b
+    53                          +
+    54  0d16 a508               	lda mul_a
+    55  0d18 a409               	ldy mul_b
+    56  0d1a 20c70c             	jsr umul8
+    57  0d1d 060a               	asl prod_l
+    58  0d1f a50b               	lda prod_h
+    59  0d21 2a                 	rol
+    60  0d22 1002               	bpl +
+    61  0d24 a97f               	lda #$7f				; clamp signed overflow ($80)
+    62                          +
+    63  0d26 240c               	bit mul_sign
+    64  0d28 1005               	bpl .pos
+    65  0d2a 49ff               	eor #$ff
+    66  0d2c 18                 	clc
+    67  0d2d 6901               	adc #1
+    68                          .pos
+    69  0d2f 60                 	rts
+    70                          
+    71                          ; |A| * FOCAL / z_eye  via 8×8 mul + 16/8 div (no log LUT)
+    72                          persp
+    73  0d30 850c               	sta mul_sign
+    74  0d32 1005               	bpl .abs
+    75  0d34 49ff               	eor #$ff
+    76  0d36 18                 	clc
+    77  0d37 6901               	adc #1
+    78                          .abs
+    79  0d39 d001               	bne +
+    80  0d3b 60                 	rts
+    81                          +
+    82  0d3c a064               	ldy #FOCAL
+    83  0d3e 20c70c             	jsr umul8
+    84  0d41 a50b               	lda prod_h
+    85  0d43 c52f               	cmp z_eye
+    86  0d45 9005               	bcc .div
+    87  0d47 a950               	lda #PERSP_MAX
+    88  0d49 4c680d             	jmp .sgn
+    89                          .div
+    90  0d4c a208               	ldx #8
+    91  0d4e a50b               	lda prod_h
+    92                          .d1
+    93  0d50 060a               	asl prod_l
+    94  0d52 2a                 	rol
+    95  0d53 b004               	bcs .d2
+    96  0d55 c52f               	cmp z_eye
+    97  0d57 9004               	bcc .d3
+    98                          .d2
+    99  0d59 e52f               	sbc z_eye
+   100  0d5b e60a               	inc prod_l
+   101                          .d3
+   102  0d5d ca                 	dex
+   103  0d5e d0f0               	bne .d1
+   104  0d60 a50a               	lda prod_l
+   105  0d62 c950               	cmp #PERSP_MAX
+   106  0d64 9002               	bcc .sgn
+   107  0d66 a950               	lda #PERSP_MAX
+   108                          .sgn
+   109  0d68 240c               	bit mul_sign
+   110  0d6a 1005               	bpl +
+   111  0d6c 49ff               	eor #$ff
+   112  0d6e 18                 	clc
+   113  0d6f 6901               	adc #1
+   114                          +
+   115  0d71 60                 	rts
+
+; ******** Source: quake64.asm
+
+; ******** Source: line.asm
+     1                          ; Mike's VIC-20 line drawer (Denial DATA @ $3C00), patched for 30k px/s.
+     2                          ;
+     3                          ; Extracted skeleton: X/Y stay in registers; SMC picks INX/DEX, INY/DEY,
+     4                          ; SBC #dy / ADC #dx, CPX/CPY end. Tables $3D00/$3E00/$3F00 were per-X
+     5                          ; column lo/hi + bitmask (AD=$1100+192*(X/8)).
+     6                          ;
+     7                          ; 30k patches from the same notes:
+     8                          ;   - (colptr),Y is the bitmap byte; Y = row in a 64-byte column strip
+     9                          ;   - column pointer updates only when leaving an 8-pixel column
+    10                          ;   - 8× unrolled ORA #imm (bit table gone)
+    11                          ;   - DEX remaining pixels (carry preserved, no CPX per pixel)
+    12                          ;   - always left → right
+    13                          ; Dirty tiles are marked once per line (bbox), never in the pixel loop.
+    14                          !zone line
+    15                          
+    16                          col_lo
+    17  0d72 004080c0004080c0...	!byte 0,64,128,192,0,64,128,192,0,64,128,192,0,64,128,192
+    18  0d82 004080c0004080c0...	!byte 0,64,128,192,0,64,128,192,0,64,128,192,0,64,128,192
+    19                          col_hi
+    20  0d92 0000000001010101...	!byte 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3
+    21  0da2 0404040405050505...	!byte 4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7
+    22                          
+    23                          mark_dirty
+    24  0db2 a526               	lda vis_ptr
+    25  0db4 8504               	sta tmp2
+    26  0db6 a527               	lda vis_ptr+1
+    27  0db8 18                 	clc
+    28  0db9 6524               	adc tile_half
+    29  0dbb 8505               	sta tmp3
+    30  0dbd a423               	ldy tile_ch
+    31  0dbf b104               	lda (tmp2),y
+    32  0dc1 d017               	bne +
+    33  0dc3 a901               	lda #1
+    34  0dc5 9104               	sta (tmp2),y
+    35  0dc7 a525               	lda dirty_count
+    36  0dc9 c980               	cmp #128
+    37  0dcb b00d               	bcs +
+    38  0dcd 0a                 	asl
+    39  0dce a8                 	tay
+    40  0dcf a523               	lda tile_ch
+    41  0dd1 9128               	sta (dirty_ptr),y
+    42  0dd3 c8                 	iny
+    43  0dd4 a524               	lda tile_half
+    44  0dd6 9128               	sta (dirty_ptr),y
+    45  0dd8 e625               	inc dirty_count
+    46                          +
+    47  0dda 60                 	rts
+    48                          
+    49                          ; Mark every char the line bbox covers (not per pixel).
+    50                          mark_bbox
+    51  0ddb a512               	lda x0
+    52  0ddd c514               	cmp x1
+    53  0ddf 900c               	bcc +
+    54  0de1 a514               	lda x1
+    55  0de3 4a                 	lsr
+    56  0de4 4a                 	lsr
+    57  0de5 4a                 	lsr
+    58  0de6 8504               	sta tmp2
+    59  0de8 a512               	lda x0
+    60  0dea 4cf40d             	jmp ++
+    61                          +
+    62  0ded 4a                 	lsr
+    63  0dee 4a                 	lsr
+    64  0def 4a                 	lsr
+    65  0df0 8504               	sta tmp2
+    66  0df2 a514               	lda x1
+    67                          ++
+    68  0df4 4a                 	lsr
+    69  0df5 4a                 	lsr
+    70  0df6 4a                 	lsr
+    71  0df7 8505               	sta tmp3				; tmp2=col0 tmp3=col1
+    72                          
+    73  0df9 a513               	lda y0
+    74  0dfb c515               	cmp y1
+    75  0dfd 900c               	bcc +
+    76  0dff a515               	lda y1
+    77  0e01 4a                 	lsr
+    78  0e02 4a                 	lsr
+    79  0e03 4a                 	lsr
+    80  0e04 8510               	sta px
+    81  0e06 a513               	lda y0
+    82  0e08 4c120e             	jmp ++
+    83                          +
+    84  0e0b 4a                 	lsr
+    85  0e0c 4a                 	lsr
+    86  0e0d 4a                 	lsr
+    87  0e0e 8510               	sta px
+    88  0e10 a515               	lda y1
+    89                          ++
+    90  0e12 4a                 	lsr
+    91  0e13 4a                 	lsr
+    92  0e14 4a                 	lsr
+    93  0e15 8511               	sta py					; px=row0 py=row1
+    94                          
+    95                          .mbcol
+    96  0e17 a510               	lda px
+    97  0e19 8502               	sta tmp0
+    98                          .mbrow
+    99  0e1b a502               	lda tmp0
+   100  0e1d c908               	cmp #8
+   101  0e1f 9006               	bcc +
+   102  0e21 e908               	sbc #8
+   103  0e23 a201               	ldx #1
+   104  0e25 d002               	bne ++
+   105                          +
+   106  0e27 a200               	ldx #0
+   107                          ++
+   108  0e29 8624               	stx tile_half
+   109  0e2b 8523               	sta tile_ch
+   110  0e2d a504               	lda tmp2
+   111  0e2f 0a                 	asl
+   112  0e30 0a                 	asl
+   113  0e31 0a                 	asl
+   114  0e32 0523               	ora tile_ch
+   115  0e34 8523               	sta tile_ch
+   116  0e36 20b20d             	jsr mark_dirty
+   117  0e39 a502               	lda tmp0
+   118  0e3b c511               	cmp py
+   119  0e3d b005               	bcs .mbnc
+   120  0e3f e602               	inc tmp0
+   121  0e41 4c1b0e             	jmp .mbrow
+   122                          .mbnc
+   123  0e44 a504               	lda tmp2
+   124  0e46 c505               	cmp tmp3
+   125  0e48 b005               	bcs .mbdone
+   126  0e4a e604               	inc tmp2
+   127  0e4c 4c170e             	jmp .mbcol
+   128                          .mbdone
+   129  0e4f 60                 	rts
+   130                          
+   131                          clear_dirty
+   132  0e50 a525               	lda dirty_count
+   133  0e52 d001               	bne +
+   134  0e54 60                 	rts
+   135                          +
+   136  0e55 a900               	lda #0
+   137  0e57 8504               	sta tmp2
+   138                          .cloop
+   139  0e59 a504               	lda tmp2
+   140  0e5b c525               	cmp dirty_count
+   141  0e5d b051               	bcs .cdone
+   142  0e5f 0a                 	asl
+   143  0e60 a8                 	tay
+   144  0e61 b128               	lda (dirty_ptr),y
+   145  0e63 8523               	sta tile_ch
+   146  0e65 c8                 	iny
+   147  0e66 b128               	lda (dirty_ptr),y
+   148  0e68 8524               	sta tile_half
+   149  0e6a a523               	lda tile_ch
+   150  0e6c 8506               	sta plotptr
+   151  0e6e a900               	lda #0
+   152  0e70 8507               	sta plotptr+1
+   153  0e72 0606               	asl plotptr
+   154  0e74 2607               	rol plotptr+1
+   155  0e76 0606               	asl plotptr
+   156  0e78 2607               	rol plotptr+1
+   157  0e7a 0606               	asl plotptr
+   158  0e7c 2607               	rol plotptr+1
+   159  0e7e a524               	lda tile_half
+   160  0e80 d008               	bne .bot
+   161  0e82 a507               	lda plotptr+1
+   162  0e84 18                 	clc
+   163  0e85 6521               	adc draw_top_hi
+   164  0e87 4c8f0e             	jmp .wipe
+   165                          .bot
+   166  0e8a a507               	lda plotptr+1
+   167  0e8c 18                 	clc
+   168  0e8d 6522               	adc draw_bot_hi
+   169                          .wipe
+   170  0e8f 8507               	sta plotptr+1
+   171  0e91 a007               	ldy #7
+   172  0e93 a900               	lda #0
+   173  0e95 9106               -	sta (plotptr),y
+   174  0e97 88                 	dey
+   175  0e98 10fb               	bpl -
+   176  0e9a a526               	lda vis_ptr
+   177  0e9c 8502               	sta tmp0
+   178  0e9e a527               	lda vis_ptr+1
+   179  0ea0 18                 	clc
+   180  0ea1 6524               	adc tile_half
+   181  0ea3 8503               	sta tmp1
+   182  0ea5 a423               	ldy tile_ch
+   183  0ea7 a900               	lda #0
+   184  0ea9 9102               	sta (tmp0),y
+   185  0eab e604               	inc tmp2
+   186  0ead 4c590e             	jmp .cloop
+   187                          .cdone
+   188  0eb0 a900               	lda #0
+   189  0eb2 8525               	sta dirty_count
+   190  0eb4 60                 	rts
+   191                          
+   192                          y_cross_down
+   193  0eb5 a524               	lda tile_half
+   194  0eb7 f006               	beq +
+   195  0eb9 a201               	ldx #1
+   196  0ebb a03f               	ldy #63
+   197  0ebd 38                 	sec
+   198  0ebe 60                 	rts
+   199                          +
+   200  0ebf e624               	inc tile_half
+   201  0ec1 18                 	clc
+   202  0ec2 a507               	lda colptr+1
+   203  0ec4 6908               	adc #8
+   204  0ec6 8507               	sta colptr+1
+   205  0ec8 a000               	ldy #0
+   206  0eca 38                 	sec
+   207  0ecb 60                 	rts
+   208                          
+   209                          y_cross_up
+   210  0ecc a524               	lda tile_half
+   211  0ece d006               	bne +
+   212  0ed0 a201               	ldx #1
+   213  0ed2 a000               	ldy #0
+   214  0ed4 38                 	sec
+   215  0ed5 60                 	rts
+   216                          +
+   217  0ed6 c624               	dec tile_half
+   218  0ed8 38                 	sec
+   219  0ed9 a507               	lda colptr+1
+   220  0edb e908               	sbc #8
+   221  0edd 8507               	sta colptr+1
+   222  0edf a03f               	ldy #63
+   223  0ee1 38                 	sec
+   224  0ee2 60                 	rts
+   225                          
+   226                          draw_line
+   227  0ee3 20db0d             	jsr mark_bbox
+   228  0ee6 a512               	lda x0
+   229  0ee8 c514               	cmp x1
+   230  0eea 900e               	bcc .ord
+   231  0eec a614               	ldx x1
+   232  0eee 8514               	sta x1
+   233  0ef0 8612               	stx x0
+   234  0ef2 a513               	lda y0
+   235  0ef4 a615               	ldx y1
+   236  0ef6 8515               	sta y1
+   237  0ef8 8613               	stx y0
+   238                          .ord
+   239  0efa a514               	lda x1
+   240  0efc 38                 	sec
+   241  0efd e512               	sbc x0
+   242  0eff 8516               	sta dx
+   243  0f01 a515               	lda y1
+   244  0f03 38                 	sec
+   245  0f04 e513               	sbc y0
+   246  0f06 b009               	bcs .yp
+   247  0f08 49ff               	eor #$ff
+   248  0f0a 18                 	clc
+   249  0f0b 6901               	adc #1
+   250  0f0d a2ff               	ldx #$ff
+   251  0f0f d002               	bne .ys
+   252                          .yp
+   253  0f11 a201               	ldx #1
+   254                          .ys
+   255  0f13 8517               	sta dy
+   256  0f15 8619               	stx sy
+   257                          
+   258  0f17 a512               	lda x0
+   259  0f19 4a                 	lsr
+   260  0f1a 4a                 	lsr
+   261  0f1b 4a                 	lsr
+   262  0f1c 8539               	sta curcol
+   263  0f1e aa                 	tax
+   264  0f1f a513               	lda y0
+   265  0f21 c940               	cmp #64
+   266  0f23 9010               	bcc .yt
+   267  0f25 e940               	sbc #64
+   268  0f27 a8                 	tay
+   269  0f28 a901               	lda #1
+   270  0f2a 8524               	sta tile_half
+   271  0f2c bd920d             	lda col_hi,x
+   272  0f2f 18                 	clc
+   273  0f30 6522               	adc draw_bot_hi
+   274  0f32 4c400f             	jmp .p
+   275                          .yt
+   276  0f35 a8                 	tay
+   277  0f36 a900               	lda #0
+   278  0f38 8524               	sta tile_half
+   279  0f3a bd920d             	lda col_hi,x
+   280  0f3d 18                 	clc
+   281  0f3e 6521               	adc draw_top_hi
+   282                          .p
+   283  0f40 8507               	sta colptr+1
+   284  0f42 bd720d             	lda col_lo,x
+   285  0f45 8506               	sta colptr
+   286                          
+   287  0f47 a512               	lda x0
+   288  0f49 2907               	and #7
+   289  0f4b 8502               	sta tmp0
+   290  0f4d a516               	lda dx
+   291  0f4f c517               	cmp dy
+   292  0f51 b003               	bcs +
+   293  0f53 4c9111             	jmp steep
+   294                          +
+   295  0f56 a516               	lda dx
+   296  0f58 4a                 	lsr
+   297  0f59 851a               	sta err_l
+   298  0f5b a519               	lda sy
+   299  0f5d 1003               	bpl +
+   300  0f5f 4c8310             	jmp sh_up
+   301                          +
+   302  0f62 4c650f             	jmp sh_dn
+   303                          
+   304                          ; ---- shallow, +Y (Mike 30k body × 8, then next column) ----
+   305                          sh_dn
+   306  0f65 a602               	ldx tmp0
+   307  0f67 bd7a0f             	lda sdn_l,x
+   308  0f6a 8d780f             	sta .j+1
+   309  0f6d bd820f             	lda sdn_h,x
+   310  0f70 8d790f             	sta .j+2
+   311  0f73 a616               	ldx dx
+   312  0f75 e8                 	inx
+   313  0f76 38                 	sec
+   314  0f77 4c0000             .j	jmp $0000
+   315  0f7a 8aa7c4e1fe1b3855   sdn_l	!byte <sd0,<sd1,<sd2,<sd3,<sd4,<sd5,<sd6,<sd7
+   316  0f82 0f0f0f0f0f101010   sdn_h	!byte >sd0,>sd1,>sd2,>sd3,>sd4,>sd5,>sd6,>sd7
+   317                          
+   318                          !macro SD .b {
+   319                          	lda (colptr),y
+   320                          	ora #.b
+   321                          	sta (colptr),y
+   322                          	dex
+   323                          	bne +
+   324                          	rts
+   325                          +
+   326                          	lda err_l
+   327                          	sbc dy
+   328                          	bcs ++
+   329                          	adc dx
+   330                          	iny
+   331                          	cpy #64
+   332                          	bcc +
+   333                          	jsr y_cross_down
+   334                          +
+   335                          ++	sta err_l
+   336                          	sec
+   337                          }
+   338  0f8a b10609809106cad0...sd0	+SD $80
+   339  0fa7 b10609409106cad0...sd1	+SD $40
+   340  0fc4 b10609209106cad0...sd2	+SD $20
+   341  0fe1 b10609109106cad0...sd3	+SD $10
+   342  0ffe b10609089106cad0...sd4	+SD $08
+   343  101b b10609049106cad0...sd5	+SD $04
+   344  1038 b10609029106cad0...sd6	+SD $02
+   345  1055 b10609019106cad0...sd7	+SD $01
+   346  1072 e639               	inc curcol
+   347  1074 18                 	clc
+   348  1075 a506               	lda colptr
+   349  1077 6940               	adc #64
+   350  1079 8506               	sta colptr
+   351  107b 9002               	bcc +
+   352  107d e607               	inc colptr+1
+   353                          +
+   354  107f 38                 	sec
+   355  1080 4c8a0f             	jmp sd0
+   356                          
+   357                          sh_up
+   358  1083 a602               	ldx tmp0
+   359  1085 bd9810             	lda sup_l,x
+   360  1088 8d9610             	sta .u+1
+   361  108b bda010             	lda sup_h,x
+   362  108e 8d9710             	sta .u+2
+   363  1091 a616               	ldx dx
+   364  1093 e8                 	inx
+   365  1094 38                 	sec
+   366  1095 4c0000             .u	jmp $0000
+   367  1098 a8c3def9142f4a65   sup_l	!byte <su0,<su1,<su2,<su3,<su4,<su5,<su6,<su7
+   368  10a0 1010101011111111   sup_h	!byte >su0,>su1,>su2,>su3,>su4,>su5,>su6,>su7
+   369                          
+   370                          !macro SU .b {
+   371                          	lda (colptr),y
+   372                          	ora #.b
+   373                          	sta (colptr),y
+   374                          	dex
+   375                          	bne +
+   376                          	rts
+   377                          +
+   378                          	lda err_l
+   379                          	sbc dy
+   380                          	bcs ++
+   381                          	adc dx
+   382                          	dey
+   383                          	bpl +
+   384                          	jsr y_cross_up
+   385                          +
+   386                          ++	sta err_l
+   387                          	sec
+   388                          }
+   389  10a8 b10609809106cad0...su0	+SU $80
+   390  10c3 b10609409106cad0...su1	+SU $40
+   391  10de b10609209106cad0...su2	+SU $20
+   392  10f9 b10609109106cad0...su3	+SU $10
+   393  1114 b10609089106cad0...su4	+SU $08
+   394  112f b10609049106cad0...su5	+SU $04
+   395  114a b10609029106cad0...su6	+SU $02
+   396  1165 b10609019106cad0...su7	+SU $01
+   397  1180 e639               	inc curcol
+   398  1182 18                 	clc
+   399  1183 a506               	lda colptr
+   400  1185 6940               	adc #64
+   401  1187 8506               	sta colptr
+   402  1189 9002               	bcc +
+   403  118b e607               	inc colptr+1
+   404                          +
+   405  118d 38                 	sec
+   406  118e 4ca810             	jmp su0
+   407                          
+   408                          ; ---- steep: Y major, step X/bit on error (same DATA skeleton) ----
+   409                          steep
+   410  1191 a517               	lda dy
+   411  1193 4a                 	lsr
+   412  1194 851a               	sta err_l
+   413  1196 a519               	lda sy
+   414  1198 1003               	bpl +
+   415  119a 4c0013             	jmp st_up
+   416                          +
+   417  119d a602               	ldx tmp0
+   418  119f bdb211             	lda std_l,x
+   419  11a2 8db011             	sta .td+1
+   420  11a5 bdba11             	lda std_h,x
+   421  11a8 8db111             	sta .td+2
+   422  11ab a617               	ldx dy
+   423  11ad e8                 	inx
+   424  11ae 38                 	sec
+   425  11af 4c0000             .td	jmp $0000
+   426  11b2 c2e80e345a80a6cc   std_l	!byte <td0,<td1,<td2,<td3,<td4,<td5,<td6,<td7
+   427  11ba 1111121212121212   std_h	!byte >td0,>td1,>td2,>td3,>td4,>td5,>td6,>td7
+   428                          
+   429                          td0
+   430  11c2 b106               	lda (colptr),y
+   431  11c4 0980               	ora #$80
+   432  11c6 9106               	sta (colptr),y
+   433  11c8 ca                 	dex
+   434  11c9 d001               	bne +
+   435  11cb 60                 	rts
+   436                          +
+   437  11cc c8                 	iny
+   438  11cd c040               	cpy #64
+   439  11cf 9003               	bcc +
+   440  11d1 20b50e             	jsr y_cross_down
+   441                          +
+   442  11d4 a51a               	lda err_l
+   443  11d6 e516               	sbc dx
+   444  11d8 b008               	bcs td0s
+   445  11da 6517               	adc dy
+   446  11dc 851a               	sta err_l
+   447  11de 38                 	sec
+   448  11df 4ce811             	jmp td1
+   449  11e2 851a               td0s	sta err_l
+   450  11e4 38                 	sec
+   451  11e5 4cc211             	jmp td0
+   452                          
+   453                          td1
+   454  11e8 b106               	lda (colptr),y
+   455  11ea 0940               	ora #$40
+   456  11ec 9106               	sta (colptr),y
+   457  11ee ca                 	dex
+   458  11ef d001               	bne +
+   459  11f1 60                 	rts
+   460                          +
+   461  11f2 c8                 	iny
+   462  11f3 c040               	cpy #64
+   463  11f5 9003               	bcc +
+   464  11f7 20b50e             	jsr y_cross_down
+   465                          +
+   466  11fa a51a               	lda err_l
+   467  11fc e516               	sbc dx
+   468  11fe b008               	bcs td1s
+   469  1200 6517               	adc dy
+   470  1202 851a               	sta err_l
+   471  1204 38                 	sec
+   472  1205 4c0e12             	jmp td2
+   473  1208 851a               td1s	sta err_l
+   474  120a 38                 	sec
+   475  120b 4ce811             	jmp td1
+   476                          
+   477                          td2
+   478  120e b106               	lda (colptr),y
+   479  1210 0920               	ora #$20
+   480  1212 9106               	sta (colptr),y
+   481  1214 ca                 	dex
+   482  1215 d001               	bne +
+   483  1217 60                 	rts
+   484                          +
+   485  1218 c8                 	iny
+   486  1219 c040               	cpy #64
+   487  121b 9003               	bcc +
+   488  121d 20b50e             	jsr y_cross_down
+   489                          +
+   490  1220 a51a               	lda err_l
+   491  1222 e516               	sbc dx
+   492  1224 b008               	bcs td2s
+   493  1226 6517               	adc dy
+   494  1228 851a               	sta err_l
+   495  122a 38                 	sec
+   496  122b 4c3412             	jmp td3
+   497  122e 851a               td2s	sta err_l
+   498  1230 38                 	sec
+   499  1231 4c0e12             	jmp td2
+   500                          
+   501                          td3
+   502  1234 b106               	lda (colptr),y
+   503  1236 0910               	ora #$10
+   504  1238 9106               	sta (colptr),y
+   505  123a ca                 	dex
+   506  123b d001               	bne +
+   507  123d 60                 	rts
+   508                          +
+   509  123e c8                 	iny
+   510  123f c040               	cpy #64
+   511  1241 9003               	bcc +
+   512  1243 20b50e             	jsr y_cross_down
+   513                          +
+   514  1246 a51a               	lda err_l
+   515  1248 e516               	sbc dx
+   516  124a b008               	bcs td3s
+   517  124c 6517               	adc dy
+   518  124e 851a               	sta err_l
+   519  1250 38                 	sec
+   520  1251 4c5a12             	jmp td4
+   521  1254 851a               td3s	sta err_l
+   522  1256 38                 	sec
+   523  1257 4c3412             	jmp td3
+   524                          
+   525                          td4
+   526  125a b106               	lda (colptr),y
+   527  125c 0908               	ora #$08
+   528  125e 9106               	sta (colptr),y
+   529  1260 ca                 	dex
+   530  1261 d001               	bne +
+   531  1263 60                 	rts
+   532                          +
+   533  1264 c8                 	iny
+   534  1265 c040               	cpy #64
+   535  1267 9003               	bcc +
+   536  1269 20b50e             	jsr y_cross_down
+   537                          +
+   538  126c a51a               	lda err_l
+   539  126e e516               	sbc dx
+   540  1270 b008               	bcs td4s
+   541  1272 6517               	adc dy
+   542  1274 851a               	sta err_l
+   543  1276 38                 	sec
+   544  1277 4c8012             	jmp td5
+   545  127a 851a               td4s	sta err_l
+   546  127c 38                 	sec
+   547  127d 4c5a12             	jmp td4
+   548                          
+   549                          td5
+   550  1280 b106               	lda (colptr),y
+   551  1282 0904               	ora #$04
+   552  1284 9106               	sta (colptr),y
+   553  1286 ca                 	dex
+   554  1287 d001               	bne +
+   555  1289 60                 	rts
+   556                          +
+   557  128a c8                 	iny
+   558  128b c040               	cpy #64
+   559  128d 9003               	bcc +
+   560  128f 20b50e             	jsr y_cross_down
+   561                          +
+   562  1292 a51a               	lda err_l
+   563  1294 e516               	sbc dx
+   564  1296 b008               	bcs td5s
+   565  1298 6517               	adc dy
+   566  129a 851a               	sta err_l
+   567  129c 38                 	sec
+   568  129d 4ca612             	jmp td6
+   569  12a0 851a               td5s	sta err_l
+   570  12a2 38                 	sec
+   571  12a3 4c8012             	jmp td5
+   572                          
+   573                          td6
+   574  12a6 b106               	lda (colptr),y
+   575  12a8 0902               	ora #$02
+   576  12aa 9106               	sta (colptr),y
+   577  12ac ca                 	dex
+   578  12ad d001               	bne +
+   579  12af 60                 	rts
+   580                          +
+   581  12b0 c8                 	iny
+   582  12b1 c040               	cpy #64
+   583  12b3 9003               	bcc +
+   584  12b5 20b50e             	jsr y_cross_down
+   585                          +
+   586  12b8 a51a               	lda err_l
+   587  12ba e516               	sbc dx
+   588  12bc b008               	bcs td6s
+   589  12be 6517               	adc dy
+   590  12c0 851a               	sta err_l
+   591  12c2 38                 	sec
+   592  12c3 4ccc12             	jmp td7
+   593  12c6 851a               td6s	sta err_l
+   594  12c8 38                 	sec
+   595  12c9 4ca612             	jmp td6
+   596                          
+   597                          td7
+   598  12cc b106               	lda (colptr),y
+   599  12ce 0901               	ora #$01
+   600  12d0 9106               	sta (colptr),y
+   601  12d2 ca                 	dex
+   602  12d3 d001               	bne +
+   603  12d5 60                 	rts
+   604                          +
+   605  12d6 c8                 	iny
+   606  12d7 c040               	cpy #64
+   607  12d9 9003               	bcc +
+   608  12db 20b50e             	jsr y_cross_down
+   609                          +
+   610  12de a51a               	lda err_l
+   611  12e0 e516               	sbc dx
+   612  12e2 b016               	bcs td7s
+   613  12e4 6517               	adc dy
+   614  12e6 851a               	sta err_l
+   615  12e8 38                 	sec
+   616  12e9 e639               	inc curcol
+   617  12eb 18                 	clc
+   618  12ec a506               	lda colptr
+   619  12ee 6940               	adc #64
+   620  12f0 8506               	sta colptr
+   621  12f2 9002               	bcc +
+   622  12f4 e607               	inc colptr+1
+   623                          +
+   624  12f6 38                 	sec
+   625  12f7 4cc211             	jmp td0
+   626  12fa 851a               td7s	sta err_l
+   627  12fc 38                 	sec
+   628  12fd 4ccc12             	jmp td7
+   629                          
+   630                          st_up
+   631  1300 a602               	ldx tmp0
+   632  1302 bd1513             	lda stu_l,x
+   633  1305 8d1313             	sta .tu+1
+   634  1308 bd1d13             	lda stu_h,x
+   635  130b 8d1413             	sta .tu+2
+   636  130e a617               	ldx dy
+   637  1310 e8                 	inx
+   638  1311 38                 	sec
+   639  1312 4c0000             .tu	jmp $0000
+   640  1315 25496d91b5d9fd21   stu_l	!byte <tu0,<tu1,<tu2,<tu3,<tu4,<tu5,<tu6,<tu7
+   641  131d 1313131313131314   stu_h	!byte >tu0,>tu1,>tu2,>tu3,>tu4,>tu5,>tu6,>tu7
+   642                          
+   643                          tu0
+   644  1325 b106               	lda (colptr),y
+   645  1327 0980               	ora #$80
+   646  1329 9106               	sta (colptr),y
+   647  132b ca                 	dex
+   648  132c d001               	bne +
+   649  132e 60                 	rts
+   650                          +
+   651  132f 88                 	dey
+   652  1330 1003               	bpl +
+   653  1332 20cc0e             	jsr y_cross_up
+   654                          +
+   655  1335 a51a               	lda err_l
+   656  1337 e516               	sbc dx
+   657  1339 b008               	bcs tu0s
+   658  133b 6517               	adc dy
+   659  133d 851a               	sta err_l
+   660  133f 38                 	sec
+   661  1340 4c4913             	jmp tu1
+   662  1343 851a               tu0s	sta err_l
+   663  1345 38                 	sec
+   664  1346 4c2513             	jmp tu0
+   665                          
+   666                          tu1
+   667  1349 b106               	lda (colptr),y
+   668  134b 0940               	ora #$40
+   669  134d 9106               	sta (colptr),y
+   670  134f ca                 	dex
+   671  1350 d001               	bne +
+   672  1352 60                 	rts
+   673                          +
+   674  1353 88                 	dey
+   675  1354 1003               	bpl +
+   676  1356 20cc0e             	jsr y_cross_up
+   677                          +
+   678  1359 a51a               	lda err_l
+   679  135b e516               	sbc dx
+   680  135d b008               	bcs tu1s
+   681  135f 6517               	adc dy
+   682  1361 851a               	sta err_l
+   683  1363 38                 	sec
+   684  1364 4c6d13             	jmp tu2
+   685  1367 851a               tu1s	sta err_l
+   686  1369 38                 	sec
+   687  136a 4c4913             	jmp tu1
+   688                          
+   689                          tu2
+   690  136d b106               	lda (colptr),y
+   691  136f 0920               	ora #$20
+   692  1371 9106               	sta (colptr),y
+   693  1373 ca                 	dex
+   694  1374 d001               	bne +
+   695  1376 60                 	rts
+   696                          +
+   697  1377 88                 	dey
+   698  1378 1003               	bpl +
+   699  137a 20cc0e             	jsr y_cross_up
+   700                          +
+   701  137d a51a               	lda err_l
+   702  137f e516               	sbc dx
+   703  1381 b008               	bcs tu2s
+   704  1383 6517               	adc dy
+   705  1385 851a               	sta err_l
+   706  1387 38                 	sec
+   707  1388 4c9113             	jmp tu3
+   708  138b 851a               tu2s	sta err_l
+   709  138d 38                 	sec
+   710  138e 4c6d13             	jmp tu2
+   711                          
+   712                          tu3
+   713  1391 b106               	lda (colptr),y
+   714  1393 0910               	ora #$10
+   715  1395 9106               	sta (colptr),y
+   716  1397 ca                 	dex
+   717  1398 d001               	bne +
+   718  139a 60                 	rts
+   719                          +
+   720  139b 88                 	dey
+   721  139c 1003               	bpl +
+   722  139e 20cc0e             	jsr y_cross_up
+   723                          +
+   724  13a1 a51a               	lda err_l
+   725  13a3 e516               	sbc dx
+   726  13a5 b008               	bcs tu3s
+   727  13a7 6517               	adc dy
+   728  13a9 851a               	sta err_l
+   729  13ab 38                 	sec
+   730  13ac 4cb513             	jmp tu4
+   731  13af 851a               tu3s	sta err_l
+   732  13b1 38                 	sec
+   733  13b2 4c9113             	jmp tu3
+   734                          
+   735                          tu4
+   736  13b5 b106               	lda (colptr),y
+   737  13b7 0908               	ora #$08
+   738  13b9 9106               	sta (colptr),y
+   739  13bb ca                 	dex
+   740  13bc d001               	bne +
+   741  13be 60                 	rts
+   742                          +
+   743  13bf 88                 	dey
+   744  13c0 1003               	bpl +
+   745  13c2 20cc0e             	jsr y_cross_up
+   746                          +
+   747  13c5 a51a               	lda err_l
+   748  13c7 e516               	sbc dx
+   749  13c9 b008               	bcs tu4s
+   750  13cb 6517               	adc dy
+   751  13cd 851a               	sta err_l
+   752  13cf 38                 	sec
+   753  13d0 4cd913             	jmp tu5
+   754  13d3 851a               tu4s	sta err_l
+   755  13d5 38                 	sec
+   756  13d6 4cb513             	jmp tu4
+   757                          
+   758                          tu5
+   759  13d9 b106               	lda (colptr),y
+   760  13db 0904               	ora #$04
+   761  13dd 9106               	sta (colptr),y
+   762  13df ca                 	dex
+   763  13e0 d001               	bne +
+   764  13e2 60                 	rts
+   765                          +
+   766  13e3 88                 	dey
+   767  13e4 1003               	bpl +
+   768  13e6 20cc0e             	jsr y_cross_up
+   769                          +
+   770  13e9 a51a               	lda err_l
+   771  13eb e516               	sbc dx
+   772  13ed b008               	bcs tu5s
+   773  13ef 6517               	adc dy
+   774  13f1 851a               	sta err_l
+   775  13f3 38                 	sec
+   776  13f4 4cfd13             	jmp tu6
+   777  13f7 851a               tu5s	sta err_l
+   778  13f9 38                 	sec
+   779  13fa 4cd913             	jmp tu5
+   780                          
+   781                          tu6
+   782  13fd b106               	lda (colptr),y
+   783  13ff 0902               	ora #$02
+   784  1401 9106               	sta (colptr),y
+   785  1403 ca                 	dex
+   786  1404 d001               	bne +
+   787  1406 60                 	rts
+   788                          +
+   789  1407 88                 	dey
+   790  1408 1003               	bpl +
+   791  140a 20cc0e             	jsr y_cross_up
+   792                          +
+   793  140d a51a               	lda err_l
+   794  140f e516               	sbc dx
+   795  1411 b008               	bcs tu6s
+   796  1413 6517               	adc dy
+   797  1415 851a               	sta err_l
+   798  1417 38                 	sec
+   799  1418 4c2114             	jmp tu7
+   800  141b 851a               tu6s	sta err_l
+   801  141d 38                 	sec
+   802  141e 4cfd13             	jmp tu6
+   803                          
+   804                          tu7
+   805  1421 b106               	lda (colptr),y
+   806  1423 0901               	ora #$01
+   807  1425 9106               	sta (colptr),y
+   808  1427 ca                 	dex
+   809  1428 d001               	bne +
+   810  142a 60                 	rts
+   811                          +
+   812  142b 88                 	dey
+   813  142c 1003               	bpl +
+   814  142e 20cc0e             	jsr y_cross_up
+   815                          +
+   816  1431 a51a               	lda err_l
+   817  1433 e516               	sbc dx
+   818  1435 b016               	bcs tu7s
+   819  1437 6517               	adc dy
+   820  1439 851a               	sta err_l
+   821  143b 38                 	sec
+   822  143c e639               	inc curcol
+   823  143e 18                 	clc
+   824  143f a506               	lda colptr
+   825  1441 6940               	adc #64
+   826  1443 8506               	sta colptr
+   827  1445 9002               	bcc +
+   828  1447 e607               	inc colptr+1
+   829                          +
+   830  1449 38                 	sec
+   831  144a 4c2513             	jmp tu0
+   832  144d 851a               tu7s	sta err_l
+   833  144f 38                 	sec
+   834  1450 4c2114             	jmp tu7
+
+; ******** Source: quake64.asm
+
+; ******** Source: cube.asm
+     1                          ; Rotate / project / stroke a unit cube (log-LUT perspective)
+     2                          !zone cube
+     3                          
+     4                          vx
+     5  1453 e02020e0e02020e0   	!byte -CUBE_H, CUBE_H, CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H,-CUBE_H
+     6                          vy
+     7  145b e0e02020e0e02020   	!byte -CUBE_H,-CUBE_H, CUBE_H, CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H
+     8                          vz
+     9  1463 e0e0e0e020202020   	!byte -CUBE_H,-CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H, CUBE_H, CUBE_H
+    10                          
+    11                          edges
+    12  146b 0001010202030300   	!byte 0,1, 1,2, 2,3, 3,0
+    13  1473 0405050606070704   	!byte 4,5, 5,6, 6,7, 7,4
+    14  147b 0004010502060307   	!byte 0,4, 1,5, 2,6, 3,7
+    15                          
+    16                          render_cube
+    17  1483 a9ff               	lda #$ff
+    18  1485 851c               	sta last_ch
+    19  1487 a900               	lda #0
+    20  1489 8535               	sta vindex
+    21                          .vert
+    22  148b a42d               	ldy yaw
+    23  148d b900fc             	lda COSTAB,y
+    24  1490 8533               	sta cs
+    25  1492 b900fb             	lda SINTAB,y
+    26  1495 8534               	sta sn
+    27                          
+    28  1497 a635               	ldx vindex
+    29  1499 bd5b14             	lda vy,x
+    30  149c 8531               	sta ry
+    31                          
+    32  149e bd5314             	lda vx,x
+    33  14a1 a433               	ldy cs
+    34  14a3 20f60c             	jsr smul7
+    35  14a6 8530               	sta rx
+    36  14a8 a635               	ldx vindex
+    37  14aa bd6314             	lda vz,x
+    38  14ad a434               	ldy sn
+    39  14af 20f60c             	jsr smul7
+    40  14b2 8502               	sta tmp0
+    41  14b4 a530               	lda rx
+    42  14b6 38                 	sec
+    43  14b7 e502               	sbc tmp0
+    44  14b9 8530               	sta rx
+    45                          
+    46  14bb a635               	ldx vindex
+    47  14bd bd5314             	lda vx,x
+    48  14c0 a434               	ldy sn
+    49  14c2 20f60c             	jsr smul7
+    50  14c5 8532               	sta rz
+    51  14c7 a635               	ldx vindex
+    52  14c9 bd6314             	lda vz,x
+    53  14cc a433               	ldy cs
+    54  14ce 20f60c             	jsr smul7
+    55  14d1 18                 	clc
+    56  14d2 6532               	adc rz
+    57  14d4 8532               	sta rz
+    58                          
+    59  14d6 a42e               	ldy pitch
+    60  14d8 b900fc             	lda COSTAB,y
+    61  14db 8533               	sta cs
+    62  14dd b900fb             	lda SINTAB,y
+    63  14e0 8534               	sta sn
+    64                          
+    65  14e2 a531               	lda ry
+    66  14e4 a433               	ldy cs
+    67  14e6 20f60c             	jsr smul7
+    68  14e9 8502               	sta tmp0
+    69  14eb a532               	lda rz
+    70  14ed a434               	ldy sn
+    71  14ef 20f60c             	jsr smul7
+    72  14f2 8503               	sta tmp1
+    73  14f4 a502               	lda tmp0
+    74  14f6 38                 	sec
+    75  14f7 e503               	sbc tmp1
+    76  14f9 8504               	sta tmp2				; y'
+    77                          
+    78  14fb a531               	lda ry
+    79  14fd a434               	ldy sn
+    80  14ff 20f60c             	jsr smul7
+    81  1502 8502               	sta tmp0
+    82  1504 a532               	lda rz
+    83  1506 a433               	ldy cs
+    84  1508 20f60c             	jsr smul7
+    85  150b 18                 	clc
+    86  150c 6502               	adc tmp0
+    87  150e 8532               	sta rz
+    88  1510 a504               	lda tmp2
+    89  1512 8531               	sta ry
+    90                          
+    91  1514 a532               	lda rz
+    92  1516 18                 	clc
+    93  1517 69a0               	adc #CAMZ
+    94  1519 9002               	bcc .zok
+    95  151b a9ff               	lda #255
+    96                          .zok
+    97  151d 852f               	sta z_eye
+    98  151f a635               	ldx vindex
+    99  1521 9d20ca             	sta PROJ_Z,x
+   100                          
+   101  1524 a530               	lda rx
+   102  1526 20300d             	jsr persp
+   103  1529 8502               	sta tmp0
+   104  152b 300a               	bmi .xneg
+   105  152d 18                 	clc
+   106  152e 6980               	adc #128
+   107  1530 900c               	bcc .xstore
+   108  1532 a9ff               	lda #255
+   109  1534 4c3e15             	jmp .xstore
+   110                          .xneg
+   111  1537 18                 	clc
+   112  1538 6980               	adc #128
+   113  153a b002               	bcs .xstore
+   114  153c a900               	lda #0
+   115                          .xstore
+   116  153e a635               	ldx vindex
+   117  1540 9d00ca             	sta PROJ_X,x
+   118                          
+   119  1543 a531               	lda ry
+   120  1545 20300d             	jsr persp
+   121  1548 8502               	sta tmp0
+   122  154a 300e               	bmi .yneg
+   123  154c 18                 	clc
+   124  154d 6940               	adc #64
+   125  154f b004               	bcs .yhi
+   126  1551 c980               	cmp #128
+   127  1553 900c               	bcc .ystore
+   128                          .yhi
+   129  1555 a97f               	lda #127
+   130  1557 4c6115             	jmp .ystore
+   131                          .yneg
+   132  155a 18                 	clc
+   133  155b 6940               	adc #64
+   134  155d b002               	bcs .ystore
+   135  155f a900               	lda #0
+   136                          .ystore
+   137  1561 a635               	ldx vindex
+   138  1563 9d08ca             	sta PROJ_Y,x
+   139                          
+   140  1566 e635               	inc vindex
+   141  1568 a535               	lda vindex
+   142  156a c908               	cmp #8
+   143  156c f003               	beq .edges
+   144  156e 4c8b14             	jmp .vert
+   145                          
+   146                          .edges
+   147  1571 a900               	lda #0
+   148  1573 8535               	sta vindex
+   149                          .el
+   150  1575 a635               	ldx vindex
+   151  1577 bd6b14             	lda edges,x
+   152  157a a8                 	tay
+   153  157b b920ca             	lda PROJ_Z,y
+   154  157e c948               	cmp #ZCLIP
+   155  1580 9029               	bcc .skip
+   156  1582 b900ca             	lda PROJ_X,y
+   157  1585 8512               	sta x0
+   158  1587 b908ca             	lda PROJ_Y,y
+   159  158a 8513               	sta y0
+   160  158c e8                 	inx
+   161  158d bd6b14             	lda edges,x
+   162  1590 a8                 	tay
+   163  1591 b920ca             	lda PROJ_Z,y
+   164  1594 c948               	cmp #ZCLIP
+   165  1596 9014               	bcc .skip2
+   166  1598 b900ca             	lda PROJ_X,y
+   167  159b 8514               	sta x1
+   168  159d b908ca             	lda PROJ_Y,y
+   169  15a0 8515               	sta y1
+   170  15a2 e8                 	inx
+   171  15a3 8635               	stx vindex
+   172  15a5 20e30e             	jsr draw_line
+   173  15a8 4caf15             	jmp .elchk
+   174                          .skip
+   175  15ab e8                 	inx
+   176                          .skip2
+   177  15ac e8                 	inx
+   178  15ad 8635               	stx vindex
+   179                          .elchk
+   180  15af a535               	lda vindex
+   181  15b1 c918               	cmp #24
+   182  15b3 f003               	beq +
+   183  15b5 4c7515             	jmp .el
+   184                          +
+   185  15b8 60                 	rts
+
+; ******** Source: quake64.asm
+   116                          
+   117                          lut_src
+
+; ******** Source: tables.asm
+     1                          ; Auto-generated by tools/gentables.py — do not edit
+     2                          ; Order: log 256, alog 512, sin 256, cos 256  (runtime $F800)
+     3  15b9 00002033404a535a...	!byte $00,$00,$20,$33,$40,$4a,$53,$5a,$60,$65,$6a,$6f,$73,$76,$7a,$7d
+     4  15c9 808385888a8d8f91...	!byte $80,$83,$85,$88,$8a,$8d,$8f,$91,$93,$95,$96,$98,$9a,$9b,$9d,$9f
+     5  15d9 a0a1a3a4a5a7a8a9...	!byte $a0,$a1,$a3,$a4,$a5,$a7,$a8,$a9,$aa,$ab,$ad,$ae,$af,$b0,$b1,$b2
+     6  15e9 b3b4b5b6b6b7b8b9...	!byte $b3,$b4,$b5,$b6,$b6,$b7,$b8,$b9,$ba,$bb,$bb,$bc,$bd,$be,$bf,$bf
+     7  15f9 c0c1c1c2c3c3c4c5...	!byte $c0,$c1,$c1,$c2,$c3,$c3,$c4,$c5,$c5,$c6,$c7,$c7,$c8,$c9,$c9,$ca
+     8  1609 cacbcbcccdcdcece...	!byte $ca,$cb,$cb,$cc,$cd,$cd,$ce,$ce,$cf,$cf,$d0,$d0,$d1,$d1,$d2,$d2
+     9  1619 d3d3d4d4d5d5d6d6...	!byte $d3,$d3,$d4,$d4,$d5,$d5,$d6,$d6,$d6,$d7,$d7,$d8,$d8,$d9,$d9,$d9
+    10  1629 dadadbdbdbdcdcdd...	!byte $da,$da,$db,$db,$db,$dc,$dc,$dd,$dd,$dd,$de,$de,$df,$df,$df,$e0
+    11  1639 e0e0e1e1e1e2e2e2...	!byte $e0,$e0,$e1,$e1,$e1,$e2,$e2,$e2,$e3,$e3,$e3,$e4,$e4,$e4,$e5,$e5
+    12  1649 e5e6e6e6e7e7e7e8...	!byte $e5,$e6,$e6,$e6,$e7,$e7,$e7,$e8,$e8,$e8,$e9,$e9,$e9,$e9,$ea,$ea
+    13  1659 eaebebebebececec...	!byte $ea,$eb,$eb,$eb,$eb,$ec,$ec,$ec,$ed,$ed,$ed,$ed,$ee,$ee,$ee,$ee
+    14  1669 efefefeff0f0f0f1...	!byte $ef,$ef,$ef,$ef,$f0,$f0,$f0,$f1,$f1,$f1,$f1,$f2,$f2,$f2,$f2,$f2
+    15  1679 f3f3f3f3f4f4f4f4...	!byte $f3,$f3,$f3,$f3,$f4,$f4,$f4,$f4,$f5,$f5,$f5,$f5,$f6,$f6,$f6,$f6
+    16  1689 f6f7f7f7f7f8f8f8...	!byte $f6,$f7,$f7,$f7,$f7,$f8,$f8,$f8,$f8,$f8,$f9,$f9,$f9,$f9,$f9,$fa
+    17  1699 fafafafafbfbfbfb...	!byte $fa,$fa,$fa,$fa,$fb,$fb,$fb,$fb,$fb,$fc,$fc,$fc,$fc,$fc,$fd,$fd
+    18  16a9 fdfdfdfefefefefe...	!byte $fd,$fd,$fd,$fe,$fe,$fe,$fe,$fe,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    19  16b9 0101010101010101...	!byte $01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01,$01
+    20  16c9 0101010202020202...	!byte $01,$01,$01,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02
+    21  16d9 0202020202020202...	!byte $02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$02,$03,$03,$03,$03,$03
+    22  16e9 0303030303030303...	!byte $03,$03,$03,$03,$03,$03,$03,$03,$03,$03,$04,$04,$04,$04,$04,$04
+    23  16f9 0404040404040505...	!byte $04,$04,$04,$04,$04,$04,$05,$05,$05,$05,$05,$05,$05,$05,$05,$06
+    24  1709 0606060606060607...	!byte $06,$06,$06,$06,$06,$06,$06,$07,$07,$07,$07,$07,$07,$07,$08,$08
+    25  1719 0808080909090909...	!byte $08,$08,$08,$09,$09,$09,$09,$09,$0a,$0a,$0a,$0a,$0a,$0b,$0b,$0b
+    26  1729 0b0c0c0c0c0d0d0d...	!byte $0b,$0c,$0c,$0c,$0c,$0d,$0d,$0d,$0d,$0e,$0e,$0e,$0f,$0f,$0f,$10
+    27  1739 1010111111121213...	!byte $10,$10,$11,$11,$11,$12,$12,$13,$13,$13,$14,$14,$15,$15,$16,$16
+    28  1749 1717181819191a1a...	!byte $17,$17,$18,$18,$19,$19,$1a,$1a,$1b,$1b,$1c,$1d,$1d,$1e,$1f,$1f
+    29  1759 2021212223242425...	!byte $20,$21,$21,$22,$23,$24,$24,$25,$26,$27,$28,$29,$29,$2a,$2b,$2c
+    30  1769 2d2e2f3031323435...	!byte $2d,$2e,$2f,$30,$31,$32,$34,$35,$36,$37,$38,$39,$3b,$3c,$3d,$3f
+    31  1779 404143444647494a...	!byte $40,$41,$43,$44,$46,$47,$49,$4a,$4c,$4e,$4f,$51,$53,$55,$57,$59
+    32  1789 5b5c5f6163656769...	!byte $5b,$5c,$5f,$61,$63,$65,$67,$69,$6c,$6e,$70,$73,$75,$78,$7b,$7d
+    33  1799 808386898c8f9295...	!byte $80,$83,$86,$89,$8c,$8f,$92,$95,$98,$9c,$9f,$a2,$a6,$aa,$ad,$b1
+    34  17a9 b5b9bdc1c5caced3...	!byte $b5,$b9,$bd,$c1,$c5,$ca,$ce,$d3,$d7,$dc,$e1,$e6,$eb,$f0,$f5,$fb
+    35  17b9 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    36  17c9 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    37  17d9 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    38  17e9 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    39  17f9 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    40  1809 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    41  1819 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    42  1829 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    43  1839 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    44  1849 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    45  1859 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    46  1869 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    47  1879 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    48  1889 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    49  1899 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    50  18a9 ffffffffffffffff...	!byte $ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff,$ff
+    51  18b9 000306090c101316...	!byte $00,$03,$06,$09,$0c,$10,$13,$16,$19,$1c,$1f,$22,$25,$28,$2b,$2e
+    52  18c9 313336393c3f4144...	!byte $31,$33,$36,$39,$3c,$3f,$41,$44,$47,$49,$4c,$4e,$51,$53,$55,$58
+    53  18d9 5a5c5e6062646668...	!byte $5a,$5c,$5e,$60,$62,$64,$66,$68,$6a,$6b,$6d,$6f,$70,$71,$73,$74
+    54  18e9 757678797a7a7b7c...	!byte $75,$76,$78,$79,$7a,$7a,$7b,$7c,$7d,$7d,$7e,$7e,$7e,$7f,$7f,$7f
+    55  18f9 7f7f7f7f7e7e7e7d...	!byte $7f,$7f,$7f,$7f,$7e,$7e,$7e,$7d,$7d,$7c,$7b,$7a,$7a,$79,$78,$76
+    56  1909 75747371706f6d6b...	!byte $75,$74,$73,$71,$70,$6f,$6d,$6b,$6a,$68,$66,$64,$62,$60,$5e,$5c
+    57  1919 5a585553514e4c49...	!byte $5a,$58,$55,$53,$51,$4e,$4c,$49,$47,$44,$41,$3f,$3c,$39,$36,$33
+    58  1929 312e2b2825221f1c...	!byte $31,$2e,$2b,$28,$25,$22,$1f,$1c,$19,$16,$13,$10,$0c,$09,$06,$03
+    59  1939 00fdfaf7f4f0edea...	!byte $00,$fd,$fa,$f7,$f4,$f0,$ed,$ea,$e7,$e4,$e1,$de,$db,$d8,$d5,$d2
+    60  1949 cfcdcac7c4c1bfbc...	!byte $cf,$cd,$ca,$c7,$c4,$c1,$bf,$bc,$b9,$b7,$b4,$b2,$af,$ad,$ab,$a8
+    61  1959 a6a4a2a09e9c9a98...	!byte $a6,$a4,$a2,$a0,$9e,$9c,$9a,$98,$96,$95,$93,$91,$90,$8f,$8d,$8c
+    62  1969 8b8a888786868584...	!byte $8b,$8a,$88,$87,$86,$86,$85,$84,$83,$83,$82,$82,$82,$81,$81,$81
+    63  1979 8181818182828283...	!byte $81,$81,$81,$81,$82,$82,$82,$83,$83,$84,$85,$86,$86,$87,$88,$8a
+    64  1989 8b8c8d8f90919395...	!byte $8b,$8c,$8d,$8f,$90,$91,$93,$95,$96,$98,$9a,$9c,$9e,$a0,$a2,$a4
+    65  1999 a6a8abadafb2b4b7...	!byte $a6,$a8,$ab,$ad,$af,$b2,$b4,$b7,$b9,$bc,$bf,$c1,$c4,$c7,$ca,$cd
+    66  19a9 cfd2d5d8dbdee1e4...	!byte $cf,$d2,$d5,$d8,$db,$de,$e1,$e4,$e7,$ea,$ed,$f0,$f4,$f7,$fa,$fd
+    67  19b9 7f7f7f7f7e7e7e7d...	!byte $7f,$7f,$7f,$7f,$7e,$7e,$7e,$7d,$7d,$7c,$7b,$7a,$7a,$79,$78,$76
+    68  19c9 75747371706f6d6b...	!byte $75,$74,$73,$71,$70,$6f,$6d,$6b,$6a,$68,$66,$64,$62,$60,$5e,$5c
+    69  19d9 5a585553514e4c49...	!byte $5a,$58,$55,$53,$51,$4e,$4c,$49,$47,$44,$41,$3f,$3c,$39,$36,$33
+    70  19e9 312e2b2825221f1c...	!byte $31,$2e,$2b,$28,$25,$22,$1f,$1c,$19,$16,$13,$10,$0c,$09,$06,$03
+    71  19f9 00fdfaf7f4f0edea...	!byte $00,$fd,$fa,$f7,$f4,$f0,$ed,$ea,$e7,$e4,$e1,$de,$db,$d8,$d5,$d2
+    72  1a09 cfcdcac7c4c1bfbc...	!byte $cf,$cd,$ca,$c7,$c4,$c1,$bf,$bc,$b9,$b7,$b4,$b2,$af,$ad,$ab,$a8
+    73  1a19 a6a4a2a09e9c9a98...	!byte $a6,$a4,$a2,$a0,$9e,$9c,$9a,$98,$96,$95,$93,$91,$90,$8f,$8d,$8c
+    74  1a29 8b8a888786868584...	!byte $8b,$8a,$88,$87,$86,$86,$85,$84,$83,$83,$82,$82,$82,$81,$81,$81
+    75  1a39 8181818182828283...	!byte $81,$81,$81,$81,$82,$82,$82,$83,$83,$84,$85,$86,$86,$87,$88,$8a
+    76  1a49 8b8c8d8f90919395...	!byte $8b,$8c,$8d,$8f,$90,$91,$93,$95,$96,$98,$9a,$9c,$9e,$a0,$a2,$a4
+    77  1a59 a6a8abadafb2b4b7...	!byte $a6,$a8,$ab,$ad,$af,$b2,$b4,$b7,$b9,$bc,$bf,$c1,$c4,$c7,$ca,$cd
+    78  1a69 cfd2d5d8dbdee1e4...	!byte $cf,$d2,$d5,$d8,$db,$de,$e1,$e4,$e7,$ea,$ed,$f0,$f4,$f7,$fa,$fd
+    79  1a79 000306090c101316...	!byte $00,$03,$06,$09,$0c,$10,$13,$16,$19,$1c,$1f,$22,$25,$28,$2b,$2e
+    80  1a89 313336393c3f4144...	!byte $31,$33,$36,$39,$3c,$3f,$41,$44,$47,$49,$4c,$4e,$51,$53,$55,$58
+    81  1a99 5a5c5e6062646668...	!byte $5a,$5c,$5e,$60,$62,$64,$66,$68,$6a,$6b,$6d,$6f,$70,$71,$73,$74
+    82  1aa9 757678797a7a7b7c...	!byte $75,$76,$78,$79,$7a,$7a,$7b,$7c,$7d,$7d,$7e,$7e,$7e,$7f,$7f,$7f
+
+; ******** Source: quake64.asm
+   119                          lut_end
+   120                          !if lut_end - lut_src != 1280 {
+   121                          	!error "LUT blob must be 1280 bytes"
+   122                          }

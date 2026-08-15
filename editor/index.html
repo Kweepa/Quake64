@@ -1,0 +1,2514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quake64 Editor</title>
+  <style>
+:root {
+  --bg: #12141a;
+  --panel: #1c1f28;
+  --border: #2e3340;
+  --text: #e4e6eb;
+  --muted: #8b91a0;
+  --accent: #d4a017;
+  --danger: #c44;
+  --btn: #2a3040;
+  --btn-hover: #3a4258;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  flex-wrap: wrap;
+  flex: 0 0 auto;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.status {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex: 1;
+  text-align: right;
+}
+
+.status.error {
+  color: #f88;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 200px 1fr 344px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.left,
+.right {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 0.75rem;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.right {
+  border-right: none;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: 0.75rem;
+}
+
+.right-editors {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-bottom: 0.75rem;
+}
+
+.preview-panel {
+  flex: 0 0 auto;
+  padding: 0.75rem 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.preview-panel h2 {
+  text-align: center;
+}
+
+.preview-frame {
+  width: 320px;
+  height: 200px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  background: #0a0a0c;
+  overflow: hidden;
+}
+
+#overhead-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #0a0a0c;
+}
+
+.preview-panel .muted {
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
+  text-align: center;
+}
+
+.center {
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.center > h2 {
+  flex: 0 0 auto;
+}
+
+.map-stage {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+#view-canvas {
+  cursor: crosshair;
+  border: 1px solid var(--border);
+  background: #0a0a0c;
+  outline: none;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#view-canvas:focus {
+  border-color: var(--accent);
+}
+
+.hint {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin: 0.5rem 0 0;
+  text-align: center;
+}
+
+button {
+  background: var(--btn);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+button:hover {
+  background: var(--btn-hover);
+}
+
+button.active,
+button.armed {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button.danger {
+  border-color: var(--danger);
+  color: #f99;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.item-palette {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 1rem;
+}
+
+.palette-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  font-size: 0.65rem;
+  color: var(--muted);
+  user-select: none;
+  min-height: 2.6rem;
+}
+
+.palette-item:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.object-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.object-list button {
+  width: 100%;
+  text-align: left;
+}
+
+.panel .muted,
+.muted {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.field > span {
+  color: var(--muted);
+  flex: 0 0 5.5rem;
+  min-width: 5.5rem;
+  white-space: nowrap;
+}
+
+.field input[type="number"],
+.field input[type="text"],
+.field select {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.3rem 0.4rem;
+  font-size: 0.85rem;
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.frame-strip {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.frame-strip button {
+  font-size: 0.72rem;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .left,
+  .right {
+    max-height: none;
+    border: none;
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+  </style>
+</head>
+<body>
+  <header class="toolbar">
+    <h1>Quake64</h1>
+    <div class="toolbar-actions" role="group" aria-label="Editor mode">
+      <button type="button" id="btn-mode-layout" class="active">Layout</button>
+      <button type="button" id="btn-mode-anim">Animation</button>
+    </div>
+    <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
+      <button type="button" id="btn-draw-all" class="active">All</button>
+      <button type="button" id="btn-draw-local">Local</button>
+    </div>
+    <div class="toolbar-actions">
+      <button type="button" id="btn-undo" title="Ctrl+Z" disabled>Undo</button>
+      <button type="button" id="btn-redo" title="Ctrl+Y" disabled>Redo</button>
+      <button type="button" id="btn-save">Save</button>
+      <button type="button" id="btn-load">Load</button>
+    </div>
+    <p id="status" class="status" role="status"></p>
+  </header>
+
+  <main class="layout">
+    <aside class="left">
+      <section id="layout-left">
+        <h2>Place</h2>
+        <div id="item-palette" class="item-palette"></div>
+        <h2>Objects</h2>
+        <ul id="object-list" class="object-list"></ul>
+      </section>
+      <section id="anim-left" hidden>
+        <h2>Enemies</h2>
+        <ul id="enemy-list" class="object-list"></ul>
+        <div class="btn-row">
+          <button type="button" id="btn-add-enemy">Add enemy</button>
+        </div>
+      </section>
+    </aside>
+
+    <section class="center">
+      <h2 id="center-title">Map</h2>
+      <div class="map-stage" id="map-stage">
+        <canvas id="view-canvas" tabindex="0"></canvas>
+      </div>
+      <p class="hint" id="hint"></p>
+    </section>
+
+    <aside class="right">
+      <div class="right-editors" id="right-editors"></div>
+      <div id="overhead-panel" class="preview-panel panel">
+        <h2>Overhead</h2>
+        <div class="preview-frame">
+          <canvas id="overhead-canvas"></canvas>
+        </div>
+        <p class="muted">Full 0–255 map · camera arrow</p>
+      </div>
+    </aside>
+  </main>
+
+  <input type="file" id="file-input" accept="application/json,.json" hidden />
+
+  <script>
+// ---- js/model.js ----
+function uid() {
+  if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+const WORLD_MIN = 0;
+const WORLD_MAX = 255;
+const WORLD_SIZE = 256;
+const MAX_VERTS = 16;
+const MAX_LINES = 16;
+const VERT_MIN = -64;
+const VERT_MAX = 63;
+
+const KINDS = {
+  room: {
+    id: "room",
+    label: "Room",
+    color: "#c8ccd4",
+    defaultSize: [16, 12, 16],
+    fixed: false,
+    slope: false,
+  },
+  crate: {
+    id: "crate",
+    label: "Crate",
+    color: "#d4893a",
+    defaultSize: [6, 6, 6],
+    fixed: false,
+    slope: false,
+  },
+  elevator: {
+    id: "elevator",
+    label: "Elevator",
+    color: "#3ab4d4",
+    defaultSize: [6, 6, 6],
+    fixed: false,
+    slope: false,
+  },
+  slope: {
+    id: "slope",
+    label: "Ramp",
+    color: "#5cb85c",
+    defaultSize: [6, 6, 12],
+    fixed: false,
+    slope: true,
+  },
+  doorway: {
+    id: "doorway",
+    label: "Doorway",
+    color: "#e6c84a",
+    defaultSize: [8, 8, 1],
+    fixed: true,
+    slope: false,
+  },
+  switch: {
+    id: "switch",
+    label: "Switch",
+    color: "#d45ec8",
+    defaultSize: [2, 3, 1],
+    fixed: true,
+    slope: false,
+  },
+};
+
+const PALETTE_ORDER = ["room", "doorway", "switch", "slope", "crate", "elevator"];
+
+const FRAME_NAMES = [
+  "Walk 0",
+  "Walk 1",
+  "Attack A 0",
+  "Attack A 1",
+  "Attack B 0",
+  "Attack B 1",
+  "Flinch 0",
+  "Flinch 1",
+  "Death 0",
+  "Death 1",
+];
+
+const FACES = [
+  { id: "+z", axis: "z", sign: 1, label: "+Z" },
+  { id: "-z", axis: "z", sign: -1, label: "-Z" },
+  { id: "+x", axis: "x", sign: 1, label: "+X" },
+  { id: "-x", axis: "x", sign: -1, label: "-X" },
+];
+
+function clampByte(n) {
+  return Math.max(WORLD_MIN, Math.min(WORLD_MAX, n | 0));
+}
+
+function clampSize(origin, size) {
+  const o = clampByte(origin);
+  const s = Math.max(1, size | 0);
+  return Math.min(s, WORLD_SIZE - o);
+}
+
+function clampVert(n) {
+  const v = n | 0;
+  return Math.max(VERT_MIN, Math.min(VERT_MAX, v));
+}
+
+function aabbEnd(box) {
+  return {
+    x: box.x + box.sx,
+    y: box.y + box.sy,
+    z: box.z + box.sz,
+  };
+}
+
+/** Inclusive face-touch counts as overlap (shared portal wall). */
+function aabbOverlap(a, b) {
+  return (
+    a.x <= b.x + b.sx &&
+    a.x + a.sx >= b.x &&
+    a.y <= b.y + b.sy &&
+    a.y + a.sy >= b.y &&
+    a.z <= b.z + b.sz &&
+    a.z + a.sz >= b.z
+  );
+}
+
+function pointInAabb(p, box) {
+  return (
+    p.x >= box.x &&
+    p.x <= box.x + box.sx &&
+    p.y >= box.y &&
+    p.y <= box.y + box.sy &&
+    p.z >= box.z &&
+    p.z <= box.z + box.sz
+  );
+}
+
+function aabbVolume(box) {
+  return box.sx * box.sy * box.sz;
+}
+
+function aabbCenter(box) {
+  return {
+    x: box.x + box.sx / 2,
+    y: box.y + box.sy / 2,
+    z: box.z + box.sz / 2,
+  };
+}
+
+function sizeForFace(kind, faceId) {
+  const def = KINDS[kind];
+  const face = FACES.find((f) => f.id === faceId) || FACES[0];
+  const [a, b, thick] = def.defaultSize;
+  if (face.axis === "x") return { sx: thick, sy: b, sz: a };
+  return { sx: a, sy: b, sz: thick };
+}
+
+function applyFaceSize(obj) {
+  if (obj.kind !== "doorway" && obj.kind !== "switch") return obj;
+  const s = sizeForFace(obj.kind, obj.face);
+  obj.sx = s.sx;
+  obj.sy = s.sy;
+  obj.sz = s.sz;
+  obj.x = clampByte(obj.x);
+  obj.y = clampByte(obj.y);
+  obj.z = clampByte(obj.z);
+  obj.sx = clampSize(obj.x, obj.sx);
+  obj.sy = clampSize(obj.y, obj.sy);
+  obj.sz = clampSize(obj.z, obj.sz);
+  return obj;
+}
+
+/** Keep 2:1 run = 2 * rise. Rise is sy. */
+function applySlopeConstraint(obj) {
+  if (obj.kind !== "slope") return obj;
+  const rise = Math.max(1, obj.sy | 0);
+  const run = Math.max(2, rise * 2);
+  obj.sy = clampSize(obj.y, rise);
+  if (obj.axis === "x") {
+    obj.sx = clampSize(obj.x, run);
+    obj.sz = clampSize(obj.z, Math.max(1, obj.sz | 0));
+  } else {
+    obj.axis = "z";
+    obj.sz = clampSize(obj.z, run);
+    obj.sx = clampSize(obj.x, Math.max(1, obj.sx | 0));
+  }
+  if (obj.dir !== -1) obj.dir = 1;
+  return obj;
+}
+
+function clampObject(obj) {
+  obj.x = clampByte(obj.x);
+  obj.y = clampByte(obj.y);
+  obj.z = clampByte(obj.z);
+  if (obj.kind === "doorway" || obj.kind === "switch") {
+    applyFaceSize(obj);
+  } else if (obj.kind === "slope") {
+    obj.sx = clampSize(obj.x, obj.sx);
+    obj.sy = clampSize(obj.y, obj.sy);
+    obj.sz = clampSize(obj.z, obj.sz);
+    applySlopeConstraint(obj);
+  } else {
+    obj.sx = clampSize(obj.x, obj.sx);
+    obj.sy = clampSize(obj.y, obj.sy);
+    obj.sz = clampSize(obj.z, obj.sz);
+  }
+  return obj;
+}
+
+function createObject(kind, x, y, z, extra = {}) {
+  const def = KINDS[kind];
+  const obj = {
+        id: extra.id || uid(),
+    kind,
+    x: x | 0,
+    y: y | 0,
+    z: z | 0,
+    sx: def.defaultSize[0],
+    sy: def.defaultSize[1],
+    sz: def.defaultSize[2],
+    face: extra.face || "+z",
+    axis: extra.axis || "z",
+    dir: extra.dir ?? 1,
+  };
+  if (kind === "slope") {
+    obj.sx = 6;
+    obj.sy = 6;
+    obj.sz = 12;
+  }
+  return clampObject(obj);
+}
+
+function cycleFace(faceId, delta) {
+  const i = FACES.findIndex((f) => f.id === faceId);
+  const n = (i + delta + FACES.length) % FACES.length;
+  return FACES[n].id;
+}
+
+function roomsOf(doc) {
+  return doc.map.objects.filter((o) => o.kind === "room");
+}
+
+function doorwaysOf(doc) {
+  return doc.map.objects.filter((o) => o.kind === "doorway");
+}
+
+function currentRoom(doc, cam) {
+  const rooms = roomsOf(doc).filter((r) => pointInAabb(cam, r));
+  if (!rooms.length) return null;
+  rooms.sort((a, b) => aabbVolume(a) - aabbVolume(b));
+  return rooms[0];
+}
+
+function neighbourRooms(doc, room) {
+  if (!room) return [];
+  const doors = doorwaysOf(doc);
+  const out = [];
+  for (const other of roomsOf(doc)) {
+    if (other.id === room.id) continue;
+    const linked = doors.some((d) => aabbOverlap(d, room) && aabbOverlap(d, other));
+    if (linked) out.push(other);
+  }
+  return out;
+}
+
+function localVisibleIds(doc, cam) {
+  const cur = currentRoom(doc, cam);
+  if (!cur) return new Set();
+  const ids = new Set([cur.id]);
+  const neigh = neighbourRooms(doc, cur);
+  for (const r of neigh) ids.add(r.id);
+  const rooms = [cur, ...neigh];
+  for (const obj of doc.map.objects) {
+    if (obj.kind === "room") continue;
+    if (rooms.some((r) => aabbOverlap(obj, r))) ids.add(obj.id);
+  }
+  return ids;
+}
+
+function objectVisible(doc, obj, cam, localMode) {
+  if (!localMode) return true;
+  return localVisibleIds(doc, cam).has(obj.id);
+}
+
+function pose(overrides) {
+  const base = [
+    [-3, 6, 0],
+    [3, 6, 0],
+    [0, 14, 0],
+    [0, 20, 0],
+    [-6, 11, 0],
+    [-8, 7, 0],
+    [6, 11, 0],
+    [8, 7, 0],
+    [-3, 3, 0],
+    [-3, 0, 0],
+    [3, 3, 0],
+    [3, 0, 0],
+  ];
+  return base.map((p, i) => {
+    const o = overrides[i];
+    if (!o) return { x: p[0], y: p[1], z: p[2] };
+    return { x: p[0] + o[0], y: p[1] + o[1], z: p[2] + o[2] };
+  });
+}
+
+const TEMPLATE_LINES = [
+  [0, 1],
+  [1, 2],
+  [2, 0],
+  [2, 3],
+  [2, 4],
+  [4, 5],
+  [2, 6],
+  [6, 7],
+  [0, 8],
+  [8, 9],
+  [1, 10],
+  [10, 11],
+];
+
+const FRAME_OFFSETS = [
+  { 5: [0, 0, 2], 7: [0, 0, -2], 9: [0, 0, -2], 11: [0, 0, 2] },
+  { 5: [0, 0, -2], 7: [0, 0, 2], 9: [0, 0, 2], 11: [0, 0, -2] },
+  { 5: [0, 2, 4], 4: [0, 1, 2], 3: [1, 0, 1] },
+  { 5: [1, 3, 6], 4: [0, 2, 3], 3: [2, 0, 2] },
+  { 7: [0, 2, 4], 6: [0, 1, 2] },
+  { 7: [1, 3, 6], 6: [0, 2, 3] },
+  { 2: [1, -1, 0], 3: [2, -1, 0] },
+  { 2: [2, -2, 0], 3: [3, -2, 1] },
+  { 2: [0, -4, 2], 3: [0, -5, 4], 5: [0, -3, 0], 7: [0, -3, 0] },
+  {
+    0: [4, -5, 2],
+    1: [6, -6, 3],
+    2: [5, -4, 4],
+    3: [8, -3, 5],
+    8: [4, -6, 1],
+    9: [4, -6, 0],
+    10: [7, -6, 2],
+    11: [8, -6, 1],
+  },
+];
+
+function defaultStickFrames() {
+  return FRAME_OFFSETS.map((off) => pose(off));
+}
+
+function createEnemy(name = "Grunt") {
+  return {
+    id: uid(),
+    name,
+    verts: 12,
+    lines: TEMPLATE_LINES.map((p) => [p[0], p[1]]),
+    frames: defaultStickFrames(),
+  };
+}
+
+function createDefaultDocument() {
+  const roomA = createObject("room", 8, 0, 8);
+  roomA.sx = 24;
+  roomA.sy = 12;
+  roomA.sz = 24;
+  const roomB = createObject("room", 31, 0, 8);
+  roomB.sx = 24;
+  roomB.sy = 12;
+  roomB.sz = 24;
+  const door = createObject("doorway", 31, 0, 16, { face: "+x" });
+  const crate = createObject("crate", 14, 0, 14);
+  return {
+    version: 1,
+    map: { objects: [roomA, roomB, door, crate] },
+    enemies: [createEnemy("Grunt")],
+  };
+}
+
+function cloneDoc(doc) {
+  return JSON.parse(JSON.stringify(doc));
+}
+
+function normalizeDocument(raw) {
+  const doc = createDefaultDocument();
+  if (!raw || typeof raw !== "object") return doc;
+  doc.map.objects = [];
+  const objs = raw.map?.objects || raw.objects || [];
+  for (const o of objs) {
+    if (!KINDS[o.kind]) continue;
+    const obj = createObject(o.kind, o.x, o.y, o.z, {
+      id: o.id,
+      face: o.face,
+      axis: o.axis,
+      dir: o.dir,
+    });
+    if (!KINDS[o.kind].fixed) {
+      obj.sx = o.sx ?? obj.sx;
+      obj.sy = o.sy ?? obj.sy;
+      obj.sz = o.sz ?? obj.sz;
+    }
+    doc.map.objects.push(clampObject(obj));
+  }
+  doc.enemies = [];
+  const enemies = raw.enemies || [];
+  for (const e of enemies) {
+    const enemy = createEnemy(e.name || "Enemy");
+    enemy.id = e.id || enemy.id;
+    const lines = Array.isArray(e.lines) ? e.lines.slice(0, MAX_LINES) : enemy.lines;
+    enemy.lines = lines
+      .filter((p) => Array.isArray(p) && p.length >= 2)
+      .map((p) => [p[0] | 0, p[1] | 0]);
+    let nverts = e.verts | 0;
+    if (Array.isArray(e.frames?.[0])) nverts = Math.max(nverts, e.frames[0].length);
+    enemy.verts = Math.max(1, Math.min(MAX_VERTS, nverts || enemy.verts));
+    const srcFrames = Array.isArray(e.frames) ? e.frames : [];
+    enemy.frames = FRAME_NAMES.map((_, fi) => {
+      const src = srcFrames[fi] || srcFrames[0] || enemy.frames[0];
+      const verts = [];
+      for (let i = 0; i < enemy.verts; i++) {
+        const v = src[i] || { x: 0, y: 0, z: 0 };
+        verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
+      }
+      return verts;
+    });
+    for (const ln of enemy.lines) {
+      ln[0] = Math.max(0, Math.min(enemy.verts - 1, ln[0]));
+      ln[1] = Math.max(0, Math.min(enemy.verts - 1, ln[1]));
+    }
+    doc.enemies.push(enemy);
+  }
+  if (!doc.enemies.length) doc.enemies.push(createEnemy("Grunt"));
+  if (!doc.map.objects.length) return createDefaultDocument();
+  return doc;
+}
+
+// ---- js/math3d.js ----
+function len3(x, y, z) {
+  return Math.hypot(x, y, z);
+}
+
+function norm3(x, y, z) {
+  const l = len3(x, y, z) || 1;
+  return { x: x / l, y: y / l, z: z / l };
+}
+
+function lookVectors(yaw, pitch) {
+  const cy = Math.cos(yaw);
+  const sy = Math.sin(yaw);
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
+  const forward = { x: sy * cp, y: sp, z: cy * cp };
+  const right = { x: cy, y: 0, z: -sy };
+  const up = {
+    x: -sy * sp,
+    y: cp,
+    z: -cy * sp,
+  };
+  return { forward, right, up };
+}
+
+function worldToCamera(p, cam) {
+  const dx = p.x - cam.x;
+  const dy = p.y - cam.y;
+  const dz = p.z - cam.z;
+  const { forward, right, up } = lookVectors(cam.yaw, cam.pitch);
+  return {
+    x: dx * right.x + dy * right.y + dz * right.z,
+    y: dx * up.x + dy * up.y + dz * up.z,
+    z: dx * forward.x + dy * forward.y + dz * forward.z,
+  };
+}
+
+const NEAR = 0.15;
+
+function projectCam(c, w, h, f) {
+  return {
+    sx: w * 0.5 + (c.x / c.z) * f,
+    sy: h * 0.5 - (c.y / c.z) * f,
+  };
+}
+
+function projectPoint(p, cam, w, h, focal) {
+  const c = worldToCamera(p, cam);
+  if (c.z < NEAR) return { ...c, ok: false, sx: 0, sy: 0 };
+  const f = focal ?? Math.min(w, h) * 0.9;
+  const s = projectCam(c, w, h, f);
+  return { ...c, ok: true, sx: s.sx, sy: s.sy };
+}
+
+/** Clip a world-space segment to the camera near plane, then project. */
+function projectLine(a, b, cam, w, h, focal) {
+  const ca = worldToCamera(a, cam);
+  const cb = worldToCamera(b, cam);
+  if (ca.z < NEAR && cb.z < NEAR) return null;
+  let pa = ca;
+  let pb = cb;
+  if (ca.z < NEAR || cb.z < NEAR) {
+    const t = (NEAR - ca.z) / (cb.z - ca.z);
+    const clip = {
+      x: ca.x + t * (cb.x - ca.x),
+      y: ca.y + t * (cb.y - ca.y),
+      z: NEAR,
+    };
+    if (ca.z < NEAR) pa = clip;
+    else pb = clip;
+  }
+  const f = focal ?? Math.min(w, h) * 0.9;
+  const sa = projectCam(pa, w, h, f);
+  const sb = projectCam(pb, w, h, f);
+  return { ax: sa.sx, ay: sa.sy, bx: sb.sx, by: sb.sy };
+}
+
+function screenRay(mx, my, cam, w, h, focal) {
+  const f = focal ?? Math.min(w, h) * 0.9;
+  const nx = (mx - w * 0.5) / f;
+  const ny = -(my - h * 0.5) / f;
+  const { forward, right, up } = lookVectors(cam.yaw, cam.pitch);
+  const dir = norm3(
+    forward.x + right.x * nx + up.x * ny,
+    forward.y + right.y * nx + up.y * ny,
+    forward.z + right.z * nx + up.z * ny
+  );
+  return { origin: { x: cam.x, y: cam.y, z: cam.z }, dir };
+}
+
+function rayAabb(origin, dir, box) {
+  const min = { x: box.x, y: box.y, z: box.z };
+  const max = { x: box.x + box.sx, y: box.y + box.sy, z: box.z + box.sz };
+  let tmin = 0;
+  let tmax = 1e9;
+  for (const a of ["x", "y", "z"]) {
+    if (Math.abs(dir[a]) < 1e-8) {
+      if (origin[a] < min[a] || origin[a] > max[a]) return null;
+      continue;
+    }
+    let t1 = (min[a] - origin[a]) / dir[a];
+    let t2 = (max[a] - origin[a]) / dir[a];
+    if (t1 > t2) [t1, t2] = [t2, t1];
+    tmin = Math.max(tmin, t1);
+    tmax = Math.min(tmax, t2);
+    if (tmin > tmax) return null;
+  }
+  if (tmax < 0) return null;
+  const t = tmin >= 0 ? tmin : tmax;
+  return {
+    t,
+    point: {
+      x: origin.x + dir.x * t,
+      y: origin.y + dir.y * t,
+      z: origin.z + dir.z * t,
+    },
+  };
+}
+
+function intersectPlane(origin, dir, point, normal) {
+  const denom = dir.x * normal.x + dir.y * normal.y + dir.z * normal.z;
+  if (Math.abs(denom) < 1e-8) return null;
+  const t =
+    ((point.x - origin.x) * normal.x +
+      (point.y - origin.y) * normal.y +
+      (point.z - origin.z) * normal.z) /
+    denom;
+  if (t < 0) return null;
+  return {
+    t,
+    point: {
+      x: origin.x + dir.x * t,
+      y: origin.y + dir.y * t,
+      z: origin.z + dir.z * t,
+    },
+  };
+}
+
+function distPointToSegment2d(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  if (l2 < 1e-6) return Math.hypot(px - ax, py - ay);
+  let t = ((px - ax) * dx + (py - ay) * dy) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+const BOX_CORNERS = [
+  [0, 0, 0],
+  [1, 0, 0],
+  [1, 1, 0],
+  [0, 1, 0],
+  [0, 0, 1],
+  [1, 0, 1],
+  [1, 1, 1],
+  [0, 1, 1],
+];
+
+const BOX_EDGES = [
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 0],
+  [4, 5],
+  [5, 6],
+  [6, 7],
+  [7, 4],
+  [0, 4],
+  [1, 5],
+  [2, 6],
+  [3, 7],
+];
+
+function cornerWorld(box, i) {
+  const c = BOX_CORNERS[i];
+  return {
+    x: box.x + c[0] * box.sx,
+    y: box.y + c[1] * box.sy,
+    z: box.z + c[2] * box.sz,
+  };
+}
+
+function faceCorners(faceId) {
+  switch (faceId) {
+    case "+z":
+      return [4, 5, 6, 7];
+    case "-z":
+      return [1, 0, 3, 2];
+    case "+x":
+      return [1, 5, 6, 2];
+    case "-x":
+      return [4, 0, 3, 7];
+    default:
+      return [4, 5, 6, 7];
+  }
+}
+
+// ---- js/io.js ----
+const STORAGE_KEY = "quake64-editor-doc";
+
+function saveToStorage(doc) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function downloadJSON(doc, filename = "quake64.json") {
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function readJSONFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        resolve(JSON.parse(String(reader.result)));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+// ---- js/layoutView.js ----
+const HANDLE = 7;
+
+class LayoutView {
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @param {object} opts
+   */
+  constructor(canvas, opts) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.opts = opts;
+    this.camera = {
+      x: 28,
+      y: 10,
+      z: -6,
+      yaw: 0.35,
+      pitch: -0.2,
+      speed: 28,
+    };
+    this.keys = new Set();
+    this.look = false;
+    this.lastT = 0;
+    this.hoverId = null;
+    this.drag = null;
+    this.enabled = true;
+    this._ro = new ResizeObserver(() => this.resize());
+    this._ro.observe(opts.stage || canvas.parentElement);
+    this.resize();
+
+    canvas.addEventListener("pointerdown", (e) => this.#onDown(e));
+    canvas.addEventListener("pointermove", (e) => this.#onMove(e));
+    canvas.addEventListener("pointerup", (e) => this.#onUp(e));
+    canvas.addEventListener("pointerleave", (e) => this.#onUp(e));
+    canvas.addEventListener("wheel", (e) => this.#onWheel(e), { passive: false });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    window.addEventListener("keydown", (e) => this.#onKey(e, true));
+    window.addEventListener("keyup", (e) => this.#onKey(e, false));
+
+    this._raf = (t) => {
+      if (this.enabled) this.#tick(t);
+      else this.lastT = t;
+      requestAnimationFrame(this._raf);
+    };
+    requestAnimationFrame(this._raf);
+  }
+
+  resize() {
+    const stage = this.opts.stage || this.canvas.parentElement;
+    const rect = stage.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(64, Math.floor(rect.width));
+    const h = Math.max(64, Math.floor(rect.height));
+    this.canvas.width = Math.floor(w * dpr);
+    this.canvas.height = Math.floor(h * dpr);
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.cssW = w;
+    this.cssH = h;
+    this.draw();
+  }
+
+  #focused() {
+    return document.activeElement === this.canvas;
+  }
+
+  #onKey(e, down) {
+    if (!this.enabled) return;
+    if (!this.#focused() && down) return;
+    const k = e.key.toLowerCase();
+    if ("wasdqe".includes(k) || k === "shift") {
+      if (down) this.keys.add(k);
+      else this.keys.delete(k);
+      if (down) e.preventDefault();
+    }
+  }
+
+  #tick(t) {
+    const dt = this.lastT ? Math.min(0.05, (t - this.lastT) / 1000) : 0;
+    this.lastT = t;
+    if (this.#focused()) {
+      const { forward, right, up } = lookVectors(this.camera.yaw, this.camera.pitch);
+      const boost = this.keys.has("shift") ? 3 : 1;
+      const sp = this.camera.speed * boost * dt;
+      if (this.keys.has("w")) {
+        this.camera.x += forward.x * sp;
+        this.camera.y += forward.y * sp;
+        this.camera.z += forward.z * sp;
+      }
+      if (this.keys.has("s")) {
+        this.camera.x -= forward.x * sp;
+        this.camera.y -= forward.y * sp;
+        this.camera.z -= forward.z * sp;
+      }
+      if (this.keys.has("d")) {
+        this.camera.x += right.x * sp;
+        this.camera.y += right.y * sp;
+        this.camera.z += right.z * sp;
+      }
+      if (this.keys.has("a")) {
+        this.camera.x -= right.x * sp;
+        this.camera.y -= right.y * sp;
+        this.camera.z -= right.z * sp;
+      }
+      if (this.keys.has("e")) {
+        this.camera.x += up.x * sp;
+        this.camera.y += up.y * sp;
+        this.camera.z += up.z * sp;
+      }
+      if (this.keys.has("q")) {
+        this.camera.x -= up.x * sp;
+        this.camera.y -= up.y * sp;
+        this.camera.z -= up.z * sp;
+      }
+    }
+    this.draw();
+  }
+
+  #eventPos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * this.cssW,
+      y: ((e.clientY - rect.top) / rect.height) * this.cssH,
+    };
+  }
+
+  #onWheel(e) {
+    if (!this.enabled || !this.#focused()) return;
+    e.preventDefault();
+    this.camera.speed = Math.max(6, Math.min(80, this.camera.speed + (e.deltaY > 0 ? -4 : 4)));
+    this.opts.onStatus?.(`Fly speed ${this.camera.speed | 0}`);
+  }
+
+  #onDown(e) {
+    if (!this.enabled) return;
+    this.canvas.focus();
+    const p = this.#eventPos(e);
+    if (e.button === 2 || e.button === 1) {
+      this.look = true;
+      this.lookLast = p;
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button !== 0) return;
+
+    const doc = this.opts.getDoc();
+    const selected = this.opts.getSelectedId?.();
+    const hitHandle = selected ? this.#hitHandle(doc, selected, p.x, p.y) : null;
+    if (hitHandle) {
+      this.opts.beginUndo?.();
+      const obj = doc.map.objects.find((o) => o.id === selected);
+      this.drag = {
+        kind: hitHandle.kind,
+        axis: hitHandle.axis,
+        corner: hitHandle.corner,
+        start: p,
+        orig: { ...obj },
+        grab: hitHandle.world,
+      };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    const hit = this.#pick(doc, p.x, p.y);
+    this.opts.onSelect?.(hit?.id || null);
+    if (hit) {
+      this.opts.beginUndo?.();
+      const obj = doc.map.objects.find((o) => o.id === hit.id);
+      this.drag = {
+        kind: "move",
+        start: p,
+        orig: { ...obj },
+        grab: hit.point,
+        planeN: lookVectors(this.camera.yaw, this.camera.pitch).forward,
+      };
+      this.canvas.setPointerCapture(e.pointerId);
+    }
+  }
+
+  #onMove(e) {
+    if (!this.enabled) return;
+    const p = this.#eventPos(e);
+    if (this.look) {
+      const dx = p.x - this.lookLast.x;
+      const dy = p.y - this.lookLast.y;
+      this.lookLast = p;
+      this.camera.yaw += dx * 0.008;
+      this.camera.pitch = Math.max(-1.4, Math.min(1.4, this.camera.pitch - dy * 0.008));
+      return;
+    }
+    if (this.drag) {
+      this.#applyDrag(p);
+      this.opts.onChange?.();
+      return;
+    }
+    const doc = this.opts.getDoc();
+    this.hoverId = this.#pick(doc, p.x, p.y)?.id || null;
+  }
+
+  #onUp(e) {
+    if (!this.enabled) return;
+    if (this.look) this.look = false;
+    if (this.drag) {
+      this.drag = null;
+      this.opts.endUndo?.();
+    }
+    try {
+      this.canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  #applyDrag(p) {
+    const doc = this.opts.getDoc();
+    const obj = doc.map.objects.find((o) => o.id === this.drag.orig.id);
+    if (!obj) return;
+    const ray = screenRay(p.x, p.y, this.camera, this.cssW, this.cssH);
+    const orig = this.drag.orig;
+
+    if (this.drag.kind === "move") {
+      const hit = intersectPlane(ray.origin, ray.dir, this.drag.grab, this.drag.planeN);
+      if (!hit) return;
+      const dx = Math.round(hit.point.x - this.drag.grab.x);
+      const dy = Math.round(hit.point.y - this.drag.grab.y);
+      const dz = Math.round(hit.point.z - this.drag.grab.z);
+      obj.x = orig.x + dx;
+      obj.y = orig.y + dy;
+      obj.z = orig.z + dz;
+      clampObject(obj);
+      return;
+    }
+
+    if (this.drag.kind === "axis") {
+      const axis = this.drag.axis;
+      const n = { x: 0, y: 0, z: 0 };
+      if (axis === "x") n.y = 1;
+      else if (axis === "y") n.x = 1;
+      else n.y = 1;
+      const hit = intersectPlane(ray.origin, ray.dir, this.drag.grab, n);
+      if (!hit) return;
+      const delta = Math.round(hit.point[axis] - this.drag.grab[axis]);
+      obj[axis] = orig[axis] + delta;
+      clampObject(obj);
+      return;
+    }
+
+    if (this.drag.kind === "scale") {
+      const def = KINDS[obj.kind];
+      if (def.fixed) return;
+      const c = this.drag.corner;
+      const opp = { x: c[0] ? orig.x : orig.x + orig.sx, y: c[1] ? orig.y : orig.y + orig.sy, z: c[2] ? orig.z : orig.z + orig.sz };
+      const hit = intersectPlane(
+        ray.origin,
+        ray.dir,
+        this.drag.grab,
+        lookVectors(this.camera.yaw, this.camera.pitch).forward
+      );
+      if (!hit) return;
+      const px = Math.round(hit.point.x);
+      const py = Math.round(hit.point.y);
+      const pz = Math.round(hit.point.z);
+      const x0 = Math.min(opp.x, px);
+      const y0 = Math.min(opp.y, py);
+      const z0 = Math.min(opp.z, pz);
+      const x1 = Math.max(opp.x, px);
+      const y1 = Math.max(opp.y, py);
+      const z1 = Math.max(opp.z, pz);
+      obj.x = x0;
+      obj.y = y0;
+      obj.z = z0;
+      obj.sx = Math.max(1, x1 - x0);
+      obj.sy = Math.max(1, y1 - y0);
+      obj.sz = Math.max(1, z1 - z0);
+      clampObject(obj);
+    }
+  }
+
+  #visibleObjects(doc) {
+    const local = this.opts.getLocalMode?.() || false;
+    const cam = this.camera;
+    return doc.map.objects.filter((o) => objectVisible(doc, o, cam, local));
+  }
+
+  #pick(doc, mx, my) {
+    const ray = screenRay(mx, my, this.camera, this.cssW, this.cssH);
+    let best = null;
+    for (const obj of this.#visibleObjects(doc)) {
+      const hit = rayAabb(ray.origin, ray.dir, obj);
+      if (!hit) continue;
+      if (!best || hit.t < best.t) best = { id: obj.id, t: hit.t, point: hit.point };
+    }
+    return best;
+  }
+
+  #hitHandle(doc, id, mx, my) {
+    const obj = doc.map.objects.find((o) => o.id === id);
+    if (!obj) return null;
+    const cam = this.camera;
+    const w = this.cssW;
+    const h = this.cssH;
+    const c = aabbCenter(obj);
+    const axes = [
+      { axis: "x", p: { x: c.x + 8, y: c.y, z: c.z } },
+      { axis: "y", p: { x: c.x, y: c.y + 8, z: c.z } },
+      { axis: "z", p: { x: c.x, y: c.y, z: c.z + 8 } },
+    ];
+    const pc = projectPoint(c, cam, w, h);
+    for (const a of axes) {
+      const pa = projectPoint(a.p, cam, w, h);
+      if (!pc.ok || !pa.ok) continue;
+      if (distPointToSegment2d(mx, my, pc.sx, pc.sy, pa.sx, pa.sy) < 8) {
+        return { kind: "axis", axis: a.axis, world: c };
+      }
+    }
+    if (!KINDS[obj.kind].fixed) {
+      for (let i = 0; i < 8; i++) {
+        const cw = cornerWorld(obj, i);
+        const pr = projectPoint(cw, cam, w, h);
+        if (!pr.ok) continue;
+        if (Math.hypot(mx - pr.sx, my - pr.sy) < HANDLE) {
+          return { kind: "scale", corner: BOX_CORNERS[i], world: cw };
+        }
+      }
+    }
+    return null;
+  }
+
+  placeInFront(kind) {
+    const { forward } = lookVectors(this.camera.yaw, this.camera.pitch);
+    const dist = 12;
+    return {
+      x: Math.round(this.camera.x + forward.x * dist),
+      y: Math.max(0, Math.round(this.camera.y + forward.y * dist - 3)),
+      z: Math.round(this.camera.z + forward.z * dist),
+    };
+  }
+
+  draw() {
+    if (!this.enabled) return;
+    const ctx = this.ctx;
+    const w = this.cssW;
+    const h = this.cssH;
+    if (!w || !h) return;
+    ctx.fillStyle = "#0a0a0c";
+    ctx.fillRect(0, 0, w, h);
+
+    const doc = this.opts.getDoc();
+    const cam = this.camera;
+    const selected = this.opts.getSelectedId?.();
+    const local = this.opts.getLocalMode?.() || false;
+
+    this.#drawGrid(ctx, cam, w, h);
+
+    const objs = [...this.#visibleObjects(doc)].sort((a, b) => {
+      const ca = aabbCenter(a);
+      const cb = aabbCenter(b);
+      const da = (ca.x - cam.x) ** 2 + (ca.y - cam.y) ** 2 + (ca.z - cam.z) ** 2;
+      const db = (cb.x - cam.x) ** 2 + (cb.y - cam.y) ** 2 + (cb.z - cam.z) ** 2;
+      return db - da;
+    });
+
+    for (const obj of objs) {
+      const hi = obj.id === selected || obj.id === this.hoverId;
+      this.#drawObject(ctx, obj, cam, w, h, hi, obj.id === selected);
+    }
+
+    ctx.fillStyle = "#8b91a0";
+    ctx.font = "11px Segoe UI, sans-serif";
+    ctx.fillText(
+      `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${local ? "LOCAL" : "ALL"}  spd ${cam.speed | 0}`,
+      8,
+      16
+    );
+  }
+
+  #drawGrid(ctx, cam, w, h) {
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#3d4658";
+    for (let i = 0; i <= WORLD_SIZE; i += 8) {
+      this.#line3(ctx, { x: i, y: 0, z: 0 }, { x: i, y: 0, z: WORLD_SIZE }, cam, w, h);
+      this.#line3(ctx, { x: 0, y: 0, z: i }, { x: WORLD_SIZE, y: 0, z: i }, cam, w, h);
+    }
+    ctx.strokeStyle = "#6a7388";
+    for (let i = 0; i <= WORLD_SIZE; i += 32) {
+      this.#line3(ctx, { x: i, y: 0, z: 0 }, { x: i, y: 0, z: WORLD_SIZE }, cam, w, h);
+      this.#line3(ctx, { x: 0, y: 0, z: i }, { x: WORLD_SIZE, y: 0, z: i }, cam, w, h);
+    }
+    ctx.strokeStyle = "#9aa3b5";
+    this.#line3(ctx, { x: 0, y: 0, z: 0 }, { x: WORLD_SIZE, y: 0, z: 0 }, cam, w, h);
+    this.#line3(ctx, { x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: WORLD_SIZE }, cam, w, h);
+    this.#line3(ctx, { x: 0, y: 0, z: 0 }, { x: 0, y: WORLD_SIZE, z: 0 }, cam, w, h);
+  }
+
+  #line3(ctx, a, b, cam, w, h, color) {
+    const seg = projectLine(a, b, cam, w, h);
+    if (!seg) return;
+    if (color) ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(seg.ax, seg.ay);
+    ctx.lineTo(seg.bx, seg.by);
+    ctx.stroke();
+  }
+
+  #drawObject(ctx, obj, cam, w, h, highlight, selected) {
+    const color = highlight ? "#f2d36b" : KINDS[obj.kind].color;
+    ctx.lineWidth = selected ? 2 : 1;
+    ctx.strokeStyle = color;
+    for (const [i, j] of BOX_EDGES) {
+      this.#line3(ctx, cornerWorld(obj, i), cornerWorld(obj, j), cam, w, h);
+    }
+    this.#drawGlyphs(ctx, obj, cam, w, h, color);
+    if (selected) this.#drawGizmo(ctx, obj, cam, w, h);
+  }
+
+  #drawGlyphs(ctx, obj, cam, w, h, color) {
+    ctx.strokeStyle = color;
+    if (obj.kind === "crate") {
+      const f = faceCorners(obj.face || "+z");
+      this.#line3(ctx, cornerWorld(obj, f[0]), cornerWorld(obj, f[2]), cam, w, h);
+      this.#line3(ctx, cornerWorld(obj, f[1]), cornerWorld(obj, f[3]), cam, w, h);
+    }
+    if (obj.kind === "doorway") {
+      const f = faceCorners(obj.face);
+      this.#line3(ctx, cornerWorld(obj, f[0]), cornerWorld(obj, f[2]), cam, w, h);
+    }
+    if (obj.kind === "switch") {
+      const f = faceCorners(obj.face);
+      const a = cornerWorld(obj, f[0]);
+      const b = cornerWorld(obj, f[1]);
+      const c = cornerWorld(obj, f[2]);
+      const d = cornerWorld(obj, f[3]);
+      const apex = {
+        x: (a.x + b.x + c.x + d.x) / 4,
+        y: Math.max(a.y, b.y, c.y, d.y),
+        z: (a.z + b.z + c.z + d.z) / 4,
+      };
+      const left = {
+        x: (a.x + d.x) / 2,
+        y: (a.y + d.y) / 2,
+        z: (a.z + d.z) / 2,
+      };
+      const right = {
+        x: (b.x + c.x) / 2,
+        y: (b.y + c.y) / 2,
+        z: (b.z + c.z) / 2,
+      };
+      this.#line3(ctx, apex, left, cam, w, h);
+      this.#line3(ctx, left, right, cam, w, h);
+      this.#line3(ctx, right, apex, cam, w, h);
+    }
+    if (obj.kind === "slope") {
+      const lowY = obj.y;
+      const highY = obj.y + obj.sy;
+      let p0, p1, p2, p3;
+      if (obj.axis === "x") {
+        const x0 = obj.dir === 1 ? obj.x : obj.x + obj.sx;
+        const x1 = obj.dir === 1 ? obj.x + obj.sx : obj.x;
+        p0 = { x: x0, y: lowY, z: obj.z };
+        p1 = { x: x0, y: lowY, z: obj.z + obj.sz };
+        p2 = { x: x1, y: highY, z: obj.z + obj.sz };
+        p3 = { x: x1, y: highY, z: obj.z };
+      } else {
+        const z0 = obj.dir === 1 ? obj.z : obj.z + obj.sz;
+        const z1 = obj.dir === 1 ? obj.z + obj.sz : obj.z;
+        p0 = { x: obj.x, y: lowY, z: z0 };
+        p1 = { x: obj.x + obj.sx, y: lowY, z: z0 };
+        p2 = { x: obj.x + obj.sx, y: highY, z: z1 };
+        p3 = { x: obj.x, y: highY, z: z1 };
+      }
+      this.#line3(ctx, p0, p1, cam, w, h);
+      this.#line3(ctx, p1, p2, cam, w, h);
+      this.#line3(ctx, p2, p3, cam, w, h);
+      this.#line3(ctx, p3, p0, cam, w, h);
+      this.#line3(ctx, p0, p2, cam, w, h);
+    }
+  }
+
+  #drawGizmo(ctx, obj, cam, w, h) {
+    const c = aabbCenter(obj);
+    this.#line3(ctx, c, { x: c.x + 8, y: c.y, z: c.z }, cam, w, h, "#e55");
+    this.#line3(ctx, c, { x: c.x, y: c.y + 8, z: c.z }, cam, w, h, "#5e5");
+    this.#line3(ctx, c, { x: c.x, y: c.y, z: c.z + 8 }, cam, w, h, "#55e");
+    if (KINDS[obj.kind].fixed) return;
+    ctx.fillStyle = "#f2d36b";
+    for (let i = 0; i < 8; i++) {
+      const pr = projectPoint(cornerWorld(obj, i), cam, w, h);
+      if (!pr.ok) continue;
+      ctx.fillRect(pr.sx - 3, pr.sy - 3, 6, 6);
+    }
+  }
+}
+
+// ---- js/overheadView.js ----
+class OverheadView {
+  constructor(canvas, opts) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.opts = opts;
+    this._ro = new ResizeObserver(() => this.resize());
+    this._ro.observe(canvas.parentElement);
+    this.resize();
+  }
+
+  resize() {
+    const parent = this.canvas.parentElement;
+    const rect = parent.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(64, Math.floor(rect.width));
+    const h = Math.max(64, Math.floor(rect.height));
+    this.canvas.width = Math.floor(w * dpr);
+    this.canvas.height = Math.floor(h * dpr);
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.cssW = w;
+    this.cssH = h;
+    this.draw();
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    const w = this.cssW;
+    const h = this.cssH;
+    if (!w || !h) return;
+    ctx.fillStyle = "#0a0a0c";
+    ctx.fillRect(0, 0, w, h);
+
+    const pad = 8;
+    const side = Math.min(w, h) - pad * 2;
+    const ox = (w - side) / 2;
+    const oy = (h - side) / 2;
+    const s = side / WORLD_SIZE;
+
+    ctx.strokeStyle = "#8b91a0";
+    ctx.strokeRect(ox, oy, side, side);
+    ctx.strokeStyle = "#3d4658";
+    for (let i = 0; i <= WORLD_SIZE; i += 8) {
+      ctx.beginPath();
+      ctx.moveTo(ox + i * s, oy);
+      ctx.lineTo(ox + i * s, oy + side);
+      ctx.moveTo(ox, oy + i * s);
+      ctx.lineTo(ox + side, oy + i * s);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = "#6a7388";
+    for (let i = 0; i <= WORLD_SIZE; i += 32) {
+      ctx.beginPath();
+      ctx.moveTo(ox + i * s, oy);
+      ctx.lineTo(ox + i * s, oy + side);
+      ctx.moveTo(ox, oy + i * s);
+      ctx.lineTo(ox + side, oy + i * s);
+      ctx.stroke();
+    }
+
+    const doc = this.opts.getDoc();
+    const cam = this.opts.getCamera();
+    const local = this.opts.getLocalMode?.() || false;
+    const cur = currentRoom(doc, cam);
+    const neigh = cur ? neighbourRooms(doc, cur) : [];
+    const vis = local ? localVisibleIds(doc, cam) : null;
+    const selected = this.opts.getSelectedId?.();
+
+    const toScreen = (x, z) => ({ x: ox + x * s, y: oy + z * s });
+
+    const drawBox = (obj, fill, stroke, lw = 1) => {
+      const p = toScreen(obj.x, obj.z);
+      ctx.lineWidth = lw;
+      if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fillRect(p.x, p.y, obj.sx * s, obj.sz * s);
+      }
+      ctx.strokeStyle = stroke;
+      ctx.strokeRect(p.x, p.y, obj.sx * s, obj.sz * s);
+    };
+
+    for (const obj of doc.map.objects) {
+      if (obj.kind !== "room") continue;
+      const isCur = cur && obj.id === cur.id;
+      const isN = neigh.some((n) => n.id === obj.id);
+      const faded = vis && !vis.has(obj.id);
+      drawBox(
+        obj,
+        isCur ? "rgba(212,160,23,0.28)" : isN ? "rgba(90,180,90,0.22)" : "rgba(200,204,212,0.08)",
+        faded ? "#333" : KINDS.room.color,
+        isCur ? 2 : 1
+      );
+    }
+
+    for (const obj of doc.map.objects) {
+      if (obj.kind === "room") continue;
+      const faded = vis && !vis.has(obj.id);
+      const col = faded ? "#444" : KINDS[obj.kind].color;
+      drawBox(obj, null, obj.id === selected ? "#f2d36b" : col, obj.id === selected ? 2 : 1);
+    }
+
+    const { forward } = lookVectors(cam.yaw, cam.pitch);
+    const c = toScreen(cam.x, cam.z);
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#d4a017";
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(c.x + forward.x * 14, c.y + forward.z * 14);
+    ctx.stroke();
+  }
+}
+
+// ---- js/animView.js ----
+class AnimView {
+  constructor(canvas, opts) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.opts = opts;
+    this.orbit = { yaw: 0.5, pitch: 0.15, dist: 48 };
+    this.drag = null;
+    this.hover = -1;
+    this.enabled = false;
+    this._ro = new ResizeObserver(() => this.resize());
+    this._ro.observe(opts.stage || canvas.parentElement);
+    this.resize();
+
+    canvas.addEventListener("pointerdown", (e) => this.#onDown(e));
+    canvas.addEventListener("pointermove", (e) => this.#onMove(e));
+    canvas.addEventListener("pointerup", (e) => this.#onUp(e));
+    canvas.addEventListener("pointerleave", (e) => this.#onUp(e));
+    canvas.addEventListener("wheel", (e) => this.#onWheel(e), { passive: false });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+
+  resize() {
+    const stage = this.opts.stage || this.canvas.parentElement;
+    const rect = stage.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(64, Math.floor(rect.width));
+    const h = Math.max(64, Math.floor(rect.height));
+    this.canvas.width = Math.floor(w * dpr);
+    this.canvas.height = Math.floor(h * dpr);
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.cssW = w;
+    this.cssH = h;
+    this.draw();
+  }
+
+  #cam() {
+    const { yaw, pitch, dist } = this.orbit;
+    const { forward } = lookVectors(yaw, pitch);
+    return {
+      x: -forward.x * dist,
+      y: 10 - forward.y * dist,
+      z: -forward.z * dist,
+      yaw,
+      pitch,
+    };
+  }
+
+  #eventPos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * this.cssW,
+      y: ((e.clientY - rect.top) / rect.height) * this.cssH,
+    };
+  }
+
+  #projectedVerts() {
+    const enemy = this.opts.getEnemy();
+    const frame = this.opts.getFrame();
+    const cam = this.#cam();
+    const verts = enemy.frames[frame];
+    return verts.map((v) => ({
+      v,
+      p: projectPoint(v, cam, this.cssW, this.cssH),
+    }));
+  }
+
+  #hitVert(mx, my) {
+    const pts = this.#projectedVerts();
+    let best = -1;
+    let bestD = 10;
+    pts.forEach((pt, i) => {
+      if (!pt.p.ok) return;
+      const d = Math.hypot(mx - pt.p.sx, my - pt.p.sy);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  #onWheel(e) {
+    if (!this.enabled) return;
+    e.preventDefault();
+    this.orbit.dist = Math.max(16, Math.min(120, this.orbit.dist + (e.deltaY > 0 ? 4 : -4)));
+    this.draw();
+  }
+
+  #onDown(e) {
+    if (!this.enabled) return;
+    this.canvas.focus();
+    const p = this.#eventPos(e);
+    if (e.button === 2 || e.button === 1) {
+      this.drag = { kind: "orbit", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button !== 0) return;
+    const vi = this.#hitVert(p.x, p.y);
+    if (vi >= 0) {
+      this.opts.beginUndo?.();
+      const additive = e.shiftKey;
+      this.opts.onSelectVert?.(vi, additive);
+      const enemy = this.opts.getEnemy();
+      const frame = this.opts.getFrame();
+      const v = enemy.frames[frame][vi];
+      this.drag = { kind: "vert", index: vi, orig: { ...v }, start: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    this.opts.onSelectVert?.(-1, false);
+    this.drag = { kind: "orbit", last: p };
+    this.canvas.setPointerCapture(e.pointerId);
+  }
+
+  #onMove(e) {
+    if (!this.enabled) return;
+    const p = this.#eventPos(e);
+    if (!this.drag) {
+      this.hover = this.#hitVert(p.x, p.y);
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "orbit") {
+      const dx = p.x - this.drag.last.x;
+      const dy = p.y - this.drag.last.y;
+      this.drag.last = p;
+      this.orbit.yaw += dx * 0.01;
+      this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch + dy * 0.01));
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "vert") {
+      const enemy = this.opts.getEnemy();
+      const frame = this.opts.getFrame();
+      const v = enemy.frames[frame][this.drag.index];
+      const cam = this.#cam();
+      const { right, up } = lookVectors(cam.yaw, cam.pitch);
+      const dx = (p.x - this.drag.start.x) / 8;
+      const dy = -(p.y - this.drag.start.y) / 8;
+      v.x = clampVert(this.drag.orig.x + right.x * dx + up.x * dy);
+      v.y = clampVert(this.drag.orig.y + right.y * dx + up.y * dy);
+      v.z = clampVert(this.drag.orig.z + right.z * dx + up.z * dy);
+      this.opts.onChange?.();
+      this.draw();
+    }
+  }
+
+  #onUp(e) {
+    if (!this.enabled) return;
+    if (this.drag?.kind === "vert") this.opts.endUndo?.();
+    this.drag = null;
+    try {
+      this.canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    this.draw();
+  }
+
+  draw() {
+    if (!this.enabled) return;
+    const ctx = this.ctx;
+    const w = this.cssW;
+    const h = this.cssH;
+    if (!w || !h) return;
+    ctx.fillStyle = "#0a0a0c";
+    ctx.fillRect(0, 0, w, h);
+
+    const cam = this.#cam();
+    const enemy = this.opts.getEnemy();
+    const frame = this.opts.getFrame();
+    const selected = this.opts.getSelectedVerts?.() || [];
+    const verts = enemy.frames[frame];
+
+    ctx.strokeStyle = "#3d4658";
+    const step = 8;
+    const strokeSeg = (p0, p1, col) => {
+      const seg = projectLine(p0, p1, cam, w, h);
+      if (!seg) return;
+      if (col) ctx.strokeStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(seg.ax, seg.ay);
+      ctx.lineTo(seg.bx, seg.by);
+      ctx.stroke();
+    };
+    for (let i = -24; i <= 24; i += step) {
+      strokeSeg({ x: i, y: 0, z: -24 }, { x: i, y: 0, z: 24 });
+      strokeSeg({ x: -24, y: 0, z: i }, { x: 24, y: 0, z: i });
+    }
+    const axes = [
+      [{ x: -20, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }, "#a66"],
+      [{ x: 0, y: 0, z: 0 }, { x: 0, y: 24, z: 0 }, "#6a6"],
+      [{ x: 0, y: 0, z: -20 }, { x: 0, y: 0, z: 20 }, "#66a"],
+    ];
+    for (const [a, b, col] of axes) strokeSeg(a, b, col);
+
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "#c8ccd4";
+    for (const [i, j] of enemy.lines) {
+      strokeSeg(verts[i], verts[j], "#c8ccd4");
+    }
+
+    verts.forEach((v, i) => {
+      const p = projectPoint(v, cam, w, h);
+      if (!p.ok) return;
+      const sel = selected.includes(i);
+      const hover = i === this.hover;
+      ctx.fillStyle = sel ? "#d4a017" : hover ? "#fff" : "#8b91a0";
+      const r = sel ? 5 : 4;
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    ctx.fillStyle = "#8b91a0";
+    ctx.font = "11px Segoe UI, sans-serif";
+    ctx.fillText(
+      `${enemy.name} · ${FRAME_NAMES[frame]} · ${enemy.verts}/${MAX_VERTS} verts  ${VERT_MIN}..${VERT_MAX}`,
+      8,
+      16
+    );
+  }
+}
+
+// ---- js/main.js ----
+const statusEl = document.getElementById("status");
+const titleEl = document.querySelector(".toolbar h1");
+const btnUndo = document.getElementById("btn-undo");
+const btnRedo = document.getElementById("btn-redo");
+const UNDO_LIMIT = 40;
+const AUTOSAVE_MS = 8000;
+
+let doc = normalizeDocument(loadFromStorage()) || createDefaultDocument();
+let editorMode = "layout";
+let localDraw = false;
+let selectedId = null;
+let enemyIndex = 0;
+let frameIndex = 0;
+let selectedVerts = [];
+let dirty = false;
+let autosaveTimer = null;
+let undoStack = [];
+let redoStack = [];
+let undoGesture = false;
+
+const layoutView = new LayoutView(document.getElementById("view-canvas"), {
+  stage: document.getElementById("map-stage"),
+  getDoc: () => doc,
+  getSelectedId: () => selectedId,
+  getLocalMode: () => localDraw && editorMode === "layout",
+  onSelect: (id) => {
+    selectedId = id;
+    refreshPanels();
+  },
+  onChange: () => {
+    markDirty();
+    refreshPanels();
+  },
+  onStatus: setStatus,
+  beginUndo,
+  endUndo,
+});
+
+const overheadView = new OverheadView(document.getElementById("overhead-canvas"), {
+  getDoc: () => doc,
+  getCamera: () => layoutView.camera,
+  getSelectedId: () => selectedId,
+  getLocalMode: () => localDraw,
+});
+
+const animView = new AnimView(document.getElementById("view-canvas"), {
+  stage: document.getElementById("map-stage"),
+  getEnemy: () => doc.enemies[enemyIndex],
+  getFrame: () => frameIndex,
+  getSelectedVerts: () => selectedVerts,
+  onSelectVert: (i, additive) => {
+    if (i < 0) selectedVerts = [];
+    else if (additive) {
+      if (!selectedVerts.includes(i)) selectedVerts.push(i);
+    } else selectedVerts = [i];
+    refreshPanels();
+  },
+  onChange: () => {
+    markDirty();
+    refreshPanels();
+  },
+  beginUndo,
+  endUndo,
+});
+
+function setStatus(msg, isError = false) {
+  statusEl.textContent = msg || "";
+  statusEl.classList.toggle("error", isError);
+}
+
+function markDirty() {
+  dirty = true;
+  titleEl.textContent = "Quake64*";
+  document.title = "Quake64 *";
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    saveToStorage(doc);
+    dirty = false;
+    titleEl.textContent = "Quake64";
+    document.title = "Quake64 Editor";
+  }, AUTOSAVE_MS);
+}
+
+function snapshot() {
+  return JSON.stringify(doc);
+}
+
+function beginUndo() {
+  if (undoGesture) return;
+  undoStack.push(snapshot());
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack.length = 0;
+  undoGesture = true;
+  updateUndoButtons();
+}
+
+function endUndo() {
+  undoGesture = false;
+}
+
+function pushUndo() {
+  beginUndo();
+  endUndo();
+}
+
+function restore(json) {
+  doc = normalizeDocument(JSON.parse(json));
+  selectedId = null;
+  selectedVerts = [];
+  if (enemyIndex >= doc.enemies.length) enemyIndex = 0;
+  markDirty();
+  refreshAll();
+}
+
+function undo() {
+  if (!undoStack.length) return;
+  endUndo();
+  redoStack.push(snapshot());
+  restore(undoStack.pop());
+  updateUndoButtons();
+}
+
+function redo() {
+  if (!redoStack.length) return;
+  undoStack.push(snapshot());
+  restore(redoStack.pop());
+  updateUndoButtons();
+}
+
+function updateUndoButtons() {
+  btnUndo.disabled = undoStack.length === 0;
+  btnRedo.disabled = redoStack.length === 0;
+}
+
+function activeEnemy() {
+  return doc.enemies[enemyIndex];
+}
+
+function setMode(mode) {
+  editorMode = mode;
+  document.getElementById("btn-mode-layout").classList.toggle("active", mode === "layout");
+  document.getElementById("btn-mode-anim").classList.toggle("active", mode === "anim");
+  document.getElementById("layout-left").hidden = mode !== "layout";
+  document.getElementById("anim-left").hidden = mode !== "anim";
+  document.getElementById("draw-mode-group").hidden = mode !== "layout";
+  document.getElementById("overhead-panel").hidden = mode !== "layout";
+  document.getElementById("center-title").textContent = mode === "layout" ? "Map" : "Enemy";
+  document.getElementById("hint").textContent =
+    mode === "layout"
+      ? "Click canvas · WASD fly along look · Q/E camera up · RMB look · LMB move · R face · Del delete"
+      : "LMB drag vertex · Shift+click add to selection · RMB orbit · [ ] frames · Add line between two verts";
+  layoutView.enabled = mode === "layout";
+  animView.enabled = mode === "anim";
+  refreshAll();
+}
+
+function setDrawMode(local) {
+  localDraw = local;
+  document.getElementById("btn-draw-all").classList.toggle("active", !local);
+  document.getElementById("btn-draw-local").classList.toggle("active", local);
+  const cam = layoutView.camera;
+  const room = currentRoom(doc, cam);
+  if (local && !room) setStatus("Local: camera is not inside a room", true);
+  else setStatus(local ? "Local draw" : "All rooms");
+  refreshAll();
+}
+
+function buildPalette() {
+  const root = document.getElementById("item-palette");
+  root.innerHTML = "";
+  for (const kind of PALETTE_ORDER) {
+    const el = document.createElement("button");
+    el.type = "button";
+    el.className = "palette-item";
+    el.textContent = KINDS[kind].label;
+    el.style.borderColor = KINDS[kind].color;
+    el.addEventListener("click", () => placeKind(kind));
+    root.appendChild(el);
+  }
+}
+
+function placeKind(kind) {
+  pushUndo();
+  const p = layoutView.placeInFront(kind);
+  const obj = createObject(kind, p.x, p.y, p.z);
+  obj.y = Math.max(0, obj.y);
+  clampObject(obj);
+  doc.map.objects.push(obj);
+  selectedId = obj.id;
+  markDirty();
+  refreshAll();
+}
+
+function selectedObject() {
+  return doc.map.objects.find((o) => o.id === selectedId) || null;
+}
+
+function deleteSelected() {
+  if (editorMode === "layout") {
+    if (!selectedId) return;
+    pushUndo();
+    doc.map.objects = doc.map.objects.filter((o) => o.id !== selectedId);
+    selectedId = null;
+    markDirty();
+    refreshAll();
+    return;
+  }
+  const e = activeEnemy();
+  if (selectedVerts.length === 1) {
+    /* keep verts; topology stays */
+  }
+}
+
+function duplicateSelected() {
+  const obj = selectedObject();
+  if (!obj) return;
+  pushUndo();
+  const copy = clampObject({ ...obj, id: uid(), x: obj.x + 2, z: obj.z + 2 });
+  doc.map.objects.push(copy);
+  selectedId = copy.id;
+  markDirty();
+  refreshAll();
+}
+
+function renderObjectList() {
+  const ul = document.getElementById("object-list");
+  ul.innerHTML = "";
+  for (const obj of doc.map.objects) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = `${KINDS[obj.kind].label}  ${obj.x},${obj.y},${obj.z}`;
+    if (obj.id === selectedId) btn.className = "active";
+    btn.addEventListener("click", () => {
+      selectedId = obj.id;
+      refreshPanels();
+    });
+    li.appendChild(btn);
+    ul.appendChild(li);
+  }
+}
+
+function renderEnemyList() {
+  const ul = document.getElementById("enemy-list");
+  ul.innerHTML = "";
+  doc.enemies.forEach((e, i) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = e.name;
+    if (i === enemyIndex) btn.className = "active";
+    btn.addEventListener("click", () => {
+      enemyIndex = i;
+      selectedVerts = [];
+      refreshAll();
+    });
+    li.appendChild(btn);
+    ul.appendChild(li);
+  });
+}
+
+function field(label, input) {
+  const row = document.createElement("label");
+  row.className = "field";
+  const span = document.createElement("span");
+  span.textContent = label;
+  row.append(span, input);
+  return row;
+}
+
+function numInput(value, onChange, min, max) {
+  const inp = document.createElement("input");
+  inp.type = "number";
+  inp.value = String(value);
+  if (min != null) inp.min = String(min);
+  if (max != null) inp.max = String(max);
+  inp.addEventListener("change", () => onChange(Number(inp.value)));
+  return inp;
+}
+
+function renderInspector() {
+  const root = document.getElementById("right-editors");
+  root.innerHTML = "";
+  if (editorMode === "layout") {
+    const obj = selectedObject();
+    const h = document.createElement("h2");
+    h.textContent = obj ? KINDS[obj.kind].label : "Inspector";
+    root.appendChild(h);
+    if (!obj) {
+      const p = document.createElement("p");
+      p.className = "muted";
+      p.textContent = "Select an object or place one from the palette.";
+      root.appendChild(p);
+      return;
+    }
+    const apply = (fn) => {
+      pushUndo();
+      fn();
+      clampObject(obj);
+      markDirty();
+      refreshAll();
+    };
+    root.appendChild(field("X", numInput(obj.x, (v) => apply(() => (obj.x = v)), 0, 255)));
+    root.appendChild(field("Y", numInput(obj.y, (v) => apply(() => (obj.y = v)), 0, 255)));
+    root.appendChild(field("Z", numInput(obj.z, (v) => apply(() => (obj.z = v)), 0, 255)));
+    if (!KINDS[obj.kind].fixed) {
+      root.appendChild(field("SX", numInput(obj.sx, (v) => apply(() => (obj.sx = v)), 1, 256)));
+      root.appendChild(field("SY", numInput(obj.sy, (v) => apply(() => (obj.sy = v)), 1, 256)));
+      root.appendChild(field("SZ", numInput(obj.sz, (v) => apply(() => (obj.sz = v)), 1, 256)));
+    } else {
+      const p = document.createElement("p");
+      p.className = "muted";
+      p.textContent = `Fixed size ${obj.sx}×${obj.sy}×${obj.sz}`;
+      root.appendChild(p);
+    }
+    if (obj.kind === "doorway" || obj.kind === "switch" || obj.kind === "crate") {
+      const sel = document.createElement("select");
+      for (const f of ["+z", "-z", "+x", "-x"]) {
+        const opt = document.createElement("option");
+        opt.value = f;
+        opt.textContent = f;
+        if (obj.face === f) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () => apply(() => (obj.face = sel.value)));
+      root.appendChild(field("Face", sel));
+    }
+    if (obj.kind === "slope") {
+      const axis = document.createElement("select");
+      for (const a of ["x", "z"]) {
+        const opt = document.createElement("option");
+        opt.value = a;
+        opt.textContent = a.toUpperCase();
+        if (obj.axis === a) opt.selected = true;
+        axis.appendChild(opt);
+      }
+      axis.addEventListener("change", () => apply(() => (obj.axis = axis.value)));
+      root.appendChild(field("Axis", axis));
+      const dir = document.createElement("select");
+      for (const d of [1, -1]) {
+        const opt = document.createElement("option");
+        opt.value = String(d);
+        opt.textContent = d === 1 ? "+ run" : "− run";
+        if (obj.dir === d) opt.selected = true;
+        dir.appendChild(opt);
+      }
+      dir.addEventListener("change", () => apply(() => (obj.dir = Number(dir.value))));
+      root.appendChild(field("Dir", dir));
+    }
+    const row = document.createElement("div");
+    row.className = "btn-row";
+    const dup = document.createElement("button");
+    dup.type = "button";
+    dup.textContent = "Duplicate";
+    dup.addEventListener("click", duplicateSelected);
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "danger";
+    del.textContent = "Delete";
+    del.addEventListener("click", deleteSelected);
+    row.append(dup, del);
+    root.appendChild(row);
+    return;
+  }
+
+  const e = activeEnemy();
+  const h = document.createElement("h2");
+  h.textContent = e.name;
+  root.appendChild(h);
+  const name = document.createElement("input");
+  name.type = "text";
+  name.value = e.name;
+  name.addEventListener("change", () => {
+    pushUndo();
+    e.name = name.value.slice(0, 24) || "Enemy";
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("Name", name));
+
+  const strip = document.createElement("div");
+  strip.className = "frame-strip";
+  FRAME_NAMES.forEach((n, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = n;
+    if (i === frameIndex) b.className = "active";
+    b.addEventListener("click", () => {
+      frameIndex = i;
+      refreshAll();
+    });
+    strip.appendChild(b);
+  });
+  root.appendChild(strip);
+
+  const counts = document.createElement("p");
+  counts.className = "muted";
+  counts.textContent = `${e.verts}/${MAX_VERTS} verts · ${e.lines.length}/${MAX_LINES} lines`;
+  root.appendChild(counts);
+
+  if (selectedVerts.length === 1) {
+    const vi = selectedVerts[0];
+    const v = e.frames[frameIndex][vi];
+    const setC = (k, val) => {
+      pushUndo();
+      v[k] = clampVert(val);
+      markDirty();
+      refreshAll();
+    };
+    root.appendChild(field("VX", numInput(v.x, (n) => setC("x", n), -64, 63)));
+    root.appendChild(field("VY", numInput(v.y, (n) => setC("y", n), -64, 63)));
+    root.appendChild(field("VZ", numInput(v.z, (n) => setC("z", n), -64, 63)));
+  }
+
+  const row = document.createElement("div");
+  row.className = "btn-row";
+  const addV = document.createElement("button");
+  addV.type = "button";
+  addV.textContent = "Add vertex";
+  addV.addEventListener("click", addVertex);
+  const addL = document.createElement("button");
+  addL.type = "button";
+  addL.textContent = "Add line";
+  addL.addEventListener("click", addLine);
+  const prev = document.createElement("button");
+  prev.type = "button";
+  prev.textContent = "Prev frame";
+  prev.addEventListener("click", () => stepFrame(-1));
+  const next = document.createElement("button");
+  next.type = "button";
+  next.textContent = "Next frame";
+  next.addEventListener("click", () => stepFrame(1));
+  row.append(addV, addL, prev, next);
+  root.appendChild(row);
+}
+
+function addVertex() {
+  const e = activeEnemy();
+  if (e.verts >= MAX_VERTS) {
+    setStatus("Max 16 vertices", true);
+    return;
+  }
+  pushUndo();
+  e.verts += 1;
+  for (const fr of e.frames) fr.push({ x: 0, y: 10, z: 0 });
+  selectedVerts = [e.verts - 1];
+  markDirty();
+  refreshAll();
+}
+
+function addLine() {
+  const e = activeEnemy();
+  if (e.lines.length >= MAX_LINES) {
+    setStatus("Max 16 lines", true);
+    return;
+  }
+  if (selectedVerts.length === 2) {
+    pushUndo();
+    e.lines.push([selectedVerts[0], selectedVerts[1]]);
+    markDirty();
+    refreshAll();
+    return;
+  }
+  if (e.verts + 2 > MAX_VERTS) {
+    setStatus("Select two vertices, or free two vertex slots for a flair line", true);
+    return;
+  }
+  pushUndo();
+  const a = e.verts;
+  const b = e.verts + 1;
+  e.verts += 2;
+  for (const fr of e.frames) {
+    fr.push({ x: -4, y: 12, z: 2 });
+    fr.push({ x: 4, y: 12, z: 2 });
+  }
+  e.lines.push([a, b]);
+  selectedVerts = [a, b];
+  markDirty();
+  refreshAll();
+}
+
+function stepFrame(d) {
+  frameIndex = (frameIndex + d + FRAME_NAMES.length) % FRAME_NAMES.length;
+  refreshAll();
+}
+
+function refreshPanels() {
+  renderObjectList();
+  renderEnemyList();
+  renderInspector();
+  overheadView.draw();
+  if (editorMode === "anim") animView.draw();
+}
+
+function refreshAll() {
+  refreshPanels();
+  if (editorMode === "layout") layoutView.draw();
+  else animView.draw();
+}
+
+document.getElementById("btn-mode-layout").addEventListener("click", () => setMode("layout"));
+document.getElementById("btn-mode-anim").addEventListener("click", () => setMode("anim"));
+document.getElementById("btn-draw-all").addEventListener("click", () => setDrawMode(false));
+document.getElementById("btn-draw-local").addEventListener("click", () => setDrawMode(true));
+document.getElementById("btn-undo").addEventListener("click", undo);
+document.getElementById("btn-redo").addEventListener("click", redo);
+document.getElementById("btn-save").addEventListener("click", () => {
+  saveToStorage(doc);
+  downloadJSON(doc);
+  dirty = false;
+  titleEl.textContent = "Quake64";
+  setStatus("Saved");
+});
+document.getElementById("btn-load").addEventListener("click", () => {
+  document.getElementById("file-input").click();
+});
+document.getElementById("file-input").addEventListener("change", async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    pushUndo();
+    doc = normalizeDocument(await readJSONFile(file));
+    selectedId = null;
+    enemyIndex = 0;
+    markDirty();
+    refreshAll();
+    setStatus(`Loaded ${file.name}`);
+  } catch (err) {
+    setStatus(String(err), true);
+  }
+});
+document.getElementById("btn-add-enemy").addEventListener("click", () => {
+  pushUndo();
+  doc.enemies.push(createEnemy(`Enemy ${doc.enemies.length + 1}`));
+  enemyIndex = doc.enemies.length - 1;
+  selectedVerts = [];
+  markDirty();
+  refreshAll();
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, select, textarea")) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+    e.preventDefault();
+    if (e.shiftKey) redo();
+    else undo();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+    e.preventDefault();
+    redo();
+    return;
+  }
+  if (e.key === "Delete" || e.key === "Backspace") {
+    if (editorMode === "layout") {
+      e.preventDefault();
+      deleteSelected();
+    }
+  }
+  if (e.key.toLowerCase() === "r" && editorMode === "layout") {
+    const obj = selectedObject();
+    if (obj && (obj.kind === "doorway" || obj.kind === "switch" || obj.kind === "crate")) {
+      e.preventDefault();
+      pushUndo();
+      obj.face = cycleFace(obj.face, 1);
+      clampObject(obj);
+      markDirty();
+      refreshAll();
+    }
+    if (obj && obj.kind === "slope") {
+      e.preventDefault();
+      pushUndo();
+      if (obj.axis === "z" && obj.dir === 1) obj.dir = -1;
+      else if (obj.axis === "z") {
+        obj.axis = "x";
+        obj.dir = 1;
+      } else if (obj.dir === 1) obj.dir = -1;
+      else {
+        obj.axis = "z";
+        obj.dir = 1;
+      }
+      clampObject(obj);
+      markDirty();
+      refreshAll();
+    }
+  }
+  if (e.key === "[" && editorMode === "anim") {
+    e.preventDefault();
+    stepFrame(-1);
+  }
+  if (e.key === "]" && editorMode === "anim") {
+    e.preventDefault();
+    stepFrame(1);
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && editorMode === "layout") {
+    e.preventDefault();
+    duplicateSelected();
+  }
+});
+
+buildPalette();
+setMode("layout");
+updateUndoButtons();
+setStatus("Ready");
+
+// Keep overhead in sync while flying
+setInterval(() => {
+  if (editorMode === "layout") overheadView.draw();
+}, 80);
+  </script>
+</body>
+</html>

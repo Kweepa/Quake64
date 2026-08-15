@@ -3,6 +3,7 @@ import {
   aabbCenter,
   clampObject,
   objectVisible,
+  activeMap,
   WORLD_SIZE,
 } from "./model.js";
 import {
@@ -169,7 +170,7 @@ export class LayoutView {
     const hitHandle = selected ? this.#hitHandle(doc, selected, p.x, p.y) : null;
     if (hitHandle) {
       this.opts.beginUndo?.();
-      const obj = doc.map.objects.find((o) => o.id === selected);
+      const obj = activeMap(doc).objects.find((o) => o.id === selected);
       this.drag = {
         kind: hitHandle.kind,
         axis: hitHandle.axis,
@@ -186,7 +187,7 @@ export class LayoutView {
     this.opts.onSelect?.(hit?.id || null);
     if (hit) {
       this.opts.beginUndo?.();
-      const obj = doc.map.objects.find((o) => o.id === hit.id);
+      const obj = activeMap(doc).objects.find((o) => o.id === hit.id);
       this.drag = {
         kind: "move",
         start: p,
@@ -234,7 +235,7 @@ export class LayoutView {
 
   #applyDrag(p) {
     const doc = this.opts.getDoc();
-    const obj = doc.map.objects.find((o) => o.id === this.drag.orig.id);
+    const obj = activeMap(doc).objects.find((o) => o.id === this.drag.orig.id);
     if (!obj) return;
     const ray = screenRay(p.x, p.y, this.camera, this.cssW, this.cssH);
     const orig = this.drag.orig;
@@ -300,7 +301,7 @@ export class LayoutView {
   #visibleObjects(doc) {
     const local = this.opts.getLocalMode?.() || false;
     const cam = this.camera;
-    return doc.map.objects.filter((o) => objectVisible(doc, o, cam, local));
+    return activeMap(doc).objects.filter((o) => objectVisible(doc, o, cam, local));
   }
 
   #pick(doc, mx, my) {
@@ -315,7 +316,7 @@ export class LayoutView {
   }
 
   #hitHandle(doc, id, mx, my) {
-    const obj = doc.map.objects.find((o) => o.id === id);
+    const obj = activeMap(doc).objects.find((o) => o.id === id);
     if (!obj) return null;
     const cam = this.camera;
     const w = this.cssW;

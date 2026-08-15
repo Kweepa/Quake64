@@ -257,6 +257,20 @@ button:disabled {
   text-align: left;
 }
 
+.level-list ul {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.level-list button {
+  width: 100%;
+  text-align: left;
+}
+
 .panel .muted,
 .muted {
   color: var(--muted);
@@ -277,6 +291,24 @@ button:disabled {
   flex: 0 0 5.5rem;
   min-width: 5.5rem;
   white-space: nowrap;
+}
+
+.field.vec3 > span {
+  flex: 0 0 3rem;
+  min-width: 3rem;
+}
+
+.vec3-inputs {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vec3-inputs input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0;
 }
 
 .field input[type="number"],
@@ -301,12 +333,13 @@ button:disabled {
 
 .frame-strip {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 3px;
 }
 
 .frame-strip button {
-  font-size: 0.72rem;
+  font-size: 0.65rem;
+  padding: 0.25rem 0.2rem;
 }
 
 @media (max-width: 900px) {

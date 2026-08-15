@@ -3,6 +3,7 @@ import {
   currentRoom,
   localVisibleIds,
   neighbourRooms,
+  activeMap,
   WORLD_SIZE,
 } from "./model.js";
 import { lookVectors } from "./math3d.js";
@@ -89,7 +90,7 @@ export class OverheadView {
       ctx.strokeRect(p.x, p.y, obj.sx * s, obj.sz * s);
     };
 
-    for (const obj of doc.map.objects) {
+    for (const obj of activeMap(doc).objects) {
       if (obj.kind !== "room") continue;
       const isCur = cur && obj.id === cur.id;
       const isN = neigh.some((n) => n.id === obj.id);
@@ -102,7 +103,7 @@ export class OverheadView {
       );
     }
 
-    for (const obj of doc.map.objects) {
+    for (const obj of activeMap(doc).objects) {
       if (obj.kind === "room") continue;
       const faded = vis && !vis.has(obj.id);
       const col = faded ? "#444" : KINDS[obj.kind].color;

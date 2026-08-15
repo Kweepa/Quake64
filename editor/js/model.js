@@ -6,8 +6,8 @@ export function uid() {
 export const WORLD_MIN = 0;
 export const WORLD_MAX = 255;
 export const WORLD_SIZE = 256;
-export const MAX_VERTS = 16;
-export const MAX_LINES = 16;
+export const MAX_VERTS = 12;
+export const MAX_LINES = 12;
 export const VERT_MIN = -64;
 export const VERT_MAX = 63;
 
@@ -64,17 +64,100 @@ export const KINDS = {
 
 export const PALETTE_ORDER = ["room", "doorway", "switch", "slope", "crate", "elevator"];
 
+export const LEVEL_NAMES = ["E1M1", "E1M2", "E1M3", "E1M4", "E1M5", "E1M6", "E1M7", "E1M8"];
+
 export const FRAME_NAMES = [
+  "Idle 0",
+  "Idle 1",
+  "Alert 0",
+  "Alert 1",
   "Walk 0",
   "Walk 1",
-  "Attack A 0",
-  "Attack A 1",
-  "Attack B 0",
-  "Attack B 1",
-  "Flinch 0",
-  "Flinch 1",
+  "Walk 2",
+  "Walk 3",
+  "AtkA 0",
+  "AtkA 1",
+  "AtkA 2",
+  "AtkA 3",
+  "AtkB 0",
+  "AtkB 1",
+  "AtkB 2",
+  "AtkB 3",
+  "AtkC 0",
+  "AtkC 1",
+  "AtkC 2",
+  "AtkC 3",
+  "Flinch",
   "Death 0",
   "Death 1",
+  "Death 2",
+];
+
+/** Shared 12-vert skeleton: hips, neck, head, L/R arm, L/R leg. */
+export const ENEMY_TYPES = [
+  { name: "Grunt", scale: [1, 1, 1], rest: {} },
+  {
+    name: "Knight",
+    scale: [1.15, 1.3, 1],
+    rest: { 3: [0, 2, 0], 4: [-1, 1, 0], 6: [1, 1, 0] },
+  },
+  {
+    name: "Rottweiler",
+    scale: [1, 0.55, 1.35],
+    rest: {
+      0: [0, 1, -5],
+      1: [0, 1, -5],
+      2: [0, -1, 3],
+      3: [0, -3, 8],
+      4: [0, -3, 3],
+      5: [0, -6, 5],
+      6: [0, -3, 3],
+      7: [0, -6, 5],
+    },
+  },
+  {
+    name: "Scrag",
+    scale: [0.85, 1.15, 0.9],
+    rest: {
+      0: [0, 8, 0],
+      1: [0, 8, 0],
+      8: [0, 6, 0],
+      9: [0, 5, 0],
+      10: [0, 6, 0],
+      11: [0, 5, 0],
+      4: [-2, 2, 0],
+      5: [-4, 0, 2],
+      6: [2, 2, 0],
+      7: [4, 0, 2],
+    },
+  },
+  {
+    name: "Ogre",
+    scale: [1.35, 1.05, 1.1],
+    rest: { 5: [0, -1, 0], 7: [0, -1, 0] },
+  },
+  {
+    name: "Shambler",
+    scale: [1.5, 1.45, 1.2],
+    rest: {
+      4: [-2, -2, 0],
+      5: [-3, -6, 1],
+      6: [2, -2, 0],
+      7: [3, -6, 1],
+    },
+  },
+  {
+    name: "Chthon",
+    scale: [1.8, 0.75, 1.6],
+    rest: {
+      2: [0, 2, 0],
+      3: [0, 4, 2],
+      4: [-3, 0, 0],
+      5: [-5, -2, 0],
+      6: [3, 0, 0],
+      7: [5, -2, 0],
+    },
+  },
 ];
 
 export const FACES = [
@@ -231,12 +314,25 @@ export function cycleFace(faceId, delta) {
   return FACES[n].id;
 }
 
+export function emptyMap() {
+  return { objects: [] };
+}
+
+export function activeMap(doc) {
+  const name = LEVEL_NAMES.includes(doc.activeLevel) ? doc.activeLevel : LEVEL_NAMES[0];
+  doc.activeLevel = name;
+  if (!doc.maps) doc.maps = {};
+  if (!doc.maps[name]) doc.maps[name] = emptyMap();
+  if (!Array.isArray(doc.maps[name].objects)) doc.maps[name].objects = [];
+  return doc.maps[name];
+}
+
 export function roomsOf(doc) {
-  return doc.map.objects.filter((o) => o.kind === "room");
+  return activeMap(doc).objects.filter((o) => o.kind === "room");
 }
 
 export function doorwaysOf(doc) {
-  return doc.map.objects.filter((o) => o.kind === "doorway");
+  return activeMap(doc).objects.filter((o) => o.kind === "doorway");
 }
 
 export function currentRoom(doc, cam) {
@@ -265,7 +361,7 @@ export function localVisibleIds(doc, cam) {
   const neigh = neighbourRooms(doc, cur);
   for (const r of neigh) ids.add(r.id);
   const rooms = [cur, ...neigh];
-  for (const obj of doc.map.objects) {
+  for (const obj of activeMap(doc).objects) {
     if (obj.kind === "room") continue;
     if (rooms.some((r) => aabbOverlap(obj, r))) ids.add(obj.id);
   }
@@ -277,27 +373,20 @@ export function objectVisible(doc, obj, cam, localMode) {
   return localVisibleIds(doc, cam).has(obj.id);
 }
 
-function pose(overrides) {
-  const base = [
-    [-3, 6, 0],
-    [3, 6, 0],
-    [0, 14, 0],
-    [0, 20, 0],
-    [-6, 11, 0],
-    [-8, 7, 0],
-    [6, 11, 0],
-    [8, 7, 0],
-    [-3, 3, 0],
-    [-3, 0, 0],
-    [3, 3, 0],
-    [3, 0, 0],
-  ];
-  return base.map((p, i) => {
-    const o = overrides[i];
-    if (!o) return { x: p[0], y: p[1], z: p[2] };
-    return { x: p[0] + o[0], y: p[1] + o[1], z: p[2] + o[2] };
-  });
-}
+const BASE_SKELETON = [
+  [-3, 6, 0],
+  [3, 6, 0],
+  [0, 14, 0],
+  [0, 20, 0],
+  [-6, 11, 0],
+  [-8, 7, 0],
+  [6, 11, 0],
+  [8, 7, 0],
+  [-3, 3, 0],
+  [-3, 0, 0],
+  [3, 3, 0],
+  [3, 0, 0],
+];
 
 const TEMPLATE_LINES = [
   [0, 1],
@@ -314,30 +403,85 @@ const TEMPLATE_LINES = [
   [10, 11],
 ];
 
+function swing(phase, amp) {
+  const s = [0, amp, 0, -amp][phase & 3];
+  return {
+    4: [0, 0, (s / 2) | 0],
+    5: [0, 0, s],
+    6: [0, 0, (-s / 2) | 0],
+    7: [0, 0, -s],
+    8: [0, 0, (-s / 2) | 0],
+    9: [0, 0, -s],
+    10: [0, 0, (s / 2) | 0],
+    11: [0, 0, s],
+  };
+}
+
 const FRAME_OFFSETS = [
-  { 5: [0, 0, 2], 7: [0, 0, -2], 9: [0, 0, -2], 11: [0, 0, 2] },
-  { 5: [0, 0, -2], 7: [0, 0, 2], 9: [0, 0, 2], 11: [0, 0, -2] },
-  { 5: [0, 2, 4], 4: [0, 1, 2], 3: [1, 0, 1] },
-  { 5: [1, 3, 6], 4: [0, 2, 3], 3: [2, 0, 2] },
-  { 7: [0, 2, 4], 6: [0, 1, 2] },
-  { 7: [1, 3, 6], 6: [0, 2, 3] },
-  { 2: [1, -1, 0], 3: [2, -1, 0] },
-  { 2: [2, -2, 0], 3: [3, -2, 1] },
-  { 2: [0, -4, 2], 3: [0, -5, 4], 5: [0, -3, 0], 7: [0, -3, 0] },
+  { 2: [0, 0, 0], 3: [0, 0, 0] },
+  { 2: [0, 1, 0], 3: [0, 1, 0] },
+  { 3: [0, 2, 1], 4: [-2, 1, 0], 5: [-3, 2, 1], 6: [2, 1, 0], 7: [3, 2, 1] },
+  { 3: [1, 3, 2], 4: [-3, 2, 1], 5: [-4, 3, 2], 6: [3, 2, 1], 7: [4, 3, 2] },
+  swing(0, 3),
+  swing(1, 3),
+  swing(2, 3),
+  swing(3, 3),
+  { 4: [0, 1, 2], 5: [0, 2, 4], 3: [1, 0, 1] },
+  { 4: [0, 2, 3], 5: [1, 3, 6], 3: [2, 0, 2] },
+  { 4: [0, 1, 4], 5: [2, 2, 7], 3: [1, 0, 3] },
+  { 4: [0, 0, 1], 5: [0, 0, 2], 3: [0, 0, 0] },
+  { 6: [0, 1, 2], 7: [0, 2, 4], 5: [0, 1, -1] },
+  { 6: [0, 2, 3], 7: [1, 4, 6], 5: [0, 2, -2] },
+  { 6: [0, 1, 5], 7: [2, 3, 8], 5: [0, 1, -1] },
+  { 6: [0, 0, 1], 7: [0, 1, 2] },
+  { 4: [-1, 2, 0], 5: [-2, 4, 0], 6: [1, 2, 0], 7: [2, 4, 0], 2: [0, -1, 0] },
+  { 4: [-2, 3, 1], 5: [-3, 6, 2], 6: [2, 3, 1], 7: [3, 6, 2], 2: [0, -2, 0] },
+  { 4: [-1, 1, 2], 5: [-2, 2, 4], 6: [1, 1, 2], 7: [2, 2, 4] },
+  { 4: [0, 0, 0], 5: [0, 0, 0], 6: [0, 0, 0], 7: [0, 0, 0] },
+  { 2: [2, -2, -1], 3: [3, -2, 0], 4: [1, -1, -1], 6: [-1, -1, -1] },
+  { 2: [0, -3, 2], 3: [0, -4, 3], 5: [0, -2, 0], 7: [0, -2, 0] },
+  { 0: [2, -4, 2], 1: [3, -5, 3], 2: [3, -4, 4], 3: [5, -3, 5], 9: [2, -5, 1], 11: [3, -5, 2] },
   {
-    0: [4, -5, 2],
-    1: [6, -6, 3],
-    2: [5, -4, 4],
-    3: [8, -3, 5],
-    8: [4, -6, 1],
-    9: [4, -6, 0],
-    10: [7, -6, 2],
-    11: [8, -6, 1],
+    0: [5, -6, 3],
+    1: [7, -6, 4],
+    2: [6, -5, 5],
+    3: [8, -4, 6],
+    8: [5, -6, 2],
+    9: [5, -6, 1],
+    10: [8, -6, 3],
+    11: [8, -6, 2],
   },
 ];
 
-export function defaultStickFrames() {
-  return FRAME_OFFSETS.map((off) => pose(off));
+function add3(a, b) {
+  const o = b || [0, 0, 0];
+  return [a[0] + o[0], a[1] + o[1], a[2] + o[2]];
+}
+
+function skeletonBase(type) {
+  const [sx, sy, sz] = type.scale;
+  return BASE_SKELETON.map((p, i) => {
+    const r = type.rest[i] || [0, 0, 0];
+    return [
+      Math.round(p[0] * sx + r[0]),
+      Math.round(p[1] * sy + r[1]),
+      Math.round(p[2] * sz + r[2]),
+    ];
+  });
+}
+
+function enemyTypeByName(name) {
+  return ENEMY_TYPES.find((t) => t.name === name) || ENEMY_TYPES[0];
+}
+
+export function dummyFramesFor(name) {
+  const base = skeletonBase(enemyTypeByName(name));
+  return FRAME_OFFSETS.map((off) =>
+    base.map((p, i) => {
+      const v = add3(p, off[i]);
+      return { x: clampVert(v[0]), y: clampVert(v[1]), z: clampVert(v[2]) };
+    })
+  );
 }
 
 export function createEnemy(name = "Grunt") {
@@ -346,38 +490,17 @@ export function createEnemy(name = "Grunt") {
     name,
     verts: 12,
     lines: TEMPLATE_LINES.map((p) => [p[0], p[1]]),
-    frames: defaultStickFrames(),
+    frames: dummyFramesFor(name),
   };
 }
 
-export function createDefaultDocument() {
-  const roomA = createObject("room", 8, 0, 8);
-  roomA.sx = 24;
-  roomA.sy = 12;
-  roomA.sz = 24;
-  const roomB = createObject("room", 31, 0, 8);
-  roomB.sx = 24;
-  roomB.sy = 12;
-  roomB.sz = 24;
-  const door = createObject("doorway", 31, 0, 16, { face: "+x" });
-  const crate = createObject("crate", 14, 0, 14);
-  return {
-    version: 1,
-    map: { objects: [roomA, roomB, door, crate] },
-    enemies: [createEnemy("Grunt")],
-  };
+export function createAllCreatures() {
+  return ENEMY_TYPES.map((t) => createEnemy(t.name));
 }
 
-export function cloneDoc(doc) {
-  return JSON.parse(JSON.stringify(doc));
-}
-
-export function normalizeDocument(raw) {
-  const doc = createDefaultDocument();
-  if (!raw || typeof raw !== "object") return doc;
-  doc.map.objects = [];
-  const objs = raw.map?.objects || raw.objects || [];
-  for (const o of objs) {
+function parseObjects(list) {
+  const out = [];
+  for (const o of list || []) {
     if (!KINDS[o.kind]) continue;
     const obj = createObject(o.kind, o.x, o.y, o.z, {
       id: o.id,
@@ -390,37 +513,81 @@ export function normalizeDocument(raw) {
       obj.sy = o.sy ?? obj.sy;
       obj.sz = o.sz ?? obj.sz;
     }
-    doc.map.objects.push(clampObject(obj));
+    out.push(clampObject(obj));
   }
-  doc.enemies = [];
-  const enemies = raw.enemies || [];
-  for (const e of enemies) {
-    const enemy = createEnemy(e.name || "Enemy");
-    enemy.id = e.id || enemy.id;
-    const lines = Array.isArray(e.lines) ? e.lines.slice(0, MAX_LINES) : enemy.lines;
-    enemy.lines = lines
-      .filter((p) => Array.isArray(p) && p.length >= 2)
-      .map((p) => [p[0] | 0, p[1] | 0]);
-    let nverts = e.verts | 0;
-    if (Array.isArray(e.frames?.[0])) nverts = Math.max(nverts, e.frames[0].length);
-    enemy.verts = Math.max(1, Math.min(MAX_VERTS, nverts || enemy.verts));
-    const srcFrames = Array.isArray(e.frames) ? e.frames : [];
-    enemy.frames = FRAME_NAMES.map((_, fi) => {
-      const src = srcFrames[fi] || srcFrames[0] || enemy.frames[0];
-      const verts = [];
-      for (let i = 0; i < enemy.verts; i++) {
-        const v = src[i] || { x: 0, y: 0, z: 0 };
-        verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
-      }
-      return verts;
-    });
-    for (const ln of enemy.lines) {
-      ln[0] = Math.max(0, Math.min(enemy.verts - 1, ln[0]));
-      ln[1] = Math.max(0, Math.min(enemy.verts - 1, ln[1]));
+  return out;
+}
+
+function starterObjects() {
+  const roomA = createObject("room", 8, 0, 8);
+  roomA.sx = 24;
+  roomA.sy = 12;
+  roomA.sz = 24;
+  const roomB = createObject("room", 31, 0, 8);
+  roomB.sx = 24;
+  roomB.sy = 12;
+  roomB.sz = 24;
+  const door = createObject("doorway", 31, 0, 16, { face: "+x" });
+  const crate = createObject("crate", 14, 0, 14);
+  return [roomA, roomB, door, crate];
+}
+
+export function createDefaultDocument() {
+  const maps = {};
+  for (const name of LEVEL_NAMES) maps[name] = emptyMap();
+  maps.E1M1 = { objects: starterObjects() };
+  return {
+    version: 3,
+    activeLevel: "E1M1",
+    maps,
+    enemies: createAllCreatures(),
+  };
+}
+
+export function cloneDoc(doc) {
+  return JSON.parse(JSON.stringify(doc));
+}
+
+export function normalizeDocument(raw) {
+  const doc = createDefaultDocument();
+  if (!raw || typeof raw !== "object") return doc;
+  if (raw.maps && typeof raw.maps === "object") {
+    for (const name of LEVEL_NAMES) {
+      doc.maps[name] = { objects: parseObjects(raw.maps[name]?.objects) };
     }
-    doc.enemies.push(enemy);
+  } else {
+    doc.maps.E1M1 = { objects: parseObjects(raw.map?.objects || raw.objects) };
   }
-  if (!doc.enemies.length) doc.enemies.push(createEnemy("Grunt"));
-  if (!doc.map.objects.length) return createDefaultDocument();
+  doc.activeLevel = LEVEL_NAMES.includes(raw.activeLevel) ? raw.activeLevel : "E1M1";
+  doc.enemies = [];
+  const stale = !raw.version || raw.version < 2;
+  if (stale) {
+    doc.enemies = createAllCreatures();
+  } else {
+    const enemies = raw.enemies || [];
+    for (const e of enemies) {
+      const enemy = createEnemy(e.name || "Enemy");
+      enemy.id = e.id || enemy.id;
+      enemy.name = e.name || enemy.name;
+      enemy.verts = 12;
+      const srcFrames = Array.isArray(e.frames) ? e.frames : [];
+      enemy.frames = FRAME_NAMES.map((_, fi) => {
+        const src = srcFrames[fi] || srcFrames[0] || enemy.frames[fi];
+        const verts = [];
+        for (let i = 0; i < 12; i++) {
+          const v = src[i] || { x: 0, y: 0, z: 0 };
+          verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
+        }
+        return verts;
+      });
+      doc.enemies.push(enemy);
+    }
+    const have = new Set(doc.enemies.map((e) => e.name));
+    for (const t of ENEMY_TYPES) {
+      if (!have.has(t.name)) doc.enemies.push(createEnemy(t.name));
+    }
+  }
+  if (!doc.enemies.length) doc.enemies = createAllCreatures();
+  doc.version = 3;
   return doc;
 }

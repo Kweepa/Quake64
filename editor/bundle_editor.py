@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import base64
 import re
 from pathlib import Path
 
@@ -38,13 +39,19 @@ def main() -> None:
         parts.append(f"// ---- {rel} ----\n{strip_module(raw)}")
     js = "\n\n".join(parts)
 
+    icon_path = ROOT / "icon.png"
+    favicon_link = ""
+    if icon_path.exists():
+        b64 = base64.b64encode(icon_path.read_bytes()).decode("ascii")
+        favicon_link = f'  <link rel="icon" type="image/png" href="data:image/png;base64,{b64}" />\n'
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Quake64 Editor</title>
-  <style>
+{favicon_link}  <style>
 {css}
   </style>
 </head>
@@ -71,6 +78,7 @@ def main() -> None:
   <main class="layout">
     <aside class="left">
       <section id="layout-left">
+        <section id="level-list"></section>
         <h2>Place</h2>
         <div id="item-palette" class="item-palette"></div>
         <h2>Objects</h2>
@@ -79,9 +87,6 @@ def main() -> None:
       <section id="anim-left" hidden>
         <h2>Enemies</h2>
         <ul id="enemy-list" class="object-list"></ul>
-        <div class="btn-row">
-          <button type="button" id="btn-add-enemy">Add enemy</button>
-        </div>
       </section>
     </aside>
 

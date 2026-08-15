@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Quake64 Editor</title>
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAMAAADz0U65AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAMUExURQAAALfGbplmWRIUGijcP7UAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAZdEVYdFNvZnR3YXJlAFBhaW50Lk5FVCA1LjEuMTITAUd0AAAAuGVYSWZJSSoACAAAAAUAGgEFAAEAAABKAAAAGwEFAAEAAABSAAAAKAEDAAEAAAACAAAAMQECABEAAABaAAAAaYcEAAEAAABsAAAAAAAAAGAAAAABAAAAYAAAAAEAAABQYWludC5ORVQgNS4xLjEyAAADAACQBwAEAAAAMDIzMAGgAwABAAAAAQAAAAWgBAABAAAAlgAAAAAAAAACAAEAAgAEAAAAUjk4AAIABwAEAAAAMDEwMAAAAADZp5qVybcLXwAAAChJREFUGFc9iEEOADAMgsD+/8+La7YDioKwmMaXFN9SEyDmNvSHGagcB10AN8kKiGEAAAAASUVORK5CYII=" />
   <style>
 :root {
   --bg: #12141a;
@@ -264,6 +265,20 @@ button:disabled {
   text-align: left;
 }
 
+.level-list ul {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+}
+
+.level-list button {
+  width: 100%;
+  text-align: left;
+}
+
 .panel .muted,
 .muted {
   color: var(--muted);
@@ -284,6 +299,24 @@ button:disabled {
   flex: 0 0 5.5rem;
   min-width: 5.5rem;
   white-space: nowrap;
+}
+
+.field.vec3 > span {
+  flex: 0 0 3rem;
+  min-width: 3rem;
+}
+
+.vec3-inputs {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vec3-inputs input {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 0;
 }
 
 .field input[type="number"],
@@ -308,12 +341,13 @@ button:disabled {
 
 .frame-strip {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 3px;
 }
 
 .frame-strip button {
-  font-size: 0.72rem;
+  font-size: 0.65rem;
+  padding: 0.25rem 0.2rem;
 }
 
 @media (max-width: 900px) {
@@ -354,6 +388,7 @@ button:disabled {
   <main class="layout">
     <aside class="left">
       <section id="layout-left">
+        <section id="level-list"></section>
         <h2>Place</h2>
         <div id="item-palette" class="item-palette"></div>
         <h2>Objects</h2>
@@ -362,9 +397,6 @@ button:disabled {
       <section id="anim-left" hidden>
         <h2>Enemies</h2>
         <ul id="enemy-list" class="object-list"></ul>
-        <div class="btn-row">
-          <button type="button" id="btn-add-enemy">Add enemy</button>
-        </div>
       </section>
     </aside>
 
@@ -400,8 +432,8 @@ function uid() {
 const WORLD_MIN = 0;
 const WORLD_MAX = 255;
 const WORLD_SIZE = 256;
-const MAX_VERTS = 16;
-const MAX_LINES = 16;
+const MAX_VERTS = 12;
+const MAX_LINES = 12;
 const VERT_MIN = -64;
 const VERT_MAX = 63;
 
@@ -458,17 +490,100 @@ const KINDS = {
 
 const PALETTE_ORDER = ["room", "doorway", "switch", "slope", "crate", "elevator"];
 
+const LEVEL_NAMES = ["E1M1", "E1M2", "E1M3", "E1M4", "E1M5", "E1M6", "E1M7", "E1M8"];
+
 const FRAME_NAMES = [
+  "Idle 0",
+  "Idle 1",
+  "Alert 0",
+  "Alert 1",
   "Walk 0",
   "Walk 1",
-  "Attack A 0",
-  "Attack A 1",
-  "Attack B 0",
-  "Attack B 1",
-  "Flinch 0",
-  "Flinch 1",
+  "Walk 2",
+  "Walk 3",
+  "AtkA 0",
+  "AtkA 1",
+  "AtkA 2",
+  "AtkA 3",
+  "AtkB 0",
+  "AtkB 1",
+  "AtkB 2",
+  "AtkB 3",
+  "AtkC 0",
+  "AtkC 1",
+  "AtkC 2",
+  "AtkC 3",
+  "Flinch",
   "Death 0",
   "Death 1",
+  "Death 2",
+];
+
+/** Shared 12-vert skeleton: hips, neck, head, L/R arm, L/R leg. */
+const ENEMY_TYPES = [
+  { name: "Grunt", scale: [1, 1, 1], rest: {} },
+  {
+    name: "Knight",
+    scale: [1.15, 1.3, 1],
+    rest: { 3: [0, 2, 0], 4: [-1, 1, 0], 6: [1, 1, 0] },
+  },
+  {
+    name: "Rottweiler",
+    scale: [1, 0.55, 1.35],
+    rest: {
+      0: [0, 1, -5],
+      1: [0, 1, -5],
+      2: [0, -1, 3],
+      3: [0, -3, 8],
+      4: [0, -3, 3],
+      5: [0, -6, 5],
+      6: [0, -3, 3],
+      7: [0, -6, 5],
+    },
+  },
+  {
+    name: "Scrag",
+    scale: [0.85, 1.15, 0.9],
+    rest: {
+      0: [0, 8, 0],
+      1: [0, 8, 0],
+      8: [0, 6, 0],
+      9: [0, 5, 0],
+      10: [0, 6, 0],
+      11: [0, 5, 0],
+      4: [-2, 2, 0],
+      5: [-4, 0, 2],
+      6: [2, 2, 0],
+      7: [4, 0, 2],
+    },
+  },
+  {
+    name: "Ogre",
+    scale: [1.35, 1.05, 1.1],
+    rest: { 5: [0, -1, 0], 7: [0, -1, 0] },
+  },
+  {
+    name: "Shambler",
+    scale: [1.5, 1.45, 1.2],
+    rest: {
+      4: [-2, -2, 0],
+      5: [-3, -6, 1],
+      6: [2, -2, 0],
+      7: [3, -6, 1],
+    },
+  },
+  {
+    name: "Chthon",
+    scale: [1.8, 0.75, 1.6],
+    rest: {
+      2: [0, 2, 0],
+      3: [0, 4, 2],
+      4: [-3, 0, 0],
+      5: [-5, -2, 0],
+      6: [3, 0, 0],
+      7: [5, -2, 0],
+    },
+  },
 ];
 
 const FACES = [
@@ -625,12 +740,25 @@ function cycleFace(faceId, delta) {
   return FACES[n].id;
 }
 
+function emptyMap() {
+  return { objects: [] };
+}
+
+function activeMap(doc) {
+  const name = LEVEL_NAMES.includes(doc.activeLevel) ? doc.activeLevel : LEVEL_NAMES[0];
+  doc.activeLevel = name;
+  if (!doc.maps) doc.maps = {};
+  if (!doc.maps[name]) doc.maps[name] = emptyMap();
+  if (!Array.isArray(doc.maps[name].objects)) doc.maps[name].objects = [];
+  return doc.maps[name];
+}
+
 function roomsOf(doc) {
-  return doc.map.objects.filter((o) => o.kind === "room");
+  return activeMap(doc).objects.filter((o) => o.kind === "room");
 }
 
 function doorwaysOf(doc) {
-  return doc.map.objects.filter((o) => o.kind === "doorway");
+  return activeMap(doc).objects.filter((o) => o.kind === "doorway");
 }
 
 function currentRoom(doc, cam) {
@@ -659,7 +787,7 @@ function localVisibleIds(doc, cam) {
   const neigh = neighbourRooms(doc, cur);
   for (const r of neigh) ids.add(r.id);
   const rooms = [cur, ...neigh];
-  for (const obj of doc.map.objects) {
+  for (const obj of activeMap(doc).objects) {
     if (obj.kind === "room") continue;
     if (rooms.some((r) => aabbOverlap(obj, r))) ids.add(obj.id);
   }
@@ -671,27 +799,20 @@ function objectVisible(doc, obj, cam, localMode) {
   return localVisibleIds(doc, cam).has(obj.id);
 }
 
-function pose(overrides) {
-  const base = [
-    [-3, 6, 0],
-    [3, 6, 0],
-    [0, 14, 0],
-    [0, 20, 0],
-    [-6, 11, 0],
-    [-8, 7, 0],
-    [6, 11, 0],
-    [8, 7, 0],
-    [-3, 3, 0],
-    [-3, 0, 0],
-    [3, 3, 0],
-    [3, 0, 0],
-  ];
-  return base.map((p, i) => {
-    const o = overrides[i];
-    if (!o) return { x: p[0], y: p[1], z: p[2] };
-    return { x: p[0] + o[0], y: p[1] + o[1], z: p[2] + o[2] };
-  });
-}
+const BASE_SKELETON = [
+  [-3, 6, 0],
+  [3, 6, 0],
+  [0, 14, 0],
+  [0, 20, 0],
+  [-6, 11, 0],
+  [-8, 7, 0],
+  [6, 11, 0],
+  [8, 7, 0],
+  [-3, 3, 0],
+  [-3, 0, 0],
+  [3, 3, 0],
+  [3, 0, 0],
+];
 
 const TEMPLATE_LINES = [
   [0, 1],
@@ -708,30 +829,85 @@ const TEMPLATE_LINES = [
   [10, 11],
 ];
 
+function swing(phase, amp) {
+  const s = [0, amp, 0, -amp][phase & 3];
+  return {
+    4: [0, 0, (s / 2) | 0],
+    5: [0, 0, s],
+    6: [0, 0, (-s / 2) | 0],
+    7: [0, 0, -s],
+    8: [0, 0, (-s / 2) | 0],
+    9: [0, 0, -s],
+    10: [0, 0, (s / 2) | 0],
+    11: [0, 0, s],
+  };
+}
+
 const FRAME_OFFSETS = [
-  { 5: [0, 0, 2], 7: [0, 0, -2], 9: [0, 0, -2], 11: [0, 0, 2] },
-  { 5: [0, 0, -2], 7: [0, 0, 2], 9: [0, 0, 2], 11: [0, 0, -2] },
-  { 5: [0, 2, 4], 4: [0, 1, 2], 3: [1, 0, 1] },
-  { 5: [1, 3, 6], 4: [0, 2, 3], 3: [2, 0, 2] },
-  { 7: [0, 2, 4], 6: [0, 1, 2] },
-  { 7: [1, 3, 6], 6: [0, 2, 3] },
-  { 2: [1, -1, 0], 3: [2, -1, 0] },
-  { 2: [2, -2, 0], 3: [3, -2, 1] },
-  { 2: [0, -4, 2], 3: [0, -5, 4], 5: [0, -3, 0], 7: [0, -3, 0] },
+  { 2: [0, 0, 0], 3: [0, 0, 0] },
+  { 2: [0, 1, 0], 3: [0, 1, 0] },
+  { 3: [0, 2, 1], 4: [-2, 1, 0], 5: [-3, 2, 1], 6: [2, 1, 0], 7: [3, 2, 1] },
+  { 3: [1, 3, 2], 4: [-3, 2, 1], 5: [-4, 3, 2], 6: [3, 2, 1], 7: [4, 3, 2] },
+  swing(0, 3),
+  swing(1, 3),
+  swing(2, 3),
+  swing(3, 3),
+  { 4: [0, 1, 2], 5: [0, 2, 4], 3: [1, 0, 1] },
+  { 4: [0, 2, 3], 5: [1, 3, 6], 3: [2, 0, 2] },
+  { 4: [0, 1, 4], 5: [2, 2, 7], 3: [1, 0, 3] },
+  { 4: [0, 0, 1], 5: [0, 0, 2], 3: [0, 0, 0] },
+  { 6: [0, 1, 2], 7: [0, 2, 4], 5: [0, 1, -1] },
+  { 6: [0, 2, 3], 7: [1, 4, 6], 5: [0, 2, -2] },
+  { 6: [0, 1, 5], 7: [2, 3, 8], 5: [0, 1, -1] },
+  { 6: [0, 0, 1], 7: [0, 1, 2] },
+  { 4: [-1, 2, 0], 5: [-2, 4, 0], 6: [1, 2, 0], 7: [2, 4, 0], 2: [0, -1, 0] },
+  { 4: [-2, 3, 1], 5: [-3, 6, 2], 6: [2, 3, 1], 7: [3, 6, 2], 2: [0, -2, 0] },
+  { 4: [-1, 1, 2], 5: [-2, 2, 4], 6: [1, 1, 2], 7: [2, 2, 4] },
+  { 4: [0, 0, 0], 5: [0, 0, 0], 6: [0, 0, 0], 7: [0, 0, 0] },
+  { 2: [2, -2, -1], 3: [3, -2, 0], 4: [1, -1, -1], 6: [-1, -1, -1] },
+  { 2: [0, -3, 2], 3: [0, -4, 3], 5: [0, -2, 0], 7: [0, -2, 0] },
+  { 0: [2, -4, 2], 1: [3, -5, 3], 2: [3, -4, 4], 3: [5, -3, 5], 9: [2, -5, 1], 11: [3, -5, 2] },
   {
-    0: [4, -5, 2],
-    1: [6, -6, 3],
-    2: [5, -4, 4],
-    3: [8, -3, 5],
-    8: [4, -6, 1],
-    9: [4, -6, 0],
-    10: [7, -6, 2],
-    11: [8, -6, 1],
+    0: [5, -6, 3],
+    1: [7, -6, 4],
+    2: [6, -5, 5],
+    3: [8, -4, 6],
+    8: [5, -6, 2],
+    9: [5, -6, 1],
+    10: [8, -6, 3],
+    11: [8, -6, 2],
   },
 ];
 
-function defaultStickFrames() {
-  return FRAME_OFFSETS.map((off) => pose(off));
+function add3(a, b) {
+  const o = b || [0, 0, 0];
+  return [a[0] + o[0], a[1] + o[1], a[2] + o[2]];
+}
+
+function skeletonBase(type) {
+  const [sx, sy, sz] = type.scale;
+  return BASE_SKELETON.map((p, i) => {
+    const r = type.rest[i] || [0, 0, 0];
+    return [
+      Math.round(p[0] * sx + r[0]),
+      Math.round(p[1] * sy + r[1]),
+      Math.round(p[2] * sz + r[2]),
+    ];
+  });
+}
+
+function enemyTypeByName(name) {
+  return ENEMY_TYPES.find((t) => t.name === name) || ENEMY_TYPES[0];
+}
+
+function dummyFramesFor(name) {
+  const base = skeletonBase(enemyTypeByName(name));
+  return FRAME_OFFSETS.map((off) =>
+    base.map((p, i) => {
+      const v = add3(p, off[i]);
+      return { x: clampVert(v[0]), y: clampVert(v[1]), z: clampVert(v[2]) };
+    })
+  );
 }
 
 function createEnemy(name = "Grunt") {
@@ -740,38 +916,17 @@ function createEnemy(name = "Grunt") {
     name,
     verts: 12,
     lines: TEMPLATE_LINES.map((p) => [p[0], p[1]]),
-    frames: defaultStickFrames(),
+    frames: dummyFramesFor(name),
   };
 }
 
-function createDefaultDocument() {
-  const roomA = createObject("room", 8, 0, 8);
-  roomA.sx = 24;
-  roomA.sy = 12;
-  roomA.sz = 24;
-  const roomB = createObject("room", 31, 0, 8);
-  roomB.sx = 24;
-  roomB.sy = 12;
-  roomB.sz = 24;
-  const door = createObject("doorway", 31, 0, 16, { face: "+x" });
-  const crate = createObject("crate", 14, 0, 14);
-  return {
-    version: 1,
-    map: { objects: [roomA, roomB, door, crate] },
-    enemies: [createEnemy("Grunt")],
-  };
+function createAllCreatures() {
+  return ENEMY_TYPES.map((t) => createEnemy(t.name));
 }
 
-function cloneDoc(doc) {
-  return JSON.parse(JSON.stringify(doc));
-}
-
-function normalizeDocument(raw) {
-  const doc = createDefaultDocument();
-  if (!raw || typeof raw !== "object") return doc;
-  doc.map.objects = [];
-  const objs = raw.map?.objects || raw.objects || [];
-  for (const o of objs) {
+function parseObjects(list) {
+  const out = [];
+  for (const o of list || []) {
     if (!KINDS[o.kind]) continue;
     const obj = createObject(o.kind, o.x, o.y, o.z, {
       id: o.id,
@@ -784,38 +939,82 @@ function normalizeDocument(raw) {
       obj.sy = o.sy ?? obj.sy;
       obj.sz = o.sz ?? obj.sz;
     }
-    doc.map.objects.push(clampObject(obj));
+    out.push(clampObject(obj));
   }
-  doc.enemies = [];
-  const enemies = raw.enemies || [];
-  for (const e of enemies) {
-    const enemy = createEnemy(e.name || "Enemy");
-    enemy.id = e.id || enemy.id;
-    const lines = Array.isArray(e.lines) ? e.lines.slice(0, MAX_LINES) : enemy.lines;
-    enemy.lines = lines
-      .filter((p) => Array.isArray(p) && p.length >= 2)
-      .map((p) => [p[0] | 0, p[1] | 0]);
-    let nverts = e.verts | 0;
-    if (Array.isArray(e.frames?.[0])) nverts = Math.max(nverts, e.frames[0].length);
-    enemy.verts = Math.max(1, Math.min(MAX_VERTS, nverts || enemy.verts));
-    const srcFrames = Array.isArray(e.frames) ? e.frames : [];
-    enemy.frames = FRAME_NAMES.map((_, fi) => {
-      const src = srcFrames[fi] || srcFrames[0] || enemy.frames[0];
-      const verts = [];
-      for (let i = 0; i < enemy.verts; i++) {
-        const v = src[i] || { x: 0, y: 0, z: 0 };
-        verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
-      }
-      return verts;
-    });
-    for (const ln of enemy.lines) {
-      ln[0] = Math.max(0, Math.min(enemy.verts - 1, ln[0]));
-      ln[1] = Math.max(0, Math.min(enemy.verts - 1, ln[1]));
+  return out;
+}
+
+function starterObjects() {
+  const roomA = createObject("room", 8, 0, 8);
+  roomA.sx = 24;
+  roomA.sy = 12;
+  roomA.sz = 24;
+  const roomB = createObject("room", 31, 0, 8);
+  roomB.sx = 24;
+  roomB.sy = 12;
+  roomB.sz = 24;
+  const door = createObject("doorway", 31, 0, 16, { face: "+x" });
+  const crate = createObject("crate", 14, 0, 14);
+  return [roomA, roomB, door, crate];
+}
+
+function createDefaultDocument() {
+  const maps = {};
+  for (const name of LEVEL_NAMES) maps[name] = emptyMap();
+  maps.E1M1 = { objects: starterObjects() };
+  return {
+    version: 3,
+    activeLevel: "E1M1",
+    maps,
+    enemies: createAllCreatures(),
+  };
+}
+
+function cloneDoc(doc) {
+  return JSON.parse(JSON.stringify(doc));
+}
+
+function normalizeDocument(raw) {
+  const doc = createDefaultDocument();
+  if (!raw || typeof raw !== "object") return doc;
+  if (raw.maps && typeof raw.maps === "object") {
+    for (const name of LEVEL_NAMES) {
+      doc.maps[name] = { objects: parseObjects(raw.maps[name]?.objects) };
     }
-    doc.enemies.push(enemy);
+  } else {
+    doc.maps.E1M1 = { objects: parseObjects(raw.map?.objects || raw.objects) };
   }
-  if (!doc.enemies.length) doc.enemies.push(createEnemy("Grunt"));
-  if (!doc.map.objects.length) return createDefaultDocument();
+  doc.activeLevel = LEVEL_NAMES.includes(raw.activeLevel) ? raw.activeLevel : "E1M1";
+  doc.enemies = [];
+  const stale = !raw.version || raw.version < 2;
+  if (stale) {
+    doc.enemies = createAllCreatures();
+  } else {
+    const enemies = raw.enemies || [];
+    for (const e of enemies) {
+      const enemy = createEnemy(e.name || "Enemy");
+      enemy.id = e.id || enemy.id;
+      enemy.name = e.name || enemy.name;
+      enemy.verts = 12;
+      const srcFrames = Array.isArray(e.frames) ? e.frames : [];
+      enemy.frames = FRAME_NAMES.map((_, fi) => {
+        const src = srcFrames[fi] || srcFrames[0] || enemy.frames[fi];
+        const verts = [];
+        for (let i = 0; i < 12; i++) {
+          const v = src[i] || { x: 0, y: 0, z: 0 };
+          verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
+        }
+        return verts;
+      });
+      doc.enemies.push(enemy);
+    }
+    const have = new Set(doc.enemies.map((e) => e.name));
+    for (const t of ENEMY_TYPES) {
+      if (!have.has(t.name)) doc.enemies.push(createEnemy(t.name));
+    }
+  }
+  if (!doc.enemies.length) doc.enemies = createAllCreatures();
+  doc.version = 3;
   return doc;
 }
 
@@ -1210,7 +1409,7 @@ class LayoutView {
     const hitHandle = selected ? this.#hitHandle(doc, selected, p.x, p.y) : null;
     if (hitHandle) {
       this.opts.beginUndo?.();
-      const obj = doc.map.objects.find((o) => o.id === selected);
+      const obj = activeMap(doc).objects.find((o) => o.id === selected);
       this.drag = {
         kind: hitHandle.kind,
         axis: hitHandle.axis,
@@ -1227,7 +1426,7 @@ class LayoutView {
     this.opts.onSelect?.(hit?.id || null);
     if (hit) {
       this.opts.beginUndo?.();
-      const obj = doc.map.objects.find((o) => o.id === hit.id);
+      const obj = activeMap(doc).objects.find((o) => o.id === hit.id);
       this.drag = {
         kind: "move",
         start: p,
@@ -1275,7 +1474,7 @@ class LayoutView {
 
   #applyDrag(p) {
     const doc = this.opts.getDoc();
-    const obj = doc.map.objects.find((o) => o.id === this.drag.orig.id);
+    const obj = activeMap(doc).objects.find((o) => o.id === this.drag.orig.id);
     if (!obj) return;
     const ray = screenRay(p.x, p.y, this.camera, this.cssW, this.cssH);
     const orig = this.drag.orig;
@@ -1341,7 +1540,7 @@ class LayoutView {
   #visibleObjects(doc) {
     const local = this.opts.getLocalMode?.() || false;
     const cam = this.camera;
-    return doc.map.objects.filter((o) => objectVisible(doc, o, cam, local));
+    return activeMap(doc).objects.filter((o) => objectVisible(doc, o, cam, local));
   }
 
   #pick(doc, mx, my) {
@@ -1356,7 +1555,7 @@ class LayoutView {
   }
 
   #hitHandle(doc, id, mx, my) {
-    const obj = doc.map.objects.find((o) => o.id === id);
+    const obj = activeMap(doc).objects.find((o) => o.id === id);
     if (!obj) return null;
     const cam = this.camera;
     const w = this.cssW;
@@ -1636,7 +1835,7 @@ class OverheadView {
       ctx.strokeRect(p.x, p.y, obj.sx * s, obj.sz * s);
     };
 
-    for (const obj of doc.map.objects) {
+    for (const obj of activeMap(doc).objects) {
       if (obj.kind !== "room") continue;
       const isCur = cur && obj.id === cur.id;
       const isN = neigh.some((n) => n.id === obj.id);
@@ -1649,7 +1848,7 @@ class OverheadView {
       );
     }
 
-    for (const obj of doc.map.objects) {
+    for (const obj of activeMap(doc).objects) {
       if (obj.kind === "room") continue;
       const faded = vis && !vis.has(obj.id);
       const col = faded ? "#444" : KINDS[obj.kind].color;
@@ -1671,6 +1870,10 @@ class OverheadView {
 }
 
 // ---- js/animView.js ----
+const AXIS_LEN = 8;
+const AXIS_HIT = 9;
+const AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
+
 class AnimView {
   constructor(canvas, opts) {
     this.canvas = canvas;
@@ -1679,6 +1882,7 @@ class AnimView {
     this.orbit = { yaw: 0.5, pitch: 0.15, dist: 48 };
     this.drag = null;
     this.hover = -1;
+    this.hoverAxis = null;
     this.enabled = false;
     this._ro = new ResizeObserver(() => this.resize());
     this._ro.observe(opts.stage || canvas.parentElement);
@@ -1728,29 +1932,61 @@ class AnimView {
     };
   }
 
-  #projectedVerts() {
+  #primaryVert() {
+    const selected = this.opts.getSelectedVerts?.() || [];
+    if (!selected.length) return null;
+    const i = selected[selected.length - 1];
+    const enemy = this.opts.getEnemy();
+    const frame = this.opts.getFrame();
+    return { index: i, v: enemy.frames[frame][i] };
+  }
+
+  #axisEnd(v, axis) {
+    return {
+      x: v.x + (axis === "x" ? AXIS_LEN : 0),
+      y: v.y + (axis === "y" ? AXIS_LEN : 0),
+      z: v.z + (axis === "z" ? AXIS_LEN : 0),
+    };
+  }
+
+  #hitVert(mx, my) {
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
     const cam = this.#cam();
     const verts = enemy.frames[frame];
-    return verts.map((v) => ({
-      v,
-      p: projectPoint(v, cam, this.cssW, this.cssH),
-    }));
-  }
-
-  #hitVert(mx, my) {
-    const pts = this.#projectedVerts();
     let best = -1;
     let bestD = 10;
-    pts.forEach((pt, i) => {
-      if (!pt.p.ok) return;
-      const d = Math.hypot(mx - pt.p.sx, my - pt.p.sy);
+    verts.forEach((v, i) => {
+      const p = projectPoint(v, cam, this.cssW, this.cssH);
+      if (!p.ok) return;
+      const d = Math.hypot(mx - p.sx, my - p.sy);
       if (d < bestD) {
         bestD = d;
         best = i;
       }
     });
+    return best;
+  }
+
+  #hitAxis(mx, my) {
+    const prim = this.#primaryVert();
+    if (!prim) return null;
+    const cam = this.#cam();
+    const w = this.cssW;
+    const h = this.cssH;
+    const pa = projectPoint(prim.v, cam, w, h);
+    if (!pa.ok) return null;
+    let best = null;
+    let bestD = AXIS_HIT;
+    for (const axis of ["x", "y", "z"]) {
+      const pb = projectPoint(this.#axisEnd(prim.v, axis), cam, w, h);
+      if (!pb.ok) continue;
+      const d = distPointToSegment2d(mx, my, pa.sx, pa.sy, pb.sx, pb.sy);
+      if (d < bestD) {
+        bestD = d;
+        best = axis;
+      }
+    }
     return best;
   }
 
@@ -1771,16 +2007,28 @@ class AnimView {
       return;
     }
     if (e.button !== 0) return;
+
+    const axis = this.#hitAxis(p.x, p.y);
+    if (axis) {
+      const prim = this.#primaryVert();
+      this.opts.beginUndo?.();
+      this.drag = {
+        kind: "axis",
+        axis,
+        index: prim.index,
+        orig: { ...prim.v },
+        start: p,
+      };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+
     const vi = this.#hitVert(p.x, p.y);
     if (vi >= 0) {
-      this.opts.beginUndo?.();
-      const additive = e.shiftKey;
-      this.opts.onSelectVert?.(vi, additive);
-      const enemy = this.opts.getEnemy();
-      const frame = this.opts.getFrame();
-      const v = enemy.frames[frame][vi];
-      this.drag = { kind: "vert", index: vi, orig: { ...v }, start: p };
+      this.opts.onSelectVert?.(vi, e.shiftKey);
+      this.drag = { kind: "select" };
       this.canvas.setPointerCapture(e.pointerId);
+      this.draw();
       return;
     }
     this.opts.onSelectVert?.(-1, false);
@@ -1792,7 +2040,8 @@ class AnimView {
     if (!this.enabled) return;
     const p = this.#eventPos(e);
     if (!this.drag) {
-      this.hover = this.#hitVert(p.x, p.y);
+      this.hoverAxis = this.#hitAxis(p.x, p.y);
+      this.hover = this.hoverAxis ? -1 : this.#hitVert(p.x, p.y);
       this.draw();
       return;
     }
@@ -1801,21 +2050,29 @@ class AnimView {
       const dy = p.y - this.drag.last.y;
       this.drag.last = p;
       this.orbit.yaw += dx * 0.01;
-      this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch + dy * 0.01));
+      this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch - dy * 0.01));
       this.draw();
       return;
     }
-    if (this.drag.kind === "vert") {
+    if (this.drag.kind === "axis") {
       const enemy = this.opts.getEnemy();
       const frame = this.opts.getFrame();
       const v = enemy.frames[frame][this.drag.index];
       const cam = this.#cam();
-      const { right, up } = lookVectors(cam.yaw, cam.pitch);
-      const dx = (p.x - this.drag.start.x) / 8;
-      const dy = -(p.y - this.drag.start.y) / 8;
-      v.x = clampVert(this.drag.orig.x + right.x * dx + up.x * dy);
-      v.y = clampVert(this.drag.orig.y + right.y * dx + up.y * dy);
-      v.z = clampVert(this.drag.orig.z + right.z * dx + up.z * dy);
+      const orig = this.drag.orig;
+      const pa = projectPoint(orig, cam, this.cssW, this.cssH);
+      const pb = projectPoint(this.#axisEnd(orig, this.drag.axis), cam, this.cssW, this.cssH);
+      if (!pa.ok || !pb.ok) return;
+      const ax = pb.sx - pa.sx;
+      const ay = pb.sy - pa.sy;
+      const alen2 = ax * ax + ay * ay;
+      if (alen2 < 16) return;
+      const t = ((p.x - this.drag.start.x) * ax + (p.y - this.drag.start.y) * ay) / alen2;
+      const delta = Math.round(t * AXIS_LEN);
+      v.x = orig.x;
+      v.y = orig.y;
+      v.z = orig.z;
+      v[this.drag.axis] = clampVert(orig[this.drag.axis] + delta);
       this.opts.onChange?.();
       this.draw();
     }
@@ -1823,7 +2080,7 @@ class AnimView {
 
   #onUp(e) {
     if (!this.enabled) return;
-    if (this.drag?.kind === "vert") this.opts.endUndo?.();
+    if (this.drag?.kind === "axis") this.opts.endUndo?.();
     this.drag = null;
     try {
       this.canvas.releasePointerCapture(e.pointerId);
@@ -1831,6 +2088,48 @@ class AnimView {
       /* ignore */
     }
     this.draw();
+  }
+
+  #strokeSeg(ctx, cam, w, h, p0, p1, col, width = 1) {
+    const seg = projectLine(p0, p1, cam, w, h);
+    if (!seg) return;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(seg.ax, seg.ay);
+    ctx.lineTo(seg.bx, seg.by);
+    ctx.stroke();
+  }
+
+  #drawForwardArrow(ctx, cam, w, h) {
+    const y = 0.2;
+    const tip = { x: 0, y, z: 14 };
+    const col = "#d4a017";
+    this.#strokeSeg(ctx, cam, w, h, { x: 0, y, z: 0 }, tip, col, 2.5);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: 2.5, y, z: 10 }, col, 2);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: -2.5, y, z: 10 }, col, 2);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: 0, y: 2.5, z: 10 }, col, 2);
+    const label = projectPoint({ x: 0, y: 1.5, z: 16 }, cam, w, h);
+    if (label.ok) {
+      ctx.fillStyle = col;
+      ctx.font = "11px Segoe UI, sans-serif";
+      ctx.fillText("fwd", label.sx - 10, label.sy);
+    }
+  }
+
+  #drawGizmo(ctx, cam, w, h, v) {
+    for (const axis of ["x", "y", "z"]) {
+      const hi = this.hoverAxis === axis || this.drag?.axis === axis;
+      const col = hi ? "#fff" : AXIS_COLS[axis];
+      this.#strokeSeg(ctx, cam, w, h, v, this.#axisEnd(v, axis), col, hi ? 3 : 2);
+      const tip = projectPoint(this.#axisEnd(v, axis), cam, w, h);
+      if (tip.ok) {
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(tip.sx, tip.sy, hi ? 5 : 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
   draw() {
@@ -1848,32 +2147,19 @@ class AnimView {
     const selected = this.opts.getSelectedVerts?.() || [];
     const verts = enemy.frames[frame];
 
-    ctx.strokeStyle = "#3d4658";
-    const step = 8;
-    const strokeSeg = (p0, p1, col) => {
-      const seg = projectLine(p0, p1, cam, w, h);
-      if (!seg) return;
-      if (col) ctx.strokeStyle = col;
-      ctx.beginPath();
-      ctx.moveTo(seg.ax, seg.ay);
-      ctx.lineTo(seg.bx, seg.by);
-      ctx.stroke();
-    };
-    for (let i = -24; i <= 24; i += step) {
-      strokeSeg({ x: i, y: 0, z: -24 }, { x: i, y: 0, z: 24 });
-      strokeSeg({ x: -24, y: 0, z: i }, { x: 24, y: 0, z: i });
+    ctx.lineWidth = 1;
+    for (let i = -24; i <= 24; i += 8) {
+      this.#strokeSeg(ctx, cam, w, h, { x: i, y: 0, z: -24 }, { x: i, y: 0, z: 24 }, "#3d4658");
+      this.#strokeSeg(ctx, cam, w, h, { x: -24, y: 0, z: i }, { x: 24, y: 0, z: i }, "#3d4658");
     }
-    const axes = [
-      [{ x: -20, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }, "#a66"],
-      [{ x: 0, y: 0, z: 0 }, { x: 0, y: 24, z: 0 }, "#6a6"],
-      [{ x: 0, y: 0, z: -20 }, { x: 0, y: 0, z: 20 }, "#66a"],
-    ];
-    for (const [a, b, col] of axes) strokeSeg(a, b, col);
+    this.#strokeSeg(ctx, cam, w, h, { x: -20, y: 0, z: 0 }, { x: 20, y: 0, z: 0 }, "#a66");
+    this.#strokeSeg(ctx, cam, w, h, { x: 0, y: 0, z: 0 }, { x: 0, y: 24, z: 0 }, "#6a6");
+    this.#strokeSeg(ctx, cam, w, h, { x: 0, y: 0, z: -20 }, { x: 0, y: 0, z: 20 }, "#66a");
+    this.#drawForwardArrow(ctx, cam, w, h);
 
     ctx.lineWidth = 1.5;
-    ctx.strokeStyle = "#c8ccd4";
     for (const [i, j] of enemy.lines) {
-      strokeSeg(verts[i], verts[j], "#c8ccd4");
+      this.#strokeSeg(ctx, cam, w, h, verts[i], verts[j], "#c8ccd4", 1.5);
     }
 
     verts.forEach((v, i) => {
@@ -1888,10 +2174,13 @@ class AnimView {
       ctx.fill();
     });
 
+    const prim = this.#primaryVert();
+    if (prim) this.#drawGizmo(ctx, cam, w, h, prim.v);
+
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";
     ctx.fillText(
-      `${enemy.name} · ${FRAME_NAMES[frame]} · ${enemy.verts}/${MAX_VERTS} verts  ${VERT_MIN}..${VERT_MAX}`,
+      `${enemy.name} · ${FRAME_NAMES[frame]} · 12 verts · 24 frames`,
       8,
       16
     );
@@ -2045,11 +2334,12 @@ function setMode(mode) {
   document.getElementById("anim-left").hidden = mode !== "anim";
   document.getElementById("draw-mode-group").hidden = mode !== "layout";
   document.getElementById("overhead-panel").hidden = mode !== "layout";
-  document.getElementById("center-title").textContent = mode === "layout" ? "Map" : "Enemy";
+  document.getElementById("center-title").textContent =
+    mode === "layout" ? `Map ${doc.activeLevel}` : "Enemy";
   document.getElementById("hint").textContent =
     mode === "layout"
       ? "Click canvas · WASD fly along look · Q/E camera up · RMB look · LMB move · R face · Del delete"
-      : "LMB drag vertex · Shift+click add to selection · RMB orbit · [ ] frames · Add line between two verts";
+      : "Click vert to select · drag axis to move · X/Y/Z nudge (Shift = −) · [ ] or ← → frames · RMB orbit";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   refreshAll();
@@ -2086,21 +2376,21 @@ function placeKind(kind) {
   const obj = createObject(kind, p.x, p.y, p.z);
   obj.y = Math.max(0, obj.y);
   clampObject(obj);
-  doc.map.objects.push(obj);
+  activeMap(doc).objects.push(obj);
   selectedId = obj.id;
   markDirty();
   refreshAll();
 }
 
 function selectedObject() {
-  return doc.map.objects.find((o) => o.id === selectedId) || null;
+  return activeMap(doc).objects.find((o) => o.id === selectedId) || null;
 }
 
 function deleteSelected() {
   if (editorMode === "layout") {
     if (!selectedId) return;
     pushUndo();
-    doc.map.objects = doc.map.objects.filter((o) => o.id !== selectedId);
+    activeMap(doc).objects = activeMap(doc).objects.filter((o) => o.id !== selectedId);
     selectedId = null;
     markDirty();
     refreshAll();
@@ -2117,16 +2407,50 @@ function duplicateSelected() {
   if (!obj) return;
   pushUndo();
   const copy = clampObject({ ...obj, id: uid(), x: obj.x + 2, z: obj.z + 2 });
-  doc.map.objects.push(copy);
+  activeMap(doc).objects.push(copy);
   selectedId = copy.id;
   markDirty();
   refreshAll();
 }
 
+function switchLevel(name) {
+  if (!LEVEL_NAMES.includes(name) || name === doc.activeLevel) return;
+  doc.activeLevel = name;
+  selectedId = null;
+  markDirty();
+  if (editorMode === "layout") {
+    document.getElementById("center-title").textContent = `Map ${doc.activeLevel}`;
+  }
+  refreshAll();
+  setStatus(name);
+}
+
+function renderLevelList() {
+  const root = document.getElementById("level-list");
+  if (!root) return;
+  root.classList.add("level-list");
+  root.innerHTML = "";
+  const title = document.createElement("h2");
+  title.textContent = "Levels";
+  root.appendChild(title);
+  const ul = document.createElement("ul");
+  for (const name of LEVEL_NAMES) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = name;
+    if (name === doc.activeLevel) btn.className = "active";
+    btn.addEventListener("click", () => switchLevel(name));
+    li.appendChild(btn);
+    ul.appendChild(li);
+  }
+  root.appendChild(ul);
+}
+
 function renderObjectList() {
   const ul = document.getElementById("object-list");
   ul.innerHTML = "";
-  for (const obj of doc.map.objects) {
+  for (const obj of activeMap(doc).objects) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
@@ -2169,6 +2493,20 @@ function field(label, input) {
   return row;
 }
 
+function vec3Field(label, specs) {
+  const row = document.createElement("label");
+  row.className = "field vec3";
+  const span = document.createElement("span");
+  span.textContent = label;
+  const wrap = document.createElement("div");
+  wrap.className = "vec3-inputs";
+  for (const s of specs) {
+    wrap.appendChild(numInput(s.value, s.onChange, s.min, s.max));
+  }
+  row.append(span, wrap);
+  return row;
+}
+
 function numInput(value, onChange, min, max) {
   const inp = document.createElement("input");
   inp.type = "number";
@@ -2201,13 +2539,21 @@ function renderInspector() {
       markDirty();
       refreshAll();
     };
-    root.appendChild(field("X", numInput(obj.x, (v) => apply(() => (obj.x = v)), 0, 255)));
-    root.appendChild(field("Y", numInput(obj.y, (v) => apply(() => (obj.y = v)), 0, 255)));
-    root.appendChild(field("Z", numInput(obj.z, (v) => apply(() => (obj.z = v)), 0, 255)));
+    root.appendChild(
+      vec3Field("XYZ", [
+        { value: obj.x, onChange: (v) => apply(() => (obj.x = v)), min: 0, max: 255 },
+        { value: obj.y, onChange: (v) => apply(() => (obj.y = v)), min: 0, max: 255 },
+        { value: obj.z, onChange: (v) => apply(() => (obj.z = v)), min: 0, max: 255 },
+      ])
+    );
     if (!KINDS[obj.kind].fixed) {
-      root.appendChild(field("SX", numInput(obj.sx, (v) => apply(() => (obj.sx = v)), 1, 256)));
-      root.appendChild(field("SY", numInput(obj.sy, (v) => apply(() => (obj.sy = v)), 1, 256)));
-      root.appendChild(field("SZ", numInput(obj.sz, (v) => apply(() => (obj.sz = v)), 1, 256)));
+      root.appendChild(
+        vec3Field("Size", [
+          { value: obj.sx, onChange: (v) => apply(() => (obj.sx = v)), min: 1, max: 256 },
+          { value: obj.sy, onChange: (v) => apply(() => (obj.sy = v)), min: 1, max: 256 },
+          { value: obj.sz, onChange: (v) => apply(() => (obj.sz = v)), min: 1, max: 256 },
+        ])
+      );
     } else {
       const p = document.createElement("p");
       p.className = "muted";
@@ -2296,7 +2642,7 @@ function renderInspector() {
 
   const counts = document.createElement("p");
   counts.className = "muted";
-  counts.textContent = `${e.verts}/${MAX_VERTS} verts · ${e.lines.length}/${MAX_LINES} lines`;
+  counts.textContent = `12 verts · 12 lines · 24 frames`;
   root.appendChild(counts);
 
   if (selectedVerts.length === 1) {
@@ -2308,21 +2654,17 @@ function renderInspector() {
       markDirty();
       refreshAll();
     };
-    root.appendChild(field("VX", numInput(v.x, (n) => setC("x", n), -64, 63)));
-    root.appendChild(field("VY", numInput(v.y, (n) => setC("y", n), -64, 63)));
-    root.appendChild(field("VZ", numInput(v.z, (n) => setC("z", n), -64, 63)));
+    root.appendChild(
+      vec3Field("XYZ", [
+        { value: v.x, onChange: (n) => setC("x", n), min: -64, max: 63 },
+        { value: v.y, onChange: (n) => setC("y", n), min: -64, max: 63 },
+        { value: v.z, onChange: (n) => setC("z", n), min: -64, max: 63 },
+      ])
+    );
   }
 
   const row = document.createElement("div");
   row.className = "btn-row";
-  const addV = document.createElement("button");
-  addV.type = "button";
-  addV.textContent = "Add vertex";
-  addV.addEventListener("click", addVertex);
-  const addL = document.createElement("button");
-  addL.type = "button";
-  addL.textContent = "Add line";
-  addL.addEventListener("click", addLine);
   const prev = document.createElement("button");
   prev.type = "button";
   prev.textContent = "Prev frame";
@@ -2331,53 +2673,8 @@ function renderInspector() {
   next.type = "button";
   next.textContent = "Next frame";
   next.addEventListener("click", () => stepFrame(1));
-  row.append(addV, addL, prev, next);
+  row.append(prev, next);
   root.appendChild(row);
-}
-
-function addVertex() {
-  const e = activeEnemy();
-  if (e.verts >= MAX_VERTS) {
-    setStatus("Max 16 vertices", true);
-    return;
-  }
-  pushUndo();
-  e.verts += 1;
-  for (const fr of e.frames) fr.push({ x: 0, y: 10, z: 0 });
-  selectedVerts = [e.verts - 1];
-  markDirty();
-  refreshAll();
-}
-
-function addLine() {
-  const e = activeEnemy();
-  if (e.lines.length >= MAX_LINES) {
-    setStatus("Max 16 lines", true);
-    return;
-  }
-  if (selectedVerts.length === 2) {
-    pushUndo();
-    e.lines.push([selectedVerts[0], selectedVerts[1]]);
-    markDirty();
-    refreshAll();
-    return;
-  }
-  if (e.verts + 2 > MAX_VERTS) {
-    setStatus("Select two vertices, or free two vertex slots for a flair line", true);
-    return;
-  }
-  pushUndo();
-  const a = e.verts;
-  const b = e.verts + 1;
-  e.verts += 2;
-  for (const fr of e.frames) {
-    fr.push({ x: -4, y: 12, z: 2 });
-    fr.push({ x: 4, y: 12, z: 2 });
-  }
-  e.lines.push([a, b]);
-  selectedVerts = [a, b];
-  markDirty();
-  refreshAll();
 }
 
 function stepFrame(d) {
@@ -2385,7 +2682,24 @@ function stepFrame(d) {
   refreshAll();
 }
 
+function nudgeVert(axis, delta) {
+  const e = activeEnemy();
+  const idxs = selectedVerts.length ? selectedVerts : [];
+  if (!idxs.length) {
+    setStatus("Select a vertex first", true);
+    return;
+  }
+  pushUndo();
+  for (const i of idxs) {
+    const v = e.frames[frameIndex][i];
+    v[axis] = clampVert(v[axis] + delta);
+  }
+  markDirty();
+  refreshAll();
+}
+
 function refreshPanels() {
+  renderLevelList();
   renderObjectList();
   renderEnemyList();
   renderInspector();
@@ -2430,14 +2744,6 @@ document.getElementById("file-input").addEventListener("change", async (e) => {
   } catch (err) {
     setStatus(String(err), true);
   }
-});
-document.getElementById("btn-add-enemy").addEventListener("click", () => {
-  pushUndo();
-  doc.enemies.push(createEnemy(`Enemy ${doc.enemies.length + 1}`));
-  enemyIndex = doc.enemies.length - 1;
-  selectedVerts = [];
-  markDirty();
-  refreshAll();
 });
 
 window.addEventListener("keydown", (e) => {
@@ -2486,13 +2792,23 @@ window.addEventListener("keydown", (e) => {
       refreshAll();
     }
   }
-  if (e.key === "[" && editorMode === "anim") {
-    e.preventDefault();
-    stepFrame(-1);
-  }
-  if (e.key === "]" && editorMode === "anim") {
-    e.preventDefault();
-    stepFrame(1);
+  if (editorMode === "anim") {
+    if (e.key === "[" || e.key === "," || e.key === "ArrowLeft") {
+      e.preventDefault();
+      stepFrame(-1);
+      return;
+    }
+    if (e.key === "]" || e.key === "." || e.key === "ArrowRight") {
+      e.preventDefault();
+      stepFrame(1);
+      return;
+    }
+    const k = e.key.toLowerCase();
+    if (k === "x" || k === "y" || k === "z") {
+      e.preventDefault();
+      nudgeVert(k, e.shiftKey ? -1 : 1);
+      return;
+    }
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && editorMode === "layout") {
     e.preventDefault();

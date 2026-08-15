@@ -2,17 +2,16 @@ import {
   KINDS,
   PALETTE_ORDER,
   FRAME_NAMES,
-  MAX_VERTS,
-  MAX_LINES,
   clampObject,
   clampVert,
-  createEnemy,
   createObject,
   createDefaultDocument,
   currentRoom,
   cycleFace,
   normalizeDocument,
   uid,
+  LEVEL_NAMES,
+  activeMap,
 } from "./model.js";
 import { downloadJSON, loadFromStorage, readJSONFile, saveToStorage } from "./io.js";
 import { LayoutView } from "./layoutView.js";
@@ -165,11 +164,12 @@ function setMode(mode) {
   document.getElementById("anim-left").hidden = mode !== "anim";
   document.getElementById("draw-mode-group").hidden = mode !== "layout";
   document.getElementById("overhead-panel").hidden = mode !== "layout";
-  document.getElementById("center-title").textContent = mode === "layout" ? "Map" : "Enemy";
+  document.getElementById("center-title").textContent =
+    mode === "layout" ? `Map ${doc.activeLevel}` : "Enemy";
   document.getElementById("hint").textContent =
     mode === "layout"
       ? "Click canvas · WASD fly along look · Q/E camera up · RMB look · LMB move · R face · Del delete"
-      : "LMB drag vertex · Shift+click add to selection · RMB orbit · [ ] frames · Add line between two verts";
+      : "Click vert to select · drag axis to move · X/Y/Z nudge (Shift = −) · [ ] or ← → frames · RMB orbit";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   refreshAll();
@@ -206,21 +206,21 @@ function placeKind(kind) {
   const obj = createObject(kind, p.x, p.y, p.z);
   obj.y = Math.max(0, obj.y);
   clampObject(obj);
-  doc.map.objects.push(obj);
+  activeMap(doc).objects.push(obj);
   selectedId = obj.id;
   markDirty();
   refreshAll();
 }
 
 function selectedObject() {
-  return doc.map.objects.find((o) => o.id === selectedId) || null;
+  return activeMap(doc).objects.find((o) => o.id === selectedId) || null;
 }
 
 function deleteSelected() {
   if (editorMode === "layout") {
     if (!selectedId) return;
     pushUndo();
-    doc.map.objects = doc.map.objects.filter((o) => o.id !== selectedId);
+    activeMap(doc).objects = activeMap(doc).objects.filter((o) => o.id !== selectedId);
     selectedId = null;
     markDirty();
     refreshAll();
@@ -237,16 +237,50 @@ function duplicateSelected() {
   if (!obj) return;
   pushUndo();
   const copy = clampObject({ ...obj, id: uid(), x: obj.x + 2, z: obj.z + 2 });
-  doc.map.objects.push(copy);
+  activeMap(doc).objects.push(copy);
   selectedId = copy.id;
   markDirty();
   refreshAll();
 }
 
+function switchLevel(name) {
+  if (!LEVEL_NAMES.includes(name) || name === doc.activeLevel) return;
+  doc.activeLevel = name;
+  selectedId = null;
+  markDirty();
+  if (editorMode === "layout") {
+    document.getElementById("center-title").textContent = `Map ${doc.activeLevel}`;
+  }
+  refreshAll();
+  setStatus(name);
+}
+
+function renderLevelList() {
+  const root = document.getElementById("level-list");
+  if (!root) return;
+  root.classList.add("level-list");
+  root.innerHTML = "";
+  const title = document.createElement("h2");
+  title.textContent = "Levels";
+  root.appendChild(title);
+  const ul = document.createElement("ul");
+  for (const name of LEVEL_NAMES) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = name;
+    if (name === doc.activeLevel) btn.className = "active";
+    btn.addEventListener("click", () => switchLevel(name));
+    li.appendChild(btn);
+    ul.appendChild(li);
+  }
+  root.appendChild(ul);
+}
+
 function renderObjectList() {
   const ul = document.getElementById("object-list");
   ul.innerHTML = "";
-  for (const obj of doc.map.objects) {
+  for (const obj of activeMap(doc).objects) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
@@ -289,6 +323,20 @@ function field(label, input) {
   return row;
 }
 
+function vec3Field(label, specs) {
+  const row = document.createElement("label");
+  row.className = "field vec3";
+  const span = document.createElement("span");
+  span.textContent = label;
+  const wrap = document.createElement("div");
+  wrap.className = "vec3-inputs";
+  for (const s of specs) {
+    wrap.appendChild(numInput(s.value, s.onChange, s.min, s.max));
+  }
+  row.append(span, wrap);
+  return row;
+}
+
 function numInput(value, onChange, min, max) {
   const inp = document.createElement("input");
   inp.type = "number";
@@ -321,13 +369,21 @@ function renderInspector() {
       markDirty();
       refreshAll();
     };
-    root.appendChild(field("X", numInput(obj.x, (v) => apply(() => (obj.x = v)), 0, 255)));
-    root.appendChild(field("Y", numInput(obj.y, (v) => apply(() => (obj.y = v)), 0, 255)));
-    root.appendChild(field("Z", numInput(obj.z, (v) => apply(() => (obj.z = v)), 0, 255)));
+    root.appendChild(
+      vec3Field("XYZ", [
+        { value: obj.x, onChange: (v) => apply(() => (obj.x = v)), min: 0, max: 255 },
+        { value: obj.y, onChange: (v) => apply(() => (obj.y = v)), min: 0, max: 255 },
+        { value: obj.z, onChange: (v) => apply(() => (obj.z = v)), min: 0, max: 255 },
+      ])
+    );
     if (!KINDS[obj.kind].fixed) {
-      root.appendChild(field("SX", numInput(obj.sx, (v) => apply(() => (obj.sx = v)), 1, 256)));
-      root.appendChild(field("SY", numInput(obj.sy, (v) => apply(() => (obj.sy = v)), 1, 256)));
-      root.appendChild(field("SZ", numInput(obj.sz, (v) => apply(() => (obj.sz = v)), 1, 256)));
+      root.appendChild(
+        vec3Field("Size", [
+          { value: obj.sx, onChange: (v) => apply(() => (obj.sx = v)), min: 1, max: 256 },
+          { value: obj.sy, onChange: (v) => apply(() => (obj.sy = v)), min: 1, max: 256 },
+          { value: obj.sz, onChange: (v) => apply(() => (obj.sz = v)), min: 1, max: 256 },
+        ])
+      );
     } else {
       const p = document.createElement("p");
       p.className = "muted";
@@ -416,7 +472,7 @@ function renderInspector() {
 
   const counts = document.createElement("p");
   counts.className = "muted";
-  counts.textContent = `${e.verts}/${MAX_VERTS} verts · ${e.lines.length}/${MAX_LINES} lines`;
+  counts.textContent = `12 verts · 12 lines · 24 frames`;
   root.appendChild(counts);
 
   if (selectedVerts.length === 1) {
@@ -428,21 +484,17 @@ function renderInspector() {
       markDirty();
       refreshAll();
     };
-    root.appendChild(field("VX", numInput(v.x, (n) => setC("x", n), -64, 63)));
-    root.appendChild(field("VY", numInput(v.y, (n) => setC("y", n), -64, 63)));
-    root.appendChild(field("VZ", numInput(v.z, (n) => setC("z", n), -64, 63)));
+    root.appendChild(
+      vec3Field("XYZ", [
+        { value: v.x, onChange: (n) => setC("x", n), min: -64, max: 63 },
+        { value: v.y, onChange: (n) => setC("y", n), min: -64, max: 63 },
+        { value: v.z, onChange: (n) => setC("z", n), min: -64, max: 63 },
+      ])
+    );
   }
 
   const row = document.createElement("div");
   row.className = "btn-row";
-  const addV = document.createElement("button");
-  addV.type = "button";
-  addV.textContent = "Add vertex";
-  addV.addEventListener("click", addVertex);
-  const addL = document.createElement("button");
-  addL.type = "button";
-  addL.textContent = "Add line";
-  addL.addEventListener("click", addLine);
   const prev = document.createElement("button");
   prev.type = "button";
   prev.textContent = "Prev frame";
@@ -451,53 +503,8 @@ function renderInspector() {
   next.type = "button";
   next.textContent = "Next frame";
   next.addEventListener("click", () => stepFrame(1));
-  row.append(addV, addL, prev, next);
+  row.append(prev, next);
   root.appendChild(row);
-}
-
-function addVertex() {
-  const e = activeEnemy();
-  if (e.verts >= MAX_VERTS) {
-    setStatus("Max 16 vertices", true);
-    return;
-  }
-  pushUndo();
-  e.verts += 1;
-  for (const fr of e.frames) fr.push({ x: 0, y: 10, z: 0 });
-  selectedVerts = [e.verts - 1];
-  markDirty();
-  refreshAll();
-}
-
-function addLine() {
-  const e = activeEnemy();
-  if (e.lines.length >= MAX_LINES) {
-    setStatus("Max 16 lines", true);
-    return;
-  }
-  if (selectedVerts.length === 2) {
-    pushUndo();
-    e.lines.push([selectedVerts[0], selectedVerts[1]]);
-    markDirty();
-    refreshAll();
-    return;
-  }
-  if (e.verts + 2 > MAX_VERTS) {
-    setStatus("Select two vertices, or free two vertex slots for a flair line", true);
-    return;
-  }
-  pushUndo();
-  const a = e.verts;
-  const b = e.verts + 1;
-  e.verts += 2;
-  for (const fr of e.frames) {
-    fr.push({ x: -4, y: 12, z: 2 });
-    fr.push({ x: 4, y: 12, z: 2 });
-  }
-  e.lines.push([a, b]);
-  selectedVerts = [a, b];
-  markDirty();
-  refreshAll();
 }
 
 function stepFrame(d) {
@@ -505,7 +512,24 @@ function stepFrame(d) {
   refreshAll();
 }
 
+function nudgeVert(axis, delta) {
+  const e = activeEnemy();
+  const idxs = selectedVerts.length ? selectedVerts : [];
+  if (!idxs.length) {
+    setStatus("Select a vertex first", true);
+    return;
+  }
+  pushUndo();
+  for (const i of idxs) {
+    const v = e.frames[frameIndex][i];
+    v[axis] = clampVert(v[axis] + delta);
+  }
+  markDirty();
+  refreshAll();
+}
+
 function refreshPanels() {
+  renderLevelList();
   renderObjectList();
   renderEnemyList();
   renderInspector();
@@ -550,14 +574,6 @@ document.getElementById("file-input").addEventListener("change", async (e) => {
   } catch (err) {
     setStatus(String(err), true);
   }
-});
-document.getElementById("btn-add-enemy").addEventListener("click", () => {
-  pushUndo();
-  doc.enemies.push(createEnemy(`Enemy ${doc.enemies.length + 1}`));
-  enemyIndex = doc.enemies.length - 1;
-  selectedVerts = [];
-  markDirty();
-  refreshAll();
 });
 
 window.addEventListener("keydown", (e) => {
@@ -606,13 +622,23 @@ window.addEventListener("keydown", (e) => {
       refreshAll();
     }
   }
-  if (e.key === "[" && editorMode === "anim") {
-    e.preventDefault();
-    stepFrame(-1);
-  }
-  if (e.key === "]" && editorMode === "anim") {
-    e.preventDefault();
-    stepFrame(1);
+  if (editorMode === "anim") {
+    if (e.key === "[" || e.key === "," || e.key === "ArrowLeft") {
+      e.preventDefault();
+      stepFrame(-1);
+      return;
+    }
+    if (e.key === "]" || e.key === "." || e.key === "ArrowRight") {
+      e.preventDefault();
+      stepFrame(1);
+      return;
+    }
+    const k = e.key.toLowerCase();
+    if (k === "x" || k === "y" || k === "z") {
+      e.preventDefault();
+      nudgeVert(k, e.shiftKey ? -1 : 1);
+      return;
+    }
   }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && editorMode === "layout") {
     e.preventDefault();

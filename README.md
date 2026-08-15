@@ -34,4 +34,4 @@ make.bat           :: build and autostart in VICE
 run-editor.bat     :: local map / skeleton editor
 ```
 
-Keys in the current cube demo: **J** / **L** yaw.
+Keys in the current cube demo: **WASD** move / strafe, **IJKL** look. **W/S** follow the look direction (pitch changes **Y**). HUD row 2 shows camera **X Y Z**, heading **H**, and pitch **P** signed from the horizon.

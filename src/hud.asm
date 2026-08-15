@@ -74,6 +74,43 @@ init_hud
 	sta $d800 + HUD_OFF + 8
 	sta $d800 + HUD_OFF + 13
 	sta $d800 + HUD_OFF + 18
+
+	ldx #0
+	lda #HUD_CH_SP
+-
+	sta SCR_A + HUD_OFF2,x
+	sta SCR_B + HUD_OFF2,x
+	inx
+	cpx #24
+	bne -
+	lda #HUD_CH_X
+	sta SCR_A + HUD_OFF2
+	sta SCR_B + HUD_OFF2
+	lda #HUD_CH_Y
+	sta SCR_A + HUD_OFF2 + 5
+	sta SCR_B + HUD_OFF2 + 5
+	lda #HUD_CH_Z
+	sta SCR_A + HUD_OFF2 + 10
+	sta SCR_B + HUD_OFF2 + 10
+	lda #HUD_CH_H
+	sta SCR_A + HUD_OFF2 + 15
+	sta SCR_B + HUD_OFF2 + 15
+	lda #HUD_CH_P
+	sta SCR_A + HUD_OFF2 + 19
+	sta SCR_B + HUD_OFF2 + 19
+
+	ldx #23
+-
+	lda #COL_HUD
+	sta $d800 + HUD_OFF2,x
+	dex
+	bpl -
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF2
+	sta $d800 + HUD_OFF2 + 5
+	sta $d800 + HUD_OFF2 + 10
+	sta $d800 + HUD_OFF2 + 15
+	sta $d800 + HUD_OFF2 + 19
 	rts
 
 ; F from frame_cy; R P K D from prof_cy (clear still timed, not printed)
@@ -97,7 +134,92 @@ hud_print
 	ldx #20
 	lda prof_cy + PROF_DRAW * 4 + 2
 	ldy prof_cy + PROF_DRAW * 4 + 1
-	jmp .ms3
+	jsr .ms3
+
+	ldx #1
+	lda cam_x
+	jsr .s8_3
+	ldx #6
+	lda cam_y
+	jsr .s8_3
+	ldx #11
+	lda cam_z
+	jsr .s8_3
+	ldx #16
+	lda yaw
+	jsr .u8_3
+	ldx #20
+	lda pitch
+	jmp .s8_3
+
+; A signed → sign + 3 digits at HUD_OFF2+X (horizon pitch = 0)
+.s8_3
+	stx pp_col
+	cmp #0
+	bpl .spos
+	ldx pp_col
+	pha
+	lda #HUD_CH_MINUS
+	sta SCR_A + HUD_OFF2,x
+	sta SCR_B + HUD_OFF2,x
+	pla
+	eor #$ff
+	clc
+	adc #1
+	inx
+	stx pp_col
+	jmp .u8_3
+.spos
+	ldx pp_col
+	pha
+	lda #HUD_CH_PLUS
+	sta SCR_A + HUD_OFF2,x
+	sta SCR_B + HUD_OFF2,x
+	pla
+	inx
+	stx pp_col
+	; fall through
+
+; A unsigned 0–255 → 3 ASCII digits at HUD_OFF2+X (also pp_col)
+.u8_3
+	stx pp_col
+	sta pp_tmp_l
+	ldx #0
+.uhund
+	lda pp_tmp_l
+	cmp #100
+	bcc .utens
+	sbc #100
+	sta pp_tmp_l
+	inx
+	bne .uhund
+.utens
+	ldy #0
+.utenlp
+	lda pp_tmp_l
+	cmp #10
+	bcc .uones
+	sbc #10
+	sta pp_tmp_l
+	iny
+	bne .utenlp
+.uones
+	txa
+	ora #$30
+	ldx pp_col
+	sta SCR_A + HUD_OFF2,x
+	sta SCR_B + HUD_OFF2,x
+	inx
+	tya
+	ora #$30
+	sta SCR_A + HUD_OFF2,x
+	sta SCR_B + HUD_OFF2,x
+	inx
+	lda pp_tmp_l
+	ora #$30
+	sta SCR_A + HUD_OFF2,x
+	sta SCR_B + HUD_OFF2,x
+	rts
 
 ; A:Y = cy[2]:cy[1] → 3 ASCII digits at HUD_OFF+X
 .ms3

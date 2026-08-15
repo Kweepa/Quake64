@@ -16,7 +16,7 @@ edges
 cube_rotate
 	!source "_rotate_body.asm"
 
-; CAM_* + CAMZ → PROJ_X/Y/Z (screen)
+; CAM_* + z_bias (camera-space CAMZ after look) → PROJ_X/Y/Z
 cube_project
 	lda #0
 	sta vindex
@@ -25,7 +25,7 @@ cube_project
 	lda CAM_Z,x
 	sta rz
 	clc
-	adc #CAMZ
+	adc z_bias
 	bcc .pzok
 	bit rz
 	bmi .pzok

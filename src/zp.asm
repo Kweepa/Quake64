@@ -54,8 +54,10 @@ hud_n		= $43			; hud_print remainder
 dt_tmp		= $44			; calc_frame_dt
 
 ; Keyboard (filled by raster IRQ, read in main)
-key_j		= $45			; 1 = J held (yaw left)
-key_l		= $46			; 1 = L held (yaw right)
+keys		= $45			; KEY_* bits (W A S D I J K L)
+cam_x		= $46			; signed world camera X
+cam_y		= $4c			; signed world camera Y
+cam_z		= $4b			; signed world camera Z
 pp_tmp_l	= $47			; prof_print decimal
 pp_tmp_h	= $48
 pp_col		= $49
@@ -74,9 +76,9 @@ z_eye		= $2f
 rx		= $30
 ry		= $31
 rz		= $32
-cs		= $33			; yaw cos (per transform)
-sn		= $34			; yaw sin
-cp		= $36			; pitch cos
-sp		= $37			; pitch sin
+look_sx		= $33			; CAMZ * sin(yaw)  — view slide X
+look_sz		= $34			; CAMZ * cos(yaw)
+look_sy		= $36			; look_sz * sin(pitch)
+z_bias		= $37			; look_sz * cos(pitch) → z_eye
 vindex		= $35
 dt_ms		= $38

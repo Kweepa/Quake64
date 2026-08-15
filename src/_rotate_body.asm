@@ -55,11 +55,189 @@ tspp
 	lda LOGTAB,x
 	sta log_sp
 	sty sg_sp
+	; Camera look: rotate (x, z+CAMZ), not the cube about its centre.
+	lda #CAMZ
+	tax
+	lda LOGTAB,x
+	sta log_x
+	lda #0
+	sta sg_x
+	lda sg_x
+	eor sg_sn
+	sta mul_sign
+	lda log_x
+	clc
+	adc log_sn
+	bcc czsnoc
+	cmp #224
+	bcc czschi
+	sbc #224
+	tax
+	lda ALOGTAB+$100,x
+	jmp czsgot
+czschi
+	adc #32
+	tax
+	lda ALOGTAB,x
+	jmp czsgot
+czsnoc
+	cmp #224
+	bcc czsz
+	sbc #224
+	tax
+	lda ALOGTAB,x
+czsgot
+	cmp #128
+	bcc czssg
+	lda #$7f
+czssg
+	bit mul_sign
+	bpl czsout
+	eor #$ff
+	clc
+	adc #1
+	jmp czsout
+czsz
+	lda #0
+czsout
+	sta look_sx
+	lda sg_x
+	eor sg_cs
+	sta mul_sign
+	lda log_x
+	clc
+	adc log_cs
+	bcc czcnoc
+	cmp #224
+	bcc czcchi
+	sbc #224
+	tax
+	lda ALOGTAB+$100,x
+	jmp czcgot
+czcchi
+	adc #32
+	tax
+	lda ALOGTAB,x
+	jmp czcgot
+czcnoc
+	cmp #224
+	bcc czcz
+	sbc #224
+	tax
+	lda ALOGTAB,x
+czcgot
+	cmp #128
+	bcc czcsg
+	lda #$7f
+czcsg
+	bit mul_sign
+	bpl czcout
+	eor #$ff
+	clc
+	adc #1
+	jmp czcout
+czcz
+	lda #0
+czcout
+	sta look_sz
+	lda look_sz
+	ldy #0
+	cmp #0
+	bpl lszp
+	ldy #$80
+	eor #$ff
+	clc
+	adc #1
+lszp
+	tax
+	lda LOGTAB,x
+	sta log_rz
+	sty sg_rz
+	lda sg_rz
+	eor sg_sp
+	sta mul_sign
+	lda log_rz
+	clc
+	adc log_sp
+	bcc lssnoc
+	cmp #224
+	bcc lsschi
+	sbc #224
+	tax
+	lda ALOGTAB+$100,x
+	jmp lssgot
+lsschi
+	adc #32
+	tax
+	lda ALOGTAB,x
+	jmp lssgot
+lssnoc
+	cmp #224
+	bcc lssz
+	sbc #224
+	tax
+	lda ALOGTAB,x
+lssgot
+	cmp #128
+	bcc lsssg
+	lda #$7f
+lsssg
+	bit mul_sign
+	bpl lssout
+	eor #$ff
+	clc
+	adc #1
+	jmp lssout
+lssz
+	lda #0
+lssout
+	sta look_sy
+	lda sg_rz
+	eor sg_cp
+	sta mul_sign
+	lda log_rz
+	clc
+	adc log_cp
+	bcc lscnoc
+	cmp #224
+	bcc lscchi
+	sbc #224
+	tax
+	lda ALOGTAB+$100,x
+	jmp lscgot
+lscchi
+	adc #32
+	tax
+	lda ALOGTAB,x
+	jmp lscgot
+lscnoc
+	cmp #224
+	bcc lscz
+	sbc #224
+	tax
+	lda ALOGTAB,x
+lscgot
+	cmp #128
+	bcc lscsg
+	lda #$7f
+lscsg
+	bit mul_sign
+	bpl lscout
+	eor #$ff
+	clc
+	adc #1
+	jmp lscout
+lscz
+	lda #0
+lscout
+	sta z_bias
 	lda #0
 	sta vindex
 .rvert
 	ldx vindex
 	lda vx,x
+	sec
+	sbc cam_x
 	ldy #0
 	cmp #0
 	bpl vxp
@@ -74,6 +252,8 @@ vxp
 	sty sg_x
 	ldx vindex
 	lda vz,x
+	sec
+	sbc cam_z
 	ldy #0
 	cmp #0
 	bpl vzp
@@ -88,6 +268,8 @@ vzp
 	sty sg_z
 	ldx vindex
 	lda vy,x
+	sec
+	sbc cam_y
 	sta ry
 	ldy #0
 	cmp #0
@@ -183,6 +365,8 @@ zsout
 	lda rx
 	sec
 	sbc rot0
+	sec
+	sbc look_sx
 	sta rx
 	; rz = x*sn + z*cs
 	lda sg_x
@@ -360,6 +544,8 @@ rsout
 	lda rot2
 	sec
 	sbc rot1
+	sec
+	sbc look_sy
 	sta rot2
 	; z'' = y*sp + rz*cp
 	lda sg_y

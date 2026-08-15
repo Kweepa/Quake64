@@ -75,16 +75,33 @@ def main() -> None:
         slog("tcp", "lda COSTAB,y", "log_cp", "sg_cp"),
         "	ldy pitch\n",
         slog("tsp", "lda SINTAB,y", "log_sp", "sg_sp"),
-        """	lda #0
+        """	; Camera look: rotate (x, z+CAMZ), not the cube about its centre.
+	lda #CAMZ
+	tax
+	lda LOGTAB,x
+	sta log_x
+	lda #0
+	sta sg_x
+""",
+        prod("czs", "log_x", "log_sn", "sg_x", "sg_sn"),
+        "	sta look_sx\n",
+        prod("czc", "log_x", "log_cs", "sg_x", "sg_cs"),
+        "	sta look_sz\n",
+        slog("lsz", "lda look_sz", "log_rz", "sg_rz"),
+        prod("lss", "log_rz", "log_sp", "sg_rz", "sg_sp"),
+        "	sta look_sy\n",
+        prod("lsc", "log_rz", "log_cp", "sg_rz", "sg_cp"),
+        """	sta z_bias
+	lda #0
 	sta vindex
 .rvert
 	ldx vindex
 """,
-        slog("vx", "lda vx,x", "log_x", "sg_x"),
+        slog("vx", "lda vx,x\n\tsec\n\tsbc cam_x", "log_x", "sg_x"),
         "	ldx vindex\n",
-        slog("vz", "lda vz,x", "log_z", "sg_z"),
+        slog("vz", "lda vz,x\n\tsec\n\tsbc cam_z", "log_z", "sg_z"),
         "	ldx vindex\n",
-        slog("vy", "lda vy,x", "log_y", "sg_y", keep="sta ry"),
+        slog("vy", "lda vy,x\n\tsec\n\tsbc cam_y", "log_y", "sg_y", keep="sta ry"),
         "	; rx = x*cs - z*sn\n",
         prod("xc", "log_x", "log_cs", "sg_x", "sg_cs"),
         "	sta rx\n",
@@ -93,6 +110,8 @@ def main() -> None:
 	lda rx
 	sec
 	sbc rot0
+	sec
+	sbc look_sx
 	sta rx
 	; rz = x*sn + z*cs
 """,
@@ -112,6 +131,8 @@ def main() -> None:
 	lda rot2
 	sec
 	sbc rot1
+	sec
+	sbc look_sy
 	sta rot2
 	; z'' = y*sp + rz*cp
 """,

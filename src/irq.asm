@@ -101,24 +101,75 @@ raster_irq
 	pla
 	rti
 
-; Wolf64 CIA1 matrix: J = PA4/$EF bit 2, L = PA5/$DF bit 2.
+; CIA1: W/A/S on PA1 $FD, D on PA2 $FB, I/J/K on PA4 $EF, L on PA5 $DF.
 scan_keys
 	lda #0
-	sta key_j
-	sta key_l
-	lda #$ef
+	sta keys
+	lda #$fd
+	sta $dc00
+	lda $dc01
+	tax
+	and #$02
+	bne +
+	lda keys
+	ora #KEY_W
+	sta keys
++
+	txa
+	and #$04
+	bne +
+	lda keys
+	ora #KEY_A
+	sta keys
++
+	txa
+	and #$20
+	bne +
+	lda keys
+	ora #KEY_S
+	sta keys
++
+	lda #$fb
 	sta $dc00
 	lda $dc01
 	and #$04
 	bne +
-	inc key_j
+	lda keys
+	ora #KEY_D
+	sta keys
++
+	lda #$ef
+	sta $dc00
+	lda $dc01
+	tax
+	and #$02
+	bne +
+	lda keys
+	ora #KEY_I
+	sta keys
++
+	txa
+	and #$04
+	bne +
+	lda keys
+	ora #KEY_J
+	sta keys
++
+	txa
+	and #$20
+	bne +
+	lda keys
+	ora #KEY_K
+	sta keys
 +
 	lda #$df
 	sta $dc00
 	lda $dc01
 	and #$04
 	bne +
-	inc key_l
+	lda keys
+	ora #KEY_L
+	sta keys
 +
 	lda #$7f
 	sta $dc00

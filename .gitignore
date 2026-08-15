@@ -3,7 +3,6 @@ src/tables.asm
 src/uifont.asm
 
 # Build outputs
-*.prg
 *.lbl
 *.o
 *.sym

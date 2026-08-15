@@ -19,9 +19,10 @@ start
 
 	lda #0
 	sta yaw
-	sta key_j
-	sta key_l
-	lda #24
+	sta keys
+	sta cam_x
+	sta cam_y
+	sta cam_z
 	sta pitch
 
 	jsr fill_colour
@@ -70,24 +71,170 @@ main
 	eor #1
 	sta draw_buf
 	jsr set_draw_ptrs
-	jsr apply_turn
+	jsr apply_look
+	jsr apply_move
 	jmp main
 
-apply_turn
-	lda key_j
-	beq .nol
+apply_look
+	lda keys
+	and #KEY_J
+	beq .noj
 	sec
 	lda yaw
 	sbc #YAW_STEP
 	sta yaw
-.nol
-	lda key_l
-	beq .done
+.noj
+	lda keys
+	and #KEY_L
+	beq .nol
 	clc
 	lda yaw
 	adc #YAW_STEP
 	sta yaw
-.done
+.nol
+	lda keys
+	and #KEY_I
+	beq .noi
+	sec
+	lda pitch
+	sbc #PITCH_STEP
+	sta pitch
+.noi
+	lda keys
+	and #KEY_K
+	beq .nok
+	clc
+	lda pitch
+	adc #PITCH_STEP
+	sta pitch
+.nok
+	; Keep pitch in signed ±48 (0 = horizon)
+	lda pitch
+	cmp #PITCH_MAX+1
+	bcc .pok
+	cmp #PITCH_MIN
+	bcs .pok
+	cmp #$80
+	bcs .plo
+	lda #PITCH_MAX
+	sta pitch
+	rts
+.plo
+	lda #PITCH_MIN
+	sta pitch
+.pok
+	rts
+
+; A = signed trig / 32 (~3 world units at full amplitude)
+scale_move
+	cmp #$80
+	ror
+	cmp #$80
+	ror
+	cmp #$80
+	ror
+	cmp #$80
+	ror
+	cmp #$80
+	ror
+	rts
+
+apply_move
+	lda $01
+	pha
+	lda #$34
+	sta $01
+	ldy yaw
+	lda SINTAB,y
+	jsr scale_move
+	sta rot0
+	ldy yaw
+	lda COSTAB,y
+	jsr scale_move
+	sta rot1
+	ldy pitch
+	lda SINTAB,y
+	jsr scale_move
+	sta rot2
+
+	lda keys
+	and #KEY_W
+	beq .now
+	ldy pitch
+	lda COSTAB,y
+	tay
+	lda rot0
+	jsr smul7
+	clc
+	adc cam_x
+	sta cam_x
+	ldy pitch
+	lda COSTAB,y
+	tay
+	lda rot1
+	jsr smul7
+	clc
+	adc cam_z
+	sta cam_z
+	sec
+	lda cam_y
+	sbc rot2
+	sta cam_y
+.now
+	lda keys
+	and #KEY_S
+	beq .nos
+	ldy pitch
+	lda COSTAB,y
+	tay
+	lda rot0
+	jsr smul7
+	sta mul_a
+	sec
+	lda cam_x
+	sbc mul_a
+	sta cam_x
+	ldy pitch
+	lda COSTAB,y
+	tay
+	lda rot1
+	jsr smul7
+	sta mul_a
+	sec
+	lda cam_z
+	sbc mul_a
+	sta cam_z
+	clc
+	lda cam_y
+	adc rot2
+	sta cam_y
+.nos
+	lda keys
+	and #KEY_D
+	beq .nod
+	clc
+	lda cam_x
+	adc rot1
+	sta cam_x
+	sec
+	lda cam_z
+	sbc rot0
+	sta cam_z
+.nod
+	lda keys
+	and #KEY_A
+	beq .noa
+	sec
+	lda cam_x
+	sbc rot1
+	sta cam_x
+	clc
+	lda cam_z
+	adc rot0
+	sta cam_z
+.noa
+	pla
+	sta $01
 	rts
 
 copy_luts

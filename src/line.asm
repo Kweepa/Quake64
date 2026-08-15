@@ -80,6 +80,30 @@ line_setup
 
 draw_line
 	lda x0
+	cmp #192
+	bcc +
+	lda #191
+	sta x0
++
+	lda x1
+	cmp #192
+	bcc +
+	lda #191
+	sta x1
++
+	lda y0
+	cmp #128
+	bcc +
+	lda #127
+	sta y0
++
+	lda y1
+	cmp #128
+	bcc +
+	lda #127
+	sta y1
++
+	lda x0
 	cmp x1
 	bcc .ord
 	ldx x1

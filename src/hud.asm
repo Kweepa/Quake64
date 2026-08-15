@@ -137,13 +137,13 @@ hud_print
 	jsr .ms3
 
 	ldx #1
-	lda cam_x
+	lda cam_xh
 	jsr .s8_3
 	ldx #6
-	lda cam_y
+	lda cam_yh
 	jsr .s8_3
 	ldx #11
-	lda cam_z
+	lda cam_zh
 	jsr .s8_3
 	ldx #16
 	lda yaw

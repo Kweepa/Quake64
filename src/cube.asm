@@ -1,11 +1,17 @@
-; Rotate / project / z-clip / stroke a unit cube
+; v-cam 8.8, yaw+pitch rotate, near+frustum clip, stroke a 6.0 crate
 !zone cube
 
-vx
+vxlo
+	!byte 0, 0, 0, 0, 0, 0, 0, 0
+vxhi
 	!byte -CUBE_H, CUBE_H, CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H,-CUBE_H
-vy
+vylo
+	!byte 0, 0, 0, 0, 0, 0, 0, 0
+vyhi
 	!byte -CUBE_H,-CUBE_H, CUBE_H, CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H
-vz
+vzlo
+	!byte 0, 0, 0, 0, 0, 0, 0, 0
+vzhi
 	!byte -CUBE_H,-CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H, CUBE_H, CUBE_H
 
 edges
@@ -15,67 +21,186 @@ edges
 
 cube_rotate
 	!source "_rotate_body.asm"
+	lda #0
+	sta vindex
+.rvert
+	ldx vindex
+	sec
+	lda vxlo,x
+	sbc cam_xl
+	sta nlo
+	lda vxhi,x
+	sbc cam_xh
+	sta nhi
+	lda nlo
+	sta CAM_X,x
+	lda nhi
+	sta CAM_XH,x
+	sec
+	lda vzlo,x
+	sbc cam_zl
+	sta e1z
+	lda vzhi,x
+	sbc cam_zh
+	sta e1zh
 
-; CAM_* + z_bias (camera-space CAMZ after look) → PROJ_X/Y/Z
+	; x1 = dx*cs - dz*sn
+	ldy cs_b
+	jsr smul16_7
+	lda nlo
+	sta e0x
+	lda nhi
+	sta e0xh
+	lda e1z
+	sta nlo
+	lda e1zh
+	sta nhi
+	ldy sn_b
+	jsr smul16_7
+	sec
+	lda e0x
+	sbc nlo
+	sta e0x
+	lda e0xh
+	sbc nhi
+	sta e0xh
+
+	; z1 = dx*sn + dz*cs
+	ldx vindex
+	lda CAM_X,x
+	sta nlo
+	lda CAM_XH,x
+	sta nhi
+	ldy sn_b
+	jsr smul16_7
+	lda nlo
+	sta e0y
+	lda nhi
+	sta e0yh
+	lda e1z
+	sta nlo
+	lda e1zh
+	sta nhi
+	ldy cs_b
+	jsr smul16_7
+	clc
+	lda e0y
+	adc nlo
+	sta e0y
+	lda e0yh
+	adc nhi
+	sta e0yh
+
+	ldx vindex
+	sec
+	lda vylo,x
+	sbc cam_yl
+	sta nlo
+	lda vyhi,x
+	sbc cam_yh
+	sta nhi
+	lda nlo
+	sta e1x
+	lda nhi
+	sta e1xh
+
+	; y' = dy*cp ??? z1*sp
+	ldy cp_b
+	jsr smul16_7
+	lda nlo
+	sta e1y
+	lda nhi
+	sta e1yh
+	lda e0y
+	sta nlo
+	lda e0yh
+	sta nhi
+	ldy sp_b
+	jsr smul16_7
+	ldx vindex
+	sec
+	lda e1y
+	sbc nlo
+	sta CAM_Y,x
+	lda e1yh
+	sbc nhi
+	sta CAM_YH,x
+
+	; z' = dy*sp + z1*cp
+	lda e1x
+	sta nlo
+	lda e1xh
+	sta nhi
+	ldy sp_b
+	jsr smul16_7
+	lda nlo
+	sta e1y
+	lda nhi
+	sta e1yh
+	lda e0y
+	sta nlo
+	lda e0yh
+	sta nhi
+	ldy cp_b
+	jsr smul16_7
+	ldx vindex
+	clc
+	lda e1y
+	adc nlo
+	sta CAM_Z,x
+	lda e1yh
+	adc nhi
+	sta CAM_ZH,x
+	lda e0x
+	sta CAM_X,x
+	lda e0xh
+	sta CAM_XH,x
+
+	inc vindex
+	lda vindex
+	cmp #8
+	beq +
+	jmp .rvert
++
+	rts
+
+; 8.8 view ??? persp if z ??? 1.0
 cube_project
 	lda #0
 	sta vindex
 .pvert
 	ldx vindex
 	lda CAM_Z,x
-	sta rz
-	clc
-	adc z_bias
-	bcc .pzok
-	bit rz
-	bmi .pzok
-	lda #255
-.pzok
-	sta z_eye
 	sta PROJ_Z,x
-
+	lda CAM_ZH,x
+	sta PROJ_ZH,x
+	jsr .zbcam
+	bcc .pfront
+	jsr .offxy
+	jmp .pnext
+.pfront
+	ldx vindex
 	lda CAM_X,x
-	jsr persp
-	sta rot0
-	bmi .xneg
-	clc
-	adc #SCREEN_CX
-	bcs .xhi
-	cmp #SCREEN_XMAX
-	bcc .xstore
-.xhi
-	lda #191
-	jmp .xstore
-.xneg
-	clc
-	adc #SCREEN_CX
-	bcs .xstore
-	lda #0
-.xstore
+	sta ylo
+	lda CAM_XH,x
+	sta yhi
+	jsr .p16
 	ldx vindex
+	lda nlo
 	sta PROJ_X,x
-
+	lda nhi
+	sta PROJ_XH,x
 	lda CAM_Y,x
-	jsr persp
-	sta rot0
-	bmi .yneg
-	clc
-	adc #64
-	bcs .yhi
-	cmp #128
-	bcc .ystore
-.yhi
-	lda #127
-	jmp .ystore
-.yneg
-	clc
-	adc #64
-	bcs .ystore
-	lda #0
-.ystore
+	sta ylo
+	lda CAM_YH,x
+	sta yhi
+	jsr .p16
 	ldx vindex
+	lda nlo
 	sta PROJ_Y,x
-
+	lda nhi
+	sta PROJ_YH,x
+.pnext
 	inc vindex
 	lda vindex
 	cmp #8
@@ -84,7 +209,75 @@ cube_project
 +
 	rts
 
-; Near-plane reject: both endpoints z >= ZCLIP
+; C=1 if this vertex z8.8 < ZCLIP
+.zbcam
+	ldx vindex
+	lda CAM_ZH,x
+	bmi .zby
+	cmp #>ZCLIP
+	bcc .zby
+	bne .zbn
+	lda CAM_Z,x
+	cmp #<ZCLIP
+	bcc .zby
+.zbn
+	jsr .setz
+	clc
+	rts
+.zby
+	sec
+	rts
+
+.setz
+	ldx vindex
+	lda CAM_Z,x
+	sta z_eye
+	lda CAM_ZH,x
+	sta z_eye_h
+	rts
+
+.offxy
+	ldx vindex
+	lda CAM_XH,x
+	bmi .offn
+	lda #$90
+	sta PROJ_X,x
+	lda #$01
+	sta PROJ_XH,x
+	jmp .offy
+.offn
+	lda #$70
+	sta PROJ_X,x
+	lda #$fe
+	sta PROJ_XH,x
+.offy
+	lda CAM_YH,x
+	bmi .offyn
+	lda #$90
+	sta PROJ_Y,x
+	lda #$01
+	sta PROJ_YH,x
+	rts
+.offyn
+	lda #$70
+	sta PROJ_Y,x
+	lda #$fe
+	sta PROJ_YH,x
+	rts
+
+; 8.8 ylo:yhi and z_eye:z_eye_h -> signed 16-bit ox
+.p16
+	jsr persp88
+	sta nlo
+	lda #0
+	sta nhi
+	lda nlo
+	bpl +
+	dec nhi
++
+	rts
+
+; Near-plane interpolate, then Cohen-Sutherland to 192x128
 cube_clip
 	lda #0
 	sta vindex
@@ -94,26 +287,744 @@ cube_clip
 	tax
 	lda edges,x
 	tay
-	lda PROJ_Z,y
-	cmp #ZCLIP
-	bcc .no
+	lda CAM_X,y
+	sta e0x
+	lda CAM_XH,y
+	sta e0xh
+	lda CAM_Y,y
+	sta e0y
+	lda CAM_YH,y
+	sta e0yh
+	lda CAM_Z,y
+	sta e0z
+	lda CAM_ZH,y
+	sta e0zh
+	lda PROJ_X,y
+	sta ox0l
+	lda PROJ_XH,y
+	sta ox0h
+	lda PROJ_Y,y
+	sta oy0l
+	lda PROJ_YH,y
+	sta oy0h
 	inx
 	lda edges,x
 	tay
-	lda PROJ_Z,y
-	cmp #ZCLIP
-	bcc .no
-	lda #1
-	bne .st
-.no
-	lda #0
-.st
+	lda CAM_X,y
+	sta e1x
+	lda CAM_XH,y
+	sta e1xh
+	lda CAM_Y,y
+	sta e1y
+	lda CAM_YH,y
+	sta e1yh
+	lda CAM_Z,y
+	sta e1z
+	lda CAM_ZH,y
+	sta e1zh
+	lda PROJ_X,y
+	sta ox1l
+	lda PROJ_XH,y
+	sta ox1h
+	lda PROJ_Y,y
+	sta oy1l
+	lda PROJ_YH,y
+	sta oy1h
+
+	jsr .zb0
+	bcs .z0b
+	jsr .zb1
+	bcs .z1b
+	jmp .frustum
+.z0b
+	jsr .zb1
+	bcs .reject
+	jsr .near0
+	jsr .projpair
+	jmp .frustum
+.z1b
+	jsr .near1
+	jsr .projpair
+.frustum
+	jsr .csclip
+	bcs .reject
+	ldx #0
+	jsr .mkoc
+	bne .reject
+	ldx #1
+	jsr .mkoc
+	bne .reject
 	ldx vindex
+	lda ox0l
+	ldy ox0h
+	jsr .to_sx
+	sta CLIP_X0,x
+	lda oy0l
+	ldy oy0h
+	jsr .to_sy
+	sta CLIP_Y0,x
+	lda ox1l
+	ldy ox1h
+	jsr .to_sx
+	sta CLIP_X1,x
+	lda oy1l
+	ldy oy1h
+	jsr .to_sy
+	sta CLIP_Y1,x
+	lda #1
 	sta EDGE_VIS,x
+	jmp .next
+.reject
+	ldx vindex
+	lda #0
+	sta EDGE_VIS,x
+.next
 	inc vindex
 	lda vindex
 	cmp #12
-	bne .cel
+	beq +
+	jmp .cel
++
+	rts
+
+.zb0
+	lda e0zh
+	bmi .zby2
+	cmp #>ZCLIP
+	bcc .zby2
+	bne .zbn2
+	lda e0z
+	cmp #<ZCLIP
+	bcc .zby2
+.zbn2
+	clc
+	rts
+.zby2
+	sec
+	rts
+
+.zb1
+	lda e1zh
+	bmi .zby2
+	cmp #>ZCLIP
+	bcc .zby2
+	bne .zbn2
+	lda e1z
+	cmp #<ZCLIP
+	bcc .zby2
+	clc
+	rts
+
+.near0
+	jsr .nlx0
+	jsr .nly0
+	lda #<ZCLIP
+	sta e0z
+	lda #>ZCLIP
+	sta e0zh
+	rts
+
+.near1
+	jsr .nlx1
+	jsr .nly1
+	lda #<ZCLIP
+	sta e1z
+	lda #>ZCLIP
+	sta e1zh
+	rts
+
+.nlx0
+	jsr .nd01
+	sec
+	lda e1x
+	sbc e0x
+	sta ylo
+	lda e1xh
+	sbc e0xh
+	sta yhi
+	jsr .nlrun
+	clc
+	adc e0x
+	sta e0x
+	lda rot1
+	adc e0xh
+	sta e0xh
+	rts
+
+.nly0
+	jsr .nd01
+	sec
+	lda e1y
+	sbc e0y
+	sta ylo
+	lda e1yh
+	sbc e0yh
+	sta yhi
+	jsr .nlrun
+	clc
+	adc e0y
+	sta e0y
+	lda rot1
+	adc e0yh
+	sta e0yh
+	rts
+
+.nlx1
+	jsr .nd10
+	sec
+	lda e0x
+	sbc e1x
+	sta ylo
+	lda e0xh
+	sbc e1xh
+	sta yhi
+	jsr .nlrun
+	clc
+	adc e1x
+	sta e1x
+	lda rot1
+	adc e1xh
+	sta e1xh
+	rts
+
+.nly1
+	jsr .nd10
+	sec
+	lda e0y
+	sbc e1y
+	sta ylo
+	lda e0yh
+	sbc e1yh
+	sta yhi
+	jsr .nlrun
+	clc
+	adc e1y
+	sta e1y
+	lda rot1
+	adc e1yh
+	sta e1yh
+	rts
+
+.nd01
+	sec
+	lda e1z
+	sbc e0z
+	sta dlo
+	lda e1zh
+	sbc e0zh
+	sta dhi
+	sec
+	lda #<ZCLIP
+	sbc e0z
+	sta nlo
+	lda #>ZCLIP
+	sbc e0zh
+	sta nhi
+	rts
+
+.nd10
+	sec
+	lda e0z
+	sbc e1z
+	sta dlo
+	lda e0zh
+	sbc e1zh
+	sta dhi
+	sec
+	lda #<ZCLIP
+	sbc e1z
+	sta nlo
+	lda #>ZCLIP
+	sbc e1zh
+	sta nhi
+	rts
+
+.nlrun
+	jsr scale3
+	lda dlo
+	sta div_c
+	ldy nlo
+	lda ylo
+	jsr lerpdv
+	sta rot0
+	lda #0
+	sta rot1
+	lda rot0
+	bpl +
+	dec rot1
++
+	lda rot0
+	rts
+
+.projpair
+	lda e0z
+	sta z_eye
+	lda e0zh
+	sta z_eye_h
+	lda e0x
+	sta ylo
+	lda e0xh
+	sta yhi
+	jsr .p16
+	lda nlo
+	sta ox0l
+	lda nhi
+	sta ox0h
+	lda e0y
+	sta ylo
+	lda e0yh
+	sta yhi
+	jsr .p16
+	lda nlo
+	sta oy0l
+	lda nhi
+	sta oy0h
+	lda e1z
+	sta z_eye
+	lda e1zh
+	sta z_eye_h
+	lda e1x
+	sta ylo
+	lda e1xh
+	sta yhi
+	jsr .p16
+	lda nlo
+	sta ox1l
+	lda nhi
+	sta ox1h
+	lda e1y
+	sta ylo
+	lda e1yh
+	sta yhi
+	jsr .p16
+	lda nlo
+	sta oy1l
+	lda nhi
+	sta oy1h
+	rts
+
+; C=0 accept (ox/oy inside), C=1 reject
+.csclip
+	lda #16
+	sta cs_n
+.cslp
+	ldx #0
+	jsr .mkoc
+	sta oc0
+	ldx #1
+	jsr .mkoc
+	sta oc1
+	lda oc0
+	ora oc1
+	bne .csneed
+	clc
+	rts
+.csneed
+	lda oc0
+	and oc1
+	beq .cswork
+	sec
+	rts
+.cswork
+	dec cs_n
+	bne +
+	sec
+	rts
++
+	lda oc0
+	bne .csp0
+	lda oc1
+	ldx #1
+	bne .csbit
+.csp0
+	ldx #0
+.csbit
+	lsr
+	bcs .csleft
+	lsr
+	bcs .csright
+	lsr
+	bcs .cstop
+	jmp .csbot
+
+.csleft
+	lda #$a0
+	sta rot0
+	lda #$ff
+	sta rot2
+	jsr .csx
+	jmp .cslp
+.csright
+	lda #$5f
+	sta rot0
+	lda #0
+	sta rot2
+	jsr .csx
+	jmp .cslp
+.cstop
+	lda #$c0
+	sta rot0
+	lda #$ff
+	sta rot2
+	jsr .csy
+	jmp .cslp
+.csbot
+	lda #$3f
+	sta rot0
+	lda #0
+	sta rot2
+	jsr .csy
+	jmp .cslp
+
+; rot0:rot2 = 16-bit plane, X = 0 (p0) or 1 (p1)
+.csx
+	stx rot1
+	jsr .ylerp
+	ldx rot1
+	cpx #0
+	bne .csx1
+	lda rot0
+	sta ox0l
+	lda rot2
+	sta ox0h
+	rts
+.csx1
+	lda rot0
+	sta ox1l
+	lda rot2
+	sta ox1h
+	rts
+
+.csy
+	stx rot1
+	jsr .xlerp
+	ldx rot1
+	cpx #0
+	bne .csy1
+	lda rot0
+	sta oy0l
+	lda rot2
+	sta oy0h
+	rts
+.csy1
+	lda rot0
+	sta oy1l
+	lda rot2
+	sta oy1h
+	rts
+
+.ylerp
+	cpx #0
+	bne .yl1
+	sec
+	lda ox1l
+	sbc ox0l
+	sta dlo
+	lda ox1h
+	sbc ox0h
+	sta dhi
+	sec
+	lda rot0
+	sbc ox0l
+	sta nlo
+	lda rot2
+	sbc ox0h
+	sta nhi
+	sec
+	lda oy1l
+	sbc oy0l
+	sta ylo
+	lda oy1h
+	sbc oy0h
+	sta yhi
+	jsr scale3
+	lda dlo
+	sta div_c
+	ldy nlo
+	lda ylo
+	jsr lerpdv
+	jsr .addoy0
+	rts
+.yl1
+	sec
+	lda ox0l
+	sbc ox1l
+	sta dlo
+	lda ox0h
+	sbc ox1h
+	sta dhi
+	sec
+	lda rot0
+	sbc ox1l
+	sta nlo
+	lda rot2
+	sbc ox1h
+	sta nhi
+	sec
+	lda oy0l
+	sbc oy1l
+	sta ylo
+	lda oy0h
+	sbc oy1h
+	sta yhi
+	jsr scale3
+	lda dlo
+	sta div_c
+	ldy nlo
+	lda ylo
+	jsr lerpdv
+	jsr .addoy1
+	rts
+
+.xlerp
+	cpx #0
+	bne .xl1
+	sec
+	lda oy1l
+	sbc oy0l
+	sta dlo
+	lda oy1h
+	sbc oy0h
+	sta dhi
+	sec
+	lda rot0
+	sbc oy0l
+	sta nlo
+	lda rot2
+	sbc oy0h
+	sta nhi
+	sec
+	lda ox1l
+	sbc ox0l
+	sta ylo
+	lda ox1h
+	sbc ox0h
+	sta yhi
+	jsr scale3
+	lda dlo
+	sta div_c
+	ldy nlo
+	lda ylo
+	jsr lerpdv
+	jsr .addox0
+	rts
+.xl1
+	sec
+	lda oy0l
+	sbc oy1l
+	sta dlo
+	lda oy0h
+	sbc oy1h
+	sta dhi
+	sec
+	lda rot0
+	sbc oy1l
+	sta nlo
+	lda rot2
+	sbc oy1h
+	sta nhi
+	sec
+	lda ox0l
+	sbc ox1l
+	sta ylo
+	lda ox0h
+	sbc ox1h
+	sta yhi
+	jsr scale3
+	lda dlo
+	sta div_c
+	ldy nlo
+	lda ylo
+	jsr lerpdv
+	jsr .addox1
+	rts
+
+.addoy0
+	sta e0z
+	lda #0
+	sta e1z
+	lda e0z
+	bpl +
+	dec e1z
++
+	clc
+	lda oy0l
+	adc e0z
+	sta oy0l
+	lda oy0h
+	adc e1z
+	sta oy0h
+	rts
+.addoy1
+	sta e0z
+	lda #0
+	sta e1z
+	lda e0z
+	bpl +
+	dec e1z
++
+	clc
+	lda oy1l
+	adc e0z
+	sta oy1l
+	lda oy1h
+	adc e1z
+	sta oy1h
+	rts
+.addox0
+	sta e0z
+	lda #0
+	sta e1z
+	lda e0z
+	bpl +
+	dec e1z
++
+	clc
+	lda ox0l
+	adc e0z
+	sta ox0l
+	lda ox0h
+	adc e1z
+	sta ox0h
+	rts
+.addox1
+	sta e0z
+	lda #0
+	sta e1z
+	lda e0z
+	bpl +
+	dec e1z
++
+	clc
+	lda ox1l
+	adc e0z
+	sta ox1l
+	lda ox1h
+	adc e1z
+	sta ox1h
+	rts
+
+; X=0 p0, X=1 p1. e0x/e0y = ox, e1x/e1y = oy
+.mkoc
+	cpx #1
+	beq .m1
+	lda ox0l
+	sta e0x
+	lda ox0h
+	sta e0y
+	lda oy0l
+	sta e1x
+	lda oy0h
+	sta e1y
+	jmp .md
+.m1
+	lda ox1l
+	sta e0x
+	lda ox1h
+	sta e0y
+	lda oy1l
+	sta e1x
+	lda oy1h
+	sta e1y
+.md
+	lda #0
+	sta oc_tmp
+	lda e0y
+	cmp #$ff
+	bne .lhi
+	lda e0x
+	cmp #$a0
+	bcc .left
+	jmp .nl
+.lhi
+	bmi .left
+	jmp .nl
+.left
+	lda #OC_LEFT
+	sta oc_tmp
+.nl
+	lda e0y
+	bne .rhi
+	lda e0x
+	cmp #$60
+	bcs .right
+	jmp .nr
+.rhi
+	bmi .nr
+.right
+	lda oc_tmp
+	ora #OC_RIGHT
+	sta oc_tmp
+.nr
+	lda e1y
+	cmp #$ff
+	bne .thi
+	lda e1x
+	cmp #$c0
+	bcc .top
+	jmp .nt
+.thi
+	bmi .top
+	jmp .nt
+.top
+	lda oc_tmp
+	ora #OC_TOP
+	sta oc_tmp
+.nt
+	lda e1y
+	bne .bhi
+	lda e1x
+	cmp #$40
+	bcs .bot
+	jmp .nb
+.bhi
+	bmi .nb
+.bot
+	lda oc_tmp
+	ora #OC_BOT
+	sta oc_tmp
+.nb
+	lda oc_tmp
+	rts
+
+; A=ox lo Y=ox hi ??? screen x 0..191
+.to_sx
+	clc
+	adc #SCREEN_CX
+	sta nlo
+	tya
+	adc #0
+	bmi .sx0
+	bne .sxh
+	lda nlo
+	cmp #192
+	bcc +
+.sxh
+	lda #191
+	rts
+.sx0
+	lda #0
++
+	rts
+
+; A=oy lo Y=oy hi ??? screen y 0..127
+.to_sy
+	clc
+	adc #64
+	sta nlo
+	tya
+	adc #0
+	bmi .sy0
+	bne .syh
+	lda nlo
+	cmp #128
+	bcc +
+.syh
+	lda #127
+	rts
+.sy0
+	lda #0
++
 	rts
 
 cube_draw
@@ -123,21 +1034,13 @@ cube_draw
 	ldx vindex
 	lda EDGE_VIS,x
 	beq .skip
-	txa
-	asl
-	tax
-	lda edges,x
-	tay
-	lda PROJ_X,y
+	lda CLIP_X0,x
 	sta x0
-	lda PROJ_Y,y
+	lda CLIP_Y0,x
 	sta y0
-	inx
-	lda edges,x
-	tay
-	lda PROJ_X,y
+	lda CLIP_X1,x
 	sta x1
-	lda PROJ_Y,y
+	lda CLIP_Y1,x
 	sta y1
 	jsr draw_line
 .skip

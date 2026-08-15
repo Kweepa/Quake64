@@ -61,6 +61,116 @@ smul7
 	lda #0
 	rts
 
+; nlo:nhi * Y (signed) >> 7 → nlo:nhi. Judd 8×8 twice, then >>7.
+smul16_7
+	sty mul_y
+	lda nhi
+	eor mul_y
+	sta mul_sign
+	lda nhi
+	bpl .nabs
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+	lda #0
+	sbc nhi
+	sta nhi
+.nabs
+	lda mul_y
+	bpl .yabs
+	eor #$ff
+	clc
+	adc #1
+	sta mul_y
+.yabs
+	lda nlo
+	ora nhi
+	beq .z16
+	lda mul_y
+	beq .z16
+	lda nlo
+	ldy mul_y
+	jsr umul8j
+	lda prod_l
+	sta dlo
+	lda prod_h
+	sta dhi
+	lda nhi
+	ldy mul_y
+	jsr umul8j
+	clc
+	lda dhi
+	adc prod_l
+	sta dhi
+	lda prod_h
+	adc #0
+	sta ylo
+	ldx #7
+.sh7
+	lsr ylo
+	ror dhi
+	ror dlo
+	dex
+	bne .sh7
+	lda dlo
+	sta nlo
+	lda dhi
+	sta nhi
+	bit mul_sign
+	bpl +
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+	lda #0
+	sbc nhi
+	sta nhi
++
+	rts
+.z16
+	lda #0
+	sta nlo
+	sta nhi
+	rts
+
+; Unsigned A*Y → prod_l:prod_h. sq[a+b] - sq[|a-b|], tables (i*i)/4.
+umul8j
+	sta mul_a
+	sty mul_b
+	clc
+	adc mul_b
+	bcc .s0
+	tax
+	lda sqlo+$100,x
+	sta prod_l
+	lda sqhi+$100,x
+	sta prod_h
+	jmp .dif
+.s0
+	tax
+	lda sqlo,x
+	sta prod_l
+	lda sqhi,x
+	sta prod_h
+.dif
+	lda mul_a
+	sec
+	sbc mul_b
+	bcs .dpos
+	eor #$ff
+	adc #1
+.dpos
+	tay
+	sec
+	lda prod_l
+	sbc sqlo,y
+	sta prod_l
+	lda prod_h
+	sbc sqhi,y
+	sta prod_h
+	rts
+
 ; Signed A → A = LOGTAB[|A|], Y = $00 or $80
 signed_log
 	ldy #0
@@ -112,6 +222,274 @@ logadd7
 +
 	rts
 .lzero
+	lda #0
+	rts
+
+; A = (A * Y) / div_c, all signed. Clamp ±127. $01=$34.
+lerpdv
+	sta mul_a
+	sty mul_b
+	eor mul_b
+	eor div_c
+	sta mul_sign
+	lda mul_a
+	bpl .la
+	eor #$ff
+	clc
+	adc #1
+.la
+	beq .lzero2
+	sta mul_a
+	lda mul_b
+	bpl .lb
+	eor #$ff
+	clc
+	adc #1
+.lb
+	beq .lzero2
+	sta mul_b
+	lda div_c
+	bpl .lc
+	eor #$ff
+	clc
+	adc #1
+.lc
+	beq .lzero2
+	tax
+	lda mul_a
+	tay
+	lda LOGTAB,y
+	clc
+	ldy mul_b
+	adc LOGTAB,y
+	sta prod_l
+	lda #0
+	adc #0
+	sta prod_h
+	sec
+	lda prod_l
+	sbc LOGTAB,x
+	sta prod_l
+	lda prod_h
+	sbc #0
+	bcc .lzero2
+	sta prod_h
+	jsr alog_fetch
+	cmp #128
+	bcc .lsgn2
+	lda #$7f
+.lsgn2
+	bit mul_sign
+	bpl +
+	eor #$ff
+	clc
+	adc #1
++
+	rts
+.lzero2
+	lda #0
+	rts
+
+; A=p1 Y=p0 → prod = p1-p0 as signed 16-bit
+ssub16
+	sta mul_b
+	sty mul_a
+	lda #0
+	sta prod_h
+	lda mul_b
+	bpl +
+	dec prod_h
++
+	lda #0
+	sta mul_sign
+	lda mul_a
+	bpl +
+	dec mul_sign
++
+	sec
+	lda mul_b
+	sbc mul_a
+	sta prod_l
+	lda prod_h
+	sbc mul_sign
+	sta prod_h
+	rts
+
+; ASR n/d/y 16-bit until each fits signed 8-bit
+scale3
+	lda #8
+	sta mul_a
+.s3
+	jsr .fitn
+	bcc .do
+	jsr .fitd
+	bcc .do
+	jsr .fity
+	bcc .do
+	rts
+.do
+	lda nhi
+	cmp #$80
+	ror nhi
+	ror nlo
+	lda dhi
+	cmp #$80
+	ror dhi
+	ror dlo
+	lda yhi
+	cmp #$80
+	ror yhi
+	ror ylo
+	dec mul_a
+	bne .s3
+	rts
+.fitn
+	lda nhi
+	ldy nlo
+	jmp .fit
+.fitd
+	lda dhi
+	ldy dlo
+	jmp .fit
+.fity
+	lda yhi
+	ldy ylo
+.fit
+	tax
+	beq .fz
+	cmp #$ff
+	bne .fn
+	tya
+	bmi .fy
+.fn
+	clc
+	rts
+.fz
+	tya
+	bmi .fn
+.fy
+	sec
+	rts
+
+; Unsigned nlo:nhi → prod = 32*log2(n). Clobbers nlo/nhi, mul_a, mul_b.
+log16
+	lda #0
+	sta mul_a
+	lda nlo
+	ora nhi
+	bne .lp
+.lz
+	sta prod_l
+	sta prod_h
+	rts
+.lp
+	lda nhi
+	bmi .mant
+	asl nlo
+	rol nhi
+	inc mul_a
+	lda mul_a
+	cmp #16
+	bcc .lp
+.mant
+	ldx nhi
+	beq .lz
+	lda LOGTAB,x
+	sta prod_l
+	lda #0
+	sta prod_h
+	lda #8
+	sec
+	sbc mul_a
+	sta mul_b
+	lda #0
+	sta mul_a
+	lda mul_b
+	bpl +
+	dec mul_a
++
+	ldx #5
+.s5
+	asl mul_b
+	rol mul_a
+	dex
+	bne .s5
+	clc
+	lda prod_l
+	adc mul_b
+	sta prod_l
+	lda prod_h
+	adc mul_a
+	sta prod_h
+	rts
+
+; ylo:yhi * FOCAL / z_eye:z_eye_h → A signed, clamp PERSP_MAX
+persp88
+	lda yhi
+	sta mul_sign
+	bpl .px
+	sec
+	lda #0
+	sbc ylo
+	sta nlo
+	lda #0
+	sbc yhi
+	sta nhi
+	jmp .gx
+.px
+	lda ylo
+	sta nlo
+	lda yhi
+	sta nhi
+.gx
+	lda nlo
+	ora nhi
+	bne +
+	rts
++
+	jsr log16
+	lda prod_l
+	sta dlo
+	lda prod_h
+	sta dhi
+	lda z_eye
+	sta nlo
+	lda z_eye_h
+	sta nhi
+	ora nlo
+	bne +
+	lda #PERSP_MAX
+	jmp .s88
++
+	jsr log16
+	clc
+	lda dlo
+	adc #LOG_FOCAL
+	sta dlo
+	lda dhi
+	adc #0
+	sta dhi
+	sec
+	lda dlo
+	sbc prod_l
+	sta prod_l
+	lda dhi
+	sbc prod_h
+	bcc .z88
+	sta prod_h
+	jsr alog_fetch
+	cmp #PERSP_MAX
+	bcc .s88
+	lda #PERSP_MAX
+.s88
+	bit mul_sign
+	bpl +
+	eor #$ff
+	clc
+	adc #1
++
+	rts
+.z88
 	lda #0
 	rts
 
@@ -180,3 +558,5 @@ alog_fetch
 	ldx prod_l
 	lda ALOGTAB,x
 	rts
+
+!source "sqtab.asm"

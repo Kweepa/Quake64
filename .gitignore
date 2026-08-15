@@ -1,5 +1,6 @@
 # Generated tables
 src/tables.asm
+src/sqtab.asm
 src/uifont.asm
 
 # Build outputs

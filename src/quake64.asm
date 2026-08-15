@@ -20,9 +20,14 @@ start
 	lda #0
 	sta yaw
 	sta keys
-	sta cam_x
-	sta cam_y
-	sta cam_z
+	sta cam_xl
+	sta cam_xh
+	sta cam_yl
+	sta cam_yh
+	sta cam_zl
+	lda #$f8			; -8.0, crate at origin sits in front
+	sta cam_zh
+	lda #0
 	sta pitch
 
 	jsr fill_colour
@@ -125,19 +130,70 @@ apply_look
 .pok
 	rts
 
-; A = signed trig / 32 (~3 world units at full amplitude)
-scale_move
-	cmp #$80
-	ror
-	cmp #$80
-	ror
-	cmp #$80
-	ror
-	cmp #$80
-	ror
-	cmp #$80
-	ror
+; A = signed 8-bit 8.8 step added to cam_xl/xh
+camaddx
+	sta rot2
+	ldx #0
+	cmp #0
+	bpl +
+	dex
++
+	clc
+	adc cam_xl
+	sta cam_xl
+	txa
+	adc cam_xh
+	sta cam_xh
 	rts
+
+camaddy
+	sta rot2
+	ldx #0
+	cmp #0
+	bpl +
+	dex
++
+	clc
+	adc cam_yl
+	sta cam_yl
+	txa
+	adc cam_yh
+	sta cam_yh
+	rts
+
+camaddz
+	sta rot2
+	ldx #0
+	cmp #0
+	bpl +
+	dex
++
+	clc
+	adc cam_zl
+	sta cam_zl
+	txa
+	adc cam_zh
+	sta cam_zh
+	rts
+
+; A = signed 8-bit 8.8 step subtracted from cam
+camsbcx
+	eor #$ff
+	clc
+	adc #1
+	jmp camaddx
+
+camsbcy
+	eor #$ff
+	clc
+	adc #1
+	jmp camaddy
+
+camsbcz
+	eor #$ff
+	clc
+	adc #1
+	jmp camaddz
 
 apply_move
 	lda $01
@@ -146,16 +202,10 @@ apply_move
 	sta $01
 	ldy yaw
 	lda SINTAB,y
-	jsr scale_move
 	sta rot0
 	ldy yaw
 	lda COSTAB,y
-	jsr scale_move
 	sta rot1
-	ldy pitch
-	lda SINTAB,y
-	jsr scale_move
-	sta rot2
 
 	lda keys
 	and #KEY_W
@@ -165,21 +215,16 @@ apply_move
 	tay
 	lda rot0
 	jsr smul7
-	clc
-	adc cam_x
-	sta cam_x
+	jsr camaddx
 	ldy pitch
 	lda COSTAB,y
 	tay
 	lda rot1
 	jsr smul7
-	clc
-	adc cam_z
-	sta cam_z
-	sec
-	lda cam_y
-	sbc rot2
-	sta cam_y
+	jsr camaddz
+	ldy pitch
+	lda SINTAB,y
+	jsr camsbcy
 .now
 	lda keys
 	and #KEY_S
@@ -189,49 +234,32 @@ apply_move
 	tay
 	lda rot0
 	jsr smul7
-	sta mul_a
-	sec
-	lda cam_x
-	sbc mul_a
-	sta cam_x
+	jsr camsbcx
 	ldy pitch
 	lda COSTAB,y
 	tay
 	lda rot1
 	jsr smul7
-	sta mul_a
-	sec
-	lda cam_z
-	sbc mul_a
-	sta cam_z
-	clc
-	lda cam_y
-	adc rot2
-	sta cam_y
+	jsr camsbcz
+	ldy pitch
+	lda SINTAB,y
+	jsr camaddy
 .nos
 	lda keys
 	and #KEY_D
 	beq .nod
-	clc
-	lda cam_x
-	adc rot1
-	sta cam_x
-	sec
-	lda cam_z
-	sbc rot0
-	sta cam_z
+	lda rot1
+	jsr camaddx
+	lda rot0
+	jsr camsbcz
 .nod
 	lda keys
 	and #KEY_A
 	beq .noa
-	sec
-	lda cam_x
-	sbc rot1
-	sta cam_x
-	clc
-	lda cam_z
-	adc rot0
-	sta cam_z
+	lda rot1
+	jsr camsbcx
+	lda rot0
+	jsr camaddz
 .noa
 	pla
 	sta $01

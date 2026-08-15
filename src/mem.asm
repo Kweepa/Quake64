@@ -2,7 +2,7 @@
 ; $C000 screen A  $C400 screen B
 ; $CA00 projected verts / CIA2 profiler (not displayed)
 ; $D000/$D800 charset A top/bot  $E000/$E800 charset B top/bot
-; $F800 log / alog / sin / cos LUTs (copied at init)
+; $F800 log/alog/sin/cos (copied at init). Judd sqlo/sqhi live in the PRG.
 
 COL_BORDER	= 0
 COL_BG		= 9			; brown sandbox
@@ -69,18 +69,24 @@ CH_B_BOT	= $E800
 PROJ_X		= $CA00
 PROJ_Y		= $CA08
 PROJ_Z		= $CA20			; per-vertex z_eye
+PROJ_XH		= $CA80			; high byte of signed 16-bit ox
+PROJ_YH		= $CA88
 frame_t0	= $CA10			; 4-byte CIA2 cascade snapshot
 frame_cy	= $CA14
 casc_now	= $CA18
-CAM_X		= $CA28			; camera-space after rotate
+CAM_X		= $CA28			; view-space after project (lo)
 CAM_Y		= $CA30
 CAM_Z		= $CA38
-EDGE_VIS	= $CA40			; 12 bytes, 1 = both endpoints passed ZCLIP
+CAM_XH		= $CA90
+CAM_YH		= $CA98
+CAM_ZH		= $CAA0
+PROJ_ZH		= $CAA8			; signed z high
+EDGE_VIS	= $CA40			; 12 bytes, 1 = edge survived clip
 
 FOCAL		= 100
 LOG_FOCAL	= 213			; round(32*log2(100))
-CAMZ		= 160
-CUBE_H		= 32
+CUBE_H		= 3			; crate half-extent integer (6.0 in 8.8)
+ZCLIP		= $0100			; 1.0 near plane (8.8)
 YAW_STEP	= 3
 PITCH_STEP	= 2
 PITCH_MIN	= $d0			; -48, signed about horizon 0
@@ -93,5 +99,17 @@ KEY_I		= 16
 KEY_J		= 32
 KEY_K		= 64
 KEY_L		= 128
-PERSP_MAX	= 80
-ZCLIP		= 72
+PERSP_MAX	= 127
+CLIP_XMIN	= -96			; signed offset: x 0..191
+CLIP_XMAX	= 95
+CLIP_YMIN	= -64			; y 0..127
+CLIP_YMAX	= 63
+OC_LEFT		= 1
+OC_RIGHT	= 2
+OC_TOP		= 4
+OC_BOT		= 8
+
+CLIP_X0		= $CA50			; 12 clipped screen x0
+CLIP_Y0		= $CA5C
+CLIP_X1		= $CA68
+CLIP_Y1		= $CA74

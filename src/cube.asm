@@ -1,48 +1,86 @@
-; v-cam 8.8, yaw+pitch rotate, near+frustum clip, stroke a 6.0 crate
+; v-cam 8.8, yaw+pitch rotate, near+frustum clip, stroke Grunt walk
 !zone cube
 
-vxlo
-	!byte 0, 0, 0, 0, 0, 0, 0, 0
-vxhi
-	!byte -CUBE_H, CUBE_H, CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H,-CUBE_H
-vylo
-	!byte 0, 0, 0, 0, 0, 0, 0, 0
-vyhi
-	!byte -CUBE_H,-CUBE_H, CUBE_H, CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H
-vzlo
-	!byte 0, 0, 0, 0, 0, 0, 0, 0
-vzhi
-	!byte -CUBE_H,-CUBE_H,-CUBE_H,-CUBE_H, CUBE_H, CUBE_H, CUBE_H, CUBE_H
+!source "grunt_data.asm"
 
-edges
-	!byte 0,1, 1,2, 2,3, 3,0
-	!byte 4,5, 5,6, 6,7, 7,4
-	!byte 0,4, 1,5, 2,6, 3,7
+; A = signed editor byte → nlo:nhi = A/8 as 8.8 (ASL×5)
+scale_s8_88
+	sta nlo
+	lda #0
+	bit nlo
+	bpl +
+	lda #$ff
++
+	sta nhi
+	asl nlo
+	rol nhi
+	asl nlo
+	rol nhi
+	asl nlo
+	rol nhi
+	asl nlo
+	rol nhi
+	asl nlo
+	rol nhi
+	rts
+
+; gidx = anim_frame * 13 + vindex → Y
+grunt_gindex
+	lda anim_frame
+	asl
+	asl
+	asl				; *8
+	sta gidx
+	lda anim_frame
+	asl
+	asl				; *4
+	clc
+	adc gidx			; *12
+	adc anim_frame			; *13
+	clc
+	adc vindex
+	sta gidx
+	tay
+	rts
 
 cube_rotate
 	!source "_rotate_body.asm"
 	lda #0
 	sta vindex
 .rvert
-	ldx vindex
+	jsr grunt_gindex
+	lda gx,y
+	jsr scale_s8_88
 	sec
-	lda vxlo,x
+	lda nlo
 	sbc cam_xl
 	sta nlo
-	lda vxhi,x
+	lda nhi
 	sbc cam_xh
 	sta nhi
+	ldx vindex
 	lda nlo
 	sta CAM_X,x
 	lda nhi
 	sta CAM_XH,x
+	lda nlo
+	sta e0x				; save dx across gz scale
+	lda nhi
+	sta e0xh
+	ldy gidx
+	lda gz,y
+	jsr scale_s8_88
 	sec
-	lda vzlo,x
+	lda nlo
 	sbc cam_zl
 	sta e1z
-	lda vzhi,x
+	lda nhi
 	sbc cam_zh
 	sta e1zh
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
 
 	; x1 = dx*cs - dz*sn
 	ldy cs_b
@@ -91,12 +129,14 @@ cube_rotate
 	adc nhi
 	sta e0yh
 
-	ldx vindex
+	ldy gidx
+	lda gy,y
+	jsr scale_s8_88
 	sec
-	lda vylo,x
+	lda nlo
 	sbc cam_yl
 	sta nlo
-	lda vyhi,x
+	lda nhi
 	sbc cam_yh
 	sta nhi
 	lda nlo
@@ -104,7 +144,7 @@ cube_rotate
 	lda nhi
 	sta e1xh
 
-	; y' = dy*cp ??? z1*sp
+	; y' = dy*cp − z1*sp
 	ldy cp_b
 	jsr smul16_7
 	lda nlo
@@ -158,7 +198,7 @@ cube_rotate
 
 	inc vindex
 	lda vindex
-	cmp #8
+	cmp #NVERTS
 	beq +
 	jmp .rvert
 +
@@ -203,7 +243,7 @@ cube_project
 .pnext
 	inc vindex
 	lda vindex
-	cmp #8
+	cmp #NVERTS
 	beq +
 	jmp .pvert
 +
@@ -381,7 +421,7 @@ cube_clip
 .next
 	inc vindex
 	lda vindex
-	cmp #12
+	cmp #NEDGES
 	beq +
 	jmp .cel
 +
@@ -1007,8 +1047,17 @@ cube_clip
 +
 	rts
 
-; A=oy lo Y=oy hi ??? screen y 0..127
+; A=oy lo Y=oy hi → screen y 0..127 (Y-down: screen = 64 - oy)
 .to_sy
+	eor #$ff
+	clc
+	adc #1
+	sta nlo
+	tya
+	eor #$ff
+	adc #0
+	tay
+	lda nlo
 	clc
 	adc #64
 	sta nlo
@@ -1046,7 +1095,7 @@ cube_draw
 .skip
 	inc vindex
 	lda vindex
-	cmp #12
+	cmp #NEDGES
 	beq +
 	jmp .del
 +

@@ -8,6 +8,16 @@ export const WORLD_MAX = 255;
 export const WORLD_SIZE = 256;
 export const MAX_VERTS = 13;
 export const MAX_LINES = 13;
+export const WEAPON_VERT = 12;
+export const WRIST_R = 7;
+/** L/R hip, elbow, wrist, knee, ankle. Neck 2 and head 3 stay. */
+export const SKELETON_MIRROR_PAIRS = [
+  [0, 1],
+  [4, 6],
+  [5, 7],
+  [8, 10],
+  [9, 11],
+];
 export const VERT_MIN = -64;
 export const VERT_MAX = 63;
 
@@ -108,7 +118,7 @@ export function clipForFrame(index) {
   return ANIM_CLIPS.find((c) => index >= c.start && index < c.start + c.len) || ANIM_CLIPS[0];
 }
 
-/** Shared 13-vert skeleton: hips, neck, head, L/R arm, L/R leg, weapon tip on right wrist. */
+/** Shared 13-vert skeleton: L/R hip, neck, head, L/R elbow, L/R wrist, L/R knee, L/R ankle, weapon tip on right wrist. */
 export const ENEMY_TYPES = [
   { name: "Grunt", scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
   {
@@ -199,6 +209,28 @@ export function clampSize(origin, size) {
 export function clampVert(n) {
   const v = n | 0;
   return Math.max(VERT_MIN, Math.min(VERT_MAX, v));
+}
+
+/** Mirror one pose across X: swap L/R limbs, keep weapon offset from right wrist. */
+export function flipFrameX(verts) {
+  const snap = verts.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+  const srcOf = verts.map((_, i) => i);
+  for (const [a, b] of SKELETON_MIRROR_PAIRS) {
+    srcOf[a] = b;
+    srcOf[b] = a;
+  }
+  for (let i = 0; i < WEAPON_VERT; i++) {
+    const src = snap[srcOf[i]];
+    verts[i].x = clampVert(-src.x);
+    verts[i].y = clampVert(src.y);
+    verts[i].z = clampVert(src.z);
+  }
+  const relx = snap[WEAPON_VERT].x - snap[WRIST_R].x;
+  const rely = snap[WEAPON_VERT].y - snap[WRIST_R].y;
+  const relz = snap[WEAPON_VERT].z - snap[WRIST_R].z;
+  verts[WEAPON_VERT].x = clampVert(verts[WRIST_R].x + relx);
+  verts[WEAPON_VERT].y = clampVert(verts[WRIST_R].y + rely);
+  verts[WEAPON_VERT].z = clampVert(verts[WRIST_R].z + relz);
 }
 
 export function aabbEnd(box) {

@@ -18,6 +18,8 @@ python tools\genrotate.py
 if errorlevel 1 exit /b 1
 python tools\genuifont.py
 if errorlevel 1 exit /b 1
+python tools\gengrunt.py
+if errorlevel 1 exit /b 1
 
 pushd src
 "%ACME%" -v3 --vicelabels ..\quake64.lbl quake64.asm

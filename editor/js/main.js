@@ -13,6 +13,7 @@ import {
   LEVEL_NAMES,
   activeMap,
   clipForFrame,
+  flipFrameX,
 } from "./model.js";
 import {
   autosaveDocJSON,
@@ -88,6 +89,14 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     else if (additive) {
       if (!selectedVerts.includes(i)) selectedVerts.push(i);
     } else selectedVerts = [i];
+    refreshPanels();
+  },
+  onSelectVerts: (indices, additive) => {
+    if (additive) {
+      for (const i of indices) {
+        if (!selectedVerts.includes(i)) selectedVerts.push(i);
+      }
+    } else selectedVerts = [...indices];
     refreshPanels();
   },
   onChange: () => {
@@ -262,7 +271,7 @@ function setMode(mode) {
   document.getElementById("hint").textContent =
     mode === "layout"
       ? "Click canvas · WASD fly along look · Q/E camera up · RMB look · LMB move · R face · Del delete"
-      : "Click vert to select · drag axis to move · X/Y/Z nudge (Shift = −) · [ ] or ← → frames · RMB orbit";
+      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   if (mode !== "anim") stopAnimPlay();
@@ -598,7 +607,12 @@ function renderInspector() {
   pasteBtn.textContent = "Paste frame";
   pasteBtn.disabled = !frameClipboard;
   pasteBtn.addEventListener("click", pasteFrame);
-  editRow.append(copyBtn, pasteBtn);
+  const flipBtn = document.createElement("button");
+  flipBtn.type = "button";
+  flipBtn.textContent = "Flip";
+  flipBtn.title = "Mirror this frame on X; weapon stays on the right wrist";
+  flipBtn.addEventListener("click", flipCurrentFrame);
+  editRow.append(copyBtn, pasteBtn, flipBtn);
   root.appendChild(editRow);
 
   if (selectedVerts.length === 1) {
@@ -692,6 +706,15 @@ function pasteFrame() {
   markDirty();
   refreshAll();
   setStatus(`Pasted onto ${FRAME_NAMES[frameIndex]}`);
+}
+
+function flipCurrentFrame() {
+  const e = activeEnemy();
+  pushUndo();
+  flipFrameX(e.frames[frameIndex]);
+  markDirty();
+  refreshAll();
+  setStatus(`Flipped ${FRAME_NAMES[frameIndex]} on X`);
 }
 
 function stopAnimPlay() {

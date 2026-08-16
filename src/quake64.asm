@@ -1,4 +1,4 @@
-; Quake64 — Step 1 core line engine (VIC Bank 3, raster split, Bresenham cube)
+; Quake64 — Step 1 core line engine (VIC Bank 3, raster split, Grunt walk)
 !cpu 6510
 !to "quake64.prg", cbm
 
@@ -23,12 +23,16 @@ start
 	sta cam_xl
 	sta cam_xh
 	sta cam_yl
-	sta cam_yh
 	sta cam_zl
-	lda #$f8			; -8.0, crate at origin sits in front
+	lda #2				; eye ~ mid-torso (editor y≈16 → 2.0)
+	sta cam_yh
+	lda #$f8			; -8.0, figure at origin sits in front
 	sta cam_zh
 	lda #0
 	sta pitch
+	sta anim_frame
+	sta anim_acc_l
+	sta anim_acc_h
 
 	jsr fill_colour
 	jsr init_vic
@@ -78,7 +82,41 @@ main
 	jsr set_draw_ptrs
 	jsr apply_look
 	jsr apply_move
+	jsr advance_walk
 	jmp main
+
+advance_walk
+	clc
+	lda anim_acc_l
+	adc dt_ms
+	sta anim_acc_l
+	lda anim_acc_h
+	adc #0
+	sta anim_acc_h
+	lda anim_acc_h
+	cmp #>ANIM_MS
+	bcc .done
+	bne .step
+	lda anim_acc_l
+	cmp #<ANIM_MS
+	bcc .done
+.step
+	sec
+	lda anim_acc_l
+	sbc #<ANIM_MS
+	sta anim_acc_l
+	lda anim_acc_h
+	sbc #>ANIM_MS
+	sta anim_acc_h
+	ldx anim_frame
+	inx
+	cpx #WALK_FRAMES
+	bcc +
+	ldx #0
++
+	stx anim_frame
+.done
+	rts
 
 apply_look
 	lda keys

@@ -2,6 +2,7 @@
 src/tables.asm
 src/sqtab.asm
 src/uifont.asm
+src/grunt_data.asm
 
 # Build outputs
 *.lbl

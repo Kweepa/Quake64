@@ -119,3 +119,7 @@ cam_zh		= $6f
 cam_yh		= $70
 mul_y		= $71			; smul16_7 saved |Y|
 mul_c		= $73			; 16×8 addend high
+anim_frame	= $74			; walk 0..3
+anim_acc_l	= $75			; ms accumulator toward ANIM_MS
+anim_acc_h	= $76
+gidx		= $77			; gx/gy/gz table index (frame*13+v)

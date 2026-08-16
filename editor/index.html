@@ -472,6 +472,16 @@ const WORLD_MAX = 255;
 const WORLD_SIZE = 256;
 const MAX_VERTS = 13;
 const MAX_LINES = 13;
+const WEAPON_VERT = 12;
+const WRIST_R = 7;
+/** L/R hip, elbow, wrist, knee, ankle. Neck 2 and head 3 stay. */
+const SKELETON_MIRROR_PAIRS = [
+  [0, 1],
+  [4, 6],
+  [5, 7],
+  [8, 10],
+  [9, 11],
+];
 const VERT_MIN = -64;
 const VERT_MAX = 63;
 
@@ -572,7 +582,7 @@ function clipForFrame(index) {
   return ANIM_CLIPS.find((c) => index >= c.start && index < c.start + c.len) || ANIM_CLIPS[0];
 }
 
-/** Shared 13-vert skeleton: hips, neck, head, L/R arm, L/R leg, weapon tip on right wrist. */
+/** Shared 13-vert skeleton: L/R hip, neck, head, L/R elbow, L/R wrist, L/R knee, L/R ankle, weapon tip on right wrist. */
 const ENEMY_TYPES = [
   { name: "Grunt", scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
   {
@@ -663,6 +673,28 @@ function clampSize(origin, size) {
 function clampVert(n) {
   const v = n | 0;
   return Math.max(VERT_MIN, Math.min(VERT_MAX, v));
+}
+
+/** Mirror one pose across X: swap L/R limbs, keep weapon offset from right wrist. */
+function flipFrameX(verts) {
+  const snap = verts.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+  const srcOf = verts.map((_, i) => i);
+  for (const [a, b] of SKELETON_MIRROR_PAIRS) {
+    srcOf[a] = b;
+    srcOf[b] = a;
+  }
+  for (let i = 0; i < WEAPON_VERT; i++) {
+    const src = snap[srcOf[i]];
+    verts[i].x = clampVert(-src.x);
+    verts[i].y = clampVert(src.y);
+    verts[i].z = clampVert(src.z);
+  }
+  const relx = snap[WEAPON_VERT].x - snap[WRIST_R].x;
+  const rely = snap[WEAPON_VERT].y - snap[WRIST_R].y;
+  const relz = snap[WEAPON_VERT].z - snap[WRIST_R].z;
+  verts[WEAPON_VERT].x = clampVert(verts[WRIST_R].x + relx);
+  verts[WEAPON_VERT].y = clampVert(verts[WRIST_R].y + rely);
+  verts[WEAPON_VERT].z = clampVert(verts[WRIST_R].z + relz);
 }
 
 function aabbEnd(box) {
@@ -2095,6 +2127,7 @@ class OverheadView {
 // ---- js/animView.js ----
 const AXIS_LEN = 8;
 const AXIS_HIT = 9;
+const BOX_CLICK = 4;
 const AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 class AnimView {
@@ -2156,12 +2189,33 @@ class AnimView {
   }
 
   #primaryVert() {
-    const selected = this.opts.getSelectedVerts?.() || [];
+    return this.#selectionAnchor();
+  }
+
+  #selectedIndices() {
+    return this.opts.getSelectedVerts?.() || [];
+  }
+
+  #selectionAnchor() {
+    const selected = this.#selectedIndices();
     if (!selected.length) return null;
-    const i = selected[selected.length - 1];
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
-    return { index: i, v: enemy.frames[frame][i] };
+    const verts = enemy.frames[frame];
+    if (selected.length === 1) {
+      const i = selected[0];
+      return { index: i, v: verts[i], indices: selected };
+    }
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    for (const i of selected) {
+      x += verts[i].x;
+      y += verts[i].y;
+      z += verts[i].z;
+    }
+    const n = selected.length;
+    return { index: selected[selected.length - 1], v: { x: x / n, y: y / n, z: z / n }, indices: selected };
   }
 
   #axisEnd(v, axis) {
@@ -2233,13 +2287,16 @@ class AnimView {
 
     const axis = this.#hitAxis(p.x, p.y);
     if (axis) {
-      const prim = this.#primaryVert();
+      const prim = this.#selectionAnchor();
+      const enemy = this.opts.getEnemy();
+      const frame = this.opts.getFrame();
+      const verts = enemy.frames[frame];
       this.opts.beginUndo?.();
       this.drag = {
         kind: "axis",
         axis,
-        index: prim.index,
-        orig: { ...prim.v },
+        origs: prim.indices.map((i) => ({ i, x: verts[i].x, y: verts[i].y, z: verts[i].z })),
+        orig: { x: prim.v.x, y: prim.v.y, z: prim.v.z },
         start: p,
       };
       this.canvas.setPointerCapture(e.pointerId);
@@ -2248,14 +2305,28 @@ class AnimView {
 
     const vi = this.#hitVert(p.x, p.y);
     if (vi >= 0) {
+      const selected = this.opts.getSelectedVerts?.() || [];
+      const wasSelected = selected.includes(vi);
       this.opts.onSelectVert?.(vi, e.shiftKey);
-      this.drag = { kind: "select" };
+      if (!wasSelected && !e.shiftKey) {
+        const enemy = this.opts.getEnemy();
+        const frame = this.opts.getFrame();
+        const v = enemy.frames[frame][vi];
+        this.drag = {
+          kind: "plane",
+          index: vi,
+          lock: this.#lockAxis(),
+          orig: { x: v.x, y: v.y, z: v.z },
+          undoStarted: false,
+        };
+      } else {
+        this.drag = { kind: "select" };
+      }
       this.canvas.setPointerCapture(e.pointerId);
       this.draw();
       return;
     }
-    this.opts.onSelectVert?.(-1, false);
-    this.drag = { kind: "orbit", last: p };
+    this.drag = { kind: "box", start: p, end: p, additive: e.shiftKey };
     this.canvas.setPointerCapture(e.pointerId);
   }
 
@@ -2277,10 +2348,15 @@ class AnimView {
       this.draw();
       return;
     }
+    if (this.drag.kind === "box") {
+      this.drag.end = p;
+      this.draw();
+      return;
+    }
     if (this.drag.kind === "axis") {
       const enemy = this.opts.getEnemy();
       const frame = this.opts.getFrame();
-      const v = enemy.frames[frame][this.drag.index];
+      const verts = enemy.frames[frame];
       const cam = this.#cam();
       const orig = this.drag.orig;
       const pa = projectPoint(orig, cam, this.cssW, this.cssH);
@@ -2292,18 +2368,93 @@ class AnimView {
       if (alen2 < 16) return;
       const t = ((p.x - this.drag.start.x) * ax + (p.y - this.drag.start.y) * ay) / alen2;
       const delta = Math.round(t * AXIS_LEN);
-      v.x = orig.x;
-      v.y = orig.y;
-      v.z = orig.z;
-      v[this.drag.axis] = clampVert(orig[this.drag.axis] + delta);
+      for (const o of this.drag.origs) {
+        const v = verts[o.i];
+        v.x = o.x;
+        v.y = o.y;
+        v.z = o.z;
+        v[this.drag.axis] = clampVert(o[this.drag.axis] + delta);
+      }
+      this.opts.onChange?.();
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "plane") {
+      const enemy = this.opts.getEnemy();
+      const frame = this.opts.getFrame();
+      const v = enemy.frames[frame][this.drag.index];
+      const orig = this.drag.orig;
+      const cam = this.#cam();
+      const ray = screenRay(p.x, p.y, cam, this.cssW, this.cssH);
+      const n = { x: 0, y: 0, z: 0 };
+      n[this.drag.lock] = 1;
+      const hit = intersectPlane(ray.origin, ray.dir, orig, n);
+      if (!hit) return;
+      const next = {
+        x: this.drag.lock === "x" ? orig.x : clampVert(Math.round(hit.point.x)),
+        y: this.drag.lock === "y" ? orig.y : clampVert(Math.round(hit.point.y)),
+        z: this.drag.lock === "z" ? orig.z : clampVert(Math.round(hit.point.z)),
+      };
+      if (next.x === v.x && next.y === v.y && next.z === v.z) return;
+      if (!this.drag.undoStarted) {
+        this.opts.beginUndo?.();
+        this.drag.undoStarted = true;
+      }
+      v.x = next.x;
+      v.y = next.y;
+      v.z = next.z;
       this.opts.onChange?.();
       this.draw();
     }
   }
 
+  #lockAxis() {
+    const { forward } = lookVectors(this.orbit.yaw, this.orbit.pitch);
+    const ax = Math.abs(forward.x);
+    const ay = Math.abs(forward.y);
+    const az = Math.abs(forward.z);
+    if (ax >= ay && ax >= az) return "x";
+    if (ay >= az) return "y";
+    return "z";
+  }
+
+  #boxRect() {
+    const a = this.drag.start;
+    const b = this.drag.end;
+    const x0 = Math.min(a.x, b.x);
+    const y0 = Math.min(a.y, b.y);
+    const x1 = Math.max(a.x, b.x);
+    const y1 = Math.max(a.y, b.y);
+    return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
+  }
+
+  #vertsInBox(rect) {
+    const enemy = this.opts.getEnemy();
+    const frame = this.opts.getFrame();
+    const cam = this.#cam();
+    const hits = [];
+    enemy.frames[frame].forEach((v, i) => {
+      const p = projectPoint(v, cam, this.cssW, this.cssH);
+      if (!p.ok) return;
+      if (p.sx >= rect.x0 && p.sx <= rect.x1 && p.sy >= rect.y0 && p.sy <= rect.y1) hits.push(i);
+    });
+    return hits;
+  }
+
+  #finishBox() {
+    const rect = this.#boxRect();
+    const additive = this.drag.additive;
+    if (rect.w < BOX_CLICK && rect.h < BOX_CLICK) {
+      if (!additive) this.opts.onSelectVerts?.([]);
+      return;
+    }
+    this.opts.onSelectVerts?.(this.#vertsInBox(rect), additive);
+  }
+
   #onUp(e) {
     if (!this.enabled) return;
-    if (this.drag?.kind === "axis") this.opts.endUndo?.();
+    if (this.drag?.kind === "box") this.#finishBox();
+    if (this.drag?.kind === "axis" || this.drag?.undoStarted) this.opts.endUndo?.();
     this.drag = null;
     try {
       this.canvas.releasePointerCapture(e.pointerId);
@@ -2369,6 +2520,14 @@ class AnimView {
     const frame = this.opts.getFrame();
     const selected = this.opts.getSelectedVerts?.() || [];
     const verts = enemy.frames[frame];
+    let shown = selected;
+    if (this.drag?.kind === "box") {
+      const r = this.#boxRect();
+      if (r.w >= BOX_CLICK || r.h >= BOX_CLICK) {
+        const hits = this.#vertsInBox(r);
+        shown = this.drag.additive ? [...new Set([...selected, ...hits])] : hits;
+      }
+    }
 
     ctx.lineWidth = 1;
     for (let i = -24; i <= 24; i += 8) {
@@ -2388,7 +2547,7 @@ class AnimView {
     verts.forEach((v, i) => {
       const p = projectPoint(v, cam, w, h);
       if (!p.ok) return;
-      const sel = selected.includes(i);
+      const sel = shown.includes(i);
       const hover = i === this.hover;
       ctx.fillStyle = sel ? "#d4a017" : hover ? "#fff" : "#8b91a0";
       const r = sel ? 5 : 4;
@@ -2397,8 +2556,19 @@ class AnimView {
       ctx.fill();
     });
 
-    const prim = this.#primaryVert();
+    const prim = this.#selectionAnchor();
     if (prim) this.#drawGizmo(ctx, cam, w, h, prim.v);
+
+    if (this.drag?.kind === "box") {
+      const r = this.#boxRect();
+      ctx.fillStyle = "rgba(212, 160, 23, 0.12)";
+      ctx.fillRect(r.x0, r.y0, r.w, r.h);
+      ctx.strokeStyle = "#d4a017";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(r.x0 + 0.5, r.y0 + 0.5, r.w, r.h);
+      ctx.setLineDash([]);
+    }
 
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";
@@ -2470,6 +2640,14 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     else if (additive) {
       if (!selectedVerts.includes(i)) selectedVerts.push(i);
     } else selectedVerts = [i];
+    refreshPanels();
+  },
+  onSelectVerts: (indices, additive) => {
+    if (additive) {
+      for (const i of indices) {
+        if (!selectedVerts.includes(i)) selectedVerts.push(i);
+      }
+    } else selectedVerts = [...indices];
     refreshPanels();
   },
   onChange: () => {
@@ -2644,7 +2822,7 @@ function setMode(mode) {
   document.getElementById("hint").textContent =
     mode === "layout"
       ? "Click canvas · WASD fly along look · Q/E camera up · RMB look · LMB move · R face · Del delete"
-      : "Click vert to select · drag axis to move · X/Y/Z nudge (Shift = −) · [ ] or ← → frames · RMB orbit";
+      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   if (mode !== "anim") stopAnimPlay();
@@ -2980,7 +3158,12 @@ function renderInspector() {
   pasteBtn.textContent = "Paste frame";
   pasteBtn.disabled = !frameClipboard;
   pasteBtn.addEventListener("click", pasteFrame);
-  editRow.append(copyBtn, pasteBtn);
+  const flipBtn = document.createElement("button");
+  flipBtn.type = "button";
+  flipBtn.textContent = "Flip";
+  flipBtn.title = "Mirror this frame on X; weapon stays on the right wrist";
+  flipBtn.addEventListener("click", flipCurrentFrame);
+  editRow.append(copyBtn, pasteBtn, flipBtn);
   root.appendChild(editRow);
 
   if (selectedVerts.length === 1) {
@@ -3074,6 +3257,15 @@ function pasteFrame() {
   markDirty();
   refreshAll();
   setStatus(`Pasted onto ${FRAME_NAMES[frameIndex]}`);
+}
+
+function flipCurrentFrame() {
+  const e = activeEnemy();
+  pushUndo();
+  flipFrameX(e.frames[frameIndex]);
+  markDirty();
+  refreshAll();
+  setStatus(`Flipped ${FRAME_NAMES[frameIndex]} on X`);
 }
 
 function stopAnimPlay() {

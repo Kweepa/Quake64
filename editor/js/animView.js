@@ -1,13 +1,16 @@
 import { FRAME_NAMES, clampVert } from "./model.js";
 import {
   distPointToSegment2d,
+  intersectPlane,
   lookVectors,
   projectLine,
   projectPoint,
+  screenRay,
 } from "./math3d.js";
 
 const AXIS_LEN = 8;
 const AXIS_HIT = 9;
+const BOX_CLICK = 4;
 const AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 export class AnimView {
@@ -69,12 +72,33 @@ export class AnimView {
   }
 
   #primaryVert() {
-    const selected = this.opts.getSelectedVerts?.() || [];
+    return this.#selectionAnchor();
+  }
+
+  #selectedIndices() {
+    return this.opts.getSelectedVerts?.() || [];
+  }
+
+  #selectionAnchor() {
+    const selected = this.#selectedIndices();
     if (!selected.length) return null;
-    const i = selected[selected.length - 1];
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
-    return { index: i, v: enemy.frames[frame][i] };
+    const verts = enemy.frames[frame];
+    if (selected.length === 1) {
+      const i = selected[0];
+      return { index: i, v: verts[i], indices: selected };
+    }
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    for (const i of selected) {
+      x += verts[i].x;
+      y += verts[i].y;
+      z += verts[i].z;
+    }
+    const n = selected.length;
+    return { index: selected[selected.length - 1], v: { x: x / n, y: y / n, z: z / n }, indices: selected };
   }
 
   #axisEnd(v, axis) {
@@ -146,13 +170,16 @@ export class AnimView {
 
     const axis = this.#hitAxis(p.x, p.y);
     if (axis) {
-      const prim = this.#primaryVert();
+      const prim = this.#selectionAnchor();
+      const enemy = this.opts.getEnemy();
+      const frame = this.opts.getFrame();
+      const verts = enemy.frames[frame];
       this.opts.beginUndo?.();
       this.drag = {
         kind: "axis",
         axis,
-        index: prim.index,
-        orig: { ...prim.v },
+        origs: prim.indices.map((i) => ({ i, x: verts[i].x, y: verts[i].y, z: verts[i].z })),
+        orig: { x: prim.v.x, y: prim.v.y, z: prim.v.z },
         start: p,
       };
       this.canvas.setPointerCapture(e.pointerId);
@@ -161,14 +188,28 @@ export class AnimView {
 
     const vi = this.#hitVert(p.x, p.y);
     if (vi >= 0) {
+      const selected = this.opts.getSelectedVerts?.() || [];
+      const wasSelected = selected.includes(vi);
       this.opts.onSelectVert?.(vi, e.shiftKey);
-      this.drag = { kind: "select" };
+      if (!wasSelected && !e.shiftKey) {
+        const enemy = this.opts.getEnemy();
+        const frame = this.opts.getFrame();
+        const v = enemy.frames[frame][vi];
+        this.drag = {
+          kind: "plane",
+          index: vi,
+          lock: this.#lockAxis(),
+          orig: { x: v.x, y: v.y, z: v.z },
+          undoStarted: false,
+        };
+      } else {
+        this.drag = { kind: "select" };
+      }
       this.canvas.setPointerCapture(e.pointerId);
       this.draw();
       return;
     }
-    this.opts.onSelectVert?.(-1, false);
-    this.drag = { kind: "orbit", last: p };
+    this.drag = { kind: "box", start: p, end: p, additive: e.shiftKey };
     this.canvas.setPointerCapture(e.pointerId);
   }
 
@@ -190,10 +231,15 @@ export class AnimView {
       this.draw();
       return;
     }
+    if (this.drag.kind === "box") {
+      this.drag.end = p;
+      this.draw();
+      return;
+    }
     if (this.drag.kind === "axis") {
       const enemy = this.opts.getEnemy();
       const frame = this.opts.getFrame();
-      const v = enemy.frames[frame][this.drag.index];
+      const verts = enemy.frames[frame];
       const cam = this.#cam();
       const orig = this.drag.orig;
       const pa = projectPoint(orig, cam, this.cssW, this.cssH);
@@ -205,18 +251,93 @@ export class AnimView {
       if (alen2 < 16) return;
       const t = ((p.x - this.drag.start.x) * ax + (p.y - this.drag.start.y) * ay) / alen2;
       const delta = Math.round(t * AXIS_LEN);
-      v.x = orig.x;
-      v.y = orig.y;
-      v.z = orig.z;
-      v[this.drag.axis] = clampVert(orig[this.drag.axis] + delta);
+      for (const o of this.drag.origs) {
+        const v = verts[o.i];
+        v.x = o.x;
+        v.y = o.y;
+        v.z = o.z;
+        v[this.drag.axis] = clampVert(o[this.drag.axis] + delta);
+      }
+      this.opts.onChange?.();
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "plane") {
+      const enemy = this.opts.getEnemy();
+      const frame = this.opts.getFrame();
+      const v = enemy.frames[frame][this.drag.index];
+      const orig = this.drag.orig;
+      const cam = this.#cam();
+      const ray = screenRay(p.x, p.y, cam, this.cssW, this.cssH);
+      const n = { x: 0, y: 0, z: 0 };
+      n[this.drag.lock] = 1;
+      const hit = intersectPlane(ray.origin, ray.dir, orig, n);
+      if (!hit) return;
+      const next = {
+        x: this.drag.lock === "x" ? orig.x : clampVert(Math.round(hit.point.x)),
+        y: this.drag.lock === "y" ? orig.y : clampVert(Math.round(hit.point.y)),
+        z: this.drag.lock === "z" ? orig.z : clampVert(Math.round(hit.point.z)),
+      };
+      if (next.x === v.x && next.y === v.y && next.z === v.z) return;
+      if (!this.drag.undoStarted) {
+        this.opts.beginUndo?.();
+        this.drag.undoStarted = true;
+      }
+      v.x = next.x;
+      v.y = next.y;
+      v.z = next.z;
       this.opts.onChange?.();
       this.draw();
     }
   }
 
+  #lockAxis() {
+    const { forward } = lookVectors(this.orbit.yaw, this.orbit.pitch);
+    const ax = Math.abs(forward.x);
+    const ay = Math.abs(forward.y);
+    const az = Math.abs(forward.z);
+    if (ax >= ay && ax >= az) return "x";
+    if (ay >= az) return "y";
+    return "z";
+  }
+
+  #boxRect() {
+    const a = this.drag.start;
+    const b = this.drag.end;
+    const x0 = Math.min(a.x, b.x);
+    const y0 = Math.min(a.y, b.y);
+    const x1 = Math.max(a.x, b.x);
+    const y1 = Math.max(a.y, b.y);
+    return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
+  }
+
+  #vertsInBox(rect) {
+    const enemy = this.opts.getEnemy();
+    const frame = this.opts.getFrame();
+    const cam = this.#cam();
+    const hits = [];
+    enemy.frames[frame].forEach((v, i) => {
+      const p = projectPoint(v, cam, this.cssW, this.cssH);
+      if (!p.ok) return;
+      if (p.sx >= rect.x0 && p.sx <= rect.x1 && p.sy >= rect.y0 && p.sy <= rect.y1) hits.push(i);
+    });
+    return hits;
+  }
+
+  #finishBox() {
+    const rect = this.#boxRect();
+    const additive = this.drag.additive;
+    if (rect.w < BOX_CLICK && rect.h < BOX_CLICK) {
+      if (!additive) this.opts.onSelectVerts?.([]);
+      return;
+    }
+    this.opts.onSelectVerts?.(this.#vertsInBox(rect), additive);
+  }
+
   #onUp(e) {
     if (!this.enabled) return;
-    if (this.drag?.kind === "axis") this.opts.endUndo?.();
+    if (this.drag?.kind === "box") this.#finishBox();
+    if (this.drag?.kind === "axis" || this.drag?.undoStarted) this.opts.endUndo?.();
     this.drag = null;
     try {
       this.canvas.releasePointerCapture(e.pointerId);
@@ -282,6 +403,14 @@ export class AnimView {
     const frame = this.opts.getFrame();
     const selected = this.opts.getSelectedVerts?.() || [];
     const verts = enemy.frames[frame];
+    let shown = selected;
+    if (this.drag?.kind === "box") {
+      const r = this.#boxRect();
+      if (r.w >= BOX_CLICK || r.h >= BOX_CLICK) {
+        const hits = this.#vertsInBox(r);
+        shown = this.drag.additive ? [...new Set([...selected, ...hits])] : hits;
+      }
+    }
 
     ctx.lineWidth = 1;
     for (let i = -24; i <= 24; i += 8) {
@@ -301,7 +430,7 @@ export class AnimView {
     verts.forEach((v, i) => {
       const p = projectPoint(v, cam, w, h);
       if (!p.ok) return;
-      const sel = selected.includes(i);
+      const sel = shown.includes(i);
       const hover = i === this.hover;
       ctx.fillStyle = sel ? "#d4a017" : hover ? "#fff" : "#8b91a0";
       const r = sel ? 5 : 4;
@@ -310,8 +439,19 @@ export class AnimView {
       ctx.fill();
     });
 
-    const prim = this.#primaryVert();
+    const prim = this.#selectionAnchor();
     if (prim) this.#drawGizmo(ctx, cam, w, h, prim.v);
+
+    if (this.drag?.kind === "box") {
+      const r = this.#boxRect();
+      ctx.fillStyle = "rgba(212, 160, 23, 0.12)";
+      ctx.fillRect(r.x0, r.y0, r.w, r.h);
+      ctx.strokeStyle = "#d4a017";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(r.x0 + 0.5, r.y0 + 0.5, r.w, r.h);
+      ctx.setLineDash([]);
+    }
 
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";

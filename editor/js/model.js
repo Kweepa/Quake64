@@ -6,8 +6,8 @@ export function uid() {
 export const WORLD_MIN = 0;
 export const WORLD_MAX = 255;
 export const WORLD_SIZE = 256;
-export const MAX_VERTS = 12;
-export const MAX_LINES = 12;
+export const MAX_VERTS = 13;
+export const MAX_LINES = 13;
 export const VERT_MIN = -64;
 export const VERT_MAX = 63;
 
@@ -93,13 +93,28 @@ export const FRAME_NAMES = [
   "Death 2",
 ];
 
-/** Shared 12-vert skeleton: hips, neck, head, L/R arm, L/R leg. */
+export const ANIM_CLIPS = [
+  { name: "Idle", start: 0, len: 2 },
+  { name: "Alert", start: 2, len: 2 },
+  { name: "Walk", start: 4, len: 4 },
+  { name: "AtkA", start: 8, len: 4 },
+  { name: "AtkB", start: 12, len: 4 },
+  { name: "AtkC", start: 16, len: 4 },
+  { name: "Flinch", start: 20, len: 1 },
+  { name: "Death", start: 21, len: 3 },
+];
+
+export function clipForFrame(index) {
+  return ANIM_CLIPS.find((c) => index >= c.start && index < c.start + c.len) || ANIM_CLIPS[0];
+}
+
+/** Shared 13-vert skeleton: hips, neck, head, L/R arm, L/R leg, weapon tip on right wrist. */
 export const ENEMY_TYPES = [
-  { name: "Grunt", scale: [1, 1, 1], rest: {} },
+  { name: "Grunt", scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
   {
     name: "Knight",
     scale: [1.15, 1.3, 1],
-    rest: { 3: [0, 2, 0], 4: [-1, 1, 0], 6: [1, 1, 0] },
+    rest: { 3: [0, 2, 0], 4: [-1, 1, 0], 6: [1, 1, 0], 12: [0, 10, -6] },
   },
   {
     name: "Rottweiler",
@@ -113,6 +128,7 @@ export const ENEMY_TYPES = [
       5: [0, -6, 5],
       6: [0, -3, 3],
       7: [0, -6, 5],
+      12: [0, -3, 6],
     },
   },
   {
@@ -129,12 +145,13 @@ export const ENEMY_TYPES = [
       5: [-4, 0, 2],
       6: [2, 2, 0],
       7: [4, 0, 2],
+      12: [3, 1, 7],
     },
   },
   {
     name: "Ogre",
     scale: [1.35, 1.05, 1.1],
-    rest: { 5: [0, -1, 0], 7: [0, -1, 0] },
+    rest: { 5: [0, -1, 0], 7: [0, -1, 0], 12: [6, -4, 6] },
   },
   {
     name: "Shambler",
@@ -144,6 +161,7 @@ export const ENEMY_TYPES = [
       5: [-3, -6, 1],
       6: [2, -2, 0],
       7: [3, -6, 1],
+      12: [4, -8, 5],
     },
   },
   {
@@ -156,6 +174,7 @@ export const ENEMY_TYPES = [
       5: [-5, -2, 0],
       6: [3, 0, 0],
       7: [5, -2, 0],
+      12: [8, -2, 5],
     },
   },
 ];
@@ -386,6 +405,7 @@ const BASE_SKELETON = [
   [-3, 0, 0],
   [3, 3, 0],
   [3, 0, 0],
+  [8, 8, 8],
 ];
 
 const TEMPLATE_LINES = [
@@ -401,6 +421,7 @@ const TEMPLATE_LINES = [
   [8, 9],
   [1, 10],
   [10, 11],
+  [7, 12],
 ];
 
 function swing(phase, amp) {
@@ -410,6 +431,7 @@ function swing(phase, amp) {
     5: [0, 0, s],
     6: [0, 0, (-s / 2) | 0],
     7: [0, 0, -s],
+    12: [0, 0, -s],
     8: [0, 0, (-s / 2) | 0],
     9: [0, 0, -s],
     10: [0, 0, (s / 2) | 0],
@@ -478,7 +500,8 @@ export function dummyFramesFor(name) {
   const base = skeletonBase(enemyTypeByName(name));
   return FRAME_OFFSETS.map((off) =>
     base.map((p, i) => {
-      const v = add3(p, off[i]);
+      const o = off[i] || (i === 12 ? off[7] : null);
+      const v = add3(p, o);
       return { x: clampVert(v[0]), y: clampVert(v[1]), z: clampVert(v[2]) };
     })
   );
@@ -488,7 +511,7 @@ export function createEnemy(name = "Grunt") {
   return {
     id: uid(),
     name,
-    verts: 12,
+    verts: 13,
     lines: TEMPLATE_LINES.map((p) => [p[0], p[1]]),
     frames: dummyFramesFor(name),
   };
@@ -569,13 +592,15 @@ export function normalizeDocument(raw) {
       const enemy = createEnemy(e.name || "Enemy");
       enemy.id = e.id || enemy.id;
       enemy.name = e.name || enemy.name;
-      enemy.verts = 12;
+      enemy.verts = 13;
+      enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
       const srcFrames = Array.isArray(e.frames) ? e.frames : [];
+      const dummy = dummyFramesFor(enemy.name);
       enemy.frames = FRAME_NAMES.map((_, fi) => {
-        const src = srcFrames[fi] || srcFrames[0] || enemy.frames[fi];
+        const src = srcFrames[fi] || srcFrames[0] || dummy[fi];
         const verts = [];
-        for (let i = 0; i < 12; i++) {
-          const v = src[i] || { x: 0, y: 0, z: 0 };
+        for (let i = 0; i < 13; i++) {
+          const v = src[i] || dummy[fi][i];
           verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
         }
         return verts;

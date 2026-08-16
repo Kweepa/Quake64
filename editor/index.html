@@ -81,6 +81,46 @@ h2 {
   color: #f88;
 }
 
+.file-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 1rem;
+}
+
+.file-gate-card {
+  width: min(22rem, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 1.1rem 1.2rem 1.2rem;
+}
+
+.file-gate-card h2 {
+  margin-bottom: 0.65rem;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.file-gate-card .muted {
+  margin: 0 0 1rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.file-gate-card .btn-row {
+  margin-top: 0;
+}
+
+.file-gate-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .layout {
   display: grid;
   grid-template-columns: 200px 1fr 344px;
@@ -420,8 +460,6 @@ button:disabled {
     </aside>
   </main>
 
-  <input type="file" id="file-input" accept="application/json,.json" hidden />
-
   <script>
 // ---- js/model.js ----
 function uid() {
@@ -432,8 +470,8 @@ function uid() {
 const WORLD_MIN = 0;
 const WORLD_MAX = 255;
 const WORLD_SIZE = 256;
-const MAX_VERTS = 12;
-const MAX_LINES = 12;
+const MAX_VERTS = 13;
+const MAX_LINES = 13;
 const VERT_MIN = -64;
 const VERT_MAX = 63;
 
@@ -519,13 +557,28 @@ const FRAME_NAMES = [
   "Death 2",
 ];
 
-/** Shared 12-vert skeleton: hips, neck, head, L/R arm, L/R leg. */
+const ANIM_CLIPS = [
+  { name: "Idle", start: 0, len: 2 },
+  { name: "Alert", start: 2, len: 2 },
+  { name: "Walk", start: 4, len: 4 },
+  { name: "AtkA", start: 8, len: 4 },
+  { name: "AtkB", start: 12, len: 4 },
+  { name: "AtkC", start: 16, len: 4 },
+  { name: "Flinch", start: 20, len: 1 },
+  { name: "Death", start: 21, len: 3 },
+];
+
+function clipForFrame(index) {
+  return ANIM_CLIPS.find((c) => index >= c.start && index < c.start + c.len) || ANIM_CLIPS[0];
+}
+
+/** Shared 13-vert skeleton: hips, neck, head, L/R arm, L/R leg, weapon tip on right wrist. */
 const ENEMY_TYPES = [
-  { name: "Grunt", scale: [1, 1, 1], rest: {} },
+  { name: "Grunt", scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
   {
     name: "Knight",
     scale: [1.15, 1.3, 1],
-    rest: { 3: [0, 2, 0], 4: [-1, 1, 0], 6: [1, 1, 0] },
+    rest: { 3: [0, 2, 0], 4: [-1, 1, 0], 6: [1, 1, 0], 12: [0, 10, -6] },
   },
   {
     name: "Rottweiler",
@@ -539,6 +592,7 @@ const ENEMY_TYPES = [
       5: [0, -6, 5],
       6: [0, -3, 3],
       7: [0, -6, 5],
+      12: [0, -3, 6],
     },
   },
   {
@@ -555,12 +609,13 @@ const ENEMY_TYPES = [
       5: [-4, 0, 2],
       6: [2, 2, 0],
       7: [4, 0, 2],
+      12: [3, 1, 7],
     },
   },
   {
     name: "Ogre",
     scale: [1.35, 1.05, 1.1],
-    rest: { 5: [0, -1, 0], 7: [0, -1, 0] },
+    rest: { 5: [0, -1, 0], 7: [0, -1, 0], 12: [6, -4, 6] },
   },
   {
     name: "Shambler",
@@ -570,6 +625,7 @@ const ENEMY_TYPES = [
       5: [-3, -6, 1],
       6: [2, -2, 0],
       7: [3, -6, 1],
+      12: [4, -8, 5],
     },
   },
   {
@@ -582,6 +638,7 @@ const ENEMY_TYPES = [
       5: [-5, -2, 0],
       6: [3, 0, 0],
       7: [5, -2, 0],
+      12: [8, -2, 5],
     },
   },
 ];
@@ -812,6 +869,7 @@ const BASE_SKELETON = [
   [-3, 0, 0],
   [3, 3, 0],
   [3, 0, 0],
+  [8, 8, 8],
 ];
 
 const TEMPLATE_LINES = [
@@ -827,6 +885,7 @@ const TEMPLATE_LINES = [
   [8, 9],
   [1, 10],
   [10, 11],
+  [7, 12],
 ];
 
 function swing(phase, amp) {
@@ -836,6 +895,7 @@ function swing(phase, amp) {
     5: [0, 0, s],
     6: [0, 0, (-s / 2) | 0],
     7: [0, 0, -s],
+    12: [0, 0, -s],
     8: [0, 0, (-s / 2) | 0],
     9: [0, 0, -s],
     10: [0, 0, (s / 2) | 0],
@@ -904,7 +964,8 @@ function dummyFramesFor(name) {
   const base = skeletonBase(enemyTypeByName(name));
   return FRAME_OFFSETS.map((off) =>
     base.map((p, i) => {
-      const v = add3(p, off[i]);
+      const o = off[i] || (i === 12 ? off[7] : null);
+      const v = add3(p, o);
       return { x: clampVert(v[0]), y: clampVert(v[1]), z: clampVert(v[2]) };
     })
   );
@@ -914,7 +975,7 @@ function createEnemy(name = "Grunt") {
   return {
     id: uid(),
     name,
-    verts: 12,
+    verts: 13,
     lines: TEMPLATE_LINES.map((p) => [p[0], p[1]]),
     frames: dummyFramesFor(name),
   };
@@ -995,13 +1056,15 @@ function normalizeDocument(raw) {
       const enemy = createEnemy(e.name || "Enemy");
       enemy.id = e.id || enemy.id;
       enemy.name = e.name || enemy.name;
-      enemy.verts = 12;
+      enemy.verts = 13;
+      enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
       const srcFrames = Array.isArray(e.frames) ? e.frames : [];
+      const dummy = dummyFramesFor(enemy.name);
       enemy.frames = FRAME_NAMES.map((_, fi) => {
-        const src = srcFrames[fi] || srcFrames[0] || enemy.frames[fi];
+        const src = srcFrames[fi] || srcFrames[0] || dummy[fi];
         const verts = [];
-        for (let i = 0; i < 12; i++) {
-          const v = src[i] || { x: 0, y: 0, z: 0 };
+        for (let i = 0; i < 13; i++) {
+          const v = src[i] || dummy[fi][i];
           verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
         }
         return verts;
@@ -1217,23 +1280,198 @@ function faceCorners(faceId) {
 }
 
 // ---- js/io.js ----
-const STORAGE_KEY = "quake64-editor-doc";
+const HANDLE_DB = "quake64-editor";
+const HANDLE_STORE = "handles";
+const HANDLE_KEY = "doc";
 
-function saveToStorage(doc) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(doc));
+const DEFAULT_DOC_PATH = "quake64.json";
+
+/** @type {FileSystemFileHandle | null} */
+let docFileHandle = null;
+
+function docFileName() {
+  return docFileHandle?.name || DEFAULT_DOC_PATH;
 }
 
-function loadFromStorage() {
+function hasDocFileHandle() {
+  return !!docFileHandle;
+}
+
+function openHandleDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HANDLE_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(HANDLE_STORE)) {
+        db.createObjectStore(HANDLE_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function storeDocHandle(handle) {
+  docFileHandle = handle;
+  if (!window.indexedDB || !handle) return;
+  const db = await openHandleDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, "readwrite");
+    tx.objectStore(HANDLE_STORE).put(handle, HANDLE_KEY);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function loadStoredDocHandle() {
+  if (!window.indexedDB) return null;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    const db = await openHandleDb();
+    const handle = await new Promise((resolve, reject) => {
+      const tx = db.transaction(HANDLE_STORE, "readonly");
+      const req = tx.objectStore(HANDLE_STORE).get(HANDLE_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return handle || null;
   } catch {
     return null;
   }
 }
 
-function downloadJSON(doc, filename = "quake64.json") {
+async function queryPermission(handle, mode = "readwrite") {
+  if (!handle?.queryPermission) return "granted";
+  return handle.queryPermission({ mode });
+}
+
+async function ensurePermission(handle, mode = "readwrite") {
+  if (!handle?.queryPermission || !handle?.requestPermission) return true;
+  const opts = { mode };
+  if ((await handle.queryPermission(opts)) === "granted") return true;
+  return (await handle.requestPermission(opts)) === "granted";
+}
+
+async function writeDocToHandle(handle, doc) {
+  const text = JSON.stringify(doc, null, 2);
+  const writable = await handle.createWritable();
+  await writable.write(text);
+  await writable.close();
+}
+
+async function readDocFromHandle(handle) {
+  const file = await handle.getFile();
+  return JSON.parse(await file.text());
+}
+
+async function getStoredDocHandle() {
+  return loadStoredDocHandle();
+}
+
+async function tryRestoreDocFile() {
+  const handle = await loadStoredDocHandle();
+  if (!handle) return null;
+  const writeState = await queryPermission(handle, "readwrite");
+  const readState = writeState === "granted" ? "granted" : await queryPermission(handle, "read");
+  if (readState !== "granted") return null;
+  docFileHandle = handle;
+  return readDocFromHandle(handle);
+}
+
+async function allowStoredDocFile(handle) {
+  if (!handle) return null;
+  if (!(await ensurePermission(handle, "readwrite"))) {
+    if (!(await ensurePermission(handle, "read"))) return null;
+  }
+  await storeDocHandle(handle);
+  return readDocFromHandle(handle);
+}
+
+async function autosaveDocJSON(doc) {
+  if (!docFileHandle) {
+    throw new Error(`Load ${DEFAULT_DOC_PATH} once so autosave can write it`);
+  }
+  if (!(await ensurePermission(docFileHandle, "readwrite"))) {
+    throw new Error(`No write permission for ${docFileHandle.name}`);
+  }
+  await writeDocToHandle(docFileHandle, doc);
+  return "file";
+}
+
+const JSON_TYPE = {
+  description: "Quake64 Editor",
+  accept: { "application/json": [".json"] },
+};
+
+async function saveDocJSON(doc, suggestedName = DEFAULT_DOC_PATH) {
+  if (docFileHandle && (await ensurePermission(docFileHandle, "readwrite"))) {
+    await writeDocToHandle(docFileHandle, doc);
+    return "file";
+  }
+
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [JSON_TYPE],
+      });
+      await storeDocHandle(handle);
+      await writeDocToHandle(handle, doc);
+      return "file";
+    } catch (e) {
+      if (e.name === "AbortError") return null;
+    }
+  }
+
+  downloadJSON(doc, suggestedName);
+  return "download";
+}
+
+async function loadDocJSON() {
+  if (window.showOpenFilePicker) {
+    try {
+      const [handle] = await window.showOpenFilePicker({
+        types: [JSON_TYPE],
+        multiple: false,
+      });
+      await storeDocHandle(handle);
+      return readDocFromHandle(handle);
+    } catch (e) {
+      if (e.name === "AbortError") return null;
+    }
+  }
+  return pickJsonFile();
+}
+
+function pickJsonFile() {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "application/json,.json";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          resolve(JSON.parse(String(reader.result)));
+        } catch {
+          resolve(null);
+        }
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsText(file);
+    });
+    input.addEventListener("cancel", () => resolve(null));
+    input.click();
+  });
+}
+
+function downloadJSON(doc, filename = DEFAULT_DOC_PATH) {
   const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1241,21 +1479,6 @@ function downloadJSON(doc, filename = "quake64.json") {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
-}
-
-function readJSONFile(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        resolve(JSON.parse(String(reader.result)));
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(file);
-  });
 }
 
 // ---- js/layoutView.js ----
@@ -2180,7 +2403,7 @@ class AnimView {
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";
     ctx.fillText(
-      `${enemy.name} · ${FRAME_NAMES[frame]} · 12 verts · 24 frames`,
+      `${enemy.name} · ${FRAME_NAMES[frame]} · 13 verts · 24 frames`,
       8,
       16
     );
@@ -2195,7 +2418,7 @@ const btnRedo = document.getElementById("btn-redo");
 const UNDO_LIMIT = 40;
 const AUTOSAVE_MS = 8000;
 
-let doc = normalizeDocument(loadFromStorage()) || createDefaultDocument();
+let doc = createDefaultDocument();
 let editorMode = "layout";
 let localDraw = false;
 let selectedId = null;
@@ -2203,10 +2426,14 @@ let enemyIndex = 0;
 let frameIndex = 0;
 let selectedVerts = [];
 let dirty = false;
+let saving = false;
 let autosaveTimer = null;
 let undoStack = [];
 let redoStack = [];
 let undoGesture = false;
+let frameClipboard = null;
+let animPlaying = false;
+let animPlayTimer = null;
 
 const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   stage: document.getElementById("map-stage"),
@@ -2258,17 +2485,88 @@ function setStatus(msg, isError = false) {
   statusEl.classList.toggle("error", isError);
 }
 
+function updateDirtyIndicator() {
+  const star = dirty ? "*" : "";
+  if (titleEl) titleEl.textContent = `Quake64${star}`;
+  document.title = dirty ? "Quake64 *" : "Quake64 Editor";
+}
+
 function markDirty() {
-  dirty = true;
-  titleEl.textContent = "Quake64*";
-  document.title = "Quake64 *";
-  clearTimeout(autosaveTimer);
+  if (!dirty) {
+    dirty = true;
+    updateDirtyIndicator();
+  }
+  scheduleAutosave();
+}
+
+function markClean() {
+  dirty = false;
+  updateDirtyIndicator();
+  clearAutosaveTimer();
+}
+
+function clearAutosaveTimer() {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+  }
+}
+
+function isEditingField(el = document.activeElement) {
+  return (
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLTextAreaElement ||
+    el instanceof HTMLSelectElement ||
+    !!el?.isContentEditable
+  );
+}
+
+function scheduleAutosave() {
+  clearAutosaveTimer();
+  if (!dirty || isEditingField()) return;
   autosaveTimer = setTimeout(() => {
-    saveToStorage(doc);
-    dirty = false;
-    titleEl.textContent = "Quake64";
-    document.title = "Quake64 Editor";
+    autosaveTimer = null;
+    void runAutosave();
   }, AUTOSAVE_MS);
+}
+
+async function runAutosave() {
+  if (!dirty || saving || !hasDocFileHandle()) return;
+  if (isEditingField()) {
+    scheduleAutosave();
+    return;
+  }
+  await saveNow("Autosaved");
+}
+
+document.addEventListener("focusin", (e) => {
+  if (isEditingField(e.target)) clearAutosaveTimer();
+});
+document.addEventListener("focusout", () => {
+  requestAnimationFrame(() => {
+    if (dirty && !isEditingField()) scheduleAutosave();
+  });
+});
+
+async function saveNow(okMsg = "Saved") {
+  if (saving) return;
+  saving = true;
+  try {
+    const how = hasDocFileHandle()
+      ? await autosaveDocJSON(doc)
+      : await saveDocJSON(doc, DEFAULT_DOC_PATH);
+    if (!how) {
+      setStatus("Save cancelled", true);
+      return;
+    }
+    markClean();
+    setStatus(`${okMsg} ${docFileName()}`);
+  } catch (err) {
+    setStatus(String(err.message || err), true);
+    scheduleAutosave();
+  } finally {
+    saving = false;
+  }
 }
 
 function snapshot() {
@@ -2300,6 +2598,13 @@ function restore(json) {
   if (enemyIndex >= doc.enemies.length) enemyIndex = 0;
   markDirty();
   refreshAll();
+}
+
+function clearUndoHistory() {
+  undoStack.length = 0;
+  redoStack.length = 0;
+  undoGesture = false;
+  updateUndoButtons();
 }
 
 function undo() {
@@ -2342,6 +2647,7 @@ function setMode(mode) {
       : "Click vert to select · drag axis to move · X/Y/Z nudge (Shift = −) · [ ] or ← → frames · RMB orbit";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
+  if (mode !== "anim") stopAnimPlay();
   refreshAll();
 }
 
@@ -2642,8 +2948,40 @@ function renderInspector() {
 
   const counts = document.createElement("p");
   counts.className = "muted";
-  counts.textContent = `12 verts · 12 lines · 24 frames`;
+  const clip = clipForFrame(frameIndex);
+  const height = frameHeight(e.frames[frameIndex]);
+  counts.textContent = `13 verts · 13 lines · ${clip.name} · height ${height} · 24 frames`;
   root.appendChild(counts);
+
+  const scaleRow = document.createElement("label");
+  scaleRow.className = "field";
+  const scaleLbl = document.createElement("span");
+  scaleLbl.textContent = "Scale";
+  const scaleInp = document.createElement("input");
+  scaleInp.type = "number";
+  scaleInp.step = "0.1";
+  scaleInp.placeholder = "1.0";
+  scaleInp.title = "Scale this frame, then clears";
+  scaleInp.addEventListener("change", () => {
+    scaleCurrentFrame(Number(scaleInp.value));
+    scaleInp.value = "";
+  });
+  scaleRow.append(scaleLbl, scaleInp);
+  root.appendChild(scaleRow);
+
+  const editRow = document.createElement("div");
+  editRow.className = "btn-row";
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.textContent = "Copy frame";
+  copyBtn.addEventListener("click", copyFrame);
+  const pasteBtn = document.createElement("button");
+  pasteBtn.type = "button";
+  pasteBtn.textContent = "Paste frame";
+  pasteBtn.disabled = !frameClipboard;
+  pasteBtn.addEventListener("click", pasteFrame);
+  editRow.append(copyBtn, pasteBtn);
+  root.appendChild(editRow);
 
   if (selectedVerts.length === 1) {
     const vi = selectedVerts[0];
@@ -2665,6 +3003,11 @@ function renderInspector() {
 
   const row = document.createElement("div");
   row.className = "btn-row";
+  const playBtn = document.createElement("button");
+  playBtn.type = "button";
+  playBtn.textContent = animPlaying ? "Pause" : "Play";
+  if (animPlaying) playBtn.className = "active";
+  playBtn.addEventListener("click", toggleAnimPlay);
   const prev = document.createElement("button");
   prev.type = "button";
   prev.textContent = "Prev frame";
@@ -2673,12 +3016,95 @@ function renderInspector() {
   next.type = "button";
   next.textContent = "Next frame";
   next.addEventListener("click", () => stepFrame(1));
-  row.append(prev, next);
+  row.append(playBtn, prev, next);
   root.appendChild(row);
+}
+
+function frameHeight(verts) {
+  let maxY = -Infinity;
+  for (const v of verts) {
+    if (v.y > maxY) maxY = v.y;
+  }
+  return Number.isFinite(maxY) ? maxY : 0;
 }
 
 function stepFrame(d) {
   frameIndex = (frameIndex + d + FRAME_NAMES.length) % FRAME_NAMES.length;
+  refreshAll();
+}
+
+function scaleCurrentFrame(factor) {
+  if (!Number.isFinite(factor) || factor === 0) {
+    setStatus("Enter a non-zero scale", true);
+    return;
+  }
+  const e = activeEnemy();
+  const fr = e.frames[frameIndex];
+  pushUndo();
+  for (const v of fr) {
+    v.x = clampVert(Math.round(v.x * factor));
+    v.y = clampVert(Math.round(v.y * factor));
+    v.z = clampVert(Math.round(v.z * factor));
+  }
+  markDirty();
+  refreshAll();
+  setStatus(`Scaled ${FRAME_NAMES[frameIndex]} × ${factor}`);
+}
+
+function copyFrame() {
+  const fr = activeEnemy().frames[frameIndex];
+  frameClipboard = fr.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+  setStatus(`Copied ${FRAME_NAMES[frameIndex]}`);
+  refreshPanels();
+}
+
+function pasteFrame() {
+  if (!frameClipboard) {
+    setStatus("Copy a frame first", true);
+    return;
+  }
+  const fr = activeEnemy().frames[frameIndex];
+  pushUndo();
+  for (let i = 0; i < fr.length; i++) {
+    const src = frameClipboard[i] || fr[i];
+    fr[i].x = clampVert(src.x);
+    fr[i].y = clampVert(src.y);
+    fr[i].z = clampVert(src.z);
+  }
+  markDirty();
+  refreshAll();
+  setStatus(`Pasted onto ${FRAME_NAMES[frameIndex]}`);
+}
+
+function stopAnimPlay() {
+  animPlaying = false;
+  if (animPlayTimer) {
+    clearInterval(animPlayTimer);
+    animPlayTimer = null;
+  }
+}
+
+function toggleAnimPlay() {
+  if (animPlaying) {
+    stopAnimPlay();
+    refreshPanels();
+    setStatus("Paused");
+    return;
+  }
+  animPlaying = true;
+  animPlayTimer = setInterval(tickAnimPlay, 500);
+  refreshPanels();
+  setStatus(`Playing ${clipForFrame(frameIndex).name}`);
+}
+
+function tickAnimPlay() {
+  if (editorMode !== "anim") {
+    stopAnimPlay();
+    return;
+  }
+  const clip = clipForFrame(frameIndex);
+  const local = frameIndex - clip.start;
+  frameIndex = clip.start + ((local + 1) % clip.len);
   refreshAll();
 }
 
@@ -2719,34 +3145,94 @@ document.getElementById("btn-draw-all").addEventListener("click", () => setDrawM
 document.getElementById("btn-draw-local").addEventListener("click", () => setDrawMode(true));
 document.getElementById("btn-undo").addEventListener("click", undo);
 document.getElementById("btn-redo").addEventListener("click", redo);
-document.getElementById("btn-save").addEventListener("click", () => {
-  saveToStorage(doc);
-  downloadJSON(doc);
-  dirty = false;
-  titleEl.textContent = "Quake64";
-  setStatus("Saved");
+document.getElementById("btn-save").addEventListener("click", async () => {
+  await saveNow("Saved");
 });
-document.getElementById("btn-load").addEventListener("click", () => {
-  document.getElementById("file-input").click();
-});
-document.getElementById("file-input").addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  e.target.value = "";
-  if (!file) return;
+
+function applyLoadedDoc(loaded) {
+  doc = normalizeDocument(loaded);
+  selectedId = null;
+  selectedVerts = [];
+  enemyIndex = 0;
+  frameIndex = 0;
+  clearUndoHistory();
+  markClean();
+  refreshAll();
+  setStatus(`Loaded ${docFileName()}`);
+}
+
+function showFileAccessGate(storedHandle) {
+  const overlay = document.createElement("div");
+  overlay.className = "file-gate";
+  overlay.innerHTML = `
+    <div class="file-gate-card" role="dialog" aria-modal="true" aria-labelledby="file-gate-title">
+      <h2 id="file-gate-title">Open map file</h2>
+      <p class="muted">
+        ${
+          storedHandle
+            ? `Browser needs permission to read/write <strong>${storedHandle.name}</strong>.`
+            : `Choose project file <strong>${DEFAULT_DOC_PATH}</strong> (usually in the editor folder).`
+        }
+      </p>
+      <div class="btn-row">
+        <button type="button" class="file-gate-primary" id="file-gate-ok">
+          ${storedHandle ? `Allow ${storedHandle.name}` : `Open ${DEFAULT_DOC_PATH}…`}
+        </button>
+        ${storedHandle ? `<button type="button" id="file-gate-other">Choose different file…</button>` : ""}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const ok = overlay.querySelector("#file-gate-ok");
+  const other = overlay.querySelector("#file-gate-other");
+  ok.focus();
+
+  const finish = async (loader) => {
+    ok.disabled = true;
+    if (other) other.disabled = true;
+    try {
+      const loaded = await loader();
+      if (!loaded) {
+        ok.disabled = false;
+        if (other) other.disabled = false;
+        setStatus("Open cancelled", true);
+        return;
+      }
+      overlay.remove();
+      applyLoadedDoc(loaded);
+    } catch (err) {
+      ok.disabled = false;
+      if (other) other.disabled = false;
+      setStatus(String(err.message || err), true);
+    }
+  };
+
+  ok.addEventListener("click", () => {
+    void finish(() =>
+      storedHandle ? allowStoredDocFile(storedHandle) : loadDocJSON()
+    );
+  });
+  other?.addEventListener("click", () => {
+    void finish(() => loadDocJSON());
+  });
+}
+
+document.getElementById("btn-load").addEventListener("click", async () => {
   try {
-    pushUndo();
-    doc = normalizeDocument(await readJSONFile(file));
-    selectedId = null;
-    enemyIndex = 0;
-    markDirty();
-    refreshAll();
-    setStatus(`Loaded ${file.name}`);
+    const loaded = await loadDocJSON();
+    if (!loaded) return;
+    applyLoadedDoc(loaded);
   } catch (err) {
-    setStatus(String(err), true);
+    setStatus(String(err.message || err), true);
   }
 });
 
 window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    void saveNow("Saved");
+    return;
+  }
   if (e.target.matches("input, select, textarea")) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
@@ -2819,9 +3305,31 @@ window.addEventListener("keydown", (e) => {
 buildPalette();
 setMode("layout");
 updateUndoButtons();
-setStatus("Ready");
 
-// Keep overhead in sync while flying
+async function boot() {
+  updateDirtyIndicator();
+  refreshAll();
+  try {
+    const loaded = await tryRestoreDocFile();
+    if (loaded) {
+      applyLoadedDoc(loaded);
+      return;
+    }
+    const stored = await getStoredDocHandle();
+    showFileAccessGate(stored);
+    setStatus(
+      stored
+        ? `Click Allow to open ${stored.name}`
+        : `Open ${DEFAULT_DOC_PATH} to edit the project map`,
+      false
+    );
+  } catch (err) {
+    setStatus(String(err.message || err), true);
+  }
+}
+
+void boot();
+
 setInterval(() => {
   if (editorMode === "layout") overheadView.draw();
 }, 80);

@@ -110,8 +110,6 @@ def main() -> None:
     </aside>
   </main>
 
-  <input type="file" id="file-input" accept="application/json,.json" hidden />
-
   <script>
 {js}
   </script>

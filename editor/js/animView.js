@@ -316,7 +316,7 @@ export class AnimView {
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";
     ctx.fillText(
-      `${enemy.name} · ${FRAME_NAMES[frame]} · 12 verts · 24 frames`,
+      `${enemy.name} · ${FRAME_NAMES[frame]} · 13 verts · 24 frames`,
       8,
       16
     );

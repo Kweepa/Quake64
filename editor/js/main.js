@@ -12,8 +12,19 @@ import {
   uid,
   LEVEL_NAMES,
   activeMap,
+  clipForFrame,
 } from "./model.js";
-import { downloadJSON, loadFromStorage, readJSONFile, saveToStorage } from "./io.js";
+import {
+  autosaveDocJSON,
+  DEFAULT_DOC_PATH,
+  docFileName,
+  getStoredDocHandle,
+  hasDocFileHandle,
+  loadDocJSON,
+  saveDocJSON,
+  tryRestoreDocFile,
+  allowStoredDocFile,
+} from "./io.js";
 import { LayoutView } from "./layoutView.js";
 import { OverheadView } from "./overheadView.js";
 import { AnimView } from "./animView.js";
@@ -25,7 +36,7 @@ const btnRedo = document.getElementById("btn-redo");
 const UNDO_LIMIT = 40;
 const AUTOSAVE_MS = 8000;
 
-let doc = normalizeDocument(loadFromStorage()) || createDefaultDocument();
+let doc = createDefaultDocument();
 let editorMode = "layout";
 let localDraw = false;
 let selectedId = null;
@@ -33,10 +44,14 @@ let enemyIndex = 0;
 let frameIndex = 0;
 let selectedVerts = [];
 let dirty = false;
+let saving = false;
 let autosaveTimer = null;
 let undoStack = [];
 let redoStack = [];
 let undoGesture = false;
+let frameClipboard = null;
+let animPlaying = false;
+let animPlayTimer = null;
 
 const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   stage: document.getElementById("map-stage"),
@@ -88,17 +103,88 @@ function setStatus(msg, isError = false) {
   statusEl.classList.toggle("error", isError);
 }
 
+function updateDirtyIndicator() {
+  const star = dirty ? "*" : "";
+  if (titleEl) titleEl.textContent = `Quake64${star}`;
+  document.title = dirty ? "Quake64 *" : "Quake64 Editor";
+}
+
 function markDirty() {
-  dirty = true;
-  titleEl.textContent = "Quake64*";
-  document.title = "Quake64 *";
-  clearTimeout(autosaveTimer);
+  if (!dirty) {
+    dirty = true;
+    updateDirtyIndicator();
+  }
+  scheduleAutosave();
+}
+
+function markClean() {
+  dirty = false;
+  updateDirtyIndicator();
+  clearAutosaveTimer();
+}
+
+function clearAutosaveTimer() {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+  }
+}
+
+function isEditingField(el = document.activeElement) {
+  return (
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLTextAreaElement ||
+    el instanceof HTMLSelectElement ||
+    !!el?.isContentEditable
+  );
+}
+
+function scheduleAutosave() {
+  clearAutosaveTimer();
+  if (!dirty || isEditingField()) return;
   autosaveTimer = setTimeout(() => {
-    saveToStorage(doc);
-    dirty = false;
-    titleEl.textContent = "Quake64";
-    document.title = "Quake64 Editor";
+    autosaveTimer = null;
+    void runAutosave();
   }, AUTOSAVE_MS);
+}
+
+async function runAutosave() {
+  if (!dirty || saving || !hasDocFileHandle()) return;
+  if (isEditingField()) {
+    scheduleAutosave();
+    return;
+  }
+  await saveNow("Autosaved");
+}
+
+document.addEventListener("focusin", (e) => {
+  if (isEditingField(e.target)) clearAutosaveTimer();
+});
+document.addEventListener("focusout", () => {
+  requestAnimationFrame(() => {
+    if (dirty && !isEditingField()) scheduleAutosave();
+  });
+});
+
+async function saveNow(okMsg = "Saved") {
+  if (saving) return;
+  saving = true;
+  try {
+    const how = hasDocFileHandle()
+      ? await autosaveDocJSON(doc)
+      : await saveDocJSON(doc, DEFAULT_DOC_PATH);
+    if (!how) {
+      setStatus("Save cancelled", true);
+      return;
+    }
+    markClean();
+    setStatus(`${okMsg} ${docFileName()}`);
+  } catch (err) {
+    setStatus(String(err.message || err), true);
+    scheduleAutosave();
+  } finally {
+    saving = false;
+  }
 }
 
 function snapshot() {
@@ -130,6 +216,13 @@ function restore(json) {
   if (enemyIndex >= doc.enemies.length) enemyIndex = 0;
   markDirty();
   refreshAll();
+}
+
+function clearUndoHistory() {
+  undoStack.length = 0;
+  redoStack.length = 0;
+  undoGesture = false;
+  updateUndoButtons();
 }
 
 function undo() {
@@ -172,6 +265,7 @@ function setMode(mode) {
       : "Click vert to select · drag axis to move · X/Y/Z nudge (Shift = −) · [ ] or ← → frames · RMB orbit";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
+  if (mode !== "anim") stopAnimPlay();
   refreshAll();
 }
 
@@ -472,8 +566,40 @@ function renderInspector() {
 
   const counts = document.createElement("p");
   counts.className = "muted";
-  counts.textContent = `12 verts · 12 lines · 24 frames`;
+  const clip = clipForFrame(frameIndex);
+  const height = frameHeight(e.frames[frameIndex]);
+  counts.textContent = `13 verts · 13 lines · ${clip.name} · height ${height} · 24 frames`;
   root.appendChild(counts);
+
+  const scaleRow = document.createElement("label");
+  scaleRow.className = "field";
+  const scaleLbl = document.createElement("span");
+  scaleLbl.textContent = "Scale";
+  const scaleInp = document.createElement("input");
+  scaleInp.type = "number";
+  scaleInp.step = "0.1";
+  scaleInp.placeholder = "1.0";
+  scaleInp.title = "Scale this frame, then clears";
+  scaleInp.addEventListener("change", () => {
+    scaleCurrentFrame(Number(scaleInp.value));
+    scaleInp.value = "";
+  });
+  scaleRow.append(scaleLbl, scaleInp);
+  root.appendChild(scaleRow);
+
+  const editRow = document.createElement("div");
+  editRow.className = "btn-row";
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.textContent = "Copy frame";
+  copyBtn.addEventListener("click", copyFrame);
+  const pasteBtn = document.createElement("button");
+  pasteBtn.type = "button";
+  pasteBtn.textContent = "Paste frame";
+  pasteBtn.disabled = !frameClipboard;
+  pasteBtn.addEventListener("click", pasteFrame);
+  editRow.append(copyBtn, pasteBtn);
+  root.appendChild(editRow);
 
   if (selectedVerts.length === 1) {
     const vi = selectedVerts[0];
@@ -495,6 +621,11 @@ function renderInspector() {
 
   const row = document.createElement("div");
   row.className = "btn-row";
+  const playBtn = document.createElement("button");
+  playBtn.type = "button";
+  playBtn.textContent = animPlaying ? "Pause" : "Play";
+  if (animPlaying) playBtn.className = "active";
+  playBtn.addEventListener("click", toggleAnimPlay);
   const prev = document.createElement("button");
   prev.type = "button";
   prev.textContent = "Prev frame";
@@ -503,12 +634,95 @@ function renderInspector() {
   next.type = "button";
   next.textContent = "Next frame";
   next.addEventListener("click", () => stepFrame(1));
-  row.append(prev, next);
+  row.append(playBtn, prev, next);
   root.appendChild(row);
+}
+
+function frameHeight(verts) {
+  let maxY = -Infinity;
+  for (const v of verts) {
+    if (v.y > maxY) maxY = v.y;
+  }
+  return Number.isFinite(maxY) ? maxY : 0;
 }
 
 function stepFrame(d) {
   frameIndex = (frameIndex + d + FRAME_NAMES.length) % FRAME_NAMES.length;
+  refreshAll();
+}
+
+function scaleCurrentFrame(factor) {
+  if (!Number.isFinite(factor) || factor === 0) {
+    setStatus("Enter a non-zero scale", true);
+    return;
+  }
+  const e = activeEnemy();
+  const fr = e.frames[frameIndex];
+  pushUndo();
+  for (const v of fr) {
+    v.x = clampVert(Math.round(v.x * factor));
+    v.y = clampVert(Math.round(v.y * factor));
+    v.z = clampVert(Math.round(v.z * factor));
+  }
+  markDirty();
+  refreshAll();
+  setStatus(`Scaled ${FRAME_NAMES[frameIndex]} × ${factor}`);
+}
+
+function copyFrame() {
+  const fr = activeEnemy().frames[frameIndex];
+  frameClipboard = fr.map((v) => ({ x: v.x, y: v.y, z: v.z }));
+  setStatus(`Copied ${FRAME_NAMES[frameIndex]}`);
+  refreshPanels();
+}
+
+function pasteFrame() {
+  if (!frameClipboard) {
+    setStatus("Copy a frame first", true);
+    return;
+  }
+  const fr = activeEnemy().frames[frameIndex];
+  pushUndo();
+  for (let i = 0; i < fr.length; i++) {
+    const src = frameClipboard[i] || fr[i];
+    fr[i].x = clampVert(src.x);
+    fr[i].y = clampVert(src.y);
+    fr[i].z = clampVert(src.z);
+  }
+  markDirty();
+  refreshAll();
+  setStatus(`Pasted onto ${FRAME_NAMES[frameIndex]}`);
+}
+
+function stopAnimPlay() {
+  animPlaying = false;
+  if (animPlayTimer) {
+    clearInterval(animPlayTimer);
+    animPlayTimer = null;
+  }
+}
+
+function toggleAnimPlay() {
+  if (animPlaying) {
+    stopAnimPlay();
+    refreshPanels();
+    setStatus("Paused");
+    return;
+  }
+  animPlaying = true;
+  animPlayTimer = setInterval(tickAnimPlay, 500);
+  refreshPanels();
+  setStatus(`Playing ${clipForFrame(frameIndex).name}`);
+}
+
+function tickAnimPlay() {
+  if (editorMode !== "anim") {
+    stopAnimPlay();
+    return;
+  }
+  const clip = clipForFrame(frameIndex);
+  const local = frameIndex - clip.start;
+  frameIndex = clip.start + ((local + 1) % clip.len);
   refreshAll();
 }
 
@@ -549,34 +763,94 @@ document.getElementById("btn-draw-all").addEventListener("click", () => setDrawM
 document.getElementById("btn-draw-local").addEventListener("click", () => setDrawMode(true));
 document.getElementById("btn-undo").addEventListener("click", undo);
 document.getElementById("btn-redo").addEventListener("click", redo);
-document.getElementById("btn-save").addEventListener("click", () => {
-  saveToStorage(doc);
-  downloadJSON(doc);
-  dirty = false;
-  titleEl.textContent = "Quake64";
-  setStatus("Saved");
+document.getElementById("btn-save").addEventListener("click", async () => {
+  await saveNow("Saved");
 });
-document.getElementById("btn-load").addEventListener("click", () => {
-  document.getElementById("file-input").click();
-});
-document.getElementById("file-input").addEventListener("change", async (e) => {
-  const file = e.target.files?.[0];
-  e.target.value = "";
-  if (!file) return;
+
+function applyLoadedDoc(loaded) {
+  doc = normalizeDocument(loaded);
+  selectedId = null;
+  selectedVerts = [];
+  enemyIndex = 0;
+  frameIndex = 0;
+  clearUndoHistory();
+  markClean();
+  refreshAll();
+  setStatus(`Loaded ${docFileName()}`);
+}
+
+function showFileAccessGate(storedHandle) {
+  const overlay = document.createElement("div");
+  overlay.className = "file-gate";
+  overlay.innerHTML = `
+    <div class="file-gate-card" role="dialog" aria-modal="true" aria-labelledby="file-gate-title">
+      <h2 id="file-gate-title">Open map file</h2>
+      <p class="muted">
+        ${
+          storedHandle
+            ? `Browser needs permission to read/write <strong>${storedHandle.name}</strong>.`
+            : `Choose project file <strong>${DEFAULT_DOC_PATH}</strong> (usually in the editor folder).`
+        }
+      </p>
+      <div class="btn-row">
+        <button type="button" class="file-gate-primary" id="file-gate-ok">
+          ${storedHandle ? `Allow ${storedHandle.name}` : `Open ${DEFAULT_DOC_PATH}…`}
+        </button>
+        ${storedHandle ? `<button type="button" id="file-gate-other">Choose different file…</button>` : ""}
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const ok = overlay.querySelector("#file-gate-ok");
+  const other = overlay.querySelector("#file-gate-other");
+  ok.focus();
+
+  const finish = async (loader) => {
+    ok.disabled = true;
+    if (other) other.disabled = true;
+    try {
+      const loaded = await loader();
+      if (!loaded) {
+        ok.disabled = false;
+        if (other) other.disabled = false;
+        setStatus("Open cancelled", true);
+        return;
+      }
+      overlay.remove();
+      applyLoadedDoc(loaded);
+    } catch (err) {
+      ok.disabled = false;
+      if (other) other.disabled = false;
+      setStatus(String(err.message || err), true);
+    }
+  };
+
+  ok.addEventListener("click", () => {
+    void finish(() =>
+      storedHandle ? allowStoredDocFile(storedHandle) : loadDocJSON()
+    );
+  });
+  other?.addEventListener("click", () => {
+    void finish(() => loadDocJSON());
+  });
+}
+
+document.getElementById("btn-load").addEventListener("click", async () => {
   try {
-    pushUndo();
-    doc = normalizeDocument(await readJSONFile(file));
-    selectedId = null;
-    enemyIndex = 0;
-    markDirty();
-    refreshAll();
-    setStatus(`Loaded ${file.name}`);
+    const loaded = await loadDocJSON();
+    if (!loaded) return;
+    applyLoadedDoc(loaded);
   } catch (err) {
-    setStatus(String(err), true);
+    setStatus(String(err.message || err), true);
   }
 });
 
 window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    void saveNow("Saved");
+    return;
+  }
   if (e.target.matches("input, select, textarea")) return;
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
@@ -649,9 +923,31 @@ window.addEventListener("keydown", (e) => {
 buildPalette();
 setMode("layout");
 updateUndoButtons();
-setStatus("Ready");
 
-// Keep overhead in sync while flying
+async function boot() {
+  updateDirtyIndicator();
+  refreshAll();
+  try {
+    const loaded = await tryRestoreDocFile();
+    if (loaded) {
+      applyLoadedDoc(loaded);
+      return;
+    }
+    const stored = await getStoredDocHandle();
+    showFileAccessGate(stored);
+    setStatus(
+      stored
+        ? `Click Allow to open ${stored.name}`
+        : `Open ${DEFAULT_DOC_PATH} to edit the project map`,
+      false
+    );
+  } catch (err) {
+    setStatus(String(err.message || err), true);
+  }
+}
+
+void boot();
+
 setInterval(() => {
   if (editorMode === "layout") overheadView.draw();
 }, 80);

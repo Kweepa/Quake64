@@ -371,6 +371,157 @@ scale3
 	sec
 	rts
 
+; ASR n/d only until each fits signed 8-bit (keep y 16-bit)
+scale_nd
+	lda #8
+	sta mul_a
+.snd
+	jsr .nd_fitn
+	bcc .sdo
+	jsr .nd_fitd
+	bcc .sdo
+	rts
+.sdo
+	lda nhi
+	cmp #$80
+	ror nhi
+	ror nlo
+	lda dhi
+	cmp #$80
+	ror dhi
+	ror dlo
+	dec mul_a
+	bne .snd
+	rts
+.nd_fitn
+	lda nhi
+	ldy nlo
+	jmp .nd_fit
+.nd_fitd
+	lda dhi
+	ldy dlo
+.nd_fit
+	tax
+	beq .nd_fz
+	cmp #$ff
+	bne .nd_fn
+	tya
+	bmi .nd_fy
+.nd_fn
+	clc
+	rts
+.nd_fz
+	tya
+	bmi .nd_fn
+.nd_fy
+	sec
+	rts
+
+; rot0:rot1 = (ylo:yhi * nlo) / dlo after scale_nd; A = rot0. Signed, no ±127 clamp.
+lerp16
+	lda #0
+	sta mul_sign
+	lda yhi
+	bpl .yp
+	lda #$80
+	sta mul_sign
+	sec
+	lda #0
+	sbc ylo
+	sta ylo
+	lda #0
+	sbc yhi
+	sta yhi
+.yp
+	lda nlo
+	bpl .np
+	lda mul_sign
+	eor #$80
+	sta mul_sign
+	lda nlo
+	eor #$ff
+	clc
+	adc #1
+	sta nlo
+.np
+	lda dlo
+	bpl .dp
+	lda mul_sign
+	eor #$80
+	sta mul_sign
+	lda dlo
+	eor #$ff
+	clc
+	adc #1
+	sta dlo
+.dp
+	lda dlo
+	bne .mul
+	lda #0
+	sta rot0
+	sta rot1
+	rts
+.mul
+	lda ylo
+	ldy nlo
+	jsr umul8j
+	lda prod_l
+	sta rot0
+	lda prod_h
+	sta rot1
+	lda yhi
+	ldy nlo
+	jsr umul8j
+	clc
+	lda rot1
+	adc prod_l
+	sta rot1
+	lda prod_h
+	adc #0
+	sta rot2
+	jsr div24u8
+	bit mul_sign
+	bpl .ok
+	sec
+	lda #0
+	sbc rot0
+	sta rot0
+	lda #0
+	sbc rot1
+	sta rot1
+.ok
+	lda rot0
+	rts
+
+; unsigned 24-bit rot0:rot1:rot2 / dlo → 16-bit quot rot0:rot1 (sat $ffff)
+div24u8
+	lda #0
+	sta nlo				; remainder
+	ldx #24
+.d24
+	asl rot0
+	rol rot1
+	rol rot2
+	rol nlo
+	lda nlo
+	bcs .dsub
+	cmp dlo
+	bcc .dnext
+.dsub
+	sbc dlo
+	sta nlo
+	inc rot0
+.dnext
+	dex
+	bne .d24
+	lda rot2
+	beq .d16
+	lda #$ff
+	sta rot0
+	sta rot1
+.d16
+	rts
+
 ; Unsigned nlo:nhi → prod = 32*log2(n). Clobbers nlo/nhi, mul_a, mul_b.
 log16
 	lda #0

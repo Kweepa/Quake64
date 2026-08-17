@@ -18,7 +18,9 @@ python tools\genrotate.py
 if errorlevel 1 exit /b 1
 python tools\genuifont.py
 if errorlevel 1 exit /b 1
-python tools\gengrunt.py
+python tools\genenemies.py
+if errorlevel 1 exit /b 1
+python tools\genmap.py
 if errorlevel 1 exit /b 1
 
 pushd src

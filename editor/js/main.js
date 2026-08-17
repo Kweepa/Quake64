@@ -9,10 +9,12 @@ import {
   clampTriggerText,
   clampName,
   clampTag,
+  clampElevType,
   clampVert,
   MAX_TRIGGER_TEXT,
   MAX_NAME_LEN,
   MAX_TAG_LEN,
+  ELEV_TYPES,
   createObject,
   createDefaultDocument,
   currentRoom,
@@ -595,7 +597,8 @@ function makeObjectListButton(obj) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = objectLabel(obj);
-  if (selectedIds.includes(obj.id)) btn.className = "active";
+  btn.classList.add(obj.kind === "room" ? "tree-label-wrap" : "tree-label-elide");
+  if (selectedIds.includes(obj.id)) btn.classList.add("active");
   btn.addEventListener("click", (e) => {
     selectObjectIds([obj.id], e.shiftKey);
   });
@@ -842,6 +845,18 @@ function renderInspector() {
             : "teleporter link";
       tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
       root.appendChild(field("Tag", tagInp));
+    }
+    if (obj.kind === "elevator") {
+      const sel = document.createElement("select");
+      for (const t of ELEV_TYPES) {
+        const opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = t;
+        if (clampElevType(obj.elevType) === t) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () => apply(() => (obj.elevType = sel.value)));
+      root.appendChild(field("Type", sel));
     }
     if (obj.kind === "doorway") {
       const lock = document.createElement("input");

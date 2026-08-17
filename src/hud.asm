@@ -111,6 +111,21 @@ init_hud
 	sta $d800 + HUD_OFF2 + 10
 	sta $d800 + HUD_OFF2 + 15
 	sta $d800 + HUD_OFF2 + 19
+
+	ldx #0
+	lda #HUD_CH_SP
+-
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	cpx #HUD_MSG_W
+	bne -
+	ldx #23
+-
+	lda #COL_HUD
+	sta $d800 + HUD_OFF3,x
+	dex
+	bpl -
 	rts
 
 ; F from frame_cy; R P K D from prof_cy (clear still timed, not printed)
@@ -286,6 +301,47 @@ hud_print
 	lda pp_tmp_l
 	sta SCR_A + HUD_OFF,x
 	sta SCR_B + HUD_OFF,x
+	rts
+
+; Message trigger on row 20 (below profiler + coords)
+hud_message
+	lda msg_on
+	bne .hm_show
+	ldx #0
+	lda #HUD_CH_SP
+.hm_blank
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	cpx #HUD_MSG_W
+	bne .hm_blank
+	rts
+.hm_show
+	ldx #0
+	lda #HUD_CH_SP
+.hm_clr
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	cpx #HUD_MSG_W
+	bne .hm_clr
+	clc
+	lda #<map_text
+	adc msg_off
+	sta src_ptr
+	lda #>map_text
+	adc #0
+	sta src_ptr+1
+	ldy #0
+.hm_cp
+	lda (src_ptr),y
+	beq .hm_done
+	sta SCR_A + HUD_OFF3,y
+	sta SCR_B + HUD_OFF3,y
+	iny
+	cpy #HUD_MSG_W
+	bcc .hm_cp
+.hm_done
 	rts
 
 ui_font

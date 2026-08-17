@@ -35,9 +35,11 @@ UI_CHARSET	= $F000
 UI_FONT_PAGES	= 8			; 256 glyphs, ASCII-indexed from quakefont.png
 HUD_ROW		= 18
 HUD_ROW2	= 19
+HUD_ROW3	= 20
 HUD_COL		= 8
 HUD_OFF		= HUD_ROW * 40 + HUD_COL
 HUD_OFF2	= HUD_ROW2 * 40 + HUD_COL
+HUD_OFF3	= HUD_ROW3 * 40 + HUD_COL
 HUD_CH_SP	= $20			; ASCII space / digits / letters in UI charset
 HUD_CH_PLUS	= $2b
 HUD_CH_MINUS	= $2d
@@ -115,3 +117,54 @@ OC_LEFT		= 1
 OC_RIGHT	= 2
 OC_TOP		= 4
 OC_BOT		= 8
+
+; Player / world
+EYE_HEIGHT	= 3
+PROX_DIST	= 3
+MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
+PLAYER_R	= 1			; XZ collision radius
+
+; Process SoA + mutable map state in VIC-bank scratch past profiler
+PROC_NUM	= 8
+PROC_FREE	= 0
+PROC_TIMER	= 1
+PROC_RAISE_DOOR	= 2
+PROC_LOWER_DOOR	= 3
+PROC_LOWER_ELEV	= 4
+PROC_RAISE_ELEV	= 5
+
+PROC_KIND	= $CB20
+PROC_A		= $CB28			; door/elev index
+PROC_B		= $CB30			; dest / next kind
+PROC_C		= $CB38			; timer/accum lo
+PROC_D		= $CB40			; timer/accum hi
+PROC_E		= $CB48			; elev home return Y
+
+door_open	= $CB50			; MAP_NDOORS (≤8)
+elev_y		= $CB58			; MAP_NELEVS (≤4)
+proc_tmp0	= $CB60
+proc_tmp1	= $CB61
+proc_tmp2	= $CB62
+proc_tmp3	= $CB63
+proc_tmp4	= $CB64
+proc_tmp5	= $CB65
+MOTION_STEP_MS	= 64
+DOOR_RECLOSE_MS	= 5000
+ELEV_WAIT_MS	= 5000
+
+; Box / mesh draw
+BOX_NVERTS	= 8
+BOX_NEDGES	= 12
+HUD_MSG_COL	= 8
+HUD_MSG_W	= 24
+SAMPLE_MS	= 20
+SAMPLE_TA_LO	= $ff			; 20ms * 1024 - 1 = $4FFF
+SAMPLE_TA_HI	= $4f
+in_fwd		= $CB66
+in_back		= $CB67
+in_strafel	= $CB68
+in_strafer	= $CB69
+in_turn_l	= $CB6A
+in_turn_r	= $CB6B
+in_pitch_u	= $CB6C
+in_pitch_d	= $CB6D

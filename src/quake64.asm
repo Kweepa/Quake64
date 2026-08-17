@@ -1,9 +1,10 @@
-; Quake64 — Step 1 core line engine (VIC Bank 3, raster split, Grunt walk)
+; Quake64 — Step 2 portal-room E1M1
 !cpu 6510
 !to "quake64.prg", cbm
 
 !source "mem.asm"
 !source "zp.asm"
+!source "map_counts.asm"
 
 *= $0801
 !byte $0b, $08, $0a, $00, $9e, $32, $30, $36, $31, $00, $00, $00	; SYS 2061
@@ -18,21 +19,18 @@ start
 	sta $01
 
 	lda #0
-	sta yaw
 	sta keys
-	sta cam_xl
-	sta cam_xh
-	sta cam_yl
-	sta cam_zl
-	lda #2				; eye ~ mid-torso (editor y≈16 → 2.0)
-	sta cam_yh
-	lda #$f8			; -8.0, figure at origin sits in front
-	sta cam_zh
-	lda #0
-	sta pitch
 	sta anim_frame
 	sta anim_acc_l
 	sta anim_acc_h
+	lda #NVERTS
+	sta mesh_nv
+	lda #NEDGES
+	sta mesh_ne
+	lda #<enemy_edges
+	sta edge_ptr
+	lda #>enemy_edges
+	sta edge_ptr+1
 
 	jsr fill_colour
 	jsr init_vic
@@ -45,6 +43,7 @@ start
 	jsr init_hud
 	jsr init_irq
 	jsr prof_init
+	jsr world_init
 	cli
 
 main
@@ -54,18 +53,8 @@ main
 	jsr clear_draw
 	ldy #PROF_CLEAR
 	jsr prof_add_bucket
-	jsr cube_rotate
-	ldy #PROF_ROT
-	jsr prof_add_bucket
-	jsr cube_project
-	ldy #PROF_PROJ
-	jsr prof_add_bucket
-	jsr cube_clip
-	ldy #PROF_CLIP
-	jsr prof_add_bucket
-	jsr cube_draw
-	ldy #PROF_DRAW
-	jsr prof_add_bucket
+	jsr draw_world
+	jsr draw_enemies
 	lda #$35
 	sta $01
 
@@ -75,13 +64,19 @@ main
 	jsr prof_frame_sample
 	jsr calc_frame_dt
 	jsr hud_print
+	jsr hud_message
 
 	lda draw_buf
 	eor #1
 	sta draw_buf
 	jsr set_draw_ptrs
-	jsr apply_look
-	jsr apply_move
+	jsr read_input
+	jsr apply_move_world
+	jsr try_proximity
+	jsr proc_update
+	jsr update_floor
+	jsr sync_eye
+	jsr update_message
 	jsr advance_walk
 	jmp main
 
@@ -116,56 +111,6 @@ advance_walk
 +
 	stx anim_frame
 .done
-	rts
-
-apply_look
-	lda keys
-	and #KEY_J
-	beq .noj
-	sec
-	lda yaw
-	sbc #YAW_STEP
-	sta yaw
-.noj
-	lda keys
-	and #KEY_L
-	beq .nol
-	clc
-	lda yaw
-	adc #YAW_STEP
-	sta yaw
-.nol
-	lda keys
-	and #KEY_I
-	beq .noi
-	sec
-	lda pitch
-	sbc #PITCH_STEP
-	sta pitch
-.noi
-	lda keys
-	and #KEY_K
-	beq .nok
-	clc
-	lda pitch
-	adc #PITCH_STEP
-	sta pitch
-.nok
-	; Keep pitch in signed ±48 (0 = horizon)
-	lda pitch
-	cmp #PITCH_MAX+1
-	bcc .pok
-	cmp #PITCH_MIN
-	bcs .pok
-	cmp #$80
-	bcs .plo
-	lda #PITCH_MAX
-	sta pitch
-	rts
-.plo
-	lda #PITCH_MIN
-	sta pitch
-.pok
 	rts
 
 ; A = signed 8-bit 8.8 step added to cam_xl/xh
@@ -337,7 +282,12 @@ copy_luts
 !source "hud.asm"
 !source "math.asm"
 !source "line.asm"
+!source "process.asm"
+!source "world.asm"
+!source "box.asm"
 !source "cube.asm"
+
+!source "map_e1m1.asm"
 
 lut_src
 	!source "tables.asm"

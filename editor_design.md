@@ -9,6 +9,8 @@
 * The Objects panel is a **shallow collapsible tree**: each **room** is a parent, the objects that sit in that room are its children.
 * Same grouping the game uses: a room owns its crates, elevators, switches, triggers, destinations, keys, enemies, spawn. **Doors appear under every room they overlap.**
 * Flat object lists are an authoring hazard; don't flatten for the game binary either.
+* List labels are **type only** (e.g. "Crate", "Trigger") — no XYZ in the name. Rooms may show their display name.
+* Non-room labels that would wrap stay on **one line** and elide with an ellipsis (`…`). Room names may wrap.
 
 ## Tags (editor) → indices (game)
 * Shared **tag** strings in the editor link controllers to targets (switch ↔ elevator, trigger ↔ door/elevator/dest, door ↔ key).

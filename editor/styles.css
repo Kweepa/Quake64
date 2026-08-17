@@ -311,6 +311,18 @@ button:disabled {
   text-align: left;
 }
 
+.object-tree .tree-label-elide {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.object-tree .tree-label-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .object-tree .tree-room {
   margin-bottom: 2px;
 }

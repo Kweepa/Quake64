@@ -165,6 +165,13 @@ export const MAX_TRIGGER_TEXT = 80;
 export const MAX_NAME_LEN = 40;
 export const MAX_TAG_LEN = 16;
 
+/** Elevator motion: descending = switch lower→wait→raise; automatic = stand-on same cycle. */
+export const ELEV_TYPES = ["descending", "automatic"];
+
+export function clampElevType(s) {
+  return ELEV_TYPES.includes(s) ? s : "descending";
+}
+
 export const LEVEL_NAMES = ["E1M1", "E1M2", "E1M3", "E1M4", "E1M5", "E1M6", "E1M7", "E1M8"];
 
 export const FRAME_NAMES = [
@@ -430,6 +437,7 @@ export function clampObject(obj) {
   if (obj.kind === "trigger") obj.text = clampTriggerText(obj.text);
   if (obj.kind === "room") obj.name = clampName(obj.name);
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
+  if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
   if (obj.kind === "doorway") {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
@@ -468,6 +476,7 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (kind === "trigger") obj.text = clampTriggerText(extra.text);
   if (kind === "room") obj.name = clampName(extra.name);
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
+  if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
   if (kind === "doorway") {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
@@ -496,22 +505,14 @@ export function isFigureObject(obj) {
   return obj.kind === "enemy" || obj.kind === "spawn";
 }
 
+/** Objects-panel label: type only (no XYZ). Rooms may include display name. */
 export function objectLabel(obj) {
   if (!obj || !KINDS[obj.kind]) return "?";
   if (obj.kind === "room") {
     return obj.name ? `Room  ${obj.name}` : "Room";
   }
-  if (obj.kind === "enemy") return `${obj.enemy || "Enemy"}  ${obj.x},${obj.y},${obj.z}`;
-  if (obj.kind === "trigger" && obj.text) {
-    return `${KINDS.trigger.label}  ${obj.text.replace(/\s+/g, " ").slice(0, 18)}`;
-  }
-  if (usesLinkTag(obj.kind) && obj.tag) {
-    return `${KINDS[obj.kind].label}  #${obj.tag}`;
-  }
-  if (obj.kind === "doorway" && obj.locked) {
-    return obj.keyTag ? `Door  locked:${obj.keyTag}` : "Door  locked";
-  }
-  return `${KINDS[obj.kind].label}  ${obj.x},${obj.y},${obj.z}`;
+  if (obj.kind === "enemy") return obj.enemy || "Enemy";
+  return KINDS[obj.kind].label;
 }
 
 export function figureTemplateName(obj) {
@@ -808,6 +809,7 @@ function parseObjects(list) {
       tag: o.tag,
       locked: o.locked,
       keyTag: o.keyTag,
+      elevType: o.elevType,
     });
     if (!KINDS[o.kind].fixed) {
       obj.sx = o.sx ?? obj.sx;
@@ -821,6 +823,7 @@ function parseObjects(list) {
     if (o.kind === "trigger" && o.text != null) obj.text = clampTriggerText(o.text);
     if (o.kind === "room" && o.name != null) obj.name = clampName(o.name);
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
+    if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
     if (o.kind === "doorway") {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);

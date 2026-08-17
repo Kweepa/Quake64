@@ -1,7 +1,7 @@
-; v-cam 8.8, yaw+pitch rotate, near+frustum clip, stroke Grunt walk
+; v-cam 8.8, yaw rotate, near+frustum clip, stroke enemies / meshes
 !zone cube
 
-!source "grunt_data.asm"
+!source "enemy_data.asm"
 
 ; A = signed editor byte → nlo:nhi = A/8 as 8.8 (ASL×5)
 scale_s8_88
@@ -24,7 +24,11 @@ scale_s8_88
 	rol nhi
 	rts
 
-; gidx = anim_frame * 13 + vindex → Y
+load_view_trig
+	!source "_rotate_body.asm"
+	rts
+
+; gidx = anim_frame * 13 + vindex → Y; also sets for (gx_ptr)
 grunt_gindex
 	lda anim_frame
 	asl
@@ -43,19 +47,127 @@ grunt_gindex
 	tay
 	rts
 
+; Load type pointers for ent_type
+ent_set_ptrs
+	ldx ent_type
+	lda enemy_gx_lo,x
+	sta gx_ptr
+	lda enemy_gx_hi,x
+	sta gx_ptr+1
+	lda enemy_gy_lo,x
+	sta gy_ptr
+	lda enemy_gy_hi,x
+	sta gy_ptr+1
+	lda enemy_gz_lo,x
+	sta gz_ptr
+	lda enemy_gz_hi,x
+	sta gz_ptr+1
+	rts
+
 cube_rotate
-	!source "_rotate_body.asm"
+	; demo path unused — ent_rotate draws map enemies
+	rts
+
+; Rotate one enemy instance at ent_wx/wy/wz, ent_rot, ent_type
+ent_rotate
+	jsr ent_set_ptrs
+	jsr load_view_trig
 	lda #0
 	sta vindex
 .rvert
 	jsr grunt_gindex
-	lda gx,y
+	lda (gx_ptr),y
 	jsr scale_s8_88
-	sec
 	lda nlo
+	sta e0x
+	lda nhi
+	sta e0xh
+	ldy gidx
+	lda (gz_ptr),y
+	jsr scale_s8_88
+	lda nlo
+	sta e1z
+	lda nhi
+	sta e1zh
+	; facing octant: rotate local XZ by rot*45° via table
+	lda ent_rot
+	asl
+	asl
+	asl
+	asl
+	asl
+	sta ent_yaw
+	ldy ent_yaw
+	lda COSTAB,y
+	tay
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	jsr smul16_7
+	lda nlo
+	sta rot0
+	lda nhi
+	sta rot1
+	ldy ent_yaw
+	lda SINTAB,y
+	tay
+	lda e1z
+	sta nlo
+	lda e1zh
+	sta nhi
+	jsr smul16_7
+	sec
+	lda rot0
+	sbc nlo
+	sta e0x
+	lda rot1
+	sbc nhi
+	sta e0xh
+	; lz' = lx*sin + lz*cos — need original lx
+	jsr grunt_gindex
+	lda (gx_ptr),y
+	jsr scale_s8_88
+	lda nlo
+	sta rot0
+	lda nhi
+	sta rot1
+	ldy ent_yaw
+	lda SINTAB,y
+	tay
+	lda rot0
+	sta nlo
+	lda rot1
+	sta nhi
+	jsr smul16_7
+	lda nlo
+	sta e0y
+	lda nhi
+	sta e0yh
+	ldy gidx
+	lda (gz_ptr),y
+	jsr scale_s8_88
+	ldy ent_yaw
+	lda COSTAB,y
+	tay
+	jsr smul16_7
+	clc
+	lda e0y
+	adc nlo
+	sta e1z
+	lda e0yh
+	adc nhi
+	sta e1zh
+	; now e0x/xh = lx', e1z/zh = lz' — add world + cam
+	clc
+	lda e0xh
+	adc ent_wx
+	sta e0xh
+	sec
+	lda e0x
 	sbc cam_xl
 	sta nlo
-	lda nhi
+	lda e0xh
 	sbc cam_xh
 	sta nhi
 	ldx vindex
@@ -64,17 +176,18 @@ cube_rotate
 	lda nhi
 	sta CAM_XH,x
 	lda nlo
-	sta e0x				; save dx across gz scale
+	sta e0x
 	lda nhi
 	sta e0xh
-	ldy gidx
-	lda gz,y
-	jsr scale_s8_88
+	clc
+	lda e1zh
+	adc ent_wz
+	sta e1zh
 	sec
-	lda nlo
+	lda e1z
 	sbc cam_zl
 	sta e1z
-	lda nhi
+	lda e1zh
 	sbc cam_zh
 	sta e1zh
 	lda e0x
@@ -82,7 +195,7 @@ cube_rotate
 	lda e0xh
 	sta nhi
 
-	; x1 = dx*cs - dz*sn
+	; x1 = dx*cs - dz*sn  (view yaw)
 	ldy cs_b
 	jsr smul16_7
 	lda nlo
@@ -103,7 +216,6 @@ cube_rotate
 	sbc nhi
 	sta e0xh
 
-	; z1 = dx*sn + dz*cs
 	ldx vindex
 	lda CAM_X,x
 	sta nlo
@@ -130,8 +242,12 @@ cube_rotate
 	sta e0yh
 
 	ldy gidx
-	lda gy,y
+	lda (gy_ptr),y
 	jsr scale_s8_88
+	clc
+	lda nhi
+	adc ent_wy
+	sta nhi
 	sec
 	lda nlo
 	sbc cam_yl
@@ -139,57 +255,14 @@ cube_rotate
 	lda nhi
 	sbc cam_yh
 	sta nhi
-	lda nlo
-	sta e1x
-	lda nhi
-	sta e1xh
-
-	; y' = dy*cp − z1*sp
-	ldy cp_b
-	jsr smul16_7
-	lda nlo
-	sta e1y
-	lda nhi
-	sta e1yh
-	lda e0y
-	sta nlo
-	lda e0yh
-	sta nhi
-	ldy sp_b
-	jsr smul16_7
 	ldx vindex
-	sec
-	lda e1y
-	sbc nlo
+	lda nlo
 	sta CAM_Y,x
-	lda e1yh
-	sbc nhi
-	sta CAM_YH,x
-
-	; z' = dy*sp + z1*cp
-	lda e1x
-	sta nlo
-	lda e1xh
-	sta nhi
-	ldy sp_b
-	jsr smul16_7
-	lda nlo
-	sta e1y
 	lda nhi
-	sta e1yh
+	sta CAM_YH,x
 	lda e0y
-	sta nlo
-	lda e0yh
-	sta nhi
-	ldy cp_b
-	jsr smul16_7
-	ldx vindex
-	clc
-	lda e1y
-	adc nlo
 	sta CAM_Z,x
-	lda e1yh
-	adc nhi
+	lda e0yh
 	sta CAM_ZH,x
 	lda e0x
 	sta CAM_X,x
@@ -205,6 +278,7 @@ cube_rotate
 	rts
 
 ; 8.8 view ??? persp if z ??? 1.0
+mesh_project
 cube_project
 	lda #0
 	sta vindex
@@ -243,7 +317,7 @@ cube_project
 .pnext
 	inc vindex
 	lda vindex
-	cmp #NVERTS
+	cmp mesh_nv
 	beq +
 	jmp .pvert
 +
@@ -318,14 +392,15 @@ cube_project
 	rts
 
 ; Near-plane interpolate, then Cohen-Sutherland to 192x128
+mesh_clip
 cube_clip
 	lda #0
 	sta vindex
 .cel
 	lda vindex
 	asl
-	tax
-	lda edges,x
+	tay
+	lda (edge_ptr),y
 	tay
 	lda CAM_X,y
 	sta e0x
@@ -347,8 +422,11 @@ cube_clip
 	sta oy0l
 	lda PROJ_YH,y
 	sta oy0h
-	inx
-	lda edges,x
+	lda vindex
+	asl
+	tay
+	iny
+	lda (edge_ptr),y
 	tay
 	lda CAM_X,y
 	sta e1x
@@ -421,7 +499,7 @@ cube_clip
 .next
 	inc vindex
 	lda vindex
-	cmp #NEDGES
+	cmp mesh_ne
 	beq +
 	jmp .cel
 +
@@ -580,21 +658,16 @@ cube_clip
 	rts
 
 .nlrun
-	jsr scale3
+	jsr scale_nd
 	lda dlo
-	sta div_c
-	ldy nlo
-	lda ylo
-	jsr lerpdv
-	sta rot0
+	ora dhi
+	bne +
 	lda #0
+	sta rot0
 	sta rot1
-	lda rot0
-	bpl +
-	dec rot1
-+
-	lda rot0
 	rts
++
+	jmp lerp16			; rot0:rot1 = (ylo:yhi * n) / d; A=rot0
 
 .projpair
 	lda e0z
@@ -1076,6 +1149,7 @@ cube_clip
 +
 	rts
 
+mesh_draw
 cube_draw
 	lda #0
 	sta vindex
@@ -1095,8 +1169,174 @@ cube_draw
 .skip
 	inc vindex
 	lda vindex
-	cmp #NEDGES
+	cmp mesh_ne
 	beq +
 	jmp .del
 +
+	rts
+
+; X = CAM slot; world int ent_wx/wy/wz → view CAM[X]
+; Caller must jsr load_view_trig first.
+xform_world_vert
+	stx vindex
+	; dx
+	lda #0
+	sec
+	sbc cam_xl
+	sta nlo
+	lda ent_wx
+	sbc cam_xh
+	sta nhi
+	lda nlo
+	sta e0x
+	lda nhi
+	sta e0xh
+	; dz
+	lda #0
+	sec
+	sbc cam_zl
+	sta e1z
+	lda ent_wz
+	sbc cam_zh
+	sta e1zh
+	; dy
+	lda #0
+	sec
+	sbc cam_yl
+	sta e1x
+	lda ent_wy
+	sbc cam_yh
+	sta e1xh
+
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	ldy cs_b
+	jsr smul16_7
+	lda nlo
+	sta rot0
+	lda nhi
+	sta rot1
+	lda e1z
+	sta nlo
+	lda e1zh
+	sta nhi
+	ldy sn_b
+	jsr smul16_7
+	sec
+	lda rot0
+	sbc nlo
+	sta e0x
+	lda rot1
+	sbc nhi
+	sta e0xh
+
+	; z1 = dx*sn + dz*cs
+	lda #0
+	sec
+	sbc cam_xl
+	sta nlo
+	lda ent_wx
+	sbc cam_xh
+	sta nhi
+	ldy sn_b
+	jsr smul16_7
+	lda nlo
+	sta rot0
+	lda nhi
+	sta rot1
+	lda e1z
+	sta nlo
+	lda e1zh
+	sta nhi
+	ldy cs_b
+	jsr smul16_7
+	clc
+	lda rot0
+	adc nlo
+	sta e0y
+	lda rot1
+	adc nhi
+	sta e0yh
+
+	ldx vindex
+	lda e1x
+	sta CAM_Y,x
+	lda e1xh
+	sta CAM_YH,x
+	lda e0y
+	sta CAM_Z,x
+	lda e0yh
+	sta CAM_ZH,x
+	lda e0x
+	sta CAM_X,x
+	lda e0xh
+	sta CAM_XH,x
+	rts
+
+draw_enemies
+	ldx #0
+.de
+	cpx #MAP_NENEMIES
+	bcs .de_rts
+	lda en_room,x
+	cmp room_idx
+	bne .de_n
+	lda en_x,x
+	sec
+	sbc #1
+	bcs +
+	lda #0
++
+	sta box_x
+	lda #2
+	sta box_sx
+	lda en_z,x
+	sec
+	sbc #1
+	bcs +
+	lda #0
++
+	sta box_z
+	lda #2
+	sta box_sz
+	jsr frustum_hits
+	bcc .de_n
+	stx obj_i
+	lda en_x,x
+	sta ent_wx
+	lda en_y,x
+	sta ent_wy
+	lda en_z,x
+	sta ent_wz
+	lda en_type,x
+	sta ent_type
+	lda en_rot,x
+	sta ent_rot
+	lda #NVERTS
+	sta mesh_nv
+	lda #NEDGES
+	sta mesh_ne
+	lda #<enemy_edges
+	sta edge_ptr
+	lda #>enemy_edges
+	sta edge_ptr+1
+	jsr ent_rotate
+	ldy #PROF_ROT
+	jsr prof_add_bucket
+	jsr mesh_project
+	ldy #PROF_PROJ
+	jsr prof_add_bucket
+	jsr mesh_clip
+	ldy #PROF_CLIP
+	jsr prof_add_bucket
+	jsr mesh_draw
+	ldy #PROF_DRAW
+	jsr prof_add_bucket
+	ldx obj_i
+.de_n
+	inx
+	bne .de
+.de_rts
 	rts

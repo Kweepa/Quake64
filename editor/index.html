@@ -319,6 +319,18 @@ button:disabled {
   text-align: left;
 }
 
+.object-tree .tree-label-elide {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.object-tree .tree-label-wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .object-tree .tree-room {
   margin-bottom: 2px;
 }
@@ -1060,22 +1072,14 @@ function isFigureObject(obj) {
   return obj.kind === "enemy" || obj.kind === "spawn";
 }
 
+/** Objects-panel label: type only (no XYZ). Rooms may include display name. */
 function objectLabel(obj) {
   if (!obj || !KINDS[obj.kind]) return "?";
   if (obj.kind === "room") {
     return obj.name ? `Room  ${obj.name}` : "Room";
   }
-  if (obj.kind === "enemy") return `${obj.enemy || "Enemy"}  ${obj.x},${obj.y},${obj.z}`;
-  if (obj.kind === "trigger" && obj.text) {
-    return `${KINDS.trigger.label}  ${obj.text.replace(/\s+/g, " ").slice(0, 18)}`;
-  }
-  if (usesLinkTag(obj.kind) && obj.tag) {
-    return `${KINDS[obj.kind].label}  #${obj.tag}`;
-  }
-  if (obj.kind === "doorway" && obj.locked) {
-    return obj.keyTag ? `Door  locked:${obj.keyTag}` : "Door  locked";
-  }
-  return `${KINDS[obj.kind].label}  ${obj.x},${obj.y},${obj.z}`;
+  if (obj.kind === "enemy") return obj.enemy || "Enemy";
+  return KINDS[obj.kind].label;
 }
 
 function figureTemplateName(obj) {
@@ -4016,7 +4020,8 @@ function makeObjectListButton(obj) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = objectLabel(obj);
-  if (selectedIds.includes(obj.id)) btn.className = "active";
+  btn.classList.add(obj.kind === "room" ? "tree-label-wrap" : "tree-label-elide");
+  if (selectedIds.includes(obj.id)) btn.classList.add("active");
   btn.addEventListener("click", (e) => {
     selectObjectIds([obj.id], e.shiftKey);
   });

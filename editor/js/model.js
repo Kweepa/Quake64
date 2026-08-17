@@ -42,7 +42,7 @@ export const KINDS = {
     id: "elevator",
     label: "Elevator",
     color: "#3ab4d4",
-    defaultSize: [6, 6, 6],
+    defaultSize: [4, 1, 4],
     fixed: false,
     slope: false,
   },
@@ -50,7 +50,7 @@ export const KINDS = {
     id: "slope",
     label: "Ramp",
     color: "#5cb85c",
-    defaultSize: [6, 6, 12],
+    defaultSize: [4, 2, 4],
     fixed: false,
     slope: true,
   },
@@ -58,7 +58,7 @@ export const KINDS = {
     id: "doorway",
     label: "Doorway",
     color: "#e6c84a",
-    defaultSize: [8, 8, 1],
+    defaultSize: [4, 5, 1],
     fixed: true,
     slope: false,
   },
@@ -70,9 +70,100 @@ export const KINDS = {
     fixed: true,
     slope: false,
   },
+  enemy: {
+    id: "enemy",
+    label: "Enemy",
+    color: "#e07070",
+    defaultSize: [2, 4, 2],
+    fixed: false,
+    slope: false,
+  },
+  spawn: {
+    id: "spawn",
+    label: "Spawn",
+    color: "#3ee06a",
+    defaultSize: [2, 4, 2],
+    fixed: false,
+    slope: false,
+  },
+  trigger: {
+    id: "trigger",
+    label: "Trigger",
+    color: "#7ec8e8",
+    defaultSize: [8, 4, 8],
+    fixed: false,
+    slope: false,
+  },
+  teleporter: {
+    id: "teleporter",
+    label: "Teleporter",
+    color: "#9b7eed",
+    defaultSize: [4, 1, 4],
+    fixed: false,
+    slope: false,
+  },
+  teleporter_dest: {
+    id: "teleporter_dest",
+    label: "Teleport dest",
+    color: "#c4a8ff",
+    defaultSize: [2, 2, 2],
+    fixed: true,
+    slope: false,
+  },
+  key: {
+    id: "key",
+    label: "Key",
+    color: "#f0d060",
+    defaultSize: [2, 2, 2],
+    fixed: false,
+    slope: false,
+  },
 };
 
-export const PALETTE_ORDER = ["room", "doorway", "switch", "slope", "crate", "elevator"];
+/** Editor-only dashed / ghost volumes (not solid world geometry). */
+export function isGhostKind(kind) {
+  return kind === "trigger" || kind === "teleporter" || kind === "teleporter_dest";
+}
+
+/** Kinds linked by a shared editor tag (resolved to indices on export). */
+export function usesLinkTag(kind) {
+  return (
+    kind === "switch" ||
+    kind === "elevator" ||
+    kind === "teleporter" ||
+    kind === "teleporter_dest" ||
+    kind === "key"
+  );
+}
+
+/** Layout placements draw Idle 0 at this fraction of anim units (Grunt ~4 world high). */
+export const LAYOUT_ENEMY_SCALE = 1 / 8;
+
+/** Yaw octants, 0 = +Z (N / game forward). */
+export const ENEMY_FACINGS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+
+export function clampEnemyRot(n) {
+  const r = n | 0;
+  if (!Number.isFinite(r)) return 0;
+  return ((r % 8) + 8) % 8;
+}
+
+export const PALETTE_ORDER = [
+  "room",
+  "doorway",
+  "switch",
+  "slope",
+  "crate",
+  "elevator",
+  "spawn",
+  "trigger",
+  "teleporter",
+  "teleporter_dest",
+  "key",
+];
+export const MAX_TRIGGER_TEXT = 80;
+export const MAX_NAME_LEN = 40;
+export const MAX_TAG_LEN = 16;
 
 export const LEVEL_NAMES = ["E1M1", "E1M2", "E1M3", "E1M4", "E1M5", "E1M6", "E1M7", "E1M8"];
 
@@ -333,13 +424,24 @@ export function clampObject(obj) {
     obj.sy = clampSize(obj.y, obj.sy);
     obj.sz = clampSize(obj.z, obj.sz);
   }
+  if (obj.kind === "enemy" || obj.kind === "spawn" || obj.kind === "teleporter_dest") {
+    obj.rot = clampEnemyRot(obj.rot ?? 0);
+  }
+  if (obj.kind === "trigger") obj.text = clampTriggerText(obj.text);
+  if (obj.kind === "room") obj.name = clampName(obj.name);
+  if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
+  if (obj.kind === "doorway") {
+    obj.locked = !!obj.locked;
+    obj.keyTag = clampTag(obj.keyTag);
+  }
   return obj;
 }
 
 export function createObject(kind, x, y, z, extra = {}) {
   const def = KINDS[kind];
+  if (!def) throw new Error(`Unknown kind ${kind}`);
   const obj = {
-        id: extra.id || uid(),
+    id: extra.id || uid(),
     kind,
     x: x | 0,
     y: y | 0,
@@ -352,11 +454,96 @@ export function createObject(kind, x, y, z, extra = {}) {
     dir: extra.dir ?? 1,
   };
   if (kind === "slope") {
-    obj.sx = 6;
-    obj.sy = 6;
-    obj.sz = 12;
+    obj.sx = 4;
+    obj.sy = 2;
+    obj.sz = 4;
+  }
+  if (kind === "spawn" || kind === "enemy" || kind === "teleporter_dest") {
+    obj.rot = clampEnemyRot(extra.rot ?? 0);
+  }
+  if (kind === "enemy") {
+    const name = extra.enemy || "Grunt";
+    obj.enemy = ENEMY_TYPES.some((t) => t.name === name) ? name : "Grunt";
+  }
+  if (kind === "trigger") obj.text = clampTriggerText(extra.text);
+  if (kind === "room") obj.name = clampName(extra.name);
+  if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
+  if (kind === "doorway") {
+    obj.locked = !!extra.locked;
+    obj.keyTag = clampTag(extra.keyTag);
   }
   return clampObject(obj);
+}
+
+export function clampTriggerText(s) {
+  return String(s ?? "").replace(/\r\n/g, "\n").slice(0, MAX_TRIGGER_TEXT);
+}
+
+export function clampName(s) {
+  return String(s ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_NAME_LEN);
+}
+
+export function clampTag(s) {
+  return String(s ?? "")
+    .replace(/\s+/g, "")
+    .slice(0, MAX_TAG_LEN);
+}
+
+export function isFigureObject(obj) {
+  return obj.kind === "enemy" || obj.kind === "spawn";
+}
+
+export function objectLabel(obj) {
+  if (!obj || !KINDS[obj.kind]) return "?";
+  if (obj.kind === "room") {
+    return obj.name ? `Room  ${obj.name}` : "Room";
+  }
+  if (obj.kind === "enemy") return `${obj.enemy || "Enemy"}  ${obj.x},${obj.y},${obj.z}`;
+  if (obj.kind === "trigger" && obj.text) {
+    return `${KINDS.trigger.label}  ${obj.text.replace(/\s+/g, " ").slice(0, 18)}`;
+  }
+  if (usesLinkTag(obj.kind) && obj.tag) {
+    return `${KINDS[obj.kind].label}  #${obj.tag}`;
+  }
+  if (obj.kind === "doorway" && obj.locked) {
+    return obj.keyTag ? `Door  locked:${obj.keyTag}` : "Door  locked";
+  }
+  return `${KINDS[obj.kind].label}  ${obj.x},${obj.y},${obj.z}`;
+}
+
+export function figureTemplateName(obj) {
+  return obj.kind === "spawn" ? "Grunt" : obj.enemy || "Grunt";
+}
+
+/** World-space Idle-0 stick verts for a placed enemy (1/8 scale, feet on floor center). */
+export function enemyPlacementWorldVerts(obj, template) {
+  const frame = template?.frames?.[0];
+  if (!frame) return [];
+  const ox = obj.x + obj.sx / 2;
+  const oy = obj.y;
+  const oz = obj.z + obj.sz / 2;
+  const s = LAYOUT_ENEMY_SCALE;
+  const rot = clampEnemyRot(obj.rot ?? 0);
+  const th = (rot * Math.PI) / 4;
+  const c = Math.cos(th);
+  const sn = Math.sin(th);
+  return frame.map((v) => {
+    const lx = v.x * s;
+    const ly = v.y * s;
+    const lz = v.z * s;
+    return {
+      x: ox + lx * c + lz * sn,
+      y: oy + ly,
+      z: oz - lx * sn + lz * c,
+    };
+  });
+}
+
+export function findEnemyTemplate(doc, name) {
+  return (doc.enemies || []).find((e) => e.name === name) || doc.enemies?.[0] || null;
 }
 
 export function cycleFace(faceId, delta) {
@@ -366,7 +553,12 @@ export function cycleFace(faceId, delta) {
 }
 
 export function emptyMap() {
-  return { objects: [] };
+  return { name: "", objects: [] };
+}
+
+export function mapDisplayName(map, key) {
+  const n = clampName(map?.name);
+  return n || key;
 }
 
 export function activeMap(doc) {
@@ -374,6 +566,7 @@ export function activeMap(doc) {
   doc.activeLevel = name;
   if (!doc.maps) doc.maps = {};
   if (!doc.maps[name]) doc.maps[name] = emptyMap();
+  if (typeof doc.maps[name].name !== "string") doc.maps[name].name = "";
   if (!Array.isArray(doc.maps[name].objects)) doc.maps[name].objects = [];
   return doc.maps[name];
 }
@@ -391,6 +584,52 @@ export function currentRoom(doc, cam) {
   if (!rooms.length) return null;
   rooms.sort((a, b) => aabbVolume(a) - aabbVolume(b));
   return rooms[0];
+}
+
+export function roomUnderObject(doc, obj) {
+  if (obj.kind === "room") return null;
+  const hits = roomsOf(doc).filter((r) => aabbOverlap(obj, r));
+  if (!hits.length) return null;
+  hits.sort((a, b) => aabbVolume(a) - aabbVolume(b));
+  return hits[0];
+}
+
+/** Rooms that contain / overlap an object (doors may sit in two). */
+export function roomsForObject(doc, obj) {
+  if (!obj || obj.kind === "room") return [];
+  return roomsOf(doc).filter((r) => aabbOverlap(obj, r));
+}
+
+/**
+ * Shallow room → children tree for the Objects panel.
+ * Doors appear under every overlapping room; other objects under the smallest room.
+ */
+export function objectTree(doc) {
+  const map = activeMap(doc);
+  const rooms = roomsOf(doc);
+  const claimed = new Set();
+  const nodes = rooms.map((room) => {
+    const children = [];
+    for (const obj of map.objects) {
+      if (obj.kind === "room") continue;
+      if (obj.kind === "doorway") {
+        if (aabbOverlap(obj, room)) children.push(obj);
+        continue;
+      }
+      const under = roomUnderObject(doc, obj);
+      if (under && under.id === room.id) {
+        children.push(obj);
+        claimed.add(obj.id);
+      }
+    }
+    return { room, children };
+  });
+  const orphans = map.objects.filter((o) => {
+    if (o.kind === "room") return false;
+    if (o.kind === "doorway") return !rooms.some((r) => aabbOverlap(o, r));
+    return !claimed.has(o.id);
+  });
+  return { nodes, orphans };
 }
 
 export function neighbourRooms(doc, room) {
@@ -562,11 +801,29 @@ function parseObjects(list) {
       face: o.face,
       axis: o.axis,
       dir: o.dir,
+      enemy: o.enemy,
+      rot: o.rot,
+      text: o.text,
+      name: o.name,
+      tag: o.tag,
+      locked: o.locked,
+      keyTag: o.keyTag,
     });
     if (!KINDS[o.kind].fixed) {
       obj.sx = o.sx ?? obj.sx;
       obj.sy = o.sy ?? obj.sy;
       obj.sz = o.sz ?? obj.sz;
+    }
+    if (o.kind === "enemy" || o.kind === "spawn" || o.kind === "teleporter_dest") {
+      if (o.enemy && o.kind === "enemy") obj.enemy = o.enemy;
+      if (o.rot != null) obj.rot = o.rot;
+    }
+    if (o.kind === "trigger" && o.text != null) obj.text = clampTriggerText(o.text);
+    if (o.kind === "room" && o.name != null) obj.name = clampName(o.name);
+    if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
+    if (o.kind === "doorway") {
+      obj.locked = !!o.locked;
+      if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);
     }
     out.push(clampObject(obj));
   }
@@ -574,11 +831,11 @@ function parseObjects(list) {
 }
 
 function starterObjects() {
-  const roomA = createObject("room", 8, 0, 8);
+  const roomA = createObject("room", 8, 0, 8, { name: "Start" });
   roomA.sx = 24;
   roomA.sy = 12;
   roomA.sz = 24;
-  const roomB = createObject("room", 31, 0, 8);
+  const roomB = createObject("room", 31, 0, 8, { name: "Next" });
   roomB.sx = 24;
   roomB.sy = 12;
   roomB.sz = 24;
@@ -587,15 +844,63 @@ function starterObjects() {
   return [roomA, roomB, door, crate];
 }
 
+export function defaultEditorState() {
+  return {
+    mode: "layout",
+    localDraw: false,
+    selectedIds: [],
+    enemy: "Grunt",
+    frameIndex: 0,
+    selectedVerts: [],
+    layoutCamera: { x: 28, y: 10, z: -6, yaw: 0.35, pitch: -0.2, speed: 28 },
+    animOrbit: { yaw: 0.5, pitch: 0.15, dist: 48 },
+  };
+}
+
+function num(v, fallback) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export function parseEditorState(raw) {
+  const d = defaultEditorState();
+  if (!raw || typeof raw !== "object") return d;
+  if (raw.mode === "anim" || raw.mode === "layout") d.mode = raw.mode;
+  d.localDraw = !!raw.localDraw;
+  if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
+  if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
+  d.frameIndex = Math.max(0, Math.min(FRAME_NAMES.length - 1, num(raw.frameIndex, 0) | 0));
+  if (Array.isArray(raw.selectedVerts)) {
+    d.selectedVerts = raw.selectedVerts.map((i) => i | 0).filter((i) => i >= 0 && i < 13);
+  }
+  const cam = raw.layoutCamera || {};
+  d.layoutCamera = {
+    x: num(cam.x, d.layoutCamera.x),
+    y: num(cam.y, d.layoutCamera.y),
+    z: num(cam.z, d.layoutCamera.z),
+    yaw: num(cam.yaw, d.layoutCamera.yaw),
+    pitch: num(cam.pitch, d.layoutCamera.pitch),
+    speed: Math.max(6, Math.min(80, num(cam.speed, d.layoutCamera.speed))),
+  };
+  const orb = raw.animOrbit || {};
+  d.animOrbit = {
+    yaw: num(orb.yaw, d.animOrbit.yaw),
+    pitch: num(orb.pitch, d.animOrbit.pitch),
+    dist: Math.max(16, Math.min(120, num(orb.dist, d.animOrbit.dist))),
+  };
+  return d;
+}
+
 export function createDefaultDocument() {
   const maps = {};
   for (const name of LEVEL_NAMES) maps[name] = emptyMap();
-  maps.E1M1 = { objects: starterObjects() };
+  maps.E1M1 = { name: "Slipgate Complex", objects: starterObjects() };
   return {
-    version: 3,
+    version: 4,
     activeLevel: "E1M1",
     maps,
     enemies: createAllCreatures(),
+    editor: defaultEditorState(),
   };
 }
 
@@ -608,10 +913,17 @@ export function normalizeDocument(raw) {
   if (!raw || typeof raw !== "object") return doc;
   if (raw.maps && typeof raw.maps === "object") {
     for (const name of LEVEL_NAMES) {
-      doc.maps[name] = { objects: parseObjects(raw.maps[name]?.objects) };
+      const src = raw.maps[name] || {};
+      doc.maps[name] = {
+        name: clampName(src.name),
+        objects: parseObjects(src.objects),
+      };
     }
   } else {
-    doc.maps.E1M1 = { objects: parseObjects(raw.map?.objects || raw.objects) };
+    doc.maps.E1M1 = {
+      name: clampName(raw.map?.name),
+      objects: parseObjects(raw.map?.objects || raw.objects),
+    };
   }
   doc.activeLevel = LEVEL_NAMES.includes(raw.activeLevel) ? raw.activeLevel : "E1M1";
   doc.enemies = [];
@@ -645,6 +957,7 @@ export function normalizeDocument(raw) {
     }
   }
   if (!doc.enemies.length) doc.enemies = createAllCreatures();
-  doc.version = 3;
+  doc.version = 4;
+  doc.editor = parseEditorState(raw.editor);
   return doc;
 }

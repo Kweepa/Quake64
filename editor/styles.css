@@ -159,6 +159,11 @@ h2 {
   text-align: center;
 }
 
+.ortho-tabs {
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
 .preview-frame {
   width: 320px;
   height: 200px;
@@ -262,20 +267,29 @@ button:disabled {
   margin-bottom: 1rem;
 }
 
+.palette-sep {
+  grid-column: 1 / -1;
+  margin: 0.5rem 0 0.15rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
 .palette-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding: 8px 4px;
+  padding: 2px 4px;
   background: var(--bg);
   border: 1px solid var(--border);
   cursor: pointer;
   font-size: 0.65rem;
   color: var(--muted);
   user-select: none;
-  min-height: 2.6rem;
+  min-height: 1.3rem;
 }
 
 .palette-item:hover {
@@ -297,6 +311,53 @@ button:disabled {
   text-align: left;
 }
 
+.object-tree .tree-room {
+  margin-bottom: 2px;
+}
+
+.object-tree .tree-row {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.object-tree .tree-twist {
+  flex: 0 0 1.35rem;
+  width: 1.35rem;
+  padding: 0.2rem 0;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.object-tree .tree-room-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.object-tree .tree-children {
+  list-style: none;
+  margin: 2px 0 4px 0.55rem;
+  padding: 0 0 0 0.4rem;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.object-tree .tree-empty {
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 0.15rem 0.35rem;
+}
+
+.object-tree .tree-orphan-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0.4rem 0 0.15rem;
+}
+
 .level-list ul {
   list-style: none;
   margin: 0 0 1rem;
@@ -309,6 +370,22 @@ button:disabled {
 .level-list button {
   width: 100%;
   text-align: left;
+  line-height: 1.15;
+  min-height: 2.2rem;
+}
+
+.level-list .level-sub {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.level-list button.active .level-sub {
+  color: var(--accent);
 }
 
 .panel .muted,
@@ -351,9 +428,22 @@ button:disabled {
   width: 0;
 }
 
+.rot-label {
+  flex: 0 0 2.2rem;
+  color: var(--text);
+  font-size: 0.85rem;
+  align-self: center;
+}
+
+.field.block {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .field input[type="number"],
 .field input[type="text"],
-.field select {
+.field select,
+.field textarea {
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text);
@@ -362,6 +452,12 @@ button:disabled {
   width: auto;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.field textarea {
+  min-height: 3.4rem;
+  resize: vertical;
+  font-family: inherit;
 }
 
 .btn-row {

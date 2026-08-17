@@ -10,7 +10,7 @@ import {
 
 const AXIS_LEN = 8;
 const AXIS_HIT = 9;
-const BOX_CLICK = 4;
+const ANIM_BOX_CLICK = 4;
 const AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 export class AnimView {
@@ -154,6 +154,7 @@ export class AnimView {
     if (!this.enabled) return;
     e.preventDefault();
     this.orbit.dist = Math.max(16, Math.min(120, this.orbit.dist + (e.deltaY > 0 ? 4 : -4)));
+    this.opts.onViewChanged?.();
     this.draw();
   }
 
@@ -327,7 +328,7 @@ export class AnimView {
   #finishBox() {
     const rect = this.#boxRect();
     const additive = this.drag.additive;
-    if (rect.w < BOX_CLICK && rect.h < BOX_CLICK) {
+    if (rect.w < ANIM_BOX_CLICK && rect.h < ANIM_BOX_CLICK) {
       if (!additive) this.opts.onSelectVerts?.([]);
       return;
     }
@@ -336,9 +337,11 @@ export class AnimView {
 
   #onUp(e) {
     if (!this.enabled) return;
+    const orbitEnded = this.drag?.kind === "orbit";
     if (this.drag?.kind === "box") this.#finishBox();
     if (this.drag?.kind === "axis" || this.drag?.undoStarted) this.opts.endUndo?.();
     this.drag = null;
+    if (orbitEnded) this.opts.onViewChanged?.();
     try {
       this.canvas.releasePointerCapture(e.pointerId);
     } catch {
@@ -406,7 +409,7 @@ export class AnimView {
     let shown = selected;
     if (this.drag?.kind === "box") {
       const r = this.#boxRect();
-      if (r.w >= BOX_CLICK || r.h >= BOX_CLICK) {
+      if (r.w >= ANIM_BOX_CLICK || r.h >= ANIM_BOX_CLICK) {
         const hits = this.#vertsInBox(r);
         shown = this.drag.additive ? [...new Set([...selected, ...hits])] : hits;
       }

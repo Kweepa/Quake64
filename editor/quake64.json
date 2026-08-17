@@ -1,108 +1,276 @@
 {
-  "version": 3,
+  "version": 4,
   "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
+      "name": "",
       "objects": [
         {
           "id": "acd16743-53cd-4404-bf31-cc8dc48e1434",
           "kind": "room",
           "x": 0,
-          "y": 0,
-          "z": 114,
+          "y": 104,
+          "z": 117,
           "sx": 32,
-          "sy": 12,
+          "sy": 8,
+          "sz": 6,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "name": "Start corridor"
+        },
+        {
+          "id": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
+          "kind": "room",
+          "x": 22,
+          "y": 64,
+          "z": 124,
+          "sx": 6,
+          "sy": 48,
+          "sz": 16,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "name": "Elevator down"
+        },
+        {
+          "id": "7f98a06a-3a51-401a-b1d4-40b9ebad9a87",
+          "kind": "doorway",
+          "x": 23,
+          "y": 104,
+          "z": 123,
+          "sx": 4,
+          "sy": 5,
+          "sz": 1,
+          "face": "-z",
+          "axis": "z",
+          "dir": 1,
+          "locked": false,
+          "keyTag": ""
+        },
+        {
+          "id": "6d6a02fe-9b13-47b0-9116-faa7f845ad9c",
+          "kind": "crate",
+          "x": 0,
+          "y": 104,
+          "z": 118,
+          "sx": 4,
+          "sy": 2,
+          "sz": 4,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1
+        },
+        {
+          "id": "37b37500-dc51-450d-a81c-57b4ca92e61b",
+          "kind": "enemy",
+          "x": 82,
+          "y": 64,
+          "z": 119,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 6,
+          "enemy": "Grunt"
+        },
+        {
+          "id": "62c4f964-bfa2-4ebd-ada1-14b0cf62882e",
+          "kind": "crate",
+          "x": 22,
+          "y": 64,
+          "z": 124,
+          "sx": 6,
+          "sy": 40,
           "sz": 10,
           "face": "+z",
           "axis": "z",
           "dir": 1
         },
         {
-          "id": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
-          "kind": "room",
-          "x": 31,
-          "y": 0,
-          "z": 8,
-          "sx": 24,
-          "sy": 12,
-          "sz": 24,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1
-        },
-        {
-          "id": "7f98a06a-3a51-401a-b1d4-40b9ebad9a87",
+          "id": "ff17085e-f2eb-4bfd-b862-549c30420579",
           "kind": "doorway",
-          "x": 31,
-          "y": 0,
-          "z": 16,
+          "x": 28,
+          "y": 64,
+          "z": 135,
           "sx": 1,
-          "sy": 8,
-          "sz": 8,
+          "sy": 5,
+          "sz": 4,
           "face": "+x",
           "axis": "z",
-          "dir": 1
+          "dir": 1,
+          "locked": false,
+          "keyTag": ""
         },
         {
-          "id": "45bd0a91-e556-45c8-99de-9a7a3f121da5",
-          "kind": "crate",
-          "x": 14,
-          "y": 0,
-          "z": 14,
-          "sx": 6,
-          "sy": 6,
-          "sz": 6,
+          "id": "ff80f0a1-d4e1-47bb-98eb-e9dfdfc4b438",
+          "kind": "switch",
+          "x": 24,
+          "y": 105,
+          "z": 139,
+          "sx": 2,
+          "sy": 3,
+          "sz": 1,
           "face": "+z",
           "axis": "z",
-          "dir": 1
+          "dir": 1,
+          "tag": ""
         },
         {
-          "id": "eed39e34-9855-4d71-89b6-277173951f89",
-          "kind": "slope",
-          "x": 0,
-          "y": 64,
-          "z": 103,
-          "sx": 6,
-          "sy": 6,
-          "sz": 12,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1
-        },
-        {
-          "id": "99b3a0b9-e2b2-4ce6-9023-d043b9933b37",
+          "id": "d02a651b-f650-42c8-9847-5e2c033e828f",
           "kind": "elevator",
-          "x": 0,
+          "x": 22,
+          "y": 103,
+          "z": 134,
+          "sx": 6,
+          "sy": 1,
+          "sz": 6,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "tag": ""
+        },
+        {
+          "id": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
+          "kind": "room",
+          "x": 29,
           "y": 64,
-          "z": 94,
+          "z": 112,
+          "sx": 64,
+          "sy": 32,
+          "sz": 32,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "name": "Outside courtyard"
+        },
+        {
+          "id": "a0e70a0f-f008-4048-8885-8e78c5026f4c",
+          "kind": "slope",
+          "x": 4,
+          "y": 104,
+          "z": 118,
+          "sx": 4,
+          "sy": 2,
+          "sz": 4,
+          "face": "+z",
+          "axis": "x",
+          "dir": -1
+        },
+        {
+          "id": "cba58a11-acb7-4f28-9eba-39a459657721",
+          "kind": "spawn",
+          "x": 1,
+          "y": 106,
+          "z": 119,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 2
+        },
+        {
+          "id": "7512297f-f012-47f8-b276-c7258bd560c0",
+          "kind": "enemy",
+          "x": 82,
+          "y": 64,
+          "z": 134,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 6,
+          "enemy": "Rottweiler"
+        },
+        {
+          "id": "0d9293ec-43a9-4ea6-8505-b8fbe04e89bb",
+          "kind": "doorway",
+          "x": 93,
+          "y": 64,
+          "z": 126,
+          "sx": 1,
+          "sy": 5,
+          "sz": 4,
+          "face": "+x",
+          "axis": "z",
+          "dir": 1,
+          "locked": false,
+          "keyTag": ""
+        },
+        {
+          "id": "644c9be1-8684-4db3-a262-be14e7d5c0e1",
+          "kind": "crate",
+          "x": 89,
+          "y": 64,
+          "z": 130,
+          "sx": 4,
+          "sy": 20,
+          "sz": 4,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1
+        },
+        {
+          "id": "fb04b015-554f-4c19-9ac4-092ed3c7a43a",
+          "kind": "crate",
+          "x": 89,
+          "y": 64,
+          "z": 122,
+          "sx": 4,
+          "sy": 20,
+          "sz": 4,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1
+        },
+        {
+          "id": "b3910ac1-09cd-4fa2-9667-bca75256dbc4",
+          "kind": "trigger",
+          "x": 11,
+          "y": 104,
+          "z": 117,
           "sx": 6,
           "sy": 6,
           "sz": 6,
           "face": "+z",
           "axis": "z",
-          "dir": 1
+          "dir": 1,
+          "text": "Welcome to Quake64!"
         }
       ]
     },
     "E1M2": {
+      "name": "",
       "objects": []
     },
     "E1M3": {
+      "name": "",
       "objects": []
     },
     "E1M4": {
+      "name": "",
       "objects": []
     },
     "E1M5": {
+      "name": "",
       "objects": []
     },
     "E1M6": {
+      "name": "",
       "objects": []
     },
     "E1M7": {
+      "name": "",
       "objects": []
     },
     "E1M8": {
+      "name": "",
       "objects": []
     }
   },
@@ -3506,69 +3674,69 @@
       "frames": [
         [
           {
-            "x": -3,
-            "y": 4,
-            "z": -5
-          },
-          {
-            "x": 3,
-            "y": 4,
-            "z": -5
-          },
-          {
-            "x": 0,
-            "y": 7,
-            "z": 3
-          },
-          {
-            "x": 0,
-            "y": 8,
-            "z": 8
-          },
-          {
             "x": -6,
-            "y": 3,
-            "z": 3
-          },
-          {
-            "x": -8,
-            "y": -2,
-            "z": 5
+            "y": 16,
+            "z": -10
           },
           {
             "x": 6,
-            "y": 3,
-            "z": 3
+            "y": 16,
+            "z": -10
+          },
+          {
+            "x": 0,
+            "y": 14,
+            "z": 6
+          },
+          {
+            "x": 0,
+            "y": 18,
+            "z": 12
+          },
+          {
+            "x": -6,
+            "y": 6,
+            "z": 4
+          },
+          {
+            "x": -8,
+            "y": 0,
+            "z": 8
+          },
+          {
+            "x": 6,
+            "y": 6,
+            "z": 6
           },
           {
             "x": 8,
-            "y": -2,
-            "z": 5
-          },
-          {
-            "x": -3,
-            "y": 2,
-            "z": 0
-          },
-          {
-            "x": -3,
             "y": 0,
-            "z": 0
+            "z": 10
           },
           {
-            "x": 3,
-            "y": 2,
-            "z": 0
+            "x": -6,
+            "y": 6,
+            "z": -4
           },
           {
-            "x": 3,
+            "x": -6,
             "y": 0,
-            "z": 0
+            "z": -8
+          },
+          {
+            "x": 6,
+            "y": 6,
+            "z": -8
+          },
+          {
+            "x": 6,
+            "y": 0,
+            "z": -12
           },
           {
             "x": 8,
-            "y": 1,
-            "z": 17
+            "y": 0,
+            "z": 10
           }
         ],
         [
@@ -11790,5 +11958,28 @@
         ]
       ]
     }
-  ]
+  ],
+  "editor": {
+    "mode": "layout",
+    "localDraw": false,
+    "selectedIds": [
+      "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
+    ],
+    "enemy": "Rottweiler",
+    "frameIndex": 0,
+    "selectedVerts": [],
+    "layoutCamera": {
+      "x": -38.15871218432926,
+      "y": 169.16216248502903,
+      "z": 228.0556092801482,
+      "yaw": 8.744667724609368,
+      "pitch": -0.48800439453124955,
+      "speed": 16
+    },
+    "animOrbit": {
+      "yaw": 3.339999999999992,
+      "pitch": -0.6966662597656252,
+      "dist": 48
+    }
+  }
 }

@@ -5,17 +5,35 @@ import {
   neighbourRooms,
   activeMap,
   WORLD_SIZE,
+  isGhostKind,
 } from "./model.js";
 import { lookVectors } from "./math3d.js";
+
+const ORTHO = {
+  top: { u: "x", v: "z", su: "sx", sv: "sz", hint: "XZ · +Z up · camera arrow" },
+  left: { u: "z", v: "y", su: "sz", sv: "sy", hint: "YZ · +Y up · camera arrow" },
+  forward: { u: "x", v: "y", su: "sx", sv: "sy", hint: "XY · +Y up · camera arrow" },
+};
 
 export class OverheadView {
   constructor(canvas, opts) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.opts = opts;
+    this.mode = "top";
     this._ro = new ResizeObserver(() => this.resize());
     this._ro.observe(canvas.parentElement);
     this.resize();
+  }
+
+  setMode(mode) {
+    if (!ORTHO[mode] || mode === this.mode) return;
+    this.mode = mode;
+    this.draw();
+  }
+
+  hint() {
+    return ORTHO[this.mode].hint;
   }
 
   resize() {
@@ -47,6 +65,7 @@ export class OverheadView {
     const ox = (w - side) / 2;
     const oy = (h - side) / 2;
     const s = side / WORLD_SIZE;
+    const axes = ORTHO[this.mode];
 
     ctx.strokeStyle = "#8b91a0";
     ctx.strokeRect(ox, oy, side, side);
@@ -75,19 +94,23 @@ export class OverheadView {
     const cur = currentRoom(doc, cam);
     const neigh = cur ? neighbourRooms(doc, cur) : [];
     const vis = local ? localVisibleIds(doc, cam) : null;
-    const selected = this.opts.getSelectedId?.();
+    const selected = new Set(this.opts.getSelectedIds?.() || []);
+    const primary = this.opts.getSelectedId?.();
+    if (primary) selected.add(primary);
 
-    const toScreen = (x, z) => ({ x: ox + x * s, y: oy + z * s });
+    const toScreen = (u, v) => ({ x: ox + u * s, y: oy + side - v * s });
 
     const drawBox = (obj, fill, stroke, lw = 1) => {
-      const p = toScreen(obj.x, obj.z);
+      const uw = obj[axes.su] * s;
+      const vh = obj[axes.sv] * s;
+      const p = toScreen(obj[axes.u], obj[axes.v] + obj[axes.sv]);
       ctx.lineWidth = lw;
       if (fill) {
         ctx.fillStyle = fill;
-        ctx.fillRect(p.x, p.y, obj.sx * s, obj.sz * s);
+        ctx.fillRect(p.x, p.y, uw, vh);
       }
       ctx.strokeStyle = stroke;
-      ctx.strokeRect(p.x, p.y, obj.sx * s, obj.sz * s);
+      ctx.strokeRect(p.x, p.y, uw, vh);
     };
 
     for (const obj of activeMap(doc).objects) {
@@ -107,11 +130,13 @@ export class OverheadView {
       if (obj.kind === "room") continue;
       const faded = vis && !vis.has(obj.id);
       const col = faded ? "#444" : KINDS[obj.kind].color;
-      drawBox(obj, null, obj.id === selected ? "#f2d36b" : col, obj.id === selected ? 2 : 1);
+      if (isGhostKind(obj.kind)) ctx.setLineDash([4, 3]);
+      drawBox(obj, null, selected.has(obj.id) ? "#f2d36b" : col, selected.has(obj.id) ? 2 : 1);
+      ctx.setLineDash([]);
     }
 
     const { forward } = lookVectors(cam.yaw, cam.pitch);
-    const c = toScreen(cam.x, cam.z);
+    const c = toScreen(cam[axes.u], cam[axes.v]);
     ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.arc(c.x, c.y, 3, 0, Math.PI * 2);
@@ -119,7 +144,7 @@ export class OverheadView {
     ctx.strokeStyle = "#d4a017";
     ctx.beginPath();
     ctx.moveTo(c.x, c.y);
-    ctx.lineTo(c.x + forward.x * 14, c.y + forward.z * 14);
+    ctx.lineTo(c.x + forward[axes.u] * 14, c.y - forward[axes.v] * 14);
     ctx.stroke();
   }
 }

@@ -140,9 +140,16 @@ export function distPointToSegment2d(px, py, ax, ay, bx, by) {
   const dy = by - ay;
   const l2 = dx * dx + dy * dy;
   if (l2 < 1e-6) return Math.hypot(px - ax, py - ay);
-  let t = ((px - ax) * dx + (py - ay) * dy) / l2;
-  t = Math.max(0, Math.min(1, t));
+  const t = closestTOnSegment2d(px, py, ax, ay, bx, by);
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+export function closestTOnSegment2d(px, py, ax, ay, bx, by) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const l2 = dx * dx + dy * dy;
+  if (l2 < 1e-6) return 0;
+  return Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l2));
 }
 
 export const BOX_CORNERS = [

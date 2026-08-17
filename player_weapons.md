@@ -8,5 +8,5 @@ Key Weapon
 
 This covers the broad strokes (a melee, a hitscan, a projectile, an arcing projectile)
 
-These are drawn at the bottom of the screen pretending to be line draws, but they are 4 sprites in a square.
+These overlay the **bottom of the 3D viewport** (viewport is at the bottom of the screen; HUD is above) pretending to be line draws, but they are 4 sprites in a square.
 Muzzle flash/axe impact are 4 separate sprites masquerading as line draws.

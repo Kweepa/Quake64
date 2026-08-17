@@ -101,11 +101,15 @@ def main() -> None:
     <aside class="right">
       <div class="right-editors" id="right-editors"></div>
       <div id="overhead-panel" class="preview-panel panel">
-        <h2>Overhead</h2>
+        <div class="toolbar-actions ortho-tabs" role="group" aria-label="Ortho view">
+          <button type="button" id="btn-ortho-top" class="active">Top</button>
+          <button type="button" id="btn-ortho-left">Left</button>
+          <button type="button" id="btn-ortho-forward">Forward</button>
+        </div>
         <div class="preview-frame">
           <canvas id="overhead-canvas"></canvas>
         </div>
-        <p class="muted">Full 0–255 map · camera arrow</p>
+        <p class="muted" id="ortho-hint">XZ · +Z up · camera arrow</p>
       </div>
     </aside>
   </main>

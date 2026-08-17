@@ -6,9 +6,10 @@
 ## 1. Core Technical Specifications & Performance Boundaries
 
 ### Viewport Layout & Display Engine
-* **Resolution:** 256 × 128 pixels centered viewport.
-* **Screen Space:** Occupies 32 × 16 text character tiles, taking up approximately 80% horizontal and 64% vertical space.
+* **Resolution:** 256 × 128 pixels (prototype currently 192 × 128).
+* **Screen Space:** Occupies 32 × 16 text character tiles. The **3D viewport sits at the bottom of the screen**; the **HUD occupies the rows above it**. Weapon sprites overlay the bottom of the viewport, not the HUD.
 * **Drive Mechanism:** Custom Character Graphics Mode utilizing 512 unique custom characters divided into two sets of 256 tiles via a mid-viewport raster split.
+* **Raster Timing:** Raster IRQs must land on the intended scanlines (HUD → viewport boundary, mid-viewport charset flip). The current chain is late / jittery; stabilize so `$D018` / `$D021` switches hit the exact raster lines rather than drifting a few lines into the next character row.
 * **Double Buffering:** Implemented within VIC Bank 3 (`$C000–$FFFF`). Buffer swaps change register `$D018` pointers instantly, allowing an active background drawing buffer with absolute zero screen-space rendering flicker.
 
 ### Performance & Buffer Manipulation
@@ -38,13 +39,26 @@
 ## 3. World Architecture & Physics Mechanics
 
 ### The Portal-Room Framework
-* **Data Definition:** The game map is discretized into an array of isolated bounding boxes rather than an expansive global coordinate layout.
+* **Data Definition:** The game map is discretized into an array of isolated bounding boxes rather than an expansive global coordinate layout. Runtime data is **room-first**: each room owns the objects that sit inside it (crates, elevators, switches, triggers, destinations, keys, enemies, spawn). Same grouping the editor tree uses.
+* **One Room Visible:** Only the room the player is in is drawn. Adjacent rooms are not projected through doorways. When the player crosses a **door threshold**, switch the active room index and start drawing that room instead.
 * **Local Boundaries:** Movement algorithms isolate collision checking explicitly to the dimensions of the player's active room index block using 8-bit `CMP` bounds operations.
-* **State Gates (Doors):** Doors operate as structural bounding boxes. In a closed state, they map as standard blocking planes. When triggered open, they function as dynamic gateway portals. They reveal adjacent room indices to the camera's sight-cone and allow physical entity transition.
+* **State Gates (Doors):** Doors operate as structural bounding boxes. In a closed state, they map as standard blocking planes. When open they allow physical entity transition; they do not punch a view into the next room. A door may be **locked** and stay closed until the player has the matching **key**. After unlock it behaves as a normal open/close door.
+* **Triggers:** Undrawn AABBs with a **purpose** (message, open door, operate elevator, teleporter). Message shows one HUD line while inside. Other purposes fire via a **tag** → index link to the target. Teleport entry is a trigger purpose, not a separate object type; destination is a tagged exit pose.
 
 ### Axis-Aligned Mechanical Elements
 * **Standard 1:2 Ramps:** Elevation geometry is locked to a fixed 1:2 gradient ratio. Height changes are computed instantly without real-time division or multiplication using arithmetic bitwise shifts: `Height = (Local_Position) >> 1`.
 * **Dynamic Interactive Elements:** Elevators (translating Y-axis base planes), switches (proximity check targets), and crates (solid vertical obstacle boxes) utilize a singular uniform bounding-box logic routine, allowing multi-object processing under a unified assembly subroutine loops.
+* **Switch → Elevator:** In the editor, a switch is bound to its elevator(s) by a **tag** string. Export compiles tags to **indices** (switch *n* toggles elevator *m*). The game never stores or compares tag strings. Same tag/index pattern as trigger purposes.
+* **Message Triggers:** Covered by trigger purpose **message** — undrawn AABB, one HUD line while the player is inside.
+
+### Cuboid Hidden Surface / Hidden Line Removal
+* Rooms, crates, and elevators are convex axis-aligned boxes. Use **Elite-style** face culling, then drop any edge that is not on a visible face.
+* **Outside** (crate, elevator): keep faces whose outward normal points toward the camera (at most three faces).
+* **Inside** (room): invert the test — keep the interior faces the camera looks at.
+* Shared edges of two culled faces are never stroked. No painter's algorithm; convexity makes the visible silhouette enough.
+
+### Motion Motes
+* When the view contains no world edges (blank wall, empty volume), camera motion is invisible. Scatter **5–6 single-pixel motes** in a volume around the player so parallax still reads as movement. Cheap plot, not sprites.
 
 ---
 
@@ -65,7 +79,7 @@
 
 ### Viewport Tone & Contrast Map
 * **3D Sandbox Space:** Screen background is explicitly assigned to **VIC Color 11 (Dark Grey)** or **Color 9 (Brown)**, drawing white or light grey vector lines. This breaks from traditional neon/dark retro game tones to evoke *Quake's* oppressive, industrial dark-fantasy space.
-* **HUD Dashboard Split:** The mid-screen raster split forces the bottom text display area into **Color 0 (Black)** with text and asset gauges drawn in **Color 2 (Dark Red)** and **Color 8 (Orange)** to replicate the original stone-carved HUD layout.
+* **HUD Dashboard Split:** The HUD lives in the **rows above the 3D viewport**. Raster-switch that band to **Color 0 (Black)** with gauges in **Color 2 (Dark Red)** and **Color 8 (Orange)** to replicate the original stone-carved HUD. The viewport band stays brown / dark grey. Trigger messages occupy **one HUD line** while the player is inside the volume.
 
 ### Hardware Sprite View-Model
 * **Zero-Overhead Weapon:** The player's weapon is structured out of **4 multiplexed hardware sprites** configured in a 2×2 grid (extending to a 48×42 canvas or 96×42 layout via horizontal hardware scaling).

@@ -7,13 +7,16 @@ box_edges
 	!byte 4,5, 5,6, 6,7, 7,4
 	!byte 0,4, 1,5, 2,6, 3,7
 
-; Ramp quad, switch triangle, two door leaves
+; Ramp quad, switch triangle, door closed/open (no floor edge)
 quad_edges
 	!byte 0,1, 1,2, 2,3, 3,0
 tri_edges
 	!byte 0,1, 1,2, 2,0
-door_edges
-	!byte 0,1, 1,2, 2,0,  3,4, 4,5, 5,3
+; Closed: BL-TL, TL-TR, TR-BL, TR-BR. Open: left 0-1-4, right 2-5 + 2-3.
+door_closed_edges
+	!byte 0,1, 1,2, 2,0,  2,3
+door_open_edges
+	!byte 0,1, 1,4, 4,0,  2,5, 2,3
 
 ; Which faces each edge belongs to (bit0=-X bit1=+X bit2=-Y bit3=+Y bit4=-Z bit5=+Z)
 ; Edge kept if either face visible. Matches box_fill_verts corners.
@@ -388,13 +391,25 @@ coord_add
 draw_door_mesh
 	jsr load_view_trig
 	jsr fill_door_verts
+	ldx obj_i
+	lda door_open,x
+	bne .dd_open
+	lda #4
+	sta mesh_nv
+	sta mesh_ne
+	lda #<door_closed_edges
+	sta edge_ptr
+	lda #>door_closed_edges
+	sta edge_ptr+1
+	jmp stroke_mesh
+.dd_open
 	lda #6
 	sta mesh_nv
-	lda #6
+	lda #5
 	sta mesh_ne
-	lda #<door_edges
+	lda #<door_open_edges
 	sta edge_ptr
-	lda #>door_edges
+	lda #>door_open_edges
 	sta edge_ptr+1
 	jmp stroke_mesh
 
@@ -424,11 +439,12 @@ draw_slope_mesh
 	sta edge_ptr+1
 	jmp stroke_mesh
 
-; Two face triangles; open slides them apart on the face width axis
+; Closed: 4 corners of the face. Open: two full-width leaves, each slides open/2.
 fill_door_verts
 	ldx obj_i
 	lda door_open,x
-	sta pv3
+	lsr
+	sta pv3				; slide
 	lda box_y
 	sta pv1				; y0
 	clc
@@ -449,6 +465,47 @@ fill_door_verts
 	lda box_z
 .fdzp
 	sta pv4				; plane z
+	ldx obj_i
+	lda door_open,x
+	bne .fdz_op
+	; v0 BL
+	lda box_x
+	sta ent_wx
+	lda pv1
+	sta ent_wy
+	lda pv4
+	sta ent_wz
+	ldx #0
+	jsr xform_world_vert
+	; v1 TL
+	lda box_x
+	sta ent_wx
+	lda pv2
+	sta ent_wy
+	lda pv4
+	sta ent_wz
+	ldx #1
+	jsr xform_world_vert
+	; v2 TR
+	clc
+	lda box_x
+	adc box_sx
+	bcc .fdz_c2
+	lda #255
+.fdz_c2
+	sta ent_wx
+	lda pv2
+	sta ent_wy
+	lda pv4
+	sta ent_wz
+	ldx #2
+	jsr xform_world_vert
+	; v3 BR
+	lda pv1
+	sta ent_wy
+	ldx #3
+	jmp xform_world_vert
+.fdz_op
 	lda box_x
 	jsr coord_sub
 	sta pv0				; xL
@@ -460,7 +517,16 @@ fill_door_verts
 	sta ent_wz
 	ldx #0
 	jsr xform_world_vert
-	; v1 TR left
+	; v1 TL left
+	lda pv0
+	sta ent_wx
+	lda pv2
+	sta ent_wy
+	lda pv4
+	sta ent_wz
+	ldx #1
+	jsr xform_world_vert
+	; v4 TR left (xL + sx)
 	clc
 	lda pv0
 	adc box_sx
@@ -472,30 +538,20 @@ fill_door_verts
 	sta ent_wy
 	lda pv4
 	sta ent_wz
-	ldx #1
+	ldx #4
 	jsr xform_world_vert
-	; v2 TL left
-	lda pv0
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	; right leaf
 	lda box_x
 	jsr coord_add
 	sta pv0				; xR
-	; v3 BL right
+	; v5 BL right
 	sta ent_wx
 	lda pv1
 	sta ent_wy
 	lda pv4
 	sta ent_wz
-	ldx #3
+	ldx #5
 	jsr xform_world_vert
-	; v4 BR right
+	; v3 BR right (xR + sx)
 	clc
 	lda pv0
 	adc box_sx
@@ -507,23 +563,13 @@ fill_door_verts
 	sta ent_wy
 	lda pv4
 	sta ent_wz
-	ldx #4
+	ldx #3
 	jsr xform_world_vert
-	; v5 TR right
-	clc
-	lda pv0
-	adc box_sx
-	bcc .fdr2
-	lda #255
-.fdr2
-	sta ent_wx
+	; v2 TR right
 	lda pv2
 	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #5
-	jsr xform_world_vert
-	rts
+	ldx #2
+	jmp xform_world_vert
 .fdx
 	ldx obj_i
 	cmp #FACE_MX
@@ -536,6 +582,47 @@ fill_door_verts
 	lda box_x
 .fdxp
 	sta pv4				; plane x
+	ldx obj_i
+	lda door_open,x
+	bne .fdx_op
+	; v0 BL
+	lda pv4
+	sta ent_wx
+	lda pv1
+	sta ent_wy
+	lda box_z
+	sta ent_wz
+	ldx #0
+	jsr xform_world_vert
+	; v1 TL
+	lda pv4
+	sta ent_wx
+	lda pv2
+	sta ent_wy
+	lda box_z
+	sta ent_wz
+	ldx #1
+	jsr xform_world_vert
+	; v2 TR
+	lda pv4
+	sta ent_wx
+	lda pv2
+	sta ent_wy
+	clc
+	lda box_z
+	adc box_sz
+	bcc .fdx_c2
+	lda #255
+.fdx_c2
+	sta ent_wz
+	ldx #2
+	jsr xform_world_vert
+	; v3 BR
+	lda pv1
+	sta ent_wy
+	ldx #3
+	jmp xform_world_vert
+.fdx_op
 	lda box_z
 	jsr coord_sub
 	sta pv0				; zL
@@ -548,7 +635,16 @@ fill_door_verts
 	sta ent_wz
 	ldx #0
 	jsr xform_world_vert
-	; v1 TR left
+	; v1 TL left
+	lda pv4
+	sta ent_wx
+	lda pv2
+	sta ent_wy
+	lda pv0
+	sta ent_wz
+	ldx #1
+	jsr xform_world_vert
+	; v4 TR left (zL + sz)
 	lda pv4
 	sta ent_wx
 	lda pv2
@@ -560,30 +656,21 @@ fill_door_verts
 	lda #255
 .fdzl1
 	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; v2 TL left
-	lda pv4
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda pv0
-	sta ent_wz
-	ldx #2
+	ldx #4
 	jsr xform_world_vert
 	lda box_z
 	jsr coord_add
 	sta pv0				; zR
-	; v3 BL right
+	; v5 BL right
 	lda pv4
 	sta ent_wx
 	lda pv1
 	sta ent_wy
 	lda pv0
 	sta ent_wz
-	ldx #3
+	ldx #5
 	jsr xform_world_vert
-	; v4 BR right
+	; v3 BR right (zR + sz)
 	lda pv4
 	sta ent_wx
 	lda pv1
@@ -595,23 +682,13 @@ fill_door_verts
 	lda #255
 .fdzr1
 	sta ent_wz
-	ldx #4
+	ldx #3
 	jsr xform_world_vert
-	; v5 TR right
-	lda pv4
-	sta ent_wx
+	; v2 TR right
 	lda pv2
 	sta ent_wy
-	clc
-	lda pv0
-	adc box_sz
-	bcc .fdzr2
-	lda #255
-.fdzr2
-	sta ent_wz
-	ldx #5
-	jsr xform_world_vert
-	rts
+	ldx #2
+	jmp xform_world_vert
 
 ; Up-pointing triangle on the switch face
 fill_switch_verts
@@ -909,7 +986,7 @@ draw_world
 	inx
 	bne .dw_c
 .dw_d
-	; doors: two face triangles, slide apart by door_open
+	; doors: closed 4-vert face; open full-width leaves slide open/2
 	ldx #0
 .dw_door
 	cpx #MAP_NDOORS

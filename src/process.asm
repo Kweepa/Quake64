@@ -109,7 +109,8 @@ door_activate
 	jsr proc_count_free
 	cmp #2
 	bcc .da_rts
-	lda #PROC_RAISE_DOOR
+	ldx proc_tmp1
+	lda #PROC_OPEN_DOOR
 	sta proc_tmp0
 	lda door_sy,x
 	sta proc_tmp2
@@ -118,6 +119,7 @@ door_activate
 	sta proc_tmp4
 	jsr proc_alloc
 	bcs .da_rts
+	ldx proc_tmp1
 	lda #PROC_TIMER
 	sta proc_tmp0
 	lda #PROC_LOWER_DOOR
@@ -128,6 +130,7 @@ door_activate
 	sta proc_tmp4
 	jsr proc_alloc
 .da_rts
+	ldx proc_tmp1
 	rts
 
 ; ------------------------------------------------------------------
@@ -168,6 +171,7 @@ elev_activate
 	lda proc_tmp5
 	sta PROC_E,y
 .ea_rts
+	ldx proc_tmp1
 	rts
 
 ; ------------------------------------------------------------------
@@ -216,7 +220,7 @@ proc_update
 	bne .pu_n1
 	jmp .pu_timer
 .pu_n1
-	cmp #PROC_RAISE_DOOR
+	cmp #PROC_OPEN_DOOR
 	bne .pu_n2
 	jmp .pu_rd
 .pu_n2

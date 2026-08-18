@@ -69,17 +69,13 @@ def btable(name: str, vals: list[int]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def ascii_petscii_ish(s: str) -> list[int]:
-    """Screen codes matching UI font (ASCII-indexed)."""
+def ascii_screen(s: str) -> list[int]:
+    """ASCII screen codes for the UI font (mixed case, 32..126)."""
+    line = s.replace("\r\n", "\n").split("\n", 1)[0]
     out = []
-    for ch in s[:22]:
+    for ch in line[:24]:
         o = ord(ch)
-        if 32 <= o <= 90:
-            out.append(o)
-        elif 97 <= o <= 122:
-            out.append(o - 32)
-        else:
-            out.append(32)
+        out.append(o if 32 <= o <= 126 else 32)
     return out
 
 
@@ -240,7 +236,7 @@ def main() -> None:
             raise SystemExit("trigger has no room")
         text = t.get("text") or ""
         off = len(text_blob)
-        chars = ascii_petscii_ish(text)
+        chars = ascii_screen(text)
         text_blob.extend(chars)
         text_blob.append(0)  # NUL
         tr_x.append(t["x"])

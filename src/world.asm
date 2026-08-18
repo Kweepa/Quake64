@@ -288,14 +288,13 @@ solid_at
 	inx
 	bne .sa_c
 .sa_d
-	; closed / partially open doors overlapping this room
+	; closed doors overlapping this room (open != 0 is a hole)
 	ldx #0
 .sa_door
 	cpx #MAP_NDOORS
 	bcs .sa_no
 	lda door_open,x
-	cmp door_sy,x
-	bcs .sa_dn			; fully open — not solid
+	bne .sa_dn			; any open — not solid
 	lda door_ra,x
 	cmp room_idx
 	beq .sa_dchk
@@ -324,8 +323,103 @@ solid_at
 	rts
 
 ; ------------------------------------------------------------------
+; door_other_room — X=door; A=linked room that isn't room_idx ($ff none)
+; ------------------------------------------------------------------
+door_other_room
+	lda door_ra,x
+	cmp room_idx
+	bne .dor_a
+	lda door_rb,x
+	rts
+.dor_a
+	rts
+
+; ------------------------------------------------------------------
+; col_in_room_y — col_x/col_z inside room Y (exclusive max). C=1 inside
+; ------------------------------------------------------------------
+col_in_room_y
+	cpy #$ff
+	beq .cir_no
+	lda col_x
+	cmp room_x,y
+	bcc .cir_no
+	clc
+	lda room_x,y
+	adc room_sx,y
+	cmp col_x
+	bcc .cir_no
+	beq .cir_no
+	lda col_z
+	cmp room_z,y
+	bcc .cir_no
+	clc
+	lda room_z,y
+	adc room_sz,y
+	cmp col_z
+	bcc .cir_no
+	beq .cir_no
+	sec
+	rts
+.cir_no
+	clc
+	rts
+
+; ------------------------------------------------------------------
+; door_hole_hit — X=door; col_x/col_z in wide opening, thin axis ±1
+; C=1 inside hole (exclusive max)
+; ------------------------------------------------------------------
+door_hole_hit
+	lda door_face,x
+	cmp #FACE_PX
+	bcs .dhh_x
+	; Z-facing: wide=X unexpanded, thin=Z ±1
+	lda door_x,x
+	sta box_x
+	lda door_sx,x
+	sta box_sx
+	lda door_z,x
+	beq .dhh_z0
+	sec
+	sbc #1
+	sta box_z
+	clc
+	lda door_sz,x
+	adc #2
+	sta box_sz
+	jmp point_in_box_xz
+.dhh_z0
+	sta box_z
+	clc
+	lda door_sz,x
+	adc #1
+	sta box_sz
+	jmp point_in_box_xz
+.dhh_x
+	lda door_z,x
+	sta box_z
+	lda door_sz,x
+	sta box_sz
+	lda door_x,x
+	beq .dhh_x0
+	sec
+	sbc #1
+	sta box_x
+	clc
+	lda door_sx,x
+	adc #2
+	sta box_sx
+	jmp point_in_box_xz
+.dhh_x0
+	sta box_x
+	clc
+	lda door_sx,x
+	adc #1
+	sta box_sx
+	jmp point_in_box_xz
+
+; ------------------------------------------------------------------
 ; in_room_or_portal — col_x/col_z allowed for room_idx?
-; Inside room AABB, or in open door leading to/from this room
+; Inside room AABB, or in an open door wall-hole (wide axes, thin ±1).
 ; C=1 allowed
 ; ------------------------------------------------------------------
 in_room_or_portal
@@ -351,14 +445,12 @@ in_room_or_portal
 	sec
 	rts
 .irp_door
-	; open door volumes
 	ldx #0
 .irp_d
 	cpx #MAP_NDOORS
 	bcs .irp_no
 	lda door_open,x
-	cmp door_sy,x
-	bcc .irp_dn
+	beq .irp_dn
 	lda door_ra,x
 	cmp room_idx
 	beq .irp_dchk
@@ -366,15 +458,7 @@ in_room_or_portal
 	cmp room_idx
 	bne .irp_dn
 .irp_dchk
-	lda door_x,x
-	sta box_x
-	lda door_z,x
-	sta box_z
-	lda door_sx,x
-	sta box_sx
-	lda door_sz,x
-	sta box_sz
-	jsr point_in_box_xz
+	jsr door_hole_hit
 	bcs .irp_yes
 .irp_dn
 	inx
@@ -387,7 +471,8 @@ in_room_or_portal
 	rts
 
 ; ------------------------------------------------------------------
-; try_room_switch — if in open door and inside neighbour, switch
+; try_room_switch — in an open door AABB: snap 1 unit into the other
+; room and switch. Else switch if already inside a neighbour room.
 ; ------------------------------------------------------------------
 try_room_switch
 	ldx #0
@@ -395,45 +480,98 @@ try_room_switch
 	cpx #MAP_NDOORS
 	bcs .trs_rts
 	lda door_open,x
-	cmp door_sy,x
-	bcc .trs_n
-	ldy door_ra,x
-	jsr .trs_try
-	ldy door_rb,x
-	cpy #$ff
 	beq .trs_n
-	jsr .trs_try
+	txa
+	tay
+	jsr player_in_door_y
+	bcc .trs_nb
+	jsr door_push_through
+	rts
+.trs_nb
+	ldy door_ra,x
+	jsr .trs_inside
+	bcs .trs_rts
+	ldy door_rb,x
+	jsr .trs_inside
+	bcs .trs_rts
 .trs_n
 	inx
 	bne .trs
 .trs_rts
 	rts
-.trs_try
+.trs_inside
 	cpy room_idx
-	beq .trs_tr
-	; if player inside room Y
-	cpy #$ff
-	beq .trs_tr
+	beq .trs_no
 	lda cam_xh
-	cmp room_x,y
-	bcc .trs_tr
-	clc
-	lda room_x,y
-	adc room_sx,y
-	cmp cam_xh
-	bcc .trs_tr
-	beq .trs_tr
+	sta col_x
 	lda cam_zh
+	sta col_z
+	jsr col_in_room_y
+	bcc .trs_no
+	sty room_idx
+	sec
+	rts
+.trs_no
+	clc
+	rts
+
+; X=door, player in its AABB. Place 1 unit inside the other room.
+door_push_through
+	jsr door_other_room
+	cmp #$ff
+	beq .dpt_rts
+	sta proc_tmp0
+	lda door_face,x
+	cmp #FACE_PX
+	bcs .dpt_x
+	ldy proc_tmp0
+	lda room_z,y
+	ldy room_idx
 	cmp room_z,y
-	bcc .trs_tr
+	bcc .dpt_zd
+	ldy proc_tmp0
+	lda room_z,y
+	sta cam_zh
+	lda #0
+	sta cam_zl
+	jmp .dpt_sw
+.dpt_zd
+	ldy proc_tmp0
 	clc
 	lda room_z,y
 	adc room_sz,y
-	cmp cam_zh
-	bcc .trs_tr
-	beq .trs_tr
-	sty room_idx
-.trs_tr
+	sec
+	sbc #1
+	sta cam_zh
+	lda #0
+	sta cam_zl
+	jmp .dpt_sw
+.dpt_x
+	ldy proc_tmp0
+	lda room_x,y
+	ldy room_idx
+	cmp room_x,y
+	bcc .dpt_xd
+	ldy proc_tmp0
+	lda room_x,y
+	sta cam_xh
+	lda #0
+	sta cam_xl
+	jmp .dpt_sw
+.dpt_xd
+	ldy proc_tmp0
+	clc
+	lda room_x,y
+	adc room_sx,y
+	sec
+	sbc #1
+	sta cam_xh
+	lda #0
+	sta cam_xl
+.dpt_sw
+	lda proc_tmp0
+	sta room_idx
+.dpt_rts
 	rts
 
 ; ------------------------------------------------------------------
@@ -636,6 +774,7 @@ try_proximity
 	jsr .prox_door
 	bcc .tp_dn
 	jsr door_activate
+	ldx obj_i
 .tp_dn
 	inx
 	bne .tp_d

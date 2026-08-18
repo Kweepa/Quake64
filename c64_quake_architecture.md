@@ -14,7 +14,7 @@
 
 ### Performance & Buffer Manipulation
 * **Traditional Clear Cost:** ~17,664 CPU cycles (consuming ~90% of a standard PAL frame's processing budget).
-* **The "Lazy Erase" List Strategy:** The engine records modified Tile IDs to a localized "Dirty List" array during active 3D line plotting. The clear phase only erases touched tiles, reducing cycles to ~1,400 per frame. This reclaims ~83% of the CPU budget for geometry projection.
+* **The "Lazy Erase" List Strategy:** The engine records modified Tile IDs to a localized "Dirty List" array during active 3D line plotting. However, this severely slows down line rendering and in the worst case isn't much faster to clear than a full unrolled clear.
 
 ---
 

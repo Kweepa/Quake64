@@ -303,7 +303,7 @@ hud_print
 	sta SCR_B + HUD_OFF,x
 	rts
 
-; Message trigger on row 20 (below profiler + coords)
+; Message trigger on row 21, centered in the 24-col viewport
 hud_message
 	lda msg_on
 	bne .hm_show
@@ -333,11 +333,26 @@ hud_message
 	adc #0
 	sta src_ptr+1
 	ldy #0
+.hm_len
+	lda (src_ptr),y
+	beq .hm_got
+	iny
+	cpy #HUD_MSG_W
+	bcc .hm_len
+.hm_got
+	sty hud_n			; length
+	lda #HUD_MSG_W
+	sec
+	sbc hud_n
+	lsr
+	tax				; dest col = (W - len) / 2
+	ldy #0
 .hm_cp
 	lda (src_ptr),y
 	beq .hm_done
-	sta SCR_A + HUD_OFF3,y
-	sta SCR_B + HUD_OFF3,y
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
 	iny
 	cpy #HUD_MSG_W
 	bcc .hm_cp

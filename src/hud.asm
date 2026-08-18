@@ -30,7 +30,7 @@ init_hud
 	sta SCR_A + HUD_OFF,x
 	sta SCR_B + HUD_OFF,x
 	inx
-	cpx #23
+	cpx #24
 	bne -
 
 	lda #HUD_CH_R
@@ -58,7 +58,7 @@ init_hud
 	cpx #104
 	bne -
 
-	ldx #22
+	ldx #23
 -
 	lda #COL_HUD
 	sta $d800 + HUD_OFF,x
@@ -69,11 +69,6 @@ init_hud
 	sta $d800 + HUD_OFF + 9
 	sta $d800 + HUD_OFF + 14
 	sta $d800 + HUD_OFF + 19
-	lda #0
-	sta $d800 + HUD_OFF + 3
-	sta $d800 + HUD_OFF + 8
-	sta $d800 + HUD_OFF + 13
-	sta $d800 + HUD_OFF + 18
 
 	ldx #0
 	lda #HUD_CH_SP
@@ -128,28 +123,28 @@ init_hud
 	bpl -
 	rts
 
-; F from frame_cy; R P K D from prof_cy (clear still timed, not printed)
+; F R P K D — 4-digit ms (xxxxRxxxxPxxxxKxxxxDxxxx)
 hud_print
 	ldx #0
-	lda frame_cy + 2
-	ldy frame_cy + 1
-	jsr .ms3
+	lda dt_msh
+	ldy dt_ms
+	jsr .dec4
 	ldx #5
 	lda prof_cy + PROF_ROT * 4 + 2
 	ldy prof_cy + PROF_ROT * 4 + 1
-	jsr .ms3
+	jsr .ms4
 	ldx #10
 	lda prof_cy + PROF_PROJ * 4 + 2
 	ldy prof_cy + PROF_PROJ * 4 + 1
-	jsr .ms3
+	jsr .ms4
 	ldx #15
 	lda prof_cy + PROF_CLIP * 4 + 2
 	ldy prof_cy + PROF_CLIP * 4 + 1
-	jsr .ms3
+	jsr .ms4
 	ldx #20
 	lda prof_cy + PROF_DRAW * 4 + 2
 	ldy prof_cy + PROF_DRAW * 4 + 1
-	jsr .ms3
+	jsr .ms4
 
 	ldx #1
 	lda cam_xh
@@ -236,9 +231,8 @@ hud_print
 	sta SCR_B + HUD_OFF2,x
 	rts
 
-; A:Y = cy[2]:cy[1] → 3 ASCII digits at HUD_OFF+X
-.ms3
-	stx pp_col
+; A:Y = cy[2]:cy[1] → ms (>>2) then 4 digits at HUD_OFF+X
+.ms4
 	sta pp_tmp_h
 	sty pp_tmp_l
 	lsr pp_tmp_h
@@ -246,55 +240,99 @@ hud_print
 	lsr pp_tmp_h
 	ror pp_tmp_l
 	lda pp_tmp_h
-	beq .dec3
+	ldy pp_tmp_l
+	; fall through
+
+; A:Y = 16-bit ms → 4 ASCII digits at HUD_OFF+X; saturate 9999
+.dec4
+	stx pp_col
+	sta pp_tmp_h
+	sty pp_tmp_l
+	cmp #>10000
+	bcc .d4go
+	bne .d4sat
+	cpy #<10000
+	bcc .d4go
+.d4sat
 	lda #$39
-	sta pp_tmp_l
 	sta hud_n
-	lda #$39
-	jmp .out3
-.dec3
+	sta pp_tmp_h
+	sta pp_tmp_l
+	ldy #$39
+	jmp .d4out
+.d4go
 	ldx #0
-.hund
+.d4thou
+	lda pp_tmp_h
+	cmp #>1000
+	bcc .d4hund
+	bne .d4tsub
+	lda pp_tmp_l
+	cmp #<1000
+	bcc .d4hund
+.d4tsub
+	sec
+	lda pp_tmp_l
+	sbc #<1000
+	sta pp_tmp_l
+	lda pp_tmp_h
+	sbc #>1000
+	sta pp_tmp_h
+	inx
+	bne .d4thou
+.d4hund
+	stx hud_n			; thousands 0–9
+	ldx #0
+.d4hlp
+	lda pp_tmp_h
+	bne .d4hsub
 	lda pp_tmp_l
 	cmp #100
-	bcc .tens
+	bcc .d4tens
+.d4hsub
+	sec
+	lda pp_tmp_l
 	sbc #100
 	sta pp_tmp_l
+	lda pp_tmp_h
+	sbc #0
+	sta pp_tmp_h
 	inx
-	bne .hund
-.tens
+	bne .d4hlp
+.d4tens
 	ldy #0
-.tenlp
+.d4tlp
 	lda pp_tmp_l
 	cmp #10
-	bcc .ones
+	bcc .d4ones
 	sbc #10
 	sta pp_tmp_l
 	iny
-	bne .tenlp
-.ones
+	bne .d4tlp
+.d4ones
 	txa
 	ora #$30
+	sta pp_tmp_h			; hundreds ASCII
+	tya
+	ora #$30
+	tay				; tens ASCII
+	lda hud_n
+	ora #$30
+	sta hud_n			; thousands ASCII
+	lda pp_tmp_l
+	ora #$30
+	sta pp_tmp_l			; ones ASCII
+.d4out
 	ldx pp_col
+	lda hud_n
+	sta SCR_A + HUD_OFF,x
+	sta SCR_B + HUD_OFF,x
+	inx
+	lda pp_tmp_h
 	sta SCR_A + HUD_OFF,x
 	sta SCR_B + HUD_OFF,x
 	inx
 	tya
-	ora #$30
-	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
-	inx
-	lda pp_tmp_l
-	ora #$30
-	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
-	rts
-.out3
-	ldx pp_col
-	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
-	inx
-	lda hud_n
 	sta SCR_A + HUD_OFF,x
 	sta SCR_B + HUD_OFF,x
 	inx
@@ -303,7 +341,7 @@ hud_print
 	sta SCR_B + HUD_OFF,x
 	rts
 
-; Message trigger on row 21, centered in the 24-col viewport
+; Message trigger on HUD_ROW3, centered in the 24-col viewport
 hud_message
 	lda msg_on
 	bne .hm_show

@@ -45,6 +45,17 @@
 * **State Gates (Doors):** Doors operate as structural bounding boxes. In a closed state, they map as standard blocking planes. When open they allow physical entity transition; they do not punch a view into the next room. A door may be **locked** and stay closed until the player has the matching **key**. After unlock it behaves as a normal open/close door.
 * **Triggers:** Undrawn AABBs with a **purpose** (message, open door, operate elevator, teleporter). Message shows one HUD line while inside. Other purposes fire via a **tag** → index link to the target. Teleport entry is a trigger purpose, not a separate object type; destination is a tagged exit pose.
 
+### View (Yaw Only)
+* The projector is **yaw-only**. View Y is `world_y − cam_yh` (no pitch shear, no extra pitch trig per vertex). Look-up/down was dropped so AABB uprights stay screen-vertical.
+* Viewport is **192×128**, `FOCAL=100`: a point is on-screen if `|x|/z ≤ 96/100` and `|y|/z ≤ 64/100` (about **44°** / **33°** half-angles).
+
+### View Frustum Cull (Items and Enemies)
+* **Cheap over exact.** Fail-open: drawing something a bit off-screen is OK; skipping something that still has pixels in the viewport is not. Tests use a **45°** cone `|axis| ≤ z` (fatter than both FOVs) plus a size pad.
+* **Items** (crates, doors, switches, elevators, slopes, platforms): `frustum_hits` runs **Y first** (no muls), then the three inward XZ planes (left / right / front). Active room is interior-culled only — not frustum-culled.
+  * Y: reject only if the **whole** AABB is above or below the cone. `y_lo = box_y − cam_yh`, `y_hi = y_lo + box_sy`. Eye-height overlap (`y_lo ≤ 0 ≤ y_hi`) always keeps. Otherwise compare `|y|` to Chebyshev XZ of the four box corners vs the camera, plus `ITEM_CULL_Y` (2). Use the **farthest** corner (max of the four `|Δ|`), not the nearest.
+  * XZ: supporting-vertex dots against yaw±`FOV_HALF` inward normals; keep unless the box is fully outside any plane.
+* **Enemies:** one origin transform, then `enemy_in_view`: `z ≥ 0`, `|x| ≤ z+ENEMY_CULL_R` (2), `|y| ≤ z+ENEMY_CULL_H` (6, figure height). Miss skips rotate/project/draw. Same-floor figures almost always pass Y; the win is stacked floors in a tall room.
+
 ### Axis-Aligned Mechanical Elements
 * **Standard 1:2 Ramps:** Elevation geometry is locked to a fixed 1:2 gradient ratio. Height changes are computed instantly without real-time division or multiplication using arithmetic bitwise shifts: `Height = (Local_Position) >> 1`.
 * **Dynamic Interactive Elements:** Elevators (translating Y-axis base planes), switches (proximity check targets), and crates (solid vertical obstacle boxes) utilize a singular uniform bounding-box logic routine, allowing multi-object processing under a unified assembly subroutine loops.
@@ -67,7 +78,7 @@
 ### Arbitrary 3D Stick Figures
 * **Structural Assembly:** Enemies are built from 10–12 vector lines using a target budget of 8–10 vertices per model frame. Animations span a 12-frame asset allocation footprint (e.g., 4 walk, 2 attack, 2 death, 1 flinch frames) costing only 480 bytes per character type.
 * **Fixed-Point Rotation Matrix Simulation:** To calculate arbitrary 3D rotation, the engine sidesteps native multiplication loops. 8-bit Log and Anti-log lookup tables evaluate vector transformations via fast addition: `AntiLog(Log(|X|) + Log(|cos(θ)|))`.
-* **Generational Advancements:** Employs true multi-axis 3D coordinates allowing authentic vertical view-pitch controls (looking up/down smoothly), room-over-room overlapping map geometries, and complex, cascading 3D ragdoll spin trajectories on dead or tumbling entities.
+* **Generational Advancements:** Employs true multi-axis 3D coordinates allowing room-over-room overlapping map geometries, and complex, cascading 3D ragdoll spin trajectories on dead or tumbling entities. Player view stays yaw-only (no pitch rotate).
 
 ### Projectiles (Nine Inch Nails)
 * **Collision Routine:** Tracked as single-point vectors shifting through active local spaces.

@@ -13,6 +13,7 @@ OUT = ROOT / "src" / "map_e1m1.asm"
 ENEMY_TYPE = {"Grunt": 0, "Rottweiler": 1}
 ELEV_DESCENDING = 0
 ELEV_AUTOMATIC = 1
+ELEV_TOGGLE = 2
 FACE = {"+z": 0, "-z": 1, "+x": 2, "-x": 3}
 ROOM_SKY_DEFAULT = 9
 ROOM_FLOOR_DEFAULT = 8
@@ -88,6 +89,7 @@ def main() -> None:
     doors = [o for o in objs if o["kind"] == "doorway"]
     crates = [o for o in objs if o["kind"] == "crate"]
     slopes = [o for o in objs if o["kind"] == "slope"]
+    plats = [o for o in objs if o["kind"] == "platform"]
     switches = [o for o in objs if o["kind"] == "switch"]
     elevs = [o for o in objs if o["kind"] == "elevator"]
     enemies = [o for o in objs if o["kind"] == "enemy"]
@@ -166,6 +168,21 @@ def main() -> None:
         slope_dir.append(1 if s.get("dir", 1) >= 0 else 0)  # 1=+ 0=-
         slope_room.append(ri)
 
+    # Platforms (horizontal floor quads)
+    plat_x, plat_y, plat_z = [], [], []
+    plat_sx, plat_sz, plat_room, plat_solid = [], [], [], []
+    for p in plats:
+        ri = room_under(rooms, p)
+        if ri is None:
+            raise SystemExit(f"platform at {p['x']},{p['y']},{p['z']} has no room")
+        plat_x.append(p["x"])
+        plat_y.append(p["y"])
+        plat_z.append(p["z"])
+        plat_sx.append(p["sx"])
+        plat_sz.append(p["sz"])
+        plat_room.append(ri)
+        plat_solid.append(0 if p.get("collide") is False else 1)
+
     # Elevators
     elev_x, elev_y, elev_z = [], [], []
     elev_sx, elev_sy, elev_sz = [], [], []
@@ -181,7 +198,12 @@ def main() -> None:
         elev_sx.append(e["sx"])
         elev_sy.append(e["sy"])
         elev_sz.append(e["sz"])
-        elev_type.append(ELEV_AUTOMATIC if et == "automatic" else ELEV_DESCENDING)
+        if et == "automatic":
+            elev_type.append(ELEV_AUTOMATIC)
+        elif et == "toggle":
+            elev_type.append(ELEV_TOGGLE)
+        else:
+            elev_type.append(ELEV_DESCENDING)
         elev_home.append(e["y"])
         elev_dest.append(rooms[ri]["y"])  # room floor
         elev_room.append(ri)
@@ -255,6 +277,7 @@ def main() -> None:
     frustum = 1
     for r in rooms:
         frustum = max(frustum, int(r["sx"]), int(r["sz"]))
+    frustum = max(1, frustum // 2)
     frustum_half = frustum // 2
 
     parts_counts = [
@@ -263,12 +286,14 @@ def main() -> None:
         f"MAP_NDOORS\t= {len(doors)}",
         f"MAP_NCRATES\t= {len(crates)}",
         f"MAP_NSLOPES\t= {len(slopes)}",
+        f"MAP_NPLATS\t= {len(plats)}",
         f"MAP_NSWITCHES\t= {len(switches)}",
         f"MAP_NELEVS\t= {len(elevs)}",
         f"MAP_NENEMIES\t= {len(enemies)}",
         f"MAP_NTRIGS\t= {len(triggers)}",
         "ELEV_TYPE_DESCEND\t= 0",
         "ELEV_TYPE_AUTO\t= 1",
+        "ELEV_TYPE_TOGGLE\t= 2",
         "FACE_PZ\t= 0",
         "FACE_MZ\t= 1",
         "FACE_PX\t= 2",
@@ -328,6 +353,14 @@ def main() -> None:
         btable("slope_dir", slope_dir).rstrip(),
         btable("slope_room", slope_room).rstrip(),
         "",
+        btable("plat_x", plat_x).rstrip(),
+        btable("plat_y", plat_y).rstrip(),
+        btable("plat_z", plat_z).rstrip(),
+        btable("plat_sx", plat_sx).rstrip(),
+        btable("plat_sz", plat_sz).rstrip(),
+        btable("plat_room", plat_room).rstrip(),
+        btable("plat_solid", plat_solid).rstrip(),
+        "",
         btable("elev_x", elev_x).rstrip(),
         btable("elev_y0", elev_y).rstrip(),  # home/init Y (const)
         btable("elev_z", elev_z).rstrip(),
@@ -373,7 +406,7 @@ def main() -> None:
     print(
         f"Wrote {OUT.relative_to(ROOT)} + map_counts.asm: "
         f"{len(rooms)} rooms, {len(doors)} doors, {len(crates)} crates, "
-        f"{len(elevs)} elevs, {len(enemies)} enemies"
+        f"{len(plats)} plats, {len(elevs)} elevs, {len(enemies)} enemies"
     )
 
 

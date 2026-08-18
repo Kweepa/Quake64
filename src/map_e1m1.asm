@@ -81,6 +81,21 @@ slope_dir
 slope_room
 	!byte 0
 
+plat_x
+	!byte 22,22
+plat_y
+	!byte 77,92
+plat_z
+	!byte 134,134
+plat_sx
+	!byte 6,6
+plat_sz
+	!byte 6,6
+plat_room
+	!byte 1,1
+plat_solid
+	!byte 0,0
+
 elev_x
 	!byte 22
 elev_y0
@@ -94,7 +109,7 @@ elev_sy
 elev_sz
 	!byte 6
 elev_type
-	!byte 0
+	!byte 2
 elev_home
 	!byte 103
 elev_dest
@@ -103,23 +118,23 @@ elev_room
 	!byte 1
 
 sw_x
-	!byte 24
+	!byte 24,22
 sw_y
-	!byte 105
+	!byte 105,66
 sw_z
-	!byte 139
+	!byte 139,136
 sw_sx
-	!byte 2
+	!byte 2,1
 sw_sy
-	!byte 3
+	!byte 3,3
 sw_sz
-	!byte 1
+	!byte 1,2
 sw_elev
-	!byte 0
+	!byte 0,0
 sw_room
-	!byte 1
+	!byte 1,1
 sw_face
-	!byte 0
+	!byte 0,2
 
 en_x
 	!byte 83,83

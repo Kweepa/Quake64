@@ -112,6 +112,14 @@ export const KINDS = {
     fixed: false,
     slope: true,
   },
+  platform: {
+    id: "platform",
+    label: "Platform",
+    color: "#b8a878",
+    defaultSize: [4, 1, 4],
+    fixed: false,
+    slope: false,
+  },
   doorway: {
     id: "doorway",
     label: "Doorway",
@@ -211,6 +219,7 @@ export const PALETTE_ORDER = [
   "doorway",
   "switch",
   "slope",
+  "platform",
   "crate",
   "elevator",
   "spawn",
@@ -223,8 +232,8 @@ export const MAX_TRIGGER_TEXT = 80;
 export const MAX_NAME_LEN = 40;
 export const MAX_TAG_LEN = 16;
 
-/** Elevator motion: descending = switch lower→wait→raise; automatic = stand-on same cycle. */
-export const ELEV_TYPES = ["descending", "automatic"];
+/** Elevator motion: descending = switch lower→wait→raise; automatic = stand-on same cycle; toggle = switch, stay until retrigger. */
+export const ELEV_TYPES = ["descending", "automatic", "toggle"];
 
 export function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
@@ -505,6 +514,10 @@ export function clampObject(obj) {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
   }
+  if (obj.kind === "platform") {
+    obj.sy = 1;
+    obj.collide = obj.collide !== false;
+  }
   return obj;
 }
 
@@ -549,6 +562,7 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
   }
+  if (kind === "platform") obj.collide = extra.collide !== false;
   return clampObject(obj);
 }
 
@@ -878,6 +892,7 @@ function parseObjects(list) {
       locked: o.locked,
       keyTag: o.keyTag,
       elevType: o.elevType,
+      collide: o.collide,
       skyColor: o.skyColor,
       floorColor: o.floorColor,
       lineColor: o.lineColor,
@@ -904,6 +919,7 @@ function parseObjects(list) {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);
     }
+    if (o.kind === "platform" && o.collide != null) obj.collide = o.collide !== false;
     out.push(clampObject(obj));
   }
   return out;

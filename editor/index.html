@@ -729,6 +729,14 @@ const KINDS = {
     fixed: false,
     slope: true,
   },
+  platform: {
+    id: "platform",
+    label: "Platform",
+    color: "#b8a878",
+    defaultSize: [4, 1, 4],
+    fixed: false,
+    slope: false,
+  },
   doorway: {
     id: "doorway",
     label: "Doorway",
@@ -828,6 +836,7 @@ const PALETTE_ORDER = [
   "doorway",
   "switch",
   "slope",
+  "platform",
   "crate",
   "elevator",
   "spawn",
@@ -840,8 +849,8 @@ const MAX_TRIGGER_TEXT = 80;
 const MAX_NAME_LEN = 40;
 const MAX_TAG_LEN = 16;
 
-/** Elevator motion: descending = switch lower→wait→raise; automatic = stand-on same cycle. */
-const ELEV_TYPES = ["descending", "automatic"];
+/** Elevator motion: descending = switch lower→wait→raise; automatic = stand-on same cycle; toggle = switch, stay until retrigger. */
+const ELEV_TYPES = ["descending", "automatic", "toggle"];
 
 function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
@@ -1122,6 +1131,10 @@ function clampObject(obj) {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
   }
+  if (obj.kind === "platform") {
+    obj.sy = 1;
+    obj.collide = obj.collide !== false;
+  }
   return obj;
 }
 
@@ -1166,6 +1179,7 @@ function createObject(kind, x, y, z, extra = {}) {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
   }
+  if (kind === "platform") obj.collide = extra.collide !== false;
   return clampObject(obj);
 }
 
@@ -1495,6 +1509,7 @@ function parseObjects(list) {
       locked: o.locked,
       keyTag: o.keyTag,
       elevType: o.elevType,
+      collide: o.collide,
       skyColor: o.skyColor,
       floorColor: o.floorColor,
       lineColor: o.lineColor,
@@ -1521,6 +1536,7 @@ function parseObjects(list) {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);
     }
+    if (o.kind === "platform" && o.collide != null) obj.collide = o.collide !== false;
     out.push(clampObject(obj));
   }
   return out;
@@ -2549,6 +2565,16 @@ class LayoutView {
       for (const [i, j] of BOX_EDGES) {
         segs.push({ a: cornerWorld(obj, i), b: cornerWorld(obj, j) });
       }
+      return segs;
+    }
+    if (obj.kind === "platform") {
+      const y = obj.y;
+      segs.push(
+        { a: { x: obj.x, y, z: obj.z }, b: { x: obj.x + obj.sx, y, z: obj.z } },
+        { a: { x: obj.x + obj.sx, y, z: obj.z }, b: { x: obj.x + obj.sx, y, z: obj.z + obj.sz } },
+        { a: { x: obj.x + obj.sx, y, z: obj.z + obj.sz }, b: { x: obj.x, y, z: obj.z + obj.sz } },
+        { a: { x: obj.x, y, z: obj.z + obj.sz }, b: { x: obj.x, y, z: obj.z } }
+      );
       return segs;
     }
     for (const [i, j] of BOX_EDGES) {
@@ -4462,6 +4488,13 @@ function renderInspector() {
       sel.addEventListener("change", () => apply(() => (obj.elevType = sel.value)));
       root.appendChild(field("Type", sel));
     }
+    if (obj.kind === "platform") {
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = obj.collide !== false;
+      chk.addEventListener("change", () => apply(() => (obj.collide = chk.checked)));
+      root.appendChild(field("Collide", chk));
+    }
     if (obj.kind === "doorway") {
       const lock = document.createElement("input");
       lock.type = "checkbox";
@@ -4477,7 +4510,14 @@ function renderInspector() {
       keyInp.addEventListener("change", () => apply(() => (obj.keyTag = clampTag(keyInp.value))));
       root.appendChild(field("Key", keyInp));
     }
-    if (!KINDS[obj.kind].fixed) {
+    if (obj.kind === "platform") {
+      root.appendChild(
+        vec3Field("Size", [
+          { value: obj.sx, onChange: (v) => apply(() => (obj.sx = v)), min: 1, max: 256 },
+          { value: obj.sz, onChange: (v) => apply(() => (obj.sz = v)), min: 1, max: 256 },
+        ])
+      );
+    } else if (!KINDS[obj.kind].fixed) {
       root.appendChild(
         vec3Field("Size", [
           { value: obj.sx, onChange: (v) => apply(() => (obj.sx = v)), min: 1, max: 256 },

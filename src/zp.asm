@@ -82,7 +82,7 @@ sn_b		= $34			; sin(yaw)
 cp_b		= $36			; cos(pitch)
 sp_b		= $37			; sin(pitch)
 vindex		= $35
-dt_ms		= $38
+dt_ms		= $38			; frame dt milliseconds (lo)
 div_c		= $3e			; signed denom for lerpdv
 nlo		= $5e			; 16-bit lerp num / den / dy
 nhi		= $5f
@@ -155,29 +155,24 @@ box_z		= $96
 box_sx		= $97
 box_sy		= $98
 box_sz		= $99
-ent_yaw		= $9a			; rot<<5 for model facing
+ent_yaw		= $9a			; unused (was rot<<5 for model facing)
 pl_on_elev	= $9b			; $ff none, else elev index
 msg_off		= $9c			; offset into map_text
 wish_dxh	= $9d			; wish 8.8 high
 wish_dzh	= $9e
-vel_ms		= $9f
+vel_ms		= $9f			; hold duration ms (lo)
 turn_acc_l	= $a0
 turn_acc_h	= $a1
 pitch_acc_l	= $a2
 pitch_acc_h	= $a3
 save_xl		= $a4
 save_zl		= $a5
-hold_fwd	= $a6			; read_input snapshots
-hold_back	= $a7
-hold_strafel	= $a8
-hold_strafer	= $a9
-hold_turn_l	= $aa
-hold_turn_r	= $ab
-hold_pitch_u	= $ac
-hold_pitch_d	= $ad
+dt_msh		= $a6			; frame dt milliseconds (hi)
+vel_msh		= $a7			; hold duration ms (hi)
+; $a8–$ad free (were 8-bit hold snapshots)
 scale_s		= $ae			; scale_vel sign
-fr_x		= $af			; lookahead square origin XZ
-fr_z		= $b0
+fn_lx		= $af			; frustum inward normals (XZ)
+fn_lz		= $b0
 pv0		= $b1			; glyph / ramp / door fill
 pv1		= $b2
 pv2		= $b3
@@ -187,4 +182,28 @@ col_sky		= $b6			; active room sky → $d021 top half
 col_floor	= $b7			; active room floor → $d021 bot half
 col_line	= $b8			; active room lines → viewport colour RAM
 palette_room	= $b9			; last room_idx palette applied ($ff = none)
+far_scale	= $ba			; FOCAL/z integer, far enemy project
+
+; SFX (playsound.asm) — raster Timer A poll only
+sound_index	= $bb			; $ff = idle
+sound_ptr_l	= $bc
+sound_ptr_h	= $bd
+sound_priority	= $be
+sound_count	= $bf
+sound_max	= $c0
+ps_save_x	= $c1
+ps_save_y	= $c2
+fn_rx		= $c3
+fn_rz		= $c4
+fn_fx		= $c5			; near/forward
+fn_fz		= $c6
+
+; Last-XZ yaw cache for xform_world_vert (vertical pairs skip 4 muls)
+xf_ok		= $c7			; 0 = empty (cleared each draw_world)
+xf_wx		= $c8
+xf_wz		= $c9
+xf_xl		= $ca			; cached view x'
+xf_xh		= $cb
+xf_zl		= $cc			; cached view z'
+xf_zh		= $cd
 

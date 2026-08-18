@@ -516,6 +516,16 @@ export class LayoutView {
       }
       return segs;
     }
+    if (obj.kind === "platform") {
+      const y = obj.y;
+      segs.push(
+        { a: { x: obj.x, y, z: obj.z }, b: { x: obj.x + obj.sx, y, z: obj.z } },
+        { a: { x: obj.x + obj.sx, y, z: obj.z }, b: { x: obj.x + obj.sx, y, z: obj.z + obj.sz } },
+        { a: { x: obj.x + obj.sx, y, z: obj.z + obj.sz }, b: { x: obj.x, y, z: obj.z + obj.sz } },
+        { a: { x: obj.x, y, z: obj.z + obj.sz }, b: { x: obj.x, y, z: obj.z } }
+      );
+      return segs;
+    }
     for (const [i, j] of BOX_EDGES) {
       segs.push({ a: cornerWorld(obj, i), b: cornerWorld(obj, j) });
     }

@@ -21,11 +21,20 @@ proc_init
 	ldx #0
 .pe
 	cpx #MAP_NELEVS
-	beq .pdone
+	beq .psw0
 	lda elev_y0,x
 	sta elev_y,x
 	inx
 	bne .pe
+.psw0
+	ldx #0
+	lda #0
+.psw
+	cpx #MAP_NSWITCHES
+	beq .pdone
+	sta sw_latched,x
+	inx
+	bne .psw
 .pdone
 	rts
 
@@ -96,19 +105,19 @@ proc_count_free
 	rts
 
 ; ------------------------------------------------------------------
-; door_activate — X = door index
+; door_activate — X = door index; C=0 success
 ; ------------------------------------------------------------------
 door_activate
 	stx proc_tmp1
 	jsr proc_target_busy
-	bcs .da_rts
+	bcs .da_fail
 	ldx proc_tmp1
 	lda door_open,x
 	cmp door_sy,x
-	bcs .da_rts
+	bcs .da_fail
 	jsr proc_count_free
 	cmp #2
-	bcc .da_rts
+	bcc .da_fail
 	ldx proc_tmp1
 	lda #PROC_OPEN_DOOR
 	sta proc_tmp0
@@ -118,7 +127,9 @@ door_activate
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .da_rts
+	bcs .da_fail
+	lda #SOUND_OPENDOOR
+	jsr play_sound
 	ldx proc_tmp1
 	lda #PROC_TIMER
 	sta proc_tmp0
@@ -129,24 +140,33 @@ door_activate
 	lda #>DOOR_RECLOSE_MS
 	sta proc_tmp4
 	jsr proc_alloc
-.da_rts
+	clc
+	ldx proc_tmp1
+	rts
+.da_fail
+	sec
 	ldx proc_tmp1
 	rts
 
 ; ------------------------------------------------------------------
-; elev_activate — X = elev index
+; elev_activate — X = elev index; C=0 success
+; toggle: one-shot to the other stop; else lower→wait→raise from home
 ; ------------------------------------------------------------------
 elev_activate
 	stx proc_tmp1
 	jsr proc_target_busy
-	bcs .ea_rts
+	bcs .ea_fail
+	ldx proc_tmp1
+	lda elev_type,x
+	cmp #ELEV_TYPE_TOGGLE
+	beq .ea_toggle
 	jsr proc_count_free
 	cmp #2
-	bcc .ea_rts
+	bcc .ea_fail
 	ldx proc_tmp1
 	lda elev_y,x
 	cmp elev_home,x
-	bne .ea_rts			; only start from home (top)
+	bne .ea_fail			; only start from home (top)
 	lda elev_home,x
 	sta proc_tmp5			; return height
 	lda #PROC_LOWER_ELEV
@@ -157,7 +177,7 @@ elev_activate
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .ea_rts
+	bcs .ea_fail
 	lda #PROC_TIMER
 	sta proc_tmp0
 	lda #PROC_RAISE_ELEV
@@ -167,24 +187,59 @@ elev_activate
 	lda #>ELEV_WAIT_MS
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .ea_rts
+	bcs .ea_fail
 	lda proc_tmp5
 	sta PROC_E,y
-.ea_rts
+	jmp .ea_snd
+.ea_fail
+	sec
+	ldx proc_tmp1
+	rts
+.ea_toggle
+	jsr proc_count_free
+	cmp #1
+	bcc .ea_fail
+	ldx proc_tmp1
+	lda elev_y,x
+	cmp elev_home,x
+	bne .ea_tog_up
+	lda #PROC_LOWER_ELEV
+	sta proc_tmp0
+	lda elev_dest,x
+	sta proc_tmp2
+	jmp .ea_tog_go
+.ea_tog_up
+	lda #PROC_RAISE_ELEV
+	sta proc_tmp0
+	lda elev_home,x
+	sta proc_tmp2
+.ea_tog_go
+	lda #0
+	sta proc_tmp3
+	sta proc_tmp4
+	jsr proc_alloc
+	bcs .ea_fail
+.ea_snd
+	lda #SOUND_STNMOV
+	jsr play_sound
+	clc
 	ldx proc_tmp1
 	rts
 
 ; ------------------------------------------------------------------
-; Accumulate motion: add dt to C:D; if >= MOTION_STEP_MS, subtract and C=0 (step)
+; Accumulate motion: add dt once, then try one 64ms step (C=0 if stepped)
 ; ------------------------------------------------------------------
-proc_accum
+proc_add_dt
 	clc
 	lda PROC_C,x
 	adc dt_ms
 	sta PROC_C,x
 	lda PROC_D,x
-	adc #0
+	adc dt_msh
 	sta PROC_D,x
+	rts
+
+proc_try_step
 	lda PROC_D,x
 	bne .acc_hi
 	lda PROC_C,x
@@ -245,7 +300,7 @@ proc_update
 	sbc dt_ms
 	sta PROC_C,x
 	lda PROC_D,x
-	sbc #0
+	sbc dt_msh
 	sta PROC_D,x
 	bcs .pu_tstill
 	; fired (went negative) or hit zero
@@ -260,9 +315,17 @@ proc_update
 	sta PROC_KIND,x
 	lda proc_tmp0
 	cmp #PROC_RAISE_ELEV
-	beq .pu_talloc
+	beq .pu_tsnd_el
+	cmp #PROC_LOWER_DOOR
+	bne .pu_talloc
+	lda #SOUND_CLOSEDOOR
+	jsr play_sound
 	lda #0
 	sta proc_tmp2			; LOWER_DOOR dest open=0
+	jmp .pu_talloc
+.pu_tsnd_el
+	lda #SOUND_STNMOV
+	jsr play_sound
 .pu_talloc
 	lda #0
 	sta proc_tmp3
@@ -278,7 +341,9 @@ proc_update
 	jmp .pu_next
 
 .pu_rd
-	jsr proc_accum
+	jsr proc_add_dt
+.pu_rd_lp
+	jsr proc_try_step
 	bcc .pu_rd_go
 	jmp .pu_next
 .pu_rd_go
@@ -289,7 +354,7 @@ proc_update
 	clc
 	adc #1
 	sta door_open,y
-	jmp .pu_next
+	jmp .pu_rd_lp
 .pu_rd_done
 	lda #PROC_FREE
 	sta PROC_KIND,x
@@ -301,7 +366,9 @@ proc_update
 	ldy PROC_A,x
 	jsr player_in_door_y
 	bcs .pu_ld_wait
-	jsr proc_accum
+	jsr proc_add_dt
+.pu_ld_lp
+	jsr proc_try_step
 	bcs .pu_ld_wait
 	ldy PROC_A,x
 	lda door_open,y
@@ -309,6 +376,7 @@ proc_update
 	sec
 	sbc #1
 	sta door_open,y
+	jmp .pu_ld_lp
 .pu_ld_wait
 	ldx proc_tmp5
 	jmp .pu_next
@@ -319,7 +387,9 @@ proc_update
 	jmp .pu_next
 
 .pu_le
-	jsr proc_accum
+	jsr proc_add_dt
+.pu_le_lp
+	jsr proc_try_step
 	bcc .pu_le_go
 	jmp .pu_next
 .pu_le_go
@@ -331,7 +401,7 @@ proc_update
 	sec
 	sbc #1
 	sta elev_y,y
-	jmp .pu_next
+	jmp .pu_le_lp
 .pu_le_done
 	lda PROC_B,x
 	sta elev_y,y
@@ -340,7 +410,9 @@ proc_update
 	jmp .pu_next
 
 .pu_re
-	jsr proc_accum
+	jsr proc_add_dt
+.pu_re_lp
+	jsr proc_try_step
 	bcc .pu_re_go
 	jmp .pu_next
 .pu_re_go
@@ -351,7 +423,7 @@ proc_update
 	clc
 	adc #1
 	sta elev_y,y
-	jmp .pu_next
+	jmp .pu_re_lp
 .pu_re_done
 	lda PROC_B,x
 	sta elev_y,y

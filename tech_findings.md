@@ -34,6 +34,14 @@ A near-clipped room corner has large view X/Y at `z = ZCLIP` (1.0). Clamping tha
 
 **Do not** `scale3` + 8-bit `lerpdv` (±127) for CS. Same 2^k undershoot on long lines (near-clipped endpoints with large |ox|). Use `scale_nd` + `lerp16` and add the 16-bit delta. `lerp16` clobbers `rot0/rot1/rot2` and X — save the clip plane and endpoint index first.
 
+## Frustum cull — stay fat, fail open
+
+Vertical FOV half-angle is `atan(64/100) ≈ 33°`. Do **not** tighten the Y test to `|y| ≤ 0.64 z`. A **45°** `|y| ≤ z` compare is cheaper and still fatter than the real cone, so it never drops an on-screen pixel. Pad `ENEMY_CULL_H` (6) / `ITEM_CULL_Y` (2) covers figure height and AABB extent; error must stay on the “drew while off-screen” side.
+
+Item Y uses **Chebyshev XZ of the farthest box corner** (max of the four `|Δ|` vs camera), not nearest-z. A nearer face is a smaller z and can false-reject a box that only peeks in at the far end. Chebyshev can undershoot true view-z on a 45° look (`√2`), but `0.64 × √2 ≈ 0.90 < 1`, so `|y| ≤ z_est` is still conservative vs the 33° cone.
+
+Y runs **before** the three XZ plane dots (no muls). A height miss skips six `smul16_7`s. Do not frustum-cull the active room.
+
 ## VICE dumps
 
 End of draw is after `jsr draw_enemies` in `main` (`lda #$35` / `sta $01`). `$01` must be `$34` to see RAM under I/O. A dump taken mid-`stroke_mesh` is a mix of the current mesh and leftover slots — capture after the frame, not during room draw.

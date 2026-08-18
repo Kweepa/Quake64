@@ -63,8 +63,9 @@ stroke_mesh
 	rts
 
 ; Fill CAM[0..7] from box corners (world → view via xform_world_vert)
+; Column order so consecutive verts share XZ (cache x'/z').
 box_fill_verts
-	; 0: x,y,z
+	; 0: x,y,z  then  4: x,y+sy,z
 	lda box_x
 	sta ent_wx
 	lda box_y
@@ -73,53 +74,53 @@ box_fill_verts
 	sta ent_wz
 	ldx #0
 	jsr xform_world_vert
-	; 1: x+sx,y,z
-	clc
-	lda box_x
-	adc box_sx
-	sta ent_wx
-	ldx #1
-	jsr xform_world_vert
-	; 2: x+sx,y,z+sz
-	clc
-	lda box_z
-	adc box_sz
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	; 3: x,y,z+sz
-	lda box_x
-	sta ent_wx
-	ldx #3
-	jsr xform_world_vert
-	; 4: x,y+sy,z
-	lda box_x
-	sta ent_wx
 	clc
 	lda box_y
 	adc box_sy
 	sta ent_wy
-	lda box_z
-	sta ent_wz
 	ldx #4
 	jsr xform_world_vert
-	; 5: x+sx,y+sy,z
+	; 1: x+sx,y,z  then  5: x+sx,y+sy,z
 	clc
 	lda box_x
 	adc box_sx
 	sta ent_wx
+	lda box_y
+	sta ent_wy
+	ldx #1
+	jsr xform_world_vert
+	clc
+	lda box_y
+	adc box_sy
+	sta ent_wy
 	ldx #5
 	jsr xform_world_vert
-	; 6: x+sx,y+sy,z+sz
+	; 2: x+sx,y,z+sz  then  6: x+sx,y+sy,z+sz
 	clc
 	lda box_z
 	adc box_sz
 	sta ent_wz
+	lda box_y
+	sta ent_wy
+	ldx #2
+	jsr xform_world_vert
+	clc
+	lda box_y
+	adc box_sy
+	sta ent_wy
 	ldx #6
 	jsr xform_world_vert
-	; 7: x,y+sy,z+sz
+	; 3: x,y,z+sz  then  7: x,y+sy,z+sz
 	lda box_x
 	sta ent_wx
+	lda box_y
+	sta ent_wy
+	ldx #3
+	jsr xform_world_vert
+	clc
+	lda box_y
+	adc box_sy
+	sta ent_wy
 	ldx #7
 	jsr xform_world_vert
 	rts
@@ -266,106 +267,193 @@ box_pack_edges
 	sta mesh_ne
 	rts
 
-; Lookahead square in XZ: origin fr_x,fr_z, side MAP_FRUSTUM
+; Inward XZ frustum normals: left/right edges at yaw±FOV_HALF, 90° swap-flip
 update_frustum
 	ldy yaw
 	lda SINTAB,y
-	ldy #MAP_FRUSTUM_HALF
-	jsr smul7
-	ldx cam_xh
-	jsr .look_axis
-	sta fr_x
-	ldy yaw
+	sta fn_fx
 	lda COSTAB,y
-	ldy #MAP_FRUSTUM_HALF
-	jsr smul7
-	ldx cam_zh
-	jsr .look_axis
-	sta fr_z
-	rts
-
-; A = signed lookahead offset, X = cam integer → A = square origin
-.look_axis
-	sta rot2
-	stx rot0
-	lda rot2
-	bpl .fwd
+	sta fn_fz
+	clc
+	lda yaw
+	adc #FOV_HALF
+	tay
+	lda COSTAB,y
 	eor #$ff
 	clc
 	adc #1
-	sta rot2
-	lda rot0
+	sta fn_lx			; left N = (-Ez, Ex)
+	lda SINTAB,y
+	sta fn_lz
 	sec
-	sbc rot2
-	bcs .have
-	lda #0
-	jmp .have
-.fwd
+	lda yaw
+	sbc #FOV_HALF
+	tay
+	lda COSTAB,y
+	sta fn_rx			; right N = (Ez, -Ex)
+	lda SINTAB,y
+	eor #$ff
 	clc
-	adc rot0
-	bcc .have
-	lda #255
-.have
-	sec
-	sbc #MAP_FRUSTUM_HALF
-	bcs .orig
-	lda #0
-.orig
-	cmp #(256-MAP_FRUSTUM)
-	bcc .ok
-	lda #(256-MAP_FRUSTUM)
-.ok
+	adc #1
+	sta fn_rz
 	rts
 
-; C=1 if box_x/z/sx/sz overlaps frustum square (exclusive max)
+; C=1 if box is not fully outside the view (Y Chebyshev, then XZ planes)
 frustum_hits
-	clc
-	lda fr_x
-	adc #MAP_FRUSTUM
-	bcc .fh_xmax
-	jmp .fh_x2			; exclusive max 256
-.fh_xmax
+	jsr frustum_y
+	bcc .fh_no
+	lda fn_lx
 	sta rot0
+	lda fn_lz
+	sta rot1
+	jsr plane_pvert
+	bcc .fh_no
+	lda fn_rx
+	sta rot0
+	lda fn_rz
+	sta rot1
+	jsr plane_pvert
+	bcc .fh_no
+	lda fn_fx
+	sta rot0
+	lda fn_fz
+	sta rot1
+	jmp plane_pvert
+.fh_no
+	clc
+	rts
+
+; C=1 unless the whole box is above/below a 45° Y cone (Chebyshev XZ + pad)
+frustum_y
+	jsr box_xz_cheby
+	clc
+	adc #ITEM_CULL_Y
+	bcs .fy_yes
+	sta nhi
+	sec
+	lda box_y
+	sbc cam_yh
+	sta nlo
+	clc
+	adc box_sy
+	sta rot0
+	lda nlo
+	bmi .fy_lo_neg
+	cmp nhi
+	beq .fy_yes
+	bcc .fy_yes
+	clc
+	rts
+.fy_lo_neg
+	lda rot0
+	bpl .fy_yes
+	lda #0
+	sec
+	sbc rot0
+	cmp nhi
+	beq .fy_yes
+	bcc .fy_yes
+	clc
+	rts
+.fy_yes
+	sec
+	rts
+
+; A = max |box XZ corner − cam| (Chebyshev of the four edges)
+box_xz_cheby
+	lda #0
+	sta rot1
+	lda cam_xh
+	sta rot2
 	lda box_x
-	cmp rot0
-	bcs .fh_no
-.fh_x2
+	jsr .absmax
 	clc
 	lda box_x
 	adc box_sx
-	bcc .fh_x1
-	jmp .fh_z			; box extends to 256
-.fh_x1
-	sta rot1
-	lda fr_x
-	cmp rot1
-	bcs .fh_no
-.fh_z
-	clc
-	lda fr_z
-	adc #MAP_FRUSTUM
-	bcc .fh_zmax
-	jmp .fh_z2
-.fh_zmax
-	sta rot0
+	bcc +
+	lda #255
++
+	jsr .absmax
+	lda cam_zh
+	sta rot2
 	lda box_z
-	cmp rot0
-	bcs .fh_no
-.fh_z2
+	jsr .absmax
 	clc
 	lda box_z
 	adc box_sz
-	bcc .fh_z1
-	sec
+	bcc +
+	lda #255
++
+	jsr .absmax
+	lda rot1
 	rts
-.fh_z1
-	sta rot1
-	lda fr_z
+.absmax
+	sec
+	sbc rot2
+	bcs .pos
+	eor #$ff
+	clc
+	adc #1
+.pos
 	cmp rot1
-	bcs .fh_no
+	bcc .ret
+	sta rot1
+.ret
+	rts
+
+; rot0=Nx rot1=Nz. C=1 if N·(p-vertex − cam) >= 0
+plane_pvert
+	lda rot0
+	bmi .pp_minx
+	clc
+	lda box_x
+	adc box_sx
+	bcc .pp_x
+	lda #255
+	jmp .pp_x
+.pp_minx
+	lda box_x
+.pp_x
+	sec
+	sbc cam_xh
+	sta nlo
+	lda #0
+	sbc #0
+	sta nhi
+	ldy rot0
+	jsr smul16_7
+	lda nlo
+	sta pv0
+	lda nhi
+	sta pv1
+	lda rot1
+	bmi .pp_minz
+	clc
+	lda box_z
+	adc box_sz
+	bcc .pp_z
+	lda #255
+	jmp .pp_z
+.pp_minz
+	lda box_z
+.pp_z
+	sec
+	sbc cam_zh
+	sta nlo
+	lda #0
+	sbc #0
+	sta nhi
+	ldy rot1
+	jsr smul16_7
+	clc
+	lda nlo
+	adc pv0
+	lda nhi
+	adc pv1
+	bmi .pp_out
 	sec
 	rts
-.fh_no
+.pp_out
 	clc
 	rts
 
@@ -438,6 +526,66 @@ draw_slope_mesh
 	lda #>quad_edges
 	sta edge_ptr+1
 	jmp stroke_mesh
+
+draw_plat_mesh
+	jsr load_view_trig
+	jsr fill_plat_verts
+	lda #4
+	sta mesh_nv
+	lda #4
+	sta mesh_ne
+	lda #<quad_edges
+	sta edge_ptr
+	lda #>quad_edges
+	sta edge_ptr+1
+	jmp stroke_mesh
+
+fill_plat_verts
+	; p0 x,y,z
+	lda box_x
+	sta ent_wx
+	lda box_y
+	sta ent_wy
+	lda box_z
+	sta ent_wz
+	ldx #0
+	jsr xform_world_vert
+	; p1 x+sx,y,z
+	clc
+	lda box_x
+	adc box_sx
+	sta ent_wx
+	lda box_y
+	sta ent_wy
+	lda box_z
+	sta ent_wz
+	ldx #1
+	jsr xform_world_vert
+	; p2 x+sx,y,z+sz
+	clc
+	lda box_x
+	adc box_sx
+	sta ent_wx
+	lda box_y
+	sta ent_wy
+	clc
+	lda box_z
+	adc box_sz
+	sta ent_wz
+	ldx #2
+	jsr xform_world_vert
+	; p3 x,y,z+sz
+	lda box_x
+	sta ent_wx
+	lda box_y
+	sta ent_wy
+	clc
+	lda box_z
+	adc box_sz
+	sta ent_wz
+	ldx #3
+	jsr xform_world_vert
+	rts
 
 ; Closed: 4 corners of the face. Open: two full-width leaves, each slides open/2.
 fill_door_verts
@@ -543,14 +691,6 @@ fill_door_verts
 	lda box_x
 	jsr coord_add
 	sta pv0				; xR
-	; v5 BL right
-	sta ent_wx
-	lda pv1
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #5
-	jsr xform_world_vert
 	; v3 BR right (xR + sx)
 	clc
 	lda pv0
@@ -565,10 +705,17 @@ fill_door_verts
 	sta ent_wz
 	ldx #3
 	jsr xform_world_vert
-	; v2 TR right
+	; v2 TR right (same XZ)
 	lda pv2
 	sta ent_wy
 	ldx #2
+	jsr xform_world_vert
+	; v5 BL right
+	lda pv0
+	sta ent_wx
+	lda pv1
+	sta ent_wy
+	ldx #5
 	jmp xform_world_vert
 .fdx
 	ldx obj_i
@@ -661,15 +808,6 @@ fill_door_verts
 	lda box_z
 	jsr coord_add
 	sta pv0				; zR
-	; v5 BL right
-	lda pv4
-	sta ent_wx
-	lda pv1
-	sta ent_wy
-	lda pv0
-	sta ent_wz
-	ldx #5
-	jsr xform_world_vert
 	; v3 BR right (zR + sz)
 	lda pv4
 	sta ent_wx
@@ -684,10 +822,17 @@ fill_door_verts
 	sta ent_wz
 	ldx #3
 	jsr xform_world_vert
-	; v2 TR right
+	; v2 TR right (same XZ)
 	lda pv2
 	sta ent_wy
 	ldx #2
+	jsr xform_world_vert
+	; v5 BL right
+	lda pv1
+	sta ent_wy
+	lda pv0
+	sta ent_wz
+	ldx #5
 	jmp xform_world_vert
 
 ; Up-pointing triangle on the switch face
@@ -936,6 +1081,8 @@ fill_slope_verts
 
 ; ------------------------------------------------------------------
 draw_world
+	lda #0
+	sta xf_ok
 	jsr update_frustum
 	; active room (inside cull) — not frustum-culled
 	ldx room_idx
@@ -1083,7 +1230,7 @@ draw_world
 	ldx #0
 .dw_slope
 	cpx #MAP_NSLOPES
-	bcs .dw_rts
+	bcs .dw_pl
 	lda slope_room,x
 	cmp room_idx
 	bne .dw_sln
@@ -1108,5 +1255,34 @@ draw_world
 .dw_sln
 	inx
 	bne .dw_slope
+.dw_pl
+	ldx #0
+.dw_plat
+	cpx #MAP_NPLATS
+	bcs .dw_rts
+	lda plat_room,x
+	cmp room_idx
+	bne .dw_pln
+	stx obj_i
+	lda plat_x,x
+	sta box_x
+	lda plat_y,x
+	sta box_y
+	lda plat_z,x
+	sta box_z
+	lda plat_sx,x
+	sta box_sx
+	lda #1
+	sta box_sy
+	lda plat_sz,x
+	sta box_sz
+	jsr frustum_hits
+	bcc .dw_plr
+	jsr draw_plat_mesh
+.dw_plr
+	ldx obj_i
+.dw_pln
+	inx
+	bne .dw_plat
 .dw_rts
 	rts

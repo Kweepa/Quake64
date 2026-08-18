@@ -11,11 +11,11 @@ init_vic
 	lda #$08				; 40 cols, no MCM
 	sta $d016
 
-	lda #D018_A_TOP
+	lda #D018_A_UI
 	sta $d018
 	lda #COL_BORDER
 	sta $d020
-	lda #COL_BG
+	lda #COL_HUD_BG
 	sta $d021
 
 	lda #0
@@ -38,9 +38,9 @@ fill_colour
 	inx
 	bne -
 
-	lda #<($d800 + VIEW_COL)
+	lda #<($d800 + VIEW_OFF)
 	sta init_ptr
-	lda #>($d800 + VIEW_COL)
+	lda #>($d800 + VIEW_OFF)
 	sta init_ptr+1
 	lda #VIEW_H
 	sta init_row
@@ -65,9 +65,9 @@ fill_colour
 
 ; 24×16 viewport only — uses col_line (room palette)
 fill_viewport_colour
-	lda #<($d800 + VIEW_COL)
+	lda #<($d800 + VIEW_OFF)
 	sta init_ptr
-	lda #>($d800 + VIEW_COL)
+	lda #>($d800 + VIEW_OFF)
 	sta init_ptr+1
 	lda #VIEW_H
 	sta init_row
@@ -100,10 +100,11 @@ apply_room_palette
 	lda room_line,x
 	sta col_line
 	jsr fill_viewport_colour
+	; irq_phase: 0=HUD (leave $d021), 1=top (sky), 2=bot (floor)
 	lda irq_phase
-	beq .arsky
+	beq .ardone
 	cmp #1
-	bne .ardone
+	beq .arsky
 	lda col_floor
 	sta $d021
 	jmp .ardone
@@ -179,7 +180,7 @@ stamp_viewport
 	lda stamp_row
 	cmp #VIEW_H
 	bcs .stdone
-	; dest = base + row*40 + VIEW_COL
+	; dest = base + VIEW_OFF + stamp_row*40
 	lda src_ptr
 	sta init_ptr
 	lda src_ptr+1
@@ -199,11 +200,11 @@ stamp_viewport
 .addcol
 	clc
 	lda init_ptr
-	adc #VIEW_COL
+	adc #<VIEW_OFF
 	sta init_ptr
-	bcc +
-	inc init_ptr+1
-+
+	lda init_ptr+1
+	adc #>VIEW_OFF
+	sta init_ptr+1
 	lda stamp_row
 	and #7
 	sta stamp_in
@@ -224,7 +225,7 @@ stamp_viewport
 .stdone
 	rts
 
-; Rows 0–15, cols 0–7 and 32–39: solid MARGIN_CH (black over $d021 brown)
+; Viewport rows, cols 0–7 and 32–39: solid MARGIN_CH (black over $d021 brown)
 stamp_margins
 	lda #<SCR_A
 	sta src_ptr
@@ -243,7 +244,10 @@ stamp_margins
 	sta init_ptr
 	lda src_ptr+1
 	sta init_ptr+1
-	ldx stamp_row
+	lda stamp_row
+	clc
+	adc #VIEW_ROW
+	tax
 	beq .cols
 .add
 	clc
@@ -362,22 +366,22 @@ clear_draw
 	rts
 
 ; $01 must be $35. Swap A/B without poking the wrong band's $d018
-; (top vs bot vs UI). irq_phase: 0=top, 1=bot, 2=HUD.
+; (HUD vs top vs bot). irq_phase: 0=HUD, 1=top, 2=bot.
 apply_show
 	sei
 	ldx show_buf
 	lda show_bot_tab,x
 	sta show_d018_bot
 	lda irq_phase
-	beq .top
+	beq .ui
 	cmp #1
-	beq .bot
-	lda show_ui_tab,x
+	beq .top
+	lda show_d018_bot
 	sta $d018
 	cli
 	rts
-.bot
-	lda show_d018_bot
+.ui
+	lda show_ui_tab,x
 	sta $d018
 	cli
 	rts

@@ -905,6 +905,13 @@ function renderInspector() {
       sel.addEventListener("change", () => apply(() => (obj.elevType = sel.value)));
       root.appendChild(field("Type", sel));
     }
+    if (obj.kind === "platform") {
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = obj.collide !== false;
+      chk.addEventListener("change", () => apply(() => (obj.collide = chk.checked)));
+      root.appendChild(field("Collide", chk));
+    }
     if (obj.kind === "doorway") {
       const lock = document.createElement("input");
       lock.type = "checkbox";
@@ -920,7 +927,14 @@ function renderInspector() {
       keyInp.addEventListener("change", () => apply(() => (obj.keyTag = clampTag(keyInp.value))));
       root.appendChild(field("Key", keyInp));
     }
-    if (!KINDS[obj.kind].fixed) {
+    if (obj.kind === "platform") {
+      root.appendChild(
+        vec3Field("Size", [
+          { value: obj.sx, onChange: (v) => apply(() => (obj.sx = v)), min: 1, max: 256 },
+          { value: obj.sz, onChange: (v) => apply(() => (obj.sz = v)), min: 1, max: 256 },
+        ])
+      );
+    } else if (!KINDS[obj.kind].fixed) {
       root.appendChild(
         vec3Field("Size", [
           { value: obj.sx, onChange: (v) => apply(() => (obj.sx = v)), min: 1, max: 256 },

@@ -1,5 +1,6 @@
 ; Mike's 30k px/s drawer (Denial): 8× unrolled ORA #imm, DEX/BEQ end,
 ; cached (colptr),Y, always LTR, SMC jump into starting bit.
+; dx=0 uses draw_vline (no error term; two runs at the y=64 charset split).
 !zone line
 
 col_lo
@@ -8,6 +9,8 @@ col_lo
 col_hi
 	!byte 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3
 	!byte 4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7
+vbits
+	!byte $80,$40,$20,$10,$08,$04,$02,$01
 
 ; Preserve X (pixel countdown) and C for the next SBC.
 y_cross_down
@@ -106,6 +109,7 @@ draw_line
 	lda x0
 	cmp x1
 	bcc .ord
+	beq .ord
 	ldx x1
 	sta x1
 	stx x0
@@ -118,6 +122,9 @@ draw_line
 	sec
 	sbc x0
 	sta dx
+	bne .notv
+	jmp draw_vline
+.notv
 	lda y1
 	sec
 	sbc y0
@@ -189,5 +196,59 @@ draw_line
 	inx
 	sec
 .js	jmp td0
+
+; dx=0: same column, no Bresenham. At most two runs split at y=64.
+draw_vline
+	lda y0
+	cmp y1
+	bcc .ysok
+	ldx y1
+	sta y1
+	stx y0
+.ysok
+	lda x0
+	and #7
+	tax
+	lda vbits,x
+	sta vl_ora+1
+	jsr line_setup
+	lda y0
+	cmp #64
+	bcc .fromtop
+	lda y1
+	sec
+	sbc y0
+	tax
+	inx
+	jmp vl_run
+.fromtop
+	lda y1
+	cmp #64
+	bcc .onlytop
+	lda #64
+	sec
+	sbc y0
+	tax
+	jsr vl_run
+	jsr y_cross_down
+	lda y1
+	sec
+	sbc #63
+	tax
+	jmp vl_run
+.onlytop
+	lda y1
+	sec
+	sbc y0
+	tax
+	inx
+vl_run
+	lda (colptr),y
+vl_ora	ora #$00
+	sta (colptr),y
+	iny
+	dex
+	bne vl_run
+	rts
 
 !source "_line_bodies.asm"

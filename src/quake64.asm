@@ -42,6 +42,7 @@ start
 	jsr copy_luts
 	jsr init_hud
 	jsr init_irq
+	jsr play_sound_init
 	jsr prof_init
 	jsr world_init
 	cli
@@ -87,8 +88,9 @@ advance_walk
 	adc dt_ms
 	sta anim_acc_l
 	lda anim_acc_h
-	adc #0
+	adc dt_msh
 	sta anim_acc_h
+.aw_try
 	lda anim_acc_h
 	cmp #>ANIM_MS
 	bcc .done
@@ -111,6 +113,7 @@ advance_walk
 	ldx #0
 +
 	stx anim_frame
+	jmp .aw_try
 .done
 	rts
 
@@ -283,6 +286,9 @@ copy_luts
 !source "hud.asm"
 !source "math.asm"
 !source "line.asm"
+!source "playsound.asm"
+!source "pcsounds.asm"
+!source "pcsfreq.asm"
 !source "process.asm"
 !source "world.asm"
 !source "box.asm"

@@ -69,95 +69,38 @@ cube_rotate
 	rts
 
 ; Rotate one enemy instance at ent_wx/wy/wz, ent_rot, ent_type
+; Caller already jsr load_view_trig
+; Facing: odd octant uses 45° tables; (rot>>1)&3 picks N/E/S/W
+; Editor yaw: x' = x c + z s, z' = -x s + z c  (local +Z → N/E/S/W)
 ent_rotate
 	jsr ent_set_ptrs
-	jsr load_view_trig
+	lda ent_rot
+	lsr
+	bcc .face_even
+	ldx ent_type
+	lda enemy_gx45_lo,x
+	sta gx_ptr
+	lda enemy_gx45_hi,x
+	sta gx_ptr+1
+	lda enemy_gz45_lo,x
+	sta gz_ptr
+	lda enemy_gz45_hi,x
+	sta gz_ptr+1
+.face_even
+	lda ent_rot
+	lsr
+	and #3
+	tax
+	lda .face_lo,x
+	sta .facejsr+1
+	lda .face_hi,x
+	sta .facejsr+2
 	lda #0
 	sta vindex
 .rvert
 	jsr grunt_gindex
-	lda (gx_ptr),y
-	jsr scale_s8_88
-	lda nlo
-	sta e0x
-	lda nhi
-	sta e0xh
-	ldy gidx
-	lda (gz_ptr),y
-	jsr scale_s8_88
-	lda nlo
-	sta e1z
-	lda nhi
-	sta e1zh
-	; facing octant: rotate local XZ by rot*45° via table
-	lda ent_rot
-	asl
-	asl
-	asl
-	asl
-	asl
-	sta ent_yaw
-	ldy ent_yaw
-	lda COSTAB,y
-	tay
-	lda e0x
-	sta nlo
-	lda e0xh
-	sta nhi
-	jsr smul16_7
-	lda nlo
-	sta rot0
-	lda nhi
-	sta rot1
-	ldy ent_yaw
-	lda SINTAB,y
-	tay
-	lda e1z
-	sta nlo
-	lda e1zh
-	sta nhi
-	jsr smul16_7
-	sec
-	lda rot0
-	sbc nlo
-	sta e0x
-	lda rot1
-	sbc nhi
-	sta e0xh
-	; lz' = lx*sin + lz*cos — need original lx
-	jsr grunt_gindex
-	lda (gx_ptr),y
-	jsr scale_s8_88
-	lda nlo
-	sta rot0
-	lda nhi
-	sta rot1
-	ldy ent_yaw
-	lda SINTAB,y
-	tay
-	lda rot0
-	sta nlo
-	lda rot1
-	sta nhi
-	jsr smul16_7
-	lda nlo
-	sta e0y
-	lda nhi
-	sta e0yh
-	ldy gidx
-	lda (gz_ptr),y
-	jsr scale_s8_88
-	ldy ent_yaw
-	lda COSTAB,y
-	tay
-	jsr smul16_7
-	clc
-	lda e0y
-	adc nlo
-	sta e1z
-	lda e0yh
-	adc nhi
-	sta e1zh
+.facejsr
+	jsr .face_n
 	; now e0x/xh = lx', e1z/zh = lz' — add world + cam
 	clc
 	lda e0xh
@@ -276,6 +219,82 @@ ent_rotate
 	jmp .rvert
 +
 	rts
+
+; Y = gidx. Local signed XZ → 8.8 in e0x / e1z. scale_s8_88 preserves Y.
+.face_n					; (x, z)  editor +Z
+	lda (gx_ptr),y
+	jsr scale_s8_88
+	lda nlo
+	sta e0x
+	lda nhi
+	sta e0xh
+	lda (gz_ptr),y
+	jsr scale_s8_88
+	lda nlo
+	sta e1z
+	lda nhi
+	sta e1zh
+	rts
+
+.face_e					; (z, -x)  editor +X
+	lda (gz_ptr),y
+	jsr scale_s8_88
+	lda nlo
+	sta e0x
+	lda nhi
+	sta e0xh
+	lda (gx_ptr),y
+	eor #$ff
+	clc
+	adc #1
+	jsr scale_s8_88
+	lda nlo
+	sta e1z
+	lda nhi
+	sta e1zh
+	rts
+
+.face_s					; (-x, -z)  editor -Z
+	lda (gx_ptr),y
+	eor #$ff
+	clc
+	adc #1
+	jsr scale_s8_88
+	lda nlo
+	sta e0x
+	lda nhi
+	sta e0xh
+	lda (gz_ptr),y
+	eor #$ff
+	clc
+	adc #1
+	jsr scale_s8_88
+	lda nlo
+	sta e1z
+	lda nhi
+	sta e1zh
+	rts
+
+.face_w					; (-z, x)  editor -X
+	lda (gz_ptr),y
+	eor #$ff
+	clc
+	adc #1
+	jsr scale_s8_88
+	lda nlo
+	sta e0x
+	lda nhi
+	sta e0xh
+	lda (gx_ptr),y
+	jsr scale_s8_88
+	lda nlo
+	sta e1z
+	lda nhi
+	sta e1zh
+	rts
+
+.face_lo	!byte <.face_n, <.face_e, <.face_s, <.face_w
+.face_hi	!byte >.face_n, >.face_e, >.face_s, >.face_w
 
 ; 8.8 view ??? persp if z ??? 1.0
 mesh_project
@@ -1166,19 +1185,42 @@ cube_draw
 
 ; X = CAM slot; world int ent_wx/wy/wz → view CAM[X]
 ; Caller must jsr load_view_trig first.
+; Same XZ as last call: reuse cached x'/z', only redo Y.
 xform_world_vert
 	stx vindex
-	; dx
+	lda xf_ok
+	beq .full
+	lda ent_wx
+	cmp xf_wx
+	bne .full
+	lda ent_wz
+	cmp xf_wz
+	bne .full
+	lda #0
+	sec
+	sbc cam_yl
+	sta e1x
+	lda ent_wy
+	sbc cam_yh
+	sta e1xh
+	lda xf_xl
+	sta e0x
+	lda xf_xh
+	sta e0xh
+	lda xf_zl
+	sta e0y
+	lda xf_zh
+	sta e0yh
+	jmp .store
+
+.full
+	; dx (kept in e0x until x' overwrites it)
 	lda #0
 	sec
 	sbc cam_xl
-	sta nlo
+	sta e0x
 	lda ent_wx
 	sbc cam_xh
-	sta nhi
-	lda nlo
-	sta e0x
-	lda nhi
 	sta e0xh
 	; dz
 	lda #0
@@ -1197,6 +1239,32 @@ xform_world_vert
 	sbc cam_yh
 	sta e1xh
 
+	; z' = dx*sn + dz*cs
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	ldy sn_b
+	jsr smul16_7
+	lda nlo
+	sta rot0
+	lda nhi
+	sta rot1
+	lda e1z
+	sta nlo
+	lda e1zh
+	sta nhi
+	ldy cs_b
+	jsr smul16_7
+	clc
+	lda rot0
+	adc nlo
+	sta e0y
+	lda rot1
+	adc nhi
+	sta e0yh
+
+	; x' = dx*cs - dz*sn
 	lda e0x
 	sta nlo
 	lda e0xh
@@ -1221,34 +1289,22 @@ xform_world_vert
 	sbc nhi
 	sta e0xh
 
-	; z1 = dx*sn + dz*cs
-	lda #0
-	sec
-	sbc cam_xl
-	sta nlo
 	lda ent_wx
-	sbc cam_xh
-	sta nhi
-	ldy sn_b
-	jsr smul16_7
-	lda nlo
-	sta rot0
-	lda nhi
-	sta rot1
-	lda e1z
-	sta nlo
-	lda e1zh
-	sta nhi
-	ldy cs_b
-	jsr smul16_7
-	clc
-	lda rot0
-	adc nlo
-	sta e0y
-	lda rot1
-	adc nhi
-	sta e0yh
+	sta xf_wx
+	lda ent_wz
+	sta xf_wz
+	lda e0x
+	sta xf_xl
+	lda e0xh
+	sta xf_xh
+	lda e0y
+	sta xf_zl
+	lda e0yh
+	sta xf_zh
+	lda #1
+	sta xf_ok
 
+.store
 	ldx vindex
 	lda e1x
 	sta CAM_Y,x
@@ -1264,7 +1320,228 @@ xform_world_vert
 	sta CAM_XH,x
 	rts
 
+; True-project feet (vert 11); limb PROJ = feet + dCAM * trunc(FOCAL/z) >> 8
+ent_far_project
+	lda CAM_Z+11
+	sta z_eye
+	lda CAM_ZH+11
+	sta z_eye_h
+	lda CAM_X+11
+	sta ylo
+	lda CAM_XH+11
+	sta yhi
+	jsr .p16
+	lda nlo
+	sta ox0l
+	lda nhi
+	sta ox0h
+	lda CAM_Y+11
+	sta ylo
+	lda CAM_YH+11
+	sta yhi
+	jsr .p16
+	lda nlo
+	sta oy0l
+	lda nhi
+	sta oy0h
+	lda #0
+	sta ylo
+	lda #1
+	sta yhi
+	jsr .p16
+	lda nhi
+	beq .far_sc
+	lda #127
+	sta far_scale
+	jmp .far_pv0
+.far_sc
+	lda nlo
+	sta far_scale
+.far_pv0
+	lda #0
+	sta vindex
+.far_pv
+	ldx vindex
+	sec
+	lda CAM_X,x
+	sbc CAM_X+11
+	sta nlo
+	lda CAM_XH,x
+	sbc CAM_XH+11
+	sta nhi
+	ldy far_scale
+	jsr smul16_7
+	lda nhi
+	cmp #$80
+	ror nhi
+	ror nlo
+	clc
+	lda nlo
+	adc ox0l
+	sta nlo
+	lda nhi
+	adc ox0h
+	sta nhi
+	ldx vindex
+	lda nlo
+	sta PROJ_X,x
+	lda nhi
+	sta PROJ_XH,x
+	sec
+	lda CAM_Y,x
+	sbc CAM_Y+11
+	sta nlo
+	lda CAM_YH,x
+	sbc CAM_YH+11
+	sta nhi
+	ldy far_scale
+	jsr smul16_7
+	lda nhi
+	cmp #$80
+	ror nhi
+	ror nlo
+	clc
+	lda nlo
+	adc oy0l
+	sta nlo
+	lda nhi
+	adc oy0h
+	sta nhi
+	ldx vindex
+	lda nlo
+	sta PROJ_Y,x
+	lda nhi
+	sta PROJ_YH,x
+	inc vindex
+	lda vindex
+	cmp #NVERTS
+	bne .far_pv
+
+	lda #0
+	sta vindex
+.far_ed
+	lda vindex
+	asl
+	tay
+	lda (edge_ptr),y
+	tay
+	lda PROJ_X,y
+	sta ox0l
+	lda PROJ_XH,y
+	sta ox0h
+	lda PROJ_Y,y
+	sta oy0l
+	lda PROJ_YH,y
+	sta oy0h
+	lda vindex
+	asl
+	tay
+	iny
+	lda (edge_ptr),y
+	tay
+	lda PROJ_X,y
+	sta ox1l
+	lda PROJ_XH,y
+	sta ox1h
+	lda PROJ_Y,y
+	sta oy1l
+	lda PROJ_YH,y
+	sta oy1h
+	ldx vindex
+	lda ox0l
+	ldy ox0h
+	jsr .to_sx
+	sta CLIP_X0,x
+	lda oy0l
+	ldy oy0h
+	jsr .to_sy
+	sta CLIP_Y0,x
+	lda ox1l
+	ldy ox1h
+	jsr .to_sx
+	sta CLIP_X1,x
+	lda oy1l
+	ldy oy1h
+	jsr .to_sy
+	sta CLIP_Y1,x
+	ldx vindex
+	lda #1
+	sta EDGE_VIS,x
+	inc vindex
+	lda vindex
+	cmp mesh_ne
+	beq +
+	jmp .far_ed
++
+	rts
+
+; C=1 if CAM[0] origin is in the view wedge: z>=0, |x|<=z+R, |y|<=z+H
+enemy_in_view
+	lda CAM_ZH
+	bmi .eiv_no
+	lda CAM_X
+	sta rot0
+	lda CAM_XH
+	sta rot1
+	bpl .eiv_xabs
+	sec
+	lda #0
+	sbc rot0
+	sta rot0
+	lda #0
+	sbc rot1
+	sta rot1
+.eiv_xabs
+	lda #ENEMY_CULL_R
+	jsr wedge_le_z
+	bcc .eiv_rts
+	lda CAM_Y
+	sta rot0
+	lda CAM_YH
+	sta rot1
+	bpl .eiv_yabs
+	sec
+	lda #0
+	sbc rot0
+	sta rot0
+	lda #0
+	sbc rot1
+	sta rot1
+.eiv_yabs
+	lda #ENEMY_CULL_H
+	jmp wedge_le_z
+.eiv_no
+	clc
+.eiv_rts
+	rts
+
+; C=1 if |rot0:rot1| <= CAM_Z:CAM_ZH + A (pad on 8.8 high)
+wedge_le_z
+	sta rot2
+	lda CAM_Z
+	sta nlo
+	clc
+	lda CAM_ZH
+	adc rot2
+	bcs .wlz_yes
+	sta nhi
+	lda rot1
+	cmp nhi
+	bcc .wlz_yes
+	bne .wlz_no
+	lda rot0
+	cmp nlo
+	bcc .wlz_yes
+	beq .wlz_yes
+.wlz_no
+	clc
+	rts
+.wlz_yes
+	sec
+	rts
+
 draw_enemies
+	jsr load_view_trig
 	ldx #0
 .de
 	cpx #MAP_NENEMIES
@@ -1272,26 +1549,14 @@ draw_enemies
 	lda en_room,x
 	cmp room_idx
 	bne .de_n
-	lda en_x,x
-	sec
-	sbc #1
-	bcs +
-	lda #0
-+
-	sta box_x
-	lda #2
-	sta box_sx
-	lda en_z,x
-	sec
-	sbc #1
-	bcs +
-	lda #0
-+
-	sta box_z
-	lda #2
-	sta box_sz
-	jsr frustum_hits
-	bcc .de_n
+	jsr .de_one
+.de_n
+	inx
+	jmp .de
+.de_rts
+	rts
+
+.de_one
 	stx obj_i
 	lda en_x,x
 	sta ent_wx
@@ -1299,6 +1564,11 @@ draw_enemies
 	sta ent_wy
 	lda en_z,x
 	sta ent_wz
+	ldx #0
+	jsr xform_world_vert
+	jsr enemy_in_view
+	bcc .de_one_rts
+	ldx obj_i
 	lda en_type,x
 	sta ent_type
 	lda en_rot,x
@@ -1314,18 +1584,26 @@ draw_enemies
 	jsr ent_rotate
 	ldy #PROF_ROT
 	jsr prof_add_bucket
+	ldx ent_type
+	lda CAM_ZH+11
+	bmi .de_full
+	cmp enemy_far_z,x
+	bcc .de_full
+	jsr ent_far_project
+	ldy #PROF_PROJ
+	jsr prof_add_bucket
+	jmp .de_draw
+.de_full
 	jsr mesh_project
 	ldy #PROF_PROJ
 	jsr prof_add_bucket
 	jsr mesh_clip
 	ldy #PROF_CLIP
 	jsr prof_add_bucket
+.de_draw
 	jsr mesh_draw
 	ldy #PROF_DRAW
 	jsr prof_add_bucket
+.de_one_rts
 	ldx obj_i
-.de_n
-	inx
-	bne .de
-.de_rts
 	rts

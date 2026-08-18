@@ -1,4 +1,5 @@
-; Raster chain + CIA1 Timer A key hold (SquareDoom-style)
+; Raster chain. CIA1 Timer A runs for key hold + SFX but IRQs stay masked —
+; poll $dc0d from raster_body after $d018 so keys/SFX never delay a split.
 !zone irq
 
 nmi_rti
@@ -28,29 +29,26 @@ init_irq
 	lda #0
 	sta irq_phase
 	sta frame_flag
-	sta in_fwd
-	sta in_back
-	sta in_strafel
-	sta in_strafer
-	sta in_turn_l
-	sta in_turn_r
 	sta turn_acc_l
 	sta turn_acc_h
 	sta wish_dx
 	sta wish_dxh
 	sta wish_dz
 	sta wish_dzh
+	ldx #11
+-
+	sta in_fwd,x
+	dex
+	bpl -
 
 	lda #SAMPLE_TA_LO
 	sta $dc04
 	lda #SAMPLE_TA_HI
 	sta $dc05
-	lda #$81				; enable CIA1 TA IRQ
-	sta $dc0d
-	lda #$11				; TA start + force load
+	lda #$11				; TA start + force load (IRQ stays masked; poll $dc0d)
 	sta $dc0e
 
-	lda #RASTER_SPLIT
+	lda #RASTER_VIEW
 	sta $d012
 	lda $d011
 	and #$7f
@@ -72,14 +70,9 @@ irq_entry
 
 	lda $d019
 	and #1
-	beq .cia
+	beq .out
 	sta $d019
 	jsr raster_body
-.cia
-	lda $dc0d
-	and #1
-	beq .out
-	jsr accum_keys
 .out
 	pla
 	sta $01
@@ -92,10 +85,23 @@ irq_entry
 
 raster_body
 	lda irq_phase
-	beq .split
+	beq .view
 	cmp #1
-	beq .hud
+	beq .split
 
+	ldx show_buf
+	lda show_ui_tab,x
+	sta $d018
+	lda #COL_HUD_BG
+	sta $d021
+	lda #RASTER_VIEW
+	sta $d012
+	lda #0
+	sta irq_phase
+	inc frame_flag
+	jmp poll_keys
+
+.view
 	ldx show_buf
 	lda show_top_tab,x
 	sta $d018
@@ -105,40 +111,41 @@ raster_body
 	sta $d021
 	lda #RASTER_SPLIT
 	sta $d012
-	lda #0
+	lda #1
 	sta irq_phase
-	inc frame_flag
-	rts
+	jmp poll_keys
 
 .split
 	lda show_d018_bot
 	sta $d018
 	lda col_floor
 	sta $d021
-	lda #RASTER_HUD
-	sta $d012
-	lda #1
-	sta irq_phase
-	rts
-
-.hud
-	ldx show_buf
-	lda show_ui_tab,x
-	sta $d018
-	lda #COL_HUD_BG
-	sta $d021
 	lda #RASTER_TOP
 	sta $d012
 	lda #2
 	sta irq_phase
+poll_keys
+	lda $dc0d
+	and #1
+	beq .nokeys
+	jsr accum_keys
+	jsr update_sfx
+.nokeys
 	rts
 
-; A = counter → min(A+SAMPLE_MS, 255)
+; Y = 0,2,4,… offset from in_fwd; add SAMPLE_MS, saturate at 65535
 irq_add_ms
 	clc
+	lda in_fwd,y
 	adc #SAMPLE_MS
+	sta in_fwd,y
+	lda in_fwd+1,y
+	adc #0
+	sta in_fwd+1,y
 	bcc +
-	lda #255
+	lda #$ff
+	sta in_fwd,y
+	sta in_fwd+1,y
 +
 	rts
 
@@ -155,9 +162,8 @@ accum_keys
 	lda keys
 	ora #KEY_W
 	sta keys
-	lda in_fwd
+	ldy #in_fwd - in_fwd
 	jsr irq_add_ms
-	sta in_fwd
 .now
 	txa
 	and #$04
@@ -165,9 +171,8 @@ accum_keys
 	lda keys
 	ora #KEY_A
 	sta keys
-	lda in_strafel
+	ldy #in_strafel - in_fwd
 	jsr irq_add_ms
-	sta in_strafel
 .noa
 	txa
 	and #$20
@@ -175,9 +180,8 @@ accum_keys
 	lda keys
 	ora #KEY_S
 	sta keys
-	lda in_back
+	ldy #in_back - in_fwd
 	jsr irq_add_ms
-	sta in_back
 .nos
 	; D PA2 $FB
 	lda #$fb
@@ -188,9 +192,8 @@ accum_keys
 	lda keys
 	ora #KEY_D
 	sta keys
-	lda in_strafer
+	ldy #in_strafer - in_fwd
 	jsr irq_add_ms
-	sta in_strafer
 .nod
 	; J/K share PA4 $EF — only J is look (yaw)
 	lda #$ef
@@ -201,9 +204,8 @@ accum_keys
 	lda keys
 	ora #KEY_J
 	sta keys
-	lda in_turn_l
+	ldy #in_turn_l - in_fwd
 	jsr irq_add_ms
-	sta in_turn_l
 .noj
 	; L PA5 $DF
 	lda #$df
@@ -214,9 +216,8 @@ accum_keys
 	lda keys
 	ora #KEY_L
 	sta keys
-	lda in_turn_r
+	ldy #in_turn_r - in_fwd
 	jsr irq_add_ms
-	sta in_turn_r
 .nol
 	lda #$7f
 	sta $dc00
@@ -225,25 +226,14 @@ accum_keys
 ; Snapshot IRQ hold ms; build turn + 8.8 wish. Call under I/O mapped.
 read_input
 	sei
-	lda in_fwd
-	sta hold_fwd
-	lda in_back
-	sta hold_back
-	lda in_strafel
-	sta hold_strafel
-	lda in_strafer
-	sta hold_strafer
-	lda in_turn_l
-	sta hold_turn_l
-	lda in_turn_r
-	sta hold_turn_r
+	ldx #11
+-
+	lda in_fwd,x
+	sta hold_fwd,x
 	lda #0
-	sta in_fwd
-	sta in_back
-	sta in_strafel
-	sta in_strafer
-	sta in_turn_l
-	sta in_turn_r
+	sta in_fwd,x
+	dex
+	bpl -
 	cli
 
 	lda #0
@@ -252,15 +242,22 @@ read_input
 	sta wish_dz
 	sta wish_dzh
 
-	; net turn: right − left
+	; net turn: right − left (16-bit ms)
+	lda hold_turn_r + 1
+	cmp hold_turn_l + 1
+	bne .tcmp
 	lda hold_turn_r
 	cmp hold_turn_l
+.tcmp
 	beq .tnone
 	bcs .tright
-	lda hold_turn_l
 	sec
+	lda hold_turn_l
 	sbc hold_turn_r
 	sta vel_ms
+	lda hold_turn_l + 1
+	sbc hold_turn_r + 1
+	sta vel_msh
 	jsr turn_deliver
 	eor #$ff
 	clc
@@ -270,10 +267,13 @@ read_input
 	sta yaw
 	jmp .tnone
 .tright
-	lda hold_turn_r
 	sec
+	lda hold_turn_r
 	sbc hold_turn_l
 	sta vel_ms
+	lda hold_turn_r + 1
+	sbc hold_turn_l + 1
+	sta vel_msh
 	jsr turn_deliver
 	clc
 	adc yaw
@@ -281,33 +281,49 @@ read_input
 .tnone
 	rts
 
-; turn_acc += vel_ms<<6; A = turn_acc>>10; turn_acc &= $03FF
+; turn_acc += vel_ms<<6 (24-bit); A = min(sum>>10, 255); turn_acc &= $03FF
 turn_deliver
 	lda vel_ms
-	tax
-	lsr
-	lsr
-	sta pp_tmp_h			; hi = vel>>2
-	txa
-	and #3
-	asl
-	asl
-	asl
-	asl
-	asl
-	asl
-	sta pp_tmp_l			; lo = (vel&3)<<6
+	sta pp_tmp_l
+	lda vel_msh
+	sta pp_tmp_h
+	lda #0
+	sta hud_n
+	ldx #6
+.tdsh
+	asl pp_tmp_l
+	rol pp_tmp_h
+	rol hud_n
+	dex
+	bne .tdsh
 	clc
 	lda turn_acc_l
 	adc pp_tmp_l
 	sta turn_acc_l
 	lda turn_acc_h
 	adc pp_tmp_h
-	sta turn_acc_h
-	tay
+	sta pp_tmp_h
+	lda hud_n
+	adc #0
+	sta hud_n
+	lda pp_tmp_h
 	and #3
 	sta turn_acc_h
-	tya
+	lda pp_tmp_h
 	lsr
 	lsr
+	sta pp_tmp_l
+	lda hud_n
+	asl
+	asl
+	asl
+	asl
+	asl
+	asl
+	ora pp_tmp_l
+	ldx hud_n
+	cpx #4
+	bcc +
+	lda #255
++
 	rts

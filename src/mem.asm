@@ -12,18 +12,21 @@ COL_LINE	= 7			; default vectors (yellow)
 COL_OUTSIDE	= 0			; black frame (not $d021 brown)
 
 VIEW_COL	= 8
-VIEW_ROW	= 0
+VIEW_ROW	= 9			; HUD occupies rows 0–8
 VIEW_W		= 24
 VIEW_H		= 16
+VIEW_OFF	= VIEW_ROW * 40 + VIEW_COL
 SCREEN_CX	= 96			; 192px viewport centre
 SCREEN_XMAX	= 192
 MARGIN_CH	= 192			; col 24 row 0 — solid glyph, not cleared
 
-; PAL text starts at raster 51 (YSCROLL=3). Top 8 char rows → last line 114.
-; Plan said "line 100"; hardware mid-window is 114/115.
-RASTER_SPLIT	= 114
-RASTER_HUD	= 179			; 51 + 128
-RASTER_TOP	= 50
+; PAL text starts at raster 51 (YSCROLL=3). HUD 9 rows, then 16-row viewport.
+; Fire the line before each band's badline (raster&7 == 3) so $d018 is latched
+; before VIC fetches that character row. IRQ on the badline itself is too late:
+; the CPU is stunned, and the row stays on the previous charset (HUD glyphs in view).
+RASTER_TOP	= 50			; line before first HUD badline (51)
+RASTER_VIEW	= 121			; two lines before viewport badline 123
+RASTER_SPLIT	= 186			; last line of viewport top half — before 187
 
 D018_A_TOP	= $04			; matrix $C000, charset $D000
 D018_A_BOT	= $06			; matrix $C000, charset $D800
@@ -34,9 +37,9 @@ D018_B_UI	= $1C			; matrix $C400, UI charset $F000
 
 UI_CHARSET	= $F000
 UI_FONT_PAGES	= 8			; 256 glyphs, ASCII-indexed from quakefont.png
-HUD_ROW		= 18
-HUD_ROW2	= 19
-HUD_ROW3	= 21
+HUD_ROW		= 2
+HUD_ROW2	= 3
+HUD_ROW3	= 5
 HUD_COL		= 8
 HUD_OFF		= HUD_ROW * 40 + HUD_COL
 HUD_OFF2	= HUD_ROW2 * 40 + HUD_COL
@@ -121,9 +124,13 @@ OC_BOT		= 8
 
 ; Player / world
 EYE_HEIGHT	= 3
-PROX_DIST	= 3
+DOOR_PROX	= 1			; open trigger: thin axis only
 MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
+ENEMY_CULL_R	= 2			; view-space |x| vs z+R (8.8 high)
+ENEMY_CULL_H	= 6			; view-space |y| vs z+H (figure height)
+ITEM_CULL_Y	= 2			; AABB |y| vs Chebyshev XZ + pad
+FOV_HALF	= 31			; yaw ticks ≈ atan(SCREEN_CX/FOCAL)
 
 ; Process SoA + mutable map state in VIC-bank scratch past profiler
 PROC_NUM	= 8
@@ -161,11 +168,16 @@ HUD_MSG_W	= 24
 SAMPLE_MS	= 20
 SAMPLE_TA_LO	= $ff			; 20ms * 1024 - 1 = $4FFF
 SAMPLE_TA_HI	= $4f
-in_fwd		= $CB66
-in_back		= $CB67
-in_strafel	= $CB68
-in_strafer	= $CB69
-in_turn_l	= $CB6A
-in_turn_r	= $CB6B
-in_pitch_u	= $CB6C
-in_pitch_d	= $CB6D
+in_fwd		= $CB66			; 16-bit hold ms (IRQ accum)
+in_back		= $CB68
+in_strafel	= $CB6A
+in_strafer	= $CB6C
+in_turn_l	= $CB6E
+in_turn_r	= $CB70
+hold_fwd	= $CB72			; 16-bit snapshots (read_input)
+hold_back	= $CB74
+hold_strafel	= $CB76
+hold_strafer	= $CB78
+hold_turn_l	= $CB7A
+hold_turn_r	= $CB7C
+sw_latched	= $CB7E			; MAP_NSWITCHES (≤8); 1 while held

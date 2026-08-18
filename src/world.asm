@@ -100,6 +100,28 @@ point_in_box_xz
 	rts
 
 ; ------------------------------------------------------------------
+; player_overlaps_y — [feet, eye] vs [box_y, box_y+box_sy); C=1 overlap
+; ------------------------------------------------------------------
+player_overlaps_y
+	clc
+	lda box_y
+	adc box_sy
+	sta col_y			; exclusive max
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	cmp col_y
+	bcs .poy_no			; feet >= y+sy
+	lda box_y
+	cmp cam_yh
+	bcs .poy_no			; y >= eye
+	sec
+	rts
+.poy_no
+	clc
+	rts
+
+; ------------------------------------------------------------------
 update_floor
 	lda #$ff
 	sta pl_on_elev
@@ -110,7 +132,7 @@ update_floor
 	ldx #0
 .uf_c
 	cpx #MAP_NCRATES
-	bcs .uf_e0
+	bcs .uf_p
 	lda crate_room,x
 	cmp room_idx
 	bne .uf_cn
@@ -138,6 +160,39 @@ update_floor
 .uf_cn
 	inx
 	bne .uf_c
+.uf_p
+	; platforms (walkable if solid)
+	ldx #0
+.uf_pl
+	cpx #MAP_NPLATS
+	bcs .uf_e0
+	lda plat_solid,x
+	beq .uf_pn
+	lda plat_room,x
+	cmp room_idx
+	bne .uf_pn
+	lda plat_x,x
+	sta box_x
+	lda plat_z,x
+	sta box_z
+	lda plat_sx,x
+	sta box_sx
+	lda plat_sz,x
+	sta box_sz
+	lda cam_xh
+	sta col_x
+	lda cam_zh
+	sta col_z
+	jsr point_in_box_xz
+	bcc .uf_pn
+	lda plat_y,x
+	cmp floor_y
+	bcc .uf_pn
+	beq .uf_pn
+	sta floor_y
+.uf_pn
+	inx
+	bne .uf_pl
 .uf_e0
 	; elevators in this room
 	ldx #0
@@ -174,10 +229,14 @@ update_floor
 	ldx #0
 .uf_s
 	cpx #MAP_NSLOPES
-	bcs .uf_done
+	bcc .uf_sgo
+	jmp .uf_done
+.uf_sgo
 	lda slope_room,x
 	cmp room_idx
-	bne .uf_sn
+	beq .uf_sroom
+	jmp .uf_sn
+.uf_sroom
 	lda slope_x,x
 	sta box_x
 	lda slope_z,x
@@ -191,8 +250,10 @@ update_floor
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	bcc .uf_sn
-	; height = slope_y + (local >> 1)
+	bcs .uf_sxz
+	jmp .uf_sn
+.uf_sxz
+	; height = slope_y + (high face of cell >> 1)
 	lda slope_axis,x
 	bne .uf_sz
 	; axis X
@@ -202,14 +263,15 @@ update_floor
 	sta col_y			; local
 	lda slope_dir,x
 	bne .uf_sx_p
-	; dir -1: local' = sx-1-local
+	; dir -1: local' = sx-local
 	lda slope_sx,x
-	sec
-	sbc #1
 	sec
 	sbc col_y
 	sta col_y
+	jmp .uf_sx_lsr
 .uf_sx_p
+	inc col_y			; dir +: sample high face
+.uf_sx_lsr
 	lsr col_y
 	clc
 	lda slope_y,x
@@ -225,11 +287,12 @@ update_floor
 	bne .uf_sz_p
 	lda slope_sz,x
 	sec
-	sbc #1
-	sec
 	sbc col_y
 	sta col_y
+	jmp .uf_sz_lsr
 .uf_sz_p
+	inc col_y
+.uf_sz_lsr
 	lsr col_y
 	clc
 	lda slope_y,x
@@ -238,7 +301,7 @@ update_floor
 	jmp .uf_done
 .uf_sn
 	inx
-	bne .uf_s
+	jmp .uf_s
 .uf_done
 	rts
 
@@ -252,7 +315,7 @@ sync_eye
 	rts
 
 ; ------------------------------------------------------------------
-; solid_at — col_x/col_z blocked by crate or closed door in active room?
+; solid_at — col_x/col_z blocked by crate, solid platform, or closed door?
 ; C=1 blocked
 ; ------------------------------------------------------------------
 solid_at
@@ -260,7 +323,7 @@ solid_at
 	ldx #0
 .sa_c
 	cpx #MAP_NCRATES
-	bcs .sa_d
+	bcs .sa_p
 	lda crate_room,x
 	cmp room_idx
 	bne .sa_cn
@@ -287,6 +350,38 @@ solid_at
 .sa_cn
 	inx
 	bne .sa_c
+.sa_p
+	; platforms — solid unless standing on/above plane
+	ldx #0
+.sa_pl
+	cpx #MAP_NPLATS
+	bcs .sa_d
+	lda plat_solid,x
+	beq .sa_pn
+	lda plat_room,x
+	cmp room_idx
+	bne .sa_pn
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT
+	sta col_y			; feet y
+	lda plat_y,x
+	cmp col_y
+	beq .sa_pn			; feet at plane — walkable
+	bcc .sa_pn			; feet above
+	lda plat_x,x
+	sta box_x
+	lda plat_z,x
+	sta box_z
+	lda plat_sx,x
+	sta box_sx
+	lda plat_sz,x
+	sta box_sz
+	jsr point_in_box_xz
+	bcs .sa_yes
+.sa_pn
+	inx
+	bne .sa_pl
 .sa_d
 	; closed doors overlapping this room (open != 0 is a hole)
 	ldx #0
@@ -604,16 +699,24 @@ apply_move_world
 	sta rot1
 
 	lda hold_fwd
+	ora hold_fwd + 1
 	beq .am_now
+	lda hold_fwd
 	sta vel_ms
+	lda hold_fwd + 1
+	sta vel_msh
 	lda rot0
 	jsr wish_add_x
 	lda rot1
 	jsr wish_add_z
 .am_now
 	lda hold_back
+	ora hold_back + 1
 	beq .am_nos
+	lda hold_back
 	sta vel_ms
+	lda hold_back + 1
+	sta vel_msh
 	lda rot0
 	jsr neg_a
 	jsr wish_add_x
@@ -622,8 +725,12 @@ apply_move_world
 	jsr wish_add_z
 .am_nos
 	lda hold_strafer
+	ora hold_strafer + 1
 	beq .am_nod
+	lda hold_strafer
 	sta vel_ms
+	lda hold_strafer + 1
+	sta vel_msh
 	lda rot1
 	jsr wish_add_x
 	lda rot0
@@ -631,14 +738,26 @@ apply_move_world
 	jsr wish_add_z
 .am_nod
 	lda hold_strafel
+	ora hold_strafel + 1
 	beq .am_noa
+	lda hold_strafel
 	sta vel_ms
+	lda hold_strafel + 1
+	sta vel_msh
 	lda rot1
 	jsr neg_a
 	jsr wish_add_x
 	lda rot0
 	jsr wish_add_z
 .am_noa
+	lda cam_xl
+	sta rot0			; start 8.8 XZ (HITWALL if fully blocked)
+	lda cam_xh
+	sta rot1
+	lda cam_zl
+	sta rot2
+	lda cam_zh
+	sta dt_tmp
 	lda cam_xl
 	sta save_xl
 	lda cam_xh
@@ -690,6 +809,26 @@ apply_move_world
 .am_done
 	pla
 	sta $01
+	lda wish_dx
+	ora wish_dxh
+	ora wish_dz
+	ora wish_dzh
+	beq .am_sw
+	lda cam_xl
+	cmp rot0
+	bne .am_sw
+	lda cam_xh
+	cmp rot1
+	bne .am_sw
+	lda cam_zl
+	cmp rot2
+	bne .am_sw
+	lda cam_zh
+	cmp dt_tmp
+	bne .am_sw
+	lda #SOUND_HITWALL
+	jsr play_sound
+.am_sw
 	jsr try_room_switch
 	rts
 
@@ -716,7 +855,7 @@ wish_add_z
 	sta wish_dzh
 	rts
 
-; A signed, vel_ms → nlo:nhi = (A * vel_ms) >> 7
+; A signed, vel_ms:vel_msh → nlo:nhi = (A * vel) >> 7
 scale_vel_7
 	sta scale_s
 	bpl .svabs
@@ -724,19 +863,43 @@ scale_vel_7
 	clc
 	adc #1
 .svabs
+	sta hud_n			; |A|
 	tay
 	lda vel_ms
 	jsr umul8j
-	lda prod_h
-	ldx #7
-.svsh
-	lsr
-	ror prod_l
-	dex
-	bne .svsh
-	sta nhi
 	lda prod_l
 	sta nlo
+	lda prod_h
+	sta nhi
+	lda vel_msh
+	beq .svsh
+	ldy hud_n
+	jsr umul8j			; |A| * vel_hi
+	clc
+	lda nhi
+	adc prod_l
+	sta nhi
+	lda prod_h
+	adc #0
+	sta pp_tmp_h			; product bits 16–23
+	ldx #7
+.svsh24
+	lsr pp_tmp_h
+	ror nhi
+	ror nlo
+	dex
+	bne .svsh24
+	jmp .svsign
+.svsh
+	lda nhi
+	ldx #7
+.svsh16
+	lsr
+	ror nlo
+	dex
+	bne .svsh16
+	sta nhi
+.svsign
 	lda scale_s
 	bpl .svok
 	sec
@@ -786,13 +949,25 @@ try_proximity
 	stx obj_i
 	lda sw_room,x
 	cmp room_idx
-	bne .tp_sn
+	bne .tp_sleave
 	jsr .prox_switch
-	bcc .tp_sn
+	bcc .tp_sleave
+	lda sw_latched,x
+	bne .tp_sn			; still held — one fire per press
+	lda #1
+	sta sw_latched,x
 	ldy sw_elev,x
 	tya
 	tax
 	jsr elev_activate
+	bcs .tp_sn
+	lda #SOUND_SWITCH
+	jsr play_sound
+	jmp .tp_sn
+.tp_sleave
+	ldx obj_i
+	lda #0
+	sta sw_latched,x
 .tp_sn
 	ldx obj_i
 	inx
@@ -818,73 +993,186 @@ try_proximity
 .tp_rts
 	rts
 
-; X=door; C=1 if within PROX_DIST of door AABB (expanded)
+; X=door; C=1 if in doorway width, thin axis ±DOOR_PROX, and Y overlaps
 .prox_door
 	stx obj_i
+	lda door_face,x
+	cmp #FACE_PX
+	bcs .pd_x
+	; Z-facing: wide=X unexpanded, thin=Z ±DOOR_PROX
 	lda door_x,x
-	sec
-	sbc #PROX_DIST
-	bcs +
-	lda #0
-+
 	sta box_x
+	lda door_sx,x
+	sta box_sx
 	lda door_z,x
 	sec
-	sbc #PROX_DIST
+	sbc #DOOR_PROX
 	bcs +
 	lda #0
 +
 	sta box_z
 	clc
-	lda door_sx,x
-	adc #PROX_DIST
-	adc #PROX_DIST
-	sta box_sx
-	clc
 	lda door_sz,x
-	adc #PROX_DIST
-	adc #PROX_DIST
+	adc #DOOR_PROX
+	adc #DOOR_PROX
 	sta box_sz
+	jmp .pd_xz
+.pd_x
+	lda door_z,x
+	sta box_z
+	lda door_sz,x
+	sta box_sz
+	lda door_x,x
+	sec
+	sbc #DOOR_PROX
+	bcs +
+	lda #0
++
+	sta box_x
+	clc
+	lda door_sx,x
+	adc #DOOR_PROX
+	adc #DOOR_PROX
+	sta box_sx
+.pd_xz
 	lda cam_xh
 	sta col_x
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
+	bcc .pd_no
+	ldx obj_i
+	lda door_y,x
+	sta box_y
+	lda door_sy,x
+	sta box_sy
+	jsr player_overlaps_y
+	ldx obj_i
+	rts
+.pd_no
+	clc
 	ldx obj_i
 	rts
 
+; X=switch; C=1 if in pad XZ, Y overlaps, facing the face, wish into it
 .prox_switch
 	stx obj_i
 	lda sw_x,x
-	sec
-	sbc #PROX_DIST
-	bcs +
-	lda #0
-+
 	sta box_x
 	lda sw_z,x
-	sec
-	sbc #PROX_DIST
-	bcs +
-	lda #0
-+
 	sta box_z
-	clc
 	lda sw_sx,x
-	adc #PROX_DIST
-	adc #PROX_DIST
 	sta box_sx
-	clc
 	lda sw_sz,x
-	adc #PROX_DIST
-	adc #PROX_DIST
 	sta box_sz
 	lda cam_xh
 	sta col_x
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
+	bcc .ps_no
 	ldx obj_i
+	lda sw_y,x
+	sta box_y
+	lda sw_sy,x
+	sta box_sy
+	jsr player_overlaps_y
+	bcc .ps_no
+	ldx obj_i
+	jsr .switch_facing
+	bcc .ps_no
+	jsr .switch_push
+	ldx obj_i
+	rts
+.ps_no
+	clc
+	ldx obj_i
+	rts
+
+; X=switch; C=1 if yaw within ±45° of sw_face (0=+Z, 64=+X, 128=-Z, 192=-X)
+.switch_facing
+	lda sw_face,x
+	cmp #FACE_PX
+	bcs .sf_x
+	cmp #FACE_MZ
+	beq .sf_mz
+	; FACE_PZ: yaw < 32 or >= 224
+	lda yaw
+	cmp #32
+	bcc .sf_yes
+	cmp #224
+	bcs .sf_yes
+	clc
+	rts
+.sf_mz
+	lda yaw
+	cmp #96
+	bcc .sf_no
+	cmp #160
+	bcc .sf_yes
+.sf_no
+	clc
+	rts
+.sf_x
+	cmp #FACE_MX
+	beq .sf_mx
+	; FACE_PX: 32..95
+	lda yaw
+	cmp #32
+	bcc .sf_no
+	cmp #96
+	bcc .sf_yes
+	clc
+	rts
+.sf_mx
+	lda yaw
+	cmp #160
+	bcc .sf_no
+	cmp #224
+	bcc .sf_yes
+	clc
+	rts
+.sf_yes
+	sec
+	rts
+
+; X=switch; C=1 if this frame's wish points into the switch face
+.switch_push
+	lda sw_face,x
+	cmp #FACE_PX
+	bcs .sp_x
+	cmp #FACE_MZ
+	beq .sp_mz
+	; FACE_PZ: +Z
+	lda wish_dzh
+	bmi .sp_no
+	ora wish_dz
+	beq .sp_no
+	sec
+	rts
+.sp_mz
+	lda wish_dzh
+	bmi .sp_yes
+.sp_no
+	clc
+	rts
+.sp_yes
+	sec
+	rts
+.sp_x
+	cmp #FACE_MX
+	beq .sp_mx
+	; FACE_PX: +X
+	lda wish_dxh
+	bmi .sp_no
+	ora wish_dx
+	beq .sp_no
+	sec
+	rts
+.sp_mx
+	lda wish_dxh
+	bmi .sp_yes
+	clc
 	rts
 
 ; ------------------------------------------------------------------

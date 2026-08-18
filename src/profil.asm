@@ -32,28 +32,36 @@ prof_init
 	sta frame_cy + 3
 	lda #20
 	sta dt_ms
+	lda #0
+	sta dt_msh
 	rts
 
-; frame_cy >> 10 → dt_ms. 0 → 20; saturate at 255.
+; frame_cy >> 10 → 16-bit dt_ms. 0 → 20; saturate at 65535.
 calc_frame_dt
 	lda frame_cy + 1
-	sta dt_tmp
+	sta dt_ms
 	lda frame_cy + 2
+	sta dt_msh
+	lda frame_cy + 3
 	lsr
-	ror dt_tmp
+	ror dt_msh
+	ror dt_ms
 	lsr
-	ror dt_tmp
-	tay
-	bne .sat
-	lda dt_tmp
+	ror dt_msh
+	ror dt_ms
+	cmp #0				; A = cy[3] >> 2
+	beq .zchk
+	lda #$ff
+	sta dt_ms
+	sta dt_msh
+	rts
+.zchk
+	lda dt_ms
+	ora dt_msh
 	bne .ok
 	lda #20
+	sta dt_ms
 .ok
-	sta dt_ms
-	rts
-.sat
-	lda #255
-	sta dt_ms
 	rts
 
 prof_read_casc

@@ -472,6 +472,47 @@ button:disabled {
   font-family: inherit;
 }
 
+.color-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.2rem;
+}
+
+.color-field > span {
+  flex: none;
+  min-width: 0;
+}
+
+.color-field .color-swatches {
+  flex: none;
+  width: 100%;
+}
+
+.color-swatches {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  width: 100%;
+}
+
+.swatch {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  height: 14px;
+  aspect-ratio: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 1px;
+}
+
+.swatch.selected {
+  border-color: #fff;
+  outline: 1px solid var(--accent);
+  outline-offset: 0;
+  z-index: 1;
+}
+
 .btn-row {
   display: flex;
   flex-wrap: wrap;

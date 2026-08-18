@@ -17,7 +17,10 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "Start corridor"
+          "name": "Start corridor",
+          "skyColor": 9,
+          "floorColor": 9,
+          "lineColor": 7
         },
         {
           "id": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
@@ -31,7 +34,10 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "Elevator down"
+          "name": "Elevator down",
+          "skyColor": 2,
+          "floorColor": 2,
+          "lineColor": 7
         },
         {
           "id": "7f98a06a-3a51-401a-b1d4-40b9ebad9a87",
@@ -130,7 +136,8 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "tag": "firstelevator"
+          "tag": "firstelevator",
+          "elevType": "descending"
         },
         {
           "id": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
@@ -144,7 +151,10 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "Outside courtyard"
+          "name": "Outside courtyard",
+          "skyColor": 14,
+          "floorColor": 5,
+          "lineColor": 1
         },
         {
           "id": "a0e70a0f-f008-4048-8885-8e78c5026f4c",
@@ -11963,17 +11973,17 @@
     "mode": "layout",
     "localDraw": false,
     "selectedIds": [
-      "7f98a06a-3a51-401a-b1d4-40b9ebad9a87"
+      "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
     ],
     "enemy": "Rottweiler",
     "frameIndex": 0,
     "selectedVerts": [],
     "layoutCamera": {
-      "x": 17.22112417428483,
-      "y": 160.3938801467482,
-      "z": 260.50695784856,
-      "yaw": 9.176667724609365,
-      "pitch": -0.4293383789062494,
+      "x": -16.90836412149065,
+      "y": 105.50806804871821,
+      "z": 149.19377157713024,
+      "yaw": 8.28600048828124,
+      "pitch": -0.1680048828124991,
       "speed": 16
     },
     "animOrbit": {

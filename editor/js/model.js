@@ -21,6 +21,64 @@ export const SKELETON_MIRROR_PAIRS = [
 export const VERT_MIN = -64;
 export const VERT_MAX = 63;
 
+/** Default room viewport colours (C64 indices). */
+export const ROOM_SKY_DEFAULT = 9;
+export const ROOM_FLOOR_DEFAULT = 8;
+export const ROOM_LINE_DEFAULT = 7;
+
+/** Pepto Commodore 64 palette (indices 0–15). */
+export const C64_HEX = [
+  "#000000",
+  "#ffffff",
+  "#813338",
+  "#75cec8",
+  "#8e3c97",
+  "#56ac4d",
+  "#40318d",
+  "#bfce72",
+  "#8e5029",
+  "#553f00",
+  "#c46c71",
+  "#4a4a4a",
+  "#7b7b7b",
+  "#a9ff9f",
+  "#706deb",
+  "#b2b2b2",
+];
+
+export const C64_NAMES = [
+  "black",
+  "white",
+  "red",
+  "cyan",
+  "purple",
+  "green",
+  "blue",
+  "yellow",
+  "orange",
+  "brown",
+  "light red",
+  "dark grey",
+  "grey",
+  "light green",
+  "light blue",
+  "light grey",
+];
+
+export function colorHex(index) {
+  return C64_HEX[index & 15] || C64_HEX[0];
+}
+
+/** Normalize JSON colour (0–15) to a C64 index. */
+export function normalizeColor(value, fallback = 0) {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.min(15, value | 0));
+  }
+  const asNum = Number(value);
+  if (Number.isFinite(asNum)) return Math.max(0, Math.min(15, asNum | 0));
+  return fallback;
+}
+
 export const KINDS = {
   room: {
     id: "room",
@@ -435,7 +493,12 @@ export function clampObject(obj) {
     obj.rot = clampEnemyRot(obj.rot ?? 0);
   }
   if (obj.kind === "trigger") obj.text = clampTriggerText(obj.text);
-  if (obj.kind === "room") obj.name = clampName(obj.name);
+  if (obj.kind === "room") {
+    obj.name = clampName(obj.name);
+    obj.skyColor = normalizeColor(obj.skyColor, ROOM_SKY_DEFAULT);
+    obj.floorColor = normalizeColor(obj.floorColor, ROOM_FLOOR_DEFAULT);
+    obj.lineColor = normalizeColor(obj.lineColor, ROOM_LINE_DEFAULT);
+  }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
   if (obj.kind === "doorway") {
@@ -474,7 +537,12 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.enemy = ENEMY_TYPES.some((t) => t.name === name) ? name : "Grunt";
   }
   if (kind === "trigger") obj.text = clampTriggerText(extra.text);
-  if (kind === "room") obj.name = clampName(extra.name);
+  if (kind === "room") {
+    obj.name = clampName(extra.name);
+    obj.skyColor = normalizeColor(extra.skyColor, ROOM_SKY_DEFAULT);
+    obj.floorColor = normalizeColor(extra.floorColor, ROOM_FLOOR_DEFAULT);
+    obj.lineColor = normalizeColor(extra.lineColor, ROOM_LINE_DEFAULT);
+  }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
   if (kind === "doorway") {
@@ -810,6 +878,9 @@ function parseObjects(list) {
       locked: o.locked,
       keyTag: o.keyTag,
       elevType: o.elevType,
+      skyColor: o.skyColor,
+      floorColor: o.floorColor,
+      lineColor: o.lineColor,
     });
     if (!KINDS[o.kind].fixed) {
       obj.sx = o.sx ?? obj.sx;
@@ -821,7 +892,12 @@ function parseObjects(list) {
       if (o.rot != null) obj.rot = o.rot;
     }
     if (o.kind === "trigger" && o.text != null) obj.text = clampTriggerText(o.text);
-    if (o.kind === "room" && o.name != null) obj.name = clampName(o.name);
+    if (o.kind === "room") {
+      if (o.name != null) obj.name = clampName(o.name);
+      if (o.skyColor != null) obj.skyColor = normalizeColor(o.skyColor, ROOM_SKY_DEFAULT);
+      if (o.floorColor != null) obj.floorColor = normalizeColor(o.floorColor, ROOM_FLOOR_DEFAULT);
+      if (o.lineColor != null) obj.lineColor = normalizeColor(o.lineColor, ROOM_LINE_DEFAULT);
+    }
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
     if (o.kind === "doorway") {

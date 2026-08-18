@@ -183,4 +183,8 @@ pv1		= $b2
 pv2		= $b3
 pv3		= $b4
 pv4		= $b5
+col_sky		= $b6			; active room sky → $d021 top half
+col_floor	= $b7			; active room floor → $d021 bot half
+col_line	= $b8			; active room lines → viewport colour RAM
+palette_room	= $b9			; last room_idx palette applied ($ff = none)
 

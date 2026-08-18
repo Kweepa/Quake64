@@ -379,16 +379,36 @@ cube_project
 	sta PROJ_YH,x
 	rts
 
-; 8.8 ylo:yhi and z_eye:z_eye_h -> signed 16-bit ox
+; 8.8 ylo:yhi * FOCAL / z_eye:z_eye_h → nlo:nhi signed 16-bit (no ±127 clamp)
 .p16
-	jsr persp88
+	lda ylo
 	sta nlo
-	lda #0
+	lda yhi
 	sta nhi
+	lda z_eye
+	sta dlo
+	lda z_eye_h
+	sta dhi
+	jsr scale_nd
 	lda nlo
-	bpl +
-	dec nhi
+	sta ylo
+	lda nhi
+	sta yhi
+	lda #FOCAL
+	sta nlo
+	lda dlo
+	ora dhi
+	bne +
+	lda #0
+	sta nlo
+	sta nhi
+	rts
 +
+	jsr lerp16
+	lda rot0
+	sta nlo
+	lda rot1
+	sta nhi
 	rts
 
 ; Near-plane interpolate, then Cohen-Sutherland to 192x128
@@ -790,10 +810,21 @@ cube_clip
 	jmp .cslp
 
 ; rot0:rot2 = 16-bit plane, X = 0 (p0) or 1 (p1)
+; lerp16 clobbers rot0/1/2 — save plane and endpoint index
 .csx
-	stx rot1
+	txa
+	pha
+	lda rot0
+	pha
+	lda rot2
+	pha
 	jsr .ylerp
-	ldx rot1
+	pla
+	sta rot2
+	pla
+	sta rot0
+	pla
+	tax
 	cpx #0
 	bne .csx1
 	lda rot0
@@ -809,9 +840,19 @@ cube_clip
 	rts
 
 .csy
-	stx rot1
+	txa
+	pha
+	lda rot0
+	pha
+	lda rot2
+	pha
 	jsr .xlerp
-	ldx rot1
+	pla
+	sta rot2
+	pla
+	sta rot0
+	pla
+	tax
 	cpx #0
 	bne .csy1
 	lda rot0
@@ -850,14 +891,8 @@ cube_clip
 	lda oy1h
 	sbc oy0h
 	sta yhi
-	jsr scale3
-	lda dlo
-	sta div_c
-	ldy nlo
-	lda ylo
-	jsr lerpdv
-	jsr .addoy0
-	rts
+	jsr .nlrun
+	jmp .addoy0
 .yl1
 	sec
 	lda ox0l
@@ -880,14 +915,8 @@ cube_clip
 	lda oy0h
 	sbc oy1h
 	sta yhi
-	jsr scale3
-	lda dlo
-	sta div_c
-	ldy nlo
-	lda ylo
-	jsr lerpdv
-	jsr .addoy1
-	rts
+	jsr .nlrun
+	jmp .addoy1
 
 .xlerp
 	cpx #0
@@ -913,14 +942,8 @@ cube_clip
 	lda ox1h
 	sbc ox0h
 	sta yhi
-	jsr scale3
-	lda dlo
-	sta div_c
-	ldy nlo
-	lda ylo
-	jsr lerpdv
-	jsr .addox0
-	rts
+	jsr .nlrun
+	jmp .addox0
 .xl1
 	sec
 	lda oy0l
@@ -943,77 +966,43 @@ cube_clip
 	lda ox0h
 	sbc ox1h
 	sta yhi
-	jsr scale3
-	lda dlo
-	sta div_c
-	ldy nlo
-	lda ylo
-	jsr lerpdv
-	jsr .addox1
-	rts
+	jsr .nlrun
+	jmp .addox1
 
 .addoy0
-	sta e0z
-	lda #0
-	sta e1z
-	lda e0z
-	bpl +
-	dec e1z
-+
 	clc
 	lda oy0l
-	adc e0z
+	adc rot0
 	sta oy0l
 	lda oy0h
-	adc e1z
+	adc rot1
 	sta oy0h
 	rts
 .addoy1
-	sta e0z
-	lda #0
-	sta e1z
-	lda e0z
-	bpl +
-	dec e1z
-+
 	clc
 	lda oy1l
-	adc e0z
+	adc rot0
 	sta oy1l
 	lda oy1h
-	adc e1z
+	adc rot1
 	sta oy1h
 	rts
 .addox0
-	sta e0z
-	lda #0
-	sta e1z
-	lda e0z
-	bpl +
-	dec e1z
-+
 	clc
 	lda ox0l
-	adc e0z
+	adc rot0
 	sta ox0l
 	lda ox0h
-	adc e1z
+	adc rot1
 	sta ox0h
 	rts
 .addox1
-	sta e0z
-	lda #0
-	sta e1z
-	lda e0z
-	bpl +
-	dec e1z
-+
 	clc
 	lda ox1l
-	adc e0z
+	adc rot0
 	sta ox1l
 	lda ox1h
-	adc e1z
+	adc rot1
 	sta ox1h
 	rts
 

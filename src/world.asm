@@ -37,6 +37,9 @@ world_init
 	jsr proc_init
 	jsr update_floor
 	jsr sync_eye
+	lda #$ff
+	sta palette_room
+	jsr apply_room_palette
 	rts
 
 ; ------------------------------------------------------------------

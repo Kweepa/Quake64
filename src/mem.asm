@@ -5,9 +5,10 @@
 ; $F800 log/alog/sin/cos (copied at init). Judd sqlo/sqhi live in the PRG.
 
 COL_BORDER	= 0
-COL_BG		= 9			; brown sandbox
+COL_BG		= 9			; default sky (brown)
+COL_FLOOR	= 8			; default floor (orange)
 COL_HUD_BG	= 0
-COL_LINE	= 7			; orange vectors
+COL_LINE	= 7			; default vectors (yellow)
 COL_OUTSIDE	= 0			; black frame (not $d021 brown)
 
 VIEW_COL	= 8

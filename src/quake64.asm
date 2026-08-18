@@ -72,6 +72,7 @@ main
 	jsr set_draw_ptrs
 	jsr read_input
 	jsr apply_move_world
+	jsr maybe_room_palette
 	jsr try_proximity
 	jsr proc_update
 	jsr update_floor

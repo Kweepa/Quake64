@@ -19,6 +19,12 @@ room_sy
 	!byte 8,48,32
 room_sz
 	!byte 6,16,32
+room_sky
+	!byte 9,2,14
+room_floor
+	!byte 9,2,5
+room_line
+	!byte 7,7,1
 
 door_x
 	!byte 23,28,93

@@ -11,6 +11,11 @@ import {
   clampTag,
   clampElevType,
   clampVert,
+  C64_HEX,
+  C64_NAMES,
+  ROOM_SKY_DEFAULT,
+  ROOM_FLOOR_DEFAULT,
+  ROOM_LINE_DEFAULT,
   MAX_TRIGGER_TEXT,
   MAX_NAME_LEN,
   MAX_TAG_LEN,
@@ -724,6 +729,27 @@ function numInput(value, onChange, min, max) {
   return inp;
 }
 
+function colorPicker(label, value, onPick) {
+  const wrap = document.createElement("div");
+  wrap.className = "field color-field";
+  const span = document.createElement("span");
+  span.textContent = label;
+  const row = document.createElement("div");
+  row.className = "color-swatches";
+  for (let i = 0; i < 16; i++) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "swatch" + (i === value ? " selected" : "");
+    btn.title = `${i}: ${C64_NAMES[i]}`;
+    btn.dataset.color = String(i);
+    btn.style.background = C64_HEX[i];
+    btn.addEventListener("click", () => onPick(i));
+    row.appendChild(btn);
+  }
+  wrap.append(span, row);
+  return wrap;
+}
+
 function renderInspector() {
   const root = document.getElementById("right-editors");
   root.innerHTML = "";
@@ -791,6 +817,27 @@ function renderInspector() {
       nameInp.placeholder = "Display name";
       nameInp.addEventListener("change", () => apply(() => (obj.name = clampName(nameInp.value))));
       root.appendChild(field("Name", nameInp));
+      root.appendChild(
+        colorPicker("Sky", obj.skyColor ?? ROOM_SKY_DEFAULT, (v) =>
+          apply(() => {
+            obj.skyColor = v;
+          })
+        )
+      );
+      root.appendChild(
+        colorPicker("Floor", obj.floorColor ?? ROOM_FLOOR_DEFAULT, (v) =>
+          apply(() => {
+            obj.floorColor = v;
+          })
+        )
+      );
+      root.appendChild(
+        colorPicker("Lines", obj.lineColor ?? ROOM_LINE_DEFAULT, (v) =>
+          apply(() => {
+            obj.lineColor = v;
+          })
+        )
+      );
     }
     if (obj.kind === "enemy") {
       const sel = document.createElement("select");

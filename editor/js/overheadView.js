@@ -6,6 +6,9 @@ import {
   activeMap,
   WORLD_SIZE,
   isGhostKind,
+  colorHex,
+  ROOM_FLOOR_DEFAULT,
+  ROOM_LINE_DEFAULT,
 } from "./model.js";
 import { lookVectors } from "./math3d.js";
 
@@ -14,6 +17,14 @@ const ORTHO = {
   left: { u: "z", v: "y", su: "sz", sv: "sy", hint: "YZ · +Y up · camera arrow" },
   forward: { u: "x", v: "y", su: "sx", sv: "sy", hint: "XY · +Y up · camera arrow" },
 };
+
+function hexAlpha(hex, alpha) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 export class OverheadView {
   constructor(canvas, opts) {
@@ -118,12 +129,14 @@ export class OverheadView {
       const isCur = cur && obj.id === cur.id;
       const isN = neigh.some((n) => n.id === obj.id);
       const faded = vis && !vis.has(obj.id);
-      drawBox(
-        obj,
-        isCur ? "rgba(212,160,23,0.28)" : isN ? "rgba(90,180,90,0.22)" : "rgba(200,204,212,0.08)",
-        faded ? "#333" : KINDS.room.color,
-        isCur ? 2 : 1
-      );
+      const floorHex = colorHex(obj.floorColor ?? ROOM_FLOOR_DEFAULT);
+      const lineHex = colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT);
+      const fill = isCur
+        ? hexAlpha(floorHex, 0.28)
+        : isN
+          ? hexAlpha(floorHex, 0.18)
+          : hexAlpha(floorHex, 0.08);
+      drawBox(obj, fill, faded ? "#333" : lineHex, isCur ? 2 : 1);
     }
 
     for (const obj of activeMap(doc).objects) {

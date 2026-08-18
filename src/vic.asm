@@ -63,6 +63,67 @@ fill_colour
 	bne .row
 	rts
 
+; 24×16 viewport only — uses col_line (room palette)
+fill_viewport_colour
+	lda #<($d800 + VIEW_COL)
+	sta init_ptr
+	lda #>($d800 + VIEW_COL)
+	sta init_ptr+1
+	lda #VIEW_H
+	sta init_row
+.vrow
+	ldy #0
+	lda col_line
+.vcol
+	sta (init_ptr),y
+	iny
+	cpy #VIEW_W
+	bne .vcol
+	clc
+	lda init_ptr
+	adc #40
+	sta init_ptr
+	bcc +
+	inc init_ptr+1
++
+	dec init_row
+	bne .vrow
+	rts
+
+; room_idx → col_sky/floor/line, viewport colour RAM, live $d021 if safe
+apply_room_palette
+	ldx room_idx
+	lda room_sky,x
+	sta col_sky
+	lda room_floor,x
+	sta col_floor
+	lda room_line,x
+	sta col_line
+	jsr fill_viewport_colour
+	lda irq_phase
+	beq .arsky
+	cmp #1
+	bne .ardone
+	lda col_floor
+	sta $d021
+	jmp .ardone
+.arsky
+	lda col_sky
+	sta $d021
+.ardone
+	lda room_idx
+	sta palette_room
+	rts
+
+; Call once per frame after movement — skips if room unchanged
+maybe_room_palette
+	lda room_idx
+	cmp palette_room
+	beq .mrpdone
+	jsr apply_room_palette
+.mrpdone
+	rts
+
 ; Unique 0–255 char codes in both matrices (top 8 rows + bottom 8 rows)
 fill_screens
 	lda #<SCR_A

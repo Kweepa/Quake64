@@ -101,7 +101,7 @@ raster_body
 	sta $d018
 	lda show_bot_tab,x
 	sta show_d018_bot
-	lda #COL_BG
+	lda col_sky
 	sta $d021
 	lda #RASTER_SPLIT
 	sta $d012
@@ -113,6 +113,8 @@ raster_body
 .split
 	lda show_d018_bot
 	sta $d018
+	lda col_floor
+	sta $d021
 	lda #RASTER_HUD
 	sta $d012
 	lda #1

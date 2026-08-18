@@ -14,6 +14,21 @@ ENEMY_TYPE = {"Grunt": 0, "Rottweiler": 1}
 ELEV_DESCENDING = 0
 ELEV_AUTOMATIC = 1
 FACE = {"+z": 0, "-z": 1, "+x": 2, "-x": 3}
+ROOM_SKY_DEFAULT = 9
+ROOM_FLOOR_DEFAULT = 8
+ROOM_LINE_DEFAULT = 7
+
+
+def norm_color(val, default: int) -> int:
+    if isinstance(val, int) and 0 <= val <= 15:
+        return val
+    try:
+        n = int(val)
+        if 0 <= n <= 15:
+            return n
+    except (TypeError, ValueError):
+        pass
+    return default
 
 
 def aabb_overlap(a: dict, b: dict) -> bool:
@@ -101,6 +116,9 @@ def main() -> None:
     room_sx = [r["sx"] for r in rooms]
     room_sy = [r["sy"] for r in rooms]
     room_sz = [r["sz"] for r in rooms]
+    room_sky = [norm_color(r.get("skyColor"), ROOM_SKY_DEFAULT) for r in rooms]
+    room_floor = [norm_color(r.get("floorColor"), ROOM_FLOOR_DEFAULT) for r in rooms]
+    room_line = [norm_color(r.get("lineColor"), ROOM_LINE_DEFAULT) for r in rooms]
 
     # Doors
     door_x, door_y, door_z = [], [], []
@@ -281,6 +299,9 @@ def main() -> None:
         btable("room_sx", room_sx).rstrip(),
         btable("room_sy", room_sy).rstrip(),
         btable("room_sz", room_sz).rstrip(),
+        btable("room_sky", room_sky).rstrip(),
+        btable("room_floor", room_floor).rstrip(),
+        btable("room_line", room_line).rstrip(),
         "",
         btable("door_x", door_x).rstrip(),
         btable("door_y", door_y).rstrip(),

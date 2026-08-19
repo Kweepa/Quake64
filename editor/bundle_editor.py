@@ -19,6 +19,7 @@ JS_ORDER = [
     "js/layoutView.js",
     "js/overheadView.js",
     "js/animView.js",
+    "js/weaponView.js",
     "js/main.js",
 ]
 
@@ -63,6 +64,7 @@ def main() -> None:
     <div class="toolbar-actions" role="group" aria-label="Editor mode">
       <button type="button" id="btn-mode-layout" class="active">Layout</button>
       <button type="button" id="btn-mode-anim">Animation</button>
+      <button type="button" id="btn-mode-weapons">Weapons</button>
     </div>
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
@@ -98,6 +100,21 @@ def main() -> None:
           <input type="number" id="mdl-scale-num" min="0.1" max="2" step="0.01" value="0.7" />
         </label>
       </section>
+      <section id="weapons-left" hidden>
+        <h2>Weapons</h2>
+        <ul id="weapon-list" class="object-list"></ul>
+        <label class="field mdl-scale-field">
+          <span>Global scale</span>
+          <input type="range" id="weapon-scale" min="0.05" max="4" step="0.01" value="0.4" />
+          <input type="number" id="weapon-scale-num" min="0.05" max="8" step="0.01" value="0.4" />
+        </label>
+        <div class="btn-row">
+          <button type="button" id="btn-weapon-folder">Open shareware folder</button>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btn-weapon-export">Export PNGs</button>
+        </div>
+      </section>
     </aside>
 
     <section class="center">
@@ -120,6 +137,13 @@ def main() -> None:
           <canvas id="overhead-canvas"></canvas>
         </div>
         <p class="muted" id="ortho-hint">XZ · +Z up · camera arrow</p>
+      </div>
+      <div id="weapon-preview-panel" class="preview-panel panel" hidden>
+        <h2>48×42 sprite</h2>
+        <div class="preview-frame weapon-preview-frame">
+          <canvas id="weapon-preview-canvas"></canvas>
+        </div>
+        <p class="muted" id="weapon-preview-hint">C64 2×2 hi-res</p>
       </div>
     </aside>
   </main>

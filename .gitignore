@@ -3,6 +3,7 @@ src/tables.asm
 src/sqtab.asm
 src/uifont.asm
 src/grunt_data.asm
+src/weapon_spr.asm
 
 # Build outputs
 *.lbl
@@ -18,6 +19,7 @@ shareware/
 # Reference materials
 ref/
 tmp/
+assets/weapons/sheet.png
 
 # Editor / OS
 .DS_Store
@@ -25,3 +27,4 @@ Thumbs.db
 *.swp
 .vscode/
 .idea/
+monitor.log

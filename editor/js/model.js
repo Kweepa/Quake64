@@ -29,6 +29,17 @@ export const VERT_MIN = -64;
 export const VERT_MAX = 63;
 export const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
+export const ANIM_ORBIT_DIST_MIN = 16;
+export const ANIM_ORBIT_DIST_MAX = 400;
+export const DOC_VERSION = 6;
+export const DEFAULT_WEAPON_SCALE = 0.4;
+export const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
+export const WEAPON_LABELS = {
+  axe: "Axe",
+  shot2: "Super shotgun",
+  nail: "Nailgun",
+  rock: "Grenade launcher",
+};
 
 export function clampMdlScale(n) {
   const v = Number(n);
@@ -911,7 +922,57 @@ export function defaultEditorState() {
     layoutCamera: { x: 28, y: 10, z: -6, yaw: 0.35, pitch: -0.2, speed: 28 },
     animOrbit: { yaw: 0.5, pitch: 0.15, dist: 48 },
     mdlScale: DEFAULT_MDL_SCALE,
+    weapon: "axe",
+    weaponFrame: 0,
   };
+}
+
+export function clampWeaponScale(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return DEFAULT_WEAPON_SCALE;
+  return Math.max(0.05, Math.min(8, v));
+}
+
+function parseWeaponPan(raw) {
+  return {
+    x: Number.isFinite(Number(raw?.x)) ? Number(raw.x) : 0,
+    y: Number.isFinite(Number(raw?.y)) ? Number(raw.y) : 0,
+  };
+}
+
+function parseWeaponItem(raw) {
+  const pan = parseWeaponPan(raw?.pan);
+  let frames = null;
+  if (Array.isArray(raw?.frames)) {
+    const seen = new Set();
+    frames = [];
+    for (const f of raw.frames) {
+      const n = f | 0;
+      if (n < 0 || n > 4095 || seen.has(n)) continue;
+      seen.add(n);
+      frames.push(n);
+    }
+  }
+  return { pan, frames };
+}
+
+export function defaultWeapons() {
+  const items = {};
+  for (const key of WEAPON_KEYS) {
+    items[key] = { pan: { x: 0, y: 0 }, frames: null };
+  }
+  return { scale: DEFAULT_WEAPON_SCALE, items };
+}
+
+export function parseWeapons(raw) {
+  const d = defaultWeapons();
+  if (!raw || typeof raw !== "object") return d;
+  d.scale = clampWeaponScale(raw.scale);
+  const src = raw.items && typeof raw.items === "object" ? raw.items : raw;
+  for (const key of WEAPON_KEYS) {
+    d.items[key] = parseWeaponItem(src[key]);
+  }
+  return d;
 }
 
 function num(v, fallback) {
@@ -922,7 +983,7 @@ function num(v, fallback) {
 export function parseEditorState(raw) {
   const d = defaultEditorState();
   if (!raw || typeof raw !== "object") return d;
-  if (raw.mode === "anim" || raw.mode === "layout") d.mode = raw.mode;
+  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons") d.mode = raw.mode;
   d.localDraw = !!raw.localDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
@@ -943,7 +1004,7 @@ export function parseEditorState(raw) {
   d.animOrbit = {
     yaw: num(orb.yaw, d.animOrbit.yaw),
     pitch: num(orb.pitch, d.animOrbit.pitch),
-    dist: Math.max(16, Math.min(120, num(orb.dist, d.animOrbit.dist))),
+    dist: Math.max(ANIM_ORBIT_DIST_MIN, Math.min(ANIM_ORBIT_DIST_MAX, num(orb.dist, d.animOrbit.dist))),
   };
   const scaleIn = raw.mdlScale;
   const scaleNum = Number(scaleIn);
@@ -952,6 +1013,8 @@ export function parseEditorState(raw) {
   } else {
     d.mdlScale = clampMdlScale(scaleNum);
   }
+  if (typeof raw.weapon === "string" && WEAPON_KEYS.includes(raw.weapon)) d.weapon = raw.weapon;
+  d.weaponFrame = Math.max(0, num(raw.weaponFrame, 0) | 0);
   return d;
 }
 
@@ -960,10 +1023,11 @@ export function createDefaultDocument() {
   for (const name of LEVEL_NAMES) maps[name] = emptyMap();
   maps.E1M1 = { name: "Slipgate Complex", objects: starterObjects() };
   return {
-    version: 5,
+    version: DOC_VERSION,
     activeLevel: "E1M1",
     maps,
     enemies: createAllCreatures(),
+    weapons: defaultWeapons(),
     editor: defaultEditorState(),
   };
 }
@@ -1013,7 +1077,8 @@ export function normalizeDocument(raw) {
     }
   }
   if (!doc.enemies.length) doc.enemies = createAllCreatures();
-  doc.version = 5;
+  doc.version = DOC_VERSION;
+  doc.weapons = parseWeapons(raw.weapons);
   doc.editor = parseEditorState(raw.editor);
   return doc;
 }

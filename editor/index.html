@@ -188,6 +188,55 @@ h2 {
   background: #0a0a0c;
 }
 
+.weapon-preview-frame {
+  width: 288px;
+  height: 252px;
+}
+
+#weapon-preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  background: #0a0a0c;
+}
+
+.weapon-frame-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.weapon-frame-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  font-size: 0.8rem;
+}
+
+.weapon-frame-list .clip-head {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  padding: 0.45rem 0 0.15rem;
+}
+
+.weapon-frame-list button.frame-name {
+  flex: 1;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0.15rem 0.25rem;
+}
+
+.weapon-frame-list button.frame-name.current {
+  color: var(--accent);
+}
+
 .preview-panel .muted {
   margin: 0.35rem 0 0;
   font-size: 0.7rem;
@@ -633,6 +682,17 @@ button:disabled {
   min-width: 3.4rem;
 }
 
+.weapon-vert-info {
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.weapon-vert-info p {
+  margin: 0.15rem 0;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
@@ -654,6 +714,7 @@ button:disabled {
     <div class="toolbar-actions" role="group" aria-label="Editor mode">
       <button type="button" id="btn-mode-layout" class="active">Layout</button>
       <button type="button" id="btn-mode-anim">Animation</button>
+      <button type="button" id="btn-mode-weapons">Weapons</button>
     </div>
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
@@ -689,6 +750,21 @@ button:disabled {
           <input type="number" id="mdl-scale-num" min="0.1" max="2" step="0.01" value="0.7" />
         </label>
       </section>
+      <section id="weapons-left" hidden>
+        <h2>Weapons</h2>
+        <ul id="weapon-list" class="object-list"></ul>
+        <label class="field mdl-scale-field">
+          <span>Global scale</span>
+          <input type="range" id="weapon-scale" min="0.05" max="4" step="0.01" value="0.4" />
+          <input type="number" id="weapon-scale-num" min="0.05" max="8" step="0.01" value="0.4" />
+        </label>
+        <div class="btn-row">
+          <button type="button" id="btn-weapon-folder">Open shareware folder</button>
+        </div>
+        <div class="btn-row">
+          <button type="button" id="btn-weapon-export">Export PNGs</button>
+        </div>
+      </section>
     </aside>
 
     <section class="center">
@@ -711,6 +787,13 @@ button:disabled {
           <canvas id="overhead-canvas"></canvas>
         </div>
         <p class="muted" id="ortho-hint">XZ · +Z up · camera arrow</p>
+      </div>
+      <div id="weapon-preview-panel" class="preview-panel panel" hidden>
+        <h2>48×42 sprite</h2>
+        <div class="preview-frame weapon-preview-frame">
+          <canvas id="weapon-preview-canvas"></canvas>
+        </div>
+        <p class="muted" id="weapon-preview-hint">C64 2×2 hi-res</p>
       </div>
     </aside>
   </main>
@@ -748,6 +831,17 @@ const VERT_MIN = -64;
 const VERT_MAX = 63;
 const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
+const ANIM_ORBIT_DIST_MIN = 16;
+const ANIM_ORBIT_DIST_MAX = 400;
+const DOC_VERSION = 6;
+const DEFAULT_WEAPON_SCALE = 0.4;
+const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
+const WEAPON_LABELS = {
+  axe: "Axe",
+  shot2: "Super shotgun",
+  nail: "Nailgun",
+  rock: "Grenade launcher",
+};
 
 function clampMdlScale(n) {
   const v = Number(n);
@@ -1630,7 +1724,57 @@ function defaultEditorState() {
     layoutCamera: { x: 28, y: 10, z: -6, yaw: 0.35, pitch: -0.2, speed: 28 },
     animOrbit: { yaw: 0.5, pitch: 0.15, dist: 48 },
     mdlScale: DEFAULT_MDL_SCALE,
+    weapon: "axe",
+    weaponFrame: 0,
   };
+}
+
+function clampWeaponScale(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return DEFAULT_WEAPON_SCALE;
+  return Math.max(0.05, Math.min(8, v));
+}
+
+function parseWeaponPan(raw) {
+  return {
+    x: Number.isFinite(Number(raw?.x)) ? Number(raw.x) : 0,
+    y: Number.isFinite(Number(raw?.y)) ? Number(raw.y) : 0,
+  };
+}
+
+function parseWeaponItem(raw) {
+  const pan = parseWeaponPan(raw?.pan);
+  let frames = null;
+  if (Array.isArray(raw?.frames)) {
+    const seen = new Set();
+    frames = [];
+    for (const f of raw.frames) {
+      const n = f | 0;
+      if (n < 0 || n > 4095 || seen.has(n)) continue;
+      seen.add(n);
+      frames.push(n);
+    }
+  }
+  return { pan, frames };
+}
+
+function defaultWeapons() {
+  const items = {};
+  for (const key of WEAPON_KEYS) {
+    items[key] = { pan: { x: 0, y: 0 }, frames: null };
+  }
+  return { scale: DEFAULT_WEAPON_SCALE, items };
+}
+
+function parseWeapons(raw) {
+  const d = defaultWeapons();
+  if (!raw || typeof raw !== "object") return d;
+  d.scale = clampWeaponScale(raw.scale);
+  const src = raw.items && typeof raw.items === "object" ? raw.items : raw;
+  for (const key of WEAPON_KEYS) {
+    d.items[key] = parseWeaponItem(src[key]);
+  }
+  return d;
 }
 
 function num(v, fallback) {
@@ -1641,7 +1785,7 @@ function num(v, fallback) {
 function parseEditorState(raw) {
   const d = defaultEditorState();
   if (!raw || typeof raw !== "object") return d;
-  if (raw.mode === "anim" || raw.mode === "layout") d.mode = raw.mode;
+  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons") d.mode = raw.mode;
   d.localDraw = !!raw.localDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
@@ -1662,7 +1806,7 @@ function parseEditorState(raw) {
   d.animOrbit = {
     yaw: num(orb.yaw, d.animOrbit.yaw),
     pitch: num(orb.pitch, d.animOrbit.pitch),
-    dist: Math.max(16, Math.min(120, num(orb.dist, d.animOrbit.dist))),
+    dist: Math.max(ANIM_ORBIT_DIST_MIN, Math.min(ANIM_ORBIT_DIST_MAX, num(orb.dist, d.animOrbit.dist))),
   };
   const scaleIn = raw.mdlScale;
   const scaleNum = Number(scaleIn);
@@ -1671,6 +1815,8 @@ function parseEditorState(raw) {
   } else {
     d.mdlScale = clampMdlScale(scaleNum);
   }
+  if (typeof raw.weapon === "string" && WEAPON_KEYS.includes(raw.weapon)) d.weapon = raw.weapon;
+  d.weaponFrame = Math.max(0, num(raw.weaponFrame, 0) | 0);
   return d;
 }
 
@@ -1679,10 +1825,11 @@ function createDefaultDocument() {
   for (const name of LEVEL_NAMES) maps[name] = emptyMap();
   maps.E1M1 = { name: "Slipgate Complex", objects: starterObjects() };
   return {
-    version: 5,
+    version: DOC_VERSION,
     activeLevel: "E1M1",
     maps,
     enemies: createAllCreatures(),
+    weapons: defaultWeapons(),
     editor: defaultEditorState(),
   };
 }
@@ -1732,7 +1879,8 @@ function normalizeDocument(raw) {
     }
   }
   if (!doc.enemies.length) doc.enemies = createAllCreatures();
-  doc.version = 5;
+  doc.version = DOC_VERSION;
+  doc.weapons = parseWeapons(raw.weapons);
   doc.editor = parseEditorState(raw.editor);
   return doc;
 }
@@ -1947,6 +2095,7 @@ const HANDLE_DB = "quake64-editor";
 const HANDLE_STORE = "handles";
 const HANDLE_KEY = "doc";
 const SHAREWARE_KEY = "shareware";
+const WEAPONS_PNG_KEY = "weapons-png";
 
 const DEFAULT_DOC_PATH = "quake64.json";
 
@@ -1954,6 +2103,8 @@ const DEFAULT_DOC_PATH = "quake64.json";
 let docFileHandle = null;
 /** @type {FileSystemDirectoryHandle | null} */
 let sharewareDirHandle = null;
+/** @type {FileSystemDirectoryHandle | null} */
+let weaponsPngDirHandle = null;
 
 function docFileName() {
   return docFileHandle?.name || DEFAULT_DOC_PATH;
@@ -2248,6 +2399,43 @@ async function loadSharewarePakBuffers(dirHandle) {
     buffers.push(await file.arrayBuffer());
   }
   return buffers;
+}
+
+async function ensureWeaponsPngDirectory() {
+  if (weaponsPngDirHandle && (await ensurePermission(weaponsPngDirHandle, "readwrite"))) {
+    return weaponsPngDirHandle;
+  }
+  const stored = await loadStoredHandle(WEAPONS_PNG_KEY);
+  if (stored && (await ensurePermission(stored, "readwrite"))) {
+    weaponsPngDirHandle = stored;
+    return stored;
+  }
+  return pickWeaponsPngDirectory();
+}
+
+async function pickWeaponsPngDirectory() {
+  if (!window.showDirectoryPicker) {
+    throw new Error("This browser cannot open a folder (needs Chromium file access)");
+  }
+  try {
+    const opts = { id: "quake-assets-weapons", mode: "readwrite" };
+    const startIn = weaponsPngDirHandle || (await loadStoredHandle(WEAPONS_PNG_KEY));
+    if (startIn) opts.startIn = startIn;
+    const handle = await window.showDirectoryPicker(opts);
+    weaponsPngDirHandle = handle;
+    await storeHandle(WEAPONS_PNG_KEY, handle);
+    return handle;
+  } catch (e) {
+    if (e.name === "AbortError") return null;
+    throw e;
+  }
+}
+
+async function writePngFile(dirHandle, filename, blob) {
+  const fh = await dirHandle.getFileHandle(filename, { create: true });
+  const writable = await fh.createWritable();
+  await writable.write(blob);
+  await writable.close();
 }
 
 function downloadJSON(doc, filename = DEFAULT_DOC_PATH) {
@@ -2629,6 +2817,751 @@ function loadEnemyMdls(lumps) {
     }
   }
   return { models, missing };
+}
+
+const WEAPON_MDL_PATHS = {
+  axe: "progs/v_axe.mdl",
+  shot2: "progs/v_shot2.mdl",
+  nail: "progs/v_nail.mdl",
+  rock: "progs/v_rock.mdl",
+};
+
+const WEAPON_SPRITE_W = 48;
+const WEAPON_SPRITE_H = 42;
+const WEAPON_FOV_X = 90;
+const WEAPON_VIEW_W = 320;
+const WEAPON_VIEW_H = 200;
+const WEAPON_NEAR = 0.05;
+
+function calcFovY(fovXDeg, width, height) {
+  const x = width / Math.tan((fovXDeg / 360) * Math.PI);
+  return (Math.atan(height / x) * 360) / Math.PI;
+}
+
+const WEAPON_FOV_Y = calcFovY(WEAPON_FOV_X, WEAPON_VIEW_W, WEAPON_VIEW_H);
+const WEAPON_XSCALE = WEAPON_VIEW_W * 0.5 / Math.tan((WEAPON_FOV_X * Math.PI) / 360);
+const WEAPON_YSCALE = WEAPON_VIEW_H * 0.5 / Math.tan((WEAPON_FOV_Y * Math.PI) / 360);
+
+const QUAD_COPLANAR_DOT = 0.9;
+const QUAD_PLANE_REL = 0.15;
+
+function edgeKey(a, b) {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+function sub3(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+function dot3(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function cross3(a, b) {
+  return { x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x };
+}
+
+function len3v(v) {
+  return Math.hypot(v.x, v.y, v.z);
+}
+
+function triEdges(t) {
+  return [
+    [t[0], t[1]],
+    [t[1], t[2]],
+    [t[2], t[0]],
+  ];
+}
+
+function triFace(t) {
+  return {
+    tri: t,
+    tris: [t],
+    edges: triEdges(t),
+  };
+}
+
+function quadFace(t0, t1, sharedKey) {
+  const edges = [];
+  for (const [a, b] of [...triEdges(t0), ...triEdges(t1)]) {
+    if (edgeKey(a, b) === sharedKey) continue;
+    edges.push([a, b]);
+  }
+  return { tri: t0, tris: [t0, t1], edges };
+}
+
+function apexOf(t, sa, sb) {
+  for (const i of t) {
+    if (i !== sa && i !== sb) return i;
+  }
+  return -1;
+}
+
+function triNormal(verts, t) {
+  const a = verts[t[0]];
+  const b = verts[t[1]];
+  const c = verts[t[2]];
+  if (!a || !b || !c) return null;
+  const n = cross3(sub3(b, a), sub3(c, a));
+  const l = len3v(n);
+  if (l < 1e-12) return null;
+  return { x: n.x / l, y: n.y / l, z: n.z / l, origin: a };
+}
+
+function triMeanEdge(verts, t) {
+  const a = verts[t[0]];
+  const b = verts[t[1]];
+  const c = verts[t[2]];
+  return (len3v(sub3(b, a)) + len3v(sub3(c, b)) + len3v(sub3(a, c))) / 3;
+}
+
+function unitDir(a, b) {
+  const d = sub3(b, a);
+  const l = len3v(d);
+  if (l < 1e-12) return null;
+  return { x: d.x / l, y: d.y / l, z: d.z / l };
+}
+
+/** Pair coplanar neighbor tris that share an MDL edge (drop that diagonal). */
+function mdlQuadEdges(tris, verts) {
+  const n = tris.length;
+  const quads = [];
+  if (!n) return quads;
+  if (!verts?.length) {
+    for (const t of tris) quads.push(triFace(t));
+    return quads;
+  }
+
+  const byEdge = new Map();
+  for (let ti = 0; ti < n; ti++) {
+    for (const [a, b] of triEdges(tris[ti])) {
+      const k = edgeKey(a, b);
+      let list = byEdge.get(k);
+      if (!list) {
+        list = [];
+        byEdge.set(k, list);
+      }
+      list.push({ ti, a, b });
+    }
+  }
+
+  const cands = [];
+  for (const [k, list] of byEdge) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const i0 = list[i].ti;
+        const i1 = list[j].ti;
+        if (i0 === i1) continue;
+        const scored = scoreNeighborTris(verts, tris[i0], tris[i1], list[i].a, list[i].b);
+        if (!scored?.pass) continue;
+        const sa = verts[list[i].a];
+        const sb = verts[list[i].b];
+        cands.push({
+          i0,
+          i1,
+          k,
+          score: scored.coplanarDot + 0.25 * scored.parallelMax,
+          len: sa && sb ? len3v(sub3(sb, sa)) : 0,
+        });
+      }
+    }
+  }
+
+  cands.sort((a, b) => b.len - a.len || b.score - a.score);
+  const used = new Uint8Array(n);
+  for (const c of cands) {
+    if (used[c.i0] || used[c.i1]) continue;
+    used[c.i0] = 1;
+    used[c.i1] = 1;
+    quads.push(quadFace(tris[c.i0], tris[c.i1], c.k));
+  }
+  for (let i = 0; i < n; i++) {
+    if (!used[i]) quads.push(triFace(tris[i]));
+  }
+  return quads;
+}
+
+function quadConvex(ring, n) {
+  let sign = 0;
+  for (let i = 0; i < 4; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % 4];
+    const c = ring[(i + 2) % 4];
+    const turn = dot3(n, cross3(sub3(b, a), sub3(c, b)));
+    if (Math.abs(turn) < 1e-8) continue;
+    const s = turn > 0 ? 1 : -1;
+    if (sign === 0) sign = s;
+    else if (s !== sign) return false;
+  }
+  return sign !== 0;
+}
+
+function sideSign(sa, sb, p, n) {
+  return dot3(n, cross3(sub3(sb, sa), sub3(p, sa)));
+}
+
+function apexesOpposite(sa, sb, p0, p1, n) {
+  return sideSign(sa, sb, p0, n) * sideSign(sa, sb, p1, n) < 0;
+}
+
+/** [sa, p0, sb, p1] is a bowtie if both apexes sit on the same side of sa–sb. */
+function orderQuadRing(sa, p0, sb, p1, n) {
+  const tries = [
+    [sa, p0, sb, p1],
+    [sa, p1, sb, p0],
+    [sa, p0, p1, sb],
+    [sa, p1, p0, sb],
+  ];
+  for (const ring of tries) {
+    if (quadConvex(ring, n)) return ring;
+  }
+  return null;
+}
+
+function oppositeParallel(ring) {
+  const d0 = unitDir(ring[0], ring[1]);
+  const d1 = unitDir(ring[1], ring[2]);
+  const d2 = unitDir(ring[2], ring[3]);
+  const d3 = unitDir(ring[3], ring[0]);
+  if (!d0 || !d1 || !d2 || !d3) return 0;
+  return Math.max(Math.abs(dot3(d0, d2)), Math.abs(dot3(d1, d3)));
+}
+
+function pointsNormal(a, b, c) {
+  return triNormal([a, b, c], [0, 1, 2]);
+}
+
+/** One triangle: unit normal used by the coplanar gate. */
+function inspectTriNormal(a, b, c) {
+  const n = pointsNormal(a, b, c);
+  if (!n) return null;
+  return { x: n.x, y: n.y, z: n.z };
+}
+
+function scoreNeighborTris(verts, t0, t1, sa, sb) {
+  const n0 = triNormal(verts, t0);
+  let n1 = triNormal(verts, t1);
+  if (!n0 || !n1) return null;
+  let coplanarDot = dot3(n0, n1);
+  if (coplanarDot < 0) {
+    n1 = { x: -n1.x, y: -n1.y, z: -n1.z, origin: n1.origin };
+    coplanarDot = -coplanarDot;
+  }
+  const p0 = apexOf(t0, sa, sb);
+  const p1 = apexOf(t1, sa, sb);
+  if (p0 < 0 || p1 < 0) return null;
+  const mean = (triMeanEdge(verts, t0) + triMeanEdge(verts, t1)) * 0.5 || 1;
+  const plane0 = Math.abs(dot3(n1, sub3(verts[p0], n1.origin))) / mean;
+  const plane1 = Math.abs(dot3(n0, sub3(verts[p1], n0.origin))) / mean;
+  const nAvg = { x: n0.x + n1.x, y: n0.y + n1.y, z: n0.z + n1.z };
+  const nl = len3v(nAvg);
+  if (nl < 1e-12) return null;
+  nAvg.x /= nl;
+  nAvg.y /= nl;
+  nAvg.z /= nl;
+  const va = verts[sa];
+  const vb = verts[sb];
+  const vp0 = verts[p0];
+  const vp1 = verts[p1];
+  const diagonal = apexesOpposite(va, vb, vp0, vp1, nAvg);
+  const ring = orderQuadRing(va, vp0, vb, vp1, nAvg);
+  const convex = !!ring;
+  const parallelMax = ring ? oppositeParallel(ring) : 0;
+  const planeRel = Math.max(plane0, plane1);
+  return {
+    coplanarDot,
+    planeRel,
+    convex,
+    diagonal,
+    parallelMax,
+    shared: [sa, sb],
+    pass:
+      coplanarDot >= QUAD_COPLANAR_DOT &&
+      planeRel < QUAD_PLANE_REL &&
+      convex &&
+      diagonal,
+  };
+}
+
+function sharedEdgeIndices(t0, t1) {
+  const s1 = new Set(t1);
+  const shared = [];
+  for (const i of t0) {
+    if (s1.has(i)) shared.push(i);
+  }
+  return shared.length === 2 ? shared : null;
+}
+
+function triKey(t) {
+  return [t[0], t[1], t[2]].sort((a, b) => a - b).join(":");
+}
+
+function quadsIncludePair(quads, t0, t1) {
+  if (!quads?.length || !t0 || !t1) return false;
+  const a = triKey(t0);
+  const b = triKey(t1);
+  for (const q of quads) {
+    const ts = q.tris;
+    if (!ts || ts.length !== 2) continue;
+    const keys = [triKey(ts[0]), triKey(ts[1])];
+    if (keys.includes(a) && keys.includes(b)) return true;
+  }
+  return false;
+}
+
+function mdlEnsureQuads(mdl) {
+  if (!mdl) return [];
+  if (!mdl.quads) mdl.quads = mdlQuadEdges(mdl.tris, mdlQuakeVerts(mdl, 0));
+  return mdl.quads;
+}
+
+/** Four selected indices: score the MDL triangle pair that uses them, if any. */
+function inspectQuadPair(tris, indices, verts, quads) {
+  if (!tris?.length || !indices || indices.length !== 4 || !verts?.length) return null;
+  const set = new Set(indices);
+  if (set.size !== 4) return null;
+  const hits = [];
+  for (const t of tris) {
+    if (t.every((i) => set.has(i))) hits.push(t);
+  }
+  for (let i = 0; i < hits.length; i++) {
+    for (let j = i + 1; j < hits.length; j++) {
+      const se = sharedEdgeIndices(hits[i], hits[j]);
+      if (!se) continue;
+      const union = new Set([...hits[i], ...hits[j]]);
+      if (union.size !== 4) continue;
+      const scored = scoreNeighborTris(verts, hits[i], hits[j], se[0], se[1]);
+      if (!scored) return { noModelPair: true };
+      scored.paired = quadsIncludePair(quads, hits[i], hits[j]);
+      return scored;
+    }
+  }
+  return { noModelPair: true };
+}
+
+/** Packed MDL verts in Quake model space (+X forward, +Y left, +Z up). */
+function mdlQuakeVerts(mdl, frameIndex) {
+  const fr = mdl.frames[frameIndex];
+  if (!fr) return [];
+  const [sx, sy, sz] = mdl.scale;
+  const [ox, oy, oz] = mdl.origin;
+  const packed = fr.verts;
+  const out = new Array(mdl.numVerts);
+  for (let i = 0; i < mdl.numVerts; i++) {
+    out[i] = {
+      x: packed[i * 3] * sx + ox,
+      y: packed[i * 3 + 1] * sy + oy,
+      z: packed[i * 3 + 2] * sz + oz,
+    };
+  }
+  return out;
+}
+
+/** Identity view-model: camera X=-Y, Y=+Z, Z=+X; FOV 90 on 320×200. */
+function projectViewVert(v) {
+  const cx = -v.y;
+  const cy = v.z;
+  const cz = v.x;
+  if (cz < WEAPON_NEAR) return { cx, cy, cz, ok: false, sx: 0, sy: 0 };
+  return {
+    cx,
+    cy,
+    cz,
+    ok: true,
+    sx: WEAPON_VIEW_W * 0.5 + WEAPON_XSCALE * (cx / cz),
+    sy: WEAPON_VIEW_H * 0.5 - WEAPON_YSCALE * (cy / cz),
+  };
+}
+
+function viewFaceTowardCamera(p0, p1, p2) {
+  if (!p0.ok || !p1.ok || !p2.ok) return false;
+  const ax = p1.cx - p0.cx;
+  const ay = p1.cy - p0.cy;
+  const az = p1.cz - p0.cz;
+  const bx = p2.cx - p0.cx;
+  const by = p2.cy - p0.cy;
+  const bz = p2.cz - p0.cz;
+  const nx = ay * bz - az * by;
+  const ny = az * bx - ax * bz;
+  const nz = ax * by - ay * bx;
+  return nx * p0.cx + ny * p0.cy + nz * p0.cz < 0;
+}
+
+function toSpritePos(sx, sy, scale, pan) {
+  return {
+    x: scale * (sx - WEAPON_VIEW_W * 0.5) + WEAPON_SPRITE_W * 0.5 + (pan?.x || 0),
+    y: scale * (sy - WEAPON_VIEW_H * 0.5) + WEAPON_SPRITE_H * 0.5 + (pan?.y || 0),
+  };
+}
+
+function defaultWeaponFrames(mdl, key) {
+  if (!mdl?.frames?.length) return [0];
+  if (key !== "axe") return [0];
+  const out = [];
+  const seen = new Set();
+  const add = (i) => {
+    const n = i | 0;
+    if (n < 0 || n >= mdl.frames.length || seen.has(n)) return;
+    seen.add(n);
+    out.push(n);
+  };
+  add(0);
+  for (const clip of mdl.clips || []) {
+    if (/^axea/i.test(clip.name)) {
+      for (const fr of clip.frames) add(fr.index);
+    }
+  }
+  return out.length ? out : [0];
+}
+
+function resolveWeaponFrames(item, mdl, key) {
+  if (Array.isArray(item?.frames)) {
+    const max = mdl?.frames?.length ?? 4096;
+    const seen = new Set();
+    const out = [];
+    for (const f of item.frames) {
+      const n = f | 0;
+      if (n < 0 || n >= max || seen.has(n)) continue;
+      seen.add(n);
+      out.push(n);
+    }
+    return out;
+  }
+  return defaultWeaponFrames(mdl, key);
+}
+
+function loadWeaponMdls(lumps) {
+  const models = {};
+  const missing = [];
+  for (const [key, path] of Object.entries(WEAPON_MDL_PATHS)) {
+    const buf = lumps.get(path.toLowerCase());
+    if (!buf) {
+      missing.push(key);
+      continue;
+    }
+    try {
+      models[key] = parseMdl(buf);
+    } catch (err) {
+      missing.push(key);
+      console.warn(`Failed to parse ${path}:`, err);
+    }
+  }
+  return { models, missing };
+}
+
+const ZBUF_MAX = 256;
+const VIEW_Z_SCALE = 8;
+const VIEW_ZBUF_MAX = 768;
+const TRI_ID_EMPTY = 0xffff;
+const Z_EDGE_SLACK = 1.02;
+
+function spriteAabb(pts) {
+  let minX = 0;
+  let minY = 0;
+  let maxX = WEAPON_SPRITE_W;
+  let maxY = WEAPON_SPRITE_H;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  return {
+    minX: Math.floor(minX) - 1,
+    minY: Math.floor(minY) - 1,
+    maxX: Math.ceil(maxX) + 1,
+    maxY: Math.ceil(maxY) + 1,
+  };
+}
+
+function scaledVert(p, originX, originY, scale) {
+  return {
+    x: (p.x - originX) * scale,
+    y: (p.y - originY) * scale,
+    z: p.z,
+    iz: p.iz,
+  };
+}
+
+function makeZctx(frontTris, aabb, scale, maxDim) {
+  const spanX = Math.max(1, aabb.maxX - aabb.minX);
+  const spanY = Math.max(1, aabb.maxY - aabb.minY);
+  let s = Math.min(scale, maxDim / spanX, maxDim / spanY);
+  if (!(s > 0)) s = 1;
+  const bw = Math.max(1, Math.ceil(spanX * s));
+  const bh = Math.max(1, Math.ceil(spanY * s));
+  const zbuf = new Float32Array(bw * bh);
+  zbuf.fill(1e12);
+  const triId = new Uint16Array(bw * bh);
+  triId.fill(TRI_ID_EMPTY);
+  for (const ft of frontTris) {
+    fillTriZ(
+      zbuf,
+      triId,
+      ft.ti,
+      0,
+      0,
+      bw,
+      bh,
+      scaledVert(ft.a, aabb.minX, aabb.minY, s),
+      scaledVert(ft.b, aabb.minX, aabb.minY, s),
+      scaledVert(ft.c, aabb.minX, aabb.minY, s)
+    );
+  }
+  return { zbuf, triId, minX: 0, minY: 0, bw, bh, originX: aabb.minX, originY: aabb.minY, scale: s };
+}
+
+function spriteVert(p, scale, pan) {
+  const s = toSpritePos(p.sx, p.sy, scale, pan);
+  return { x: s.x, y: s.y, z: p.cz, iz: 1 / p.cz };
+}
+
+function faceToward(proj, tri) {
+  return viewFaceTowardCamera(proj[tri[0]], proj[tri[1]], proj[tri[2]]);
+}
+
+function trisSharingEdge(tris, proj, ia, ib) {
+  const adj = new Set();
+  for (let ti = 0; ti < tris.length; ti++) {
+    const t = tris[ti];
+    if (t[0] !== ia && t[1] !== ia && t[2] !== ia) continue;
+    if (t[0] !== ib && t[1] !== ib && t[2] !== ib) continue;
+    if (!faceToward(proj, t)) continue;
+    adj.add(ti);
+  }
+  return adj;
+}
+
+function fillTriZ(zbuf, triId, ti, ox, oy, bw, bh, a, b, c) {
+  const minX = Math.max(0, Math.floor(Math.min(a.x, b.x, c.x) - ox));
+  const maxX = Math.min(bw - 1, Math.ceil(Math.max(a.x, b.x, c.x) - ox));
+  const minY = Math.max(0, Math.floor(Math.min(a.y, b.y, c.y) - oy));
+  const maxY = Math.min(bh - 1, Math.ceil(Math.max(a.y, b.y, c.y) - oy));
+  if (minX > maxX || minY > maxY) return;
+  const denom = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
+  if (Math.abs(denom) < 1e-8) return;
+  const inv = 1 / denom;
+  for (let y = minY; y <= maxY; y++) {
+    const py = y + oy + 0.5;
+    for (let x = minX; x <= maxX; x++) {
+      const px = x + ox + 0.5;
+      const w0 = ((b.y - c.y) * (px - c.x) + (c.x - b.x) * (py - c.y)) * inv;
+      const w1 = ((c.y - a.y) * (px - c.x) + (a.x - c.x) * (py - c.y)) * inv;
+      const w2 = 1 - w0 - w1;
+      if (w0 < -1e-4 || w1 < -1e-4 || w2 < -1e-4) continue;
+      const iz = w0 * a.iz + w1 * b.iz + w2 * c.iz;
+      if (iz <= 0) continue;
+      const z = 1 / iz;
+      const i = y * bw + x;
+      if (z < zbuf[i]) {
+        zbuf[i] = z;
+        triId[i] = ti;
+      }
+    }
+  }
+}
+
+function segmentT(a, b, px, py) {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-12) return 0;
+  let t = ((px - a.x) * dx + (py - a.y) * dy) / len2;
+  if (t < 0) return 0;
+  if (t > 1) return 1;
+  return t;
+}
+
+function lerpDepth(a, b, t) {
+  const iz = a.iz * (1 - t) + b.iz * t;
+  return iz > 0 ? 1 / iz : 1e9;
+}
+
+function edgePixelVisible(zctx, x, y, a, b, adj) {
+  const bx = Math.floor(x - zctx.minX);
+  const by = Math.floor(y - zctx.minY);
+  if (bx < 0 || by < 0 || bx >= zctx.bw || by >= zctx.bh) return false;
+  const i = by * zctx.bw + bx;
+  const owner = zctx.triId[i];
+  if (owner === TRI_ID_EMPTY) return true;
+  if (adj.has(owner)) return true;
+  const cx = bx + zctx.minX + 0.5;
+  const cy = by + zctx.minY + 0.5;
+  const z = lerpDepth(a, b, segmentT(a, b, cx, cy));
+  return z <= zctx.zbuf[i] * Z_EDGE_SLACK;
+}
+
+function toZspace(p, zctx) {
+  return scaledVert(p, zctx.originX, zctx.originY, zctx.scale);
+}
+
+function fromZspace(x, y, zctx) {
+  return {
+    x: x / zctx.scale + zctx.originX,
+    y: y / zctx.scale + zctx.originY,
+  };
+}
+
+/** Visible bits of an edge in projected sprite space (no pixel snapping). */
+function edgeRuns(zctx, a, b, adj) {
+  const ha = toZspace(a, zctx);
+  const hb = toZspace(b, zctx);
+  const dist = Math.hypot(hb.x - ha.x, hb.y - ha.y);
+  const n = Math.max(2, Math.ceil(dist * 2));
+  const runs = [];
+  let run = null;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = ha.x + (hb.x - ha.x) * t;
+    const y = ha.y + (hb.y - ha.y) * t;
+    if (edgePixelVisible(zctx, x, y, ha, hb, adj)) {
+      const p = fromZspace(x, y, zctx);
+      if (!run) run = { ax: p.x, ay: p.y, bx: p.x, by: p.y };
+      else {
+        run.bx = p.x;
+        run.by = p.y;
+      }
+    } else if (run) {
+      runs.push(run);
+      run = null;
+    }
+  }
+  if (run) runs.push(run);
+  return runs;
+}
+
+function leftToRight(a, b) {
+  if (a.x < b.x || (a.x === b.x && a.y <= b.y)) return [a, b];
+  return [b, a];
+}
+
+function plotSpritePixel(pixels, x, y, zctx, adj, za, zb) {
+  if (x < 0 || y < 0 || x >= WEAPON_SPRITE_W || y >= WEAPON_SPRITE_H) return;
+  if (zctx) {
+    const p = toZspace({ x: x + 0.5, y: y + 0.5, iz: 0 }, zctx);
+    if (!edgePixelVisible(zctx, p.x, p.y, za, zb, adj)) return;
+  }
+  pixels[y * WEAPON_SPRITE_W + x] = 1;
+}
+
+/** Thin 8-connected Bresenham: one pixel per major-axis step, no corner elbows. */
+function plotSpriteLine(pixels, a, b, zctx, adj) {
+  [a, b] = leftToRight(a, b);
+  const za = zctx ? toZspace(a, zctx) : null;
+  const zb = zctx ? toZspace(b, zctx) : null;
+  let x = Math.round(a.x);
+  let y = Math.round(a.y);
+  const xEnd = Math.round(b.x);
+  const yEnd = Math.round(b.y);
+  const dx = Math.abs(xEnd - x);
+  const dy = Math.abs(yEnd - y);
+  const sx = x < xEnd ? 1 : -1;
+  const sy = y < yEnd ? 1 : -1;
+  if (dx >= dy) {
+    let err = 2 * dy - dx;
+    for (;;) {
+      plotSpritePixel(pixels, x, y, zctx, adj, za, zb);
+      if (x === xEnd) break;
+      if (err >= 0) {
+        y += sy;
+        err -= 2 * dx;
+      }
+      err += 2 * dy;
+      x += sx;
+    }
+  } else {
+    let err = 2 * dx - dy;
+    for (;;) {
+      plotSpritePixel(pixels, x, y, zctx, adj, za, zb);
+      if (y === yEnd) break;
+      if (err >= 0) {
+        x += sx;
+        err -= 2 * dy;
+      }
+      err += 2 * dx;
+      y += sy;
+    }
+  }
+}
+
+function visibleWeaponMesh(mdl, frameIndex, scale, pan) {
+  const verts = mdlQuakeVerts(mdl, frameIndex);
+  const proj = verts.map(projectViewVert);
+  const quads = mdlEnsureQuads(mdl);
+  const pts = [];
+  const frontTris = [];
+  const frontEdges = [];
+  const seenEdge = new Set();
+  let clipped = false;
+
+  for (let ti = 0; ti < mdl.tris.length; ti++) {
+    const t = mdl.tris[ti];
+    if (!faceToward(proj, t)) continue;
+    const a = proj[t[0]];
+    const b = proj[t[1]];
+    const c = proj[t[2]];
+    if (!a.ok || !b.ok || !c.ok) continue;
+    const pa = spriteVert(a, scale, pan);
+    const pb = spriteVert(b, scale, pan);
+    const pc = spriteVert(c, scale, pan);
+    frontTris.push({ a: pa, b: pb, c: pc, ti });
+    pts.push(pa, pb, pc);
+  }
+
+  for (const q of quads) {
+    const tris = q.tris || [q.tri];
+    if (!tris.some((t) => faceToward(proj, t))) continue;
+    for (const [ia, ib] of q.edges) {
+      const a = proj[ia];
+      const b = proj[ib];
+      if (!a?.ok || !b?.ok) {
+        clipped = true;
+        continue;
+      }
+      const k = edgeKey(ia, ib);
+      if (seenEdge.has(k)) continue;
+      seenEdge.add(k);
+      const pa = spriteVert(a, scale, pan);
+      const pb = spriteVert(b, scale, pan);
+      const adj = trisSharingEdge(mdl.tris, proj, ia, ib);
+      const [la, lb] = leftToRight(pa, pb);
+      frontEdges.push({ a: la, b: lb, adj });
+      pts.push(pa, pb);
+      if (
+        pa.x < 0 ||
+        pa.y < 0 ||
+        pa.x >= WEAPON_SPRITE_W ||
+        pa.y >= WEAPON_SPRITE_H ||
+        pb.x < 0 ||
+        pb.y < 0 ||
+        pb.x >= WEAPON_SPRITE_W ||
+        pb.y >= WEAPON_SPRITE_H
+      ) {
+        clipped = true;
+      }
+    }
+  }
+
+  const segs = [];
+  const pixels = new Uint8Array(WEAPON_SPRITE_W * WEAPON_SPRITE_H);
+  const viewAabb = spriteAabb(pts);
+  const zView = makeZctx(frontTris, viewAabb, VIEW_Z_SCALE, VIEW_ZBUF_MAX);
+  const zBake = makeZctx(frontTris, { minX: 0, minY: 0, maxX: WEAPON_SPRITE_W, maxY: WEAPON_SPRITE_H }, 1, ZBUF_MAX);
+  for (const e of frontEdges) {
+    for (const run of edgeRuns(zView, e.a, e.b, e.adj)) segs.push(run);
+  }
+  for (const e of frontEdges) plotSpriteLine(pixels, e.a, e.b, zBake, e.adj);
+
+  return { segs, pixels, clipped };
+}
+
+function projectedWeaponEdges(mdl, frameIndex, scale, pan) {
+  const { segs, clipped } = visibleWeaponMesh(mdl, frameIndex, scale, pan);
+  return { segs, clipped };
+}
+
+function rasterWeaponFrame(mdl, frameIndex, scale, pan) {
+  return visibleWeaponMesh(mdl, frameIndex, scale, pan);
 }
 
 // ---- js/layoutView.js ----
@@ -3759,7 +4692,9 @@ class OverheadView {
 const AXIS_LEN = 8;
 const AXIS_HIT = 9;
 const ANIM_BOX_CLICK = 4;
-const ANIM_ZOOM_K = 0.008;
+function clampAnimDist(d) {
+  return Math.max(ANIM_ORBIT_DIST_MIN, Math.min(ANIM_ORBIT_DIST_MAX, d));
+}
 const AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 class AnimView {
@@ -3916,7 +4851,7 @@ class AnimView {
   #onWheel(e) {
     if (!this.enabled) return;
     e.preventDefault();
-    this.orbit.dist = Math.max(16, Math.min(120, this.orbit.dist + (e.deltaY > 0 ? 4 : -4)));
+    this.orbit.dist = clampAnimDist(this.orbit.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1));
     this.opts.onViewChanged?.();
     this.draw();
   }
@@ -4014,7 +4949,7 @@ class AnimView {
       this.drag.last = p;
       const delta = dx + dy;
       if (delta) {
-        this.orbit.dist = Math.max(16, Math.min(120, this.orbit.dist * Math.exp(-delta * ANIM_ZOOM_K)));
+        this.orbit.dist = clampAnimDist(this.orbit.dist * Math.exp(-delta * ANIM_ZOOM_K));
       }
       this.draw();
       return;
@@ -4317,6 +5252,308 @@ class AnimView {
   }
 }
 
+// ---- js/weaponView.js ----
+const ONION = "rgba(180, 170, 140, 0.28)";
+const CURRENT = "#e8e4d8";
+const OVERLAY = "rgba(212, 160, 23, 0.9)";
+const GRID = "rgba(255, 255, 255, 0.06)";
+
+class WeaponView {
+  constructor(canvas, opts) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.opts = opts;
+    this.enabled = false;
+    this.drag = null;
+    this.cssW = 0;
+    this.cssH = 0;
+    this._ro = new ResizeObserver(() => this.resize());
+    this._ro.observe(opts.stage || canvas.parentElement);
+    this.resize();
+
+    canvas.addEventListener("pointerdown", (e) => this.#onDown(e));
+    canvas.addEventListener("pointermove", (e) => this.#onMove(e));
+    canvas.addEventListener("pointerup", (e) => this.#onUp(e));
+    canvas.addEventListener("pointerleave", (e) => this.#onUp(e));
+    canvas.addEventListener("wheel", (e) => this.#onWheel(e), { passive: false });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+
+  resize() {
+    const stage = this.opts.stage || this.canvas.parentElement;
+    const rect = stage.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(64, Math.floor(rect.width));
+    const h = Math.max(64, Math.floor(rect.height));
+    this.canvas.width = Math.floor(w * dpr);
+    this.canvas.height = Math.floor(h * dpr);
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.cssW = w;
+    this.cssH = h;
+    this.draw();
+  }
+
+  #layout() {
+    const w = this.cssW;
+    const h = this.cssH;
+    const cell = Math.min(w / (WEAPON_SPRITE_W * 2.15), h / (WEAPON_SPRITE_H * 2.15));
+    const ow = WEAPON_SPRITE_W * cell;
+    const oh = WEAPON_SPRITE_H * cell;
+    return {
+      cell,
+      ox: (w - ow) / 2,
+      oy: (h - oh) / 2,
+      ow,
+      oh,
+    };
+  }
+
+  #eventPos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * this.cssW,
+      y: ((e.clientY - rect.top) / rect.height) * this.cssH,
+    };
+  }
+
+  #toCanvas(layout, x, y) {
+    return { x: layout.ox + x * layout.cell, y: layout.oy + y * layout.cell };
+  }
+
+  #onWheel(e) {
+    if (!this.enabled) return;
+    e.preventDefault();
+    const cur = this.opts.getScale();
+    const next = Math.max(0.05, Math.min(8, cur * (e.deltaY > 0 ? 0.92 : 1.08)));
+    if (Math.abs(next - cur) < 1e-6) return;
+    this.opts.beginUndo?.();
+    this.opts.setScale(next);
+    this.opts.endUndo?.();
+    this.opts.onChange?.();
+    this.opts.onPanEnd?.();
+    this.draw();
+  }
+
+  #projectedVerts() {
+    const mdl = this.opts.getMdl?.();
+    if (!mdl) return [];
+    const verts = mdlQuakeVerts(mdl, this.opts.getPreviewFrame());
+    const scale = this.opts.getScale();
+    const pan = this.opts.getPan();
+    const out = [];
+    for (let i = 0; i < verts.length; i++) {
+      const p = projectViewVert(verts[i]);
+      if (!p.ok) continue;
+      const s = toSpritePos(p.sx, p.sy, scale, pan);
+      out.push({ i, x: s.x, y: s.y, v: verts[i] });
+    }
+    return out;
+  }
+
+  #hitVertCluster(mx, my) {
+    const layout = this.#layout();
+    const pts = this.#projectedVerts();
+    let best = -1;
+    let bestD = 10;
+    for (const p of pts) {
+      const c = this.#toCanvas(layout, p.x, p.y);
+      const d = Math.hypot(mx - c.x, my - c.y);
+      if (d < bestD) {
+        bestD = d;
+        best = p.i;
+      }
+    }
+    if (best < 0) return [];
+    const hit = pts.find((p) => p.i === best);
+    const hc = this.#toCanvas(layout, hit.x, hit.y);
+    const cluster = [];
+    for (const p of pts) {
+      const c = this.#toCanvas(layout, p.x, p.y);
+      if (Math.hypot(c.x - hc.x, c.y - hc.y) <= 4) cluster.push(p.i);
+    }
+    return cluster.sort((a, b) => a - b);
+  }
+
+  #onDown(e) {
+    if (!this.enabled) return;
+    this.canvas.focus();
+    if (e.button !== 0) return;
+    const p = this.#eventPos(e);
+    const cluster = this.#hitVertCluster(p.x, p.y);
+    if (cluster.length) {
+      this.opts.onSelectVerts?.(cluster, e.shiftKey);
+      this.drag = { kind: "select" };
+      return;
+    }
+    if (!e.shiftKey) this.opts.onSelectVerts?.([], false);
+    const pan = this.opts.getPan();
+    this.opts.beginUndo?.();
+    this.drag = { kind: "pan", last: p, pan: { x: pan.x, y: pan.y } };
+    this.canvas.setPointerCapture(e.pointerId);
+  }
+
+  #onMove(e) {
+    if (!this.enabled || !this.drag || this.drag.kind !== "pan") return;
+    const p = this.#eventPos(e);
+    const layout = this.#layout();
+    const dx = (p.x - this.drag.last.x) / layout.cell;
+    const dy = (p.y - this.drag.last.y) / layout.cell;
+    this.drag.last = p;
+    this.drag.pan = { x: this.drag.pan.x + dx, y: this.drag.pan.y + dy };
+    this.opts.setPan(this.drag.pan.x, this.drag.pan.y);
+    this.opts.onChange?.();
+    this.draw();
+  }
+
+  #onUp() {
+    if (!this.drag) return;
+    const pan = this.drag.kind === "pan";
+    this.drag = null;
+    if (pan) {
+      this.opts.endUndo?.();
+      this.opts.onPanEnd?.();
+    }
+  }
+
+  #strokeSegs(ctx, layout, segs, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    for (const s of segs) {
+      const a = this.#toCanvas(layout, s.ax, s.ay);
+      const b = this.#toCanvas(layout, s.bx, s.by);
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+    }
+    ctx.stroke();
+  }
+
+  drawPreview() {
+    const canvas = this.opts.previewCanvas;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const scale = 6;
+    canvas.width = WEAPON_SPRITE_W * scale;
+    canvas.height = WEAPON_SPRITE_H * scale;
+    ctx.fillStyle = "#0a0a0c";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const mdl = this.opts.getMdl?.();
+    if (!mdl) return;
+    const { pixels } = rasterWeaponFrame(
+      mdl,
+      this.opts.getPreviewFrame(),
+      this.opts.getScale(),
+      this.opts.getPan()
+    );
+    ctx.fillStyle = "#e8e4d8";
+    for (let y = 0; y < WEAPON_SPRITE_H; y++) {
+      for (let x = 0; x < WEAPON_SPRITE_W; x++) {
+        if (!pixels[y * WEAPON_SPRITE_W + x]) continue;
+        ctx.fillRect(x * scale, y * scale, scale, scale);
+      }
+    }
+    ctx.strokeStyle = "rgba(212, 160, 23, 0.5)";
+    ctx.strokeRect(0.5, 0.5, canvas.width - 1, canvas.height - 1);
+    ctx.strokeStyle = "rgba(255,255,255,0.12)";
+    ctx.beginPath();
+    ctx.moveTo(24 * scale + 0.5, 0);
+    ctx.lineTo(24 * scale + 0.5, canvas.height);
+    ctx.moveTo(0, 21 * scale + 0.5);
+    ctx.lineTo(canvas.width, 21 * scale + 0.5);
+    ctx.stroke();
+  }
+
+  draw() {
+    if (!this.enabled) return;
+    const ctx = this.ctx;
+    const w = this.cssW;
+    const h = this.cssH;
+    if (!w || !h) return;
+    ctx.fillStyle = "#0a0a0c";
+    ctx.fillRect(0, 0, w, h);
+
+    const layout = this.#layout();
+    ctx.fillStyle = "rgba(212, 160, 23, 0.06)";
+    ctx.fillRect(layout.ox, layout.oy, layout.ow, layout.oh);
+    ctx.strokeStyle = GRID;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 1; x < WEAPON_SPRITE_W; x++) {
+      const px = layout.ox + x * layout.cell;
+      ctx.moveTo(px, layout.oy);
+      ctx.lineTo(px, layout.oy + layout.oh);
+    }
+    for (let y = 1; y < WEAPON_SPRITE_H; y++) {
+      const py = layout.oy + y * layout.cell;
+      ctx.moveTo(layout.ox, py);
+      ctx.lineTo(layout.ox + layout.ow, py);
+    }
+    ctx.stroke();
+    ctx.strokeStyle = OVERLAY;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(layout.ox + 0.5, layout.oy + 0.5, layout.ow - 1, layout.oh - 1);
+    ctx.strokeStyle = "rgba(212, 160, 23, 0.35)";
+    ctx.beginPath();
+    ctx.moveTo(layout.ox + 24 * layout.cell, layout.oy);
+    ctx.lineTo(layout.ox + 24 * layout.cell, layout.oy + layout.oh);
+    ctx.moveTo(layout.ox, layout.oy + 21 * layout.cell);
+    ctx.lineTo(layout.ox + layout.ow, layout.oy + 21 * layout.cell);
+    ctx.stroke();
+
+    const mdl = this.opts.getMdl?.();
+    if (!mdl) {
+      ctx.fillStyle = "#8b91a0";
+      ctx.font = "13px Segoe UI, sans-serif";
+      ctx.fillText("Open shareware (pak0.pak) to load view-models", 16, 28);
+      this.drawPreview();
+      this.opts.onClipWarn?.(false);
+      return;
+    }
+
+    const scale = this.opts.getScale();
+    const pan = this.opts.getPan();
+    const current = this.opts.getPreviewFrame();
+    const onion = this.opts.getOnionFrames?.() || [];
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const fi of onion) {
+      if (fi === current) continue;
+      const { segs } = projectedWeaponEdges(mdl, fi, scale, pan);
+      this.#strokeSegs(ctx, layout, segs, ONION, 1);
+    }
+    const { segs, clipped } = projectedWeaponEdges(mdl, current, scale, pan);
+    this.#strokeSegs(ctx, layout, segs, CURRENT, 1.4);
+    this.opts.onClipWarn?.(clipped);
+
+    const selected = new Set(this.opts.getSelectedVerts?.() || []);
+    const pts = this.#projectedVerts();
+    ctx.font = "10px Segoe UI, sans-serif";
+    for (const p of pts) {
+      const c = this.#toCanvas(layout, p.x, p.y);
+      const on = selected.has(p.i);
+      ctx.fillStyle = on ? "#f0c040" : "rgba(180, 190, 210, 0.7)";
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, on ? 4.5 : 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      if (on) {
+        ctx.strokeStyle = "#111";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.fillStyle = "#f0c040";
+        ctx.fillText(String(p.i), c.x + 6, c.y - 4);
+      }
+    }
+
+    ctx.fillStyle = OVERLAY;
+    ctx.font = "11px Segoe UI, sans-serif";
+    ctx.fillText("48×42", layout.ox + 4, layout.oy - 6);
+
+    this.drawPreview();
+  }
+}
+
 // ---- js/main.js ----
 const statusEl = document.getElementById("status");
 const titleEl = document.querySelector(".toolbar h1");
@@ -4347,11 +5584,17 @@ let animPlayTimer = null;
 let animLoop = false;
 let sharewareModels = {};
 let sharewareMissing = [];
+let sharewareWeapons = {};
+let sharewareWeaponMissing = [];
 let overlayOn = true;
 let bindJoint = -1;
 let clipIndex = 0;
 let frameLocal = 0;
 let mdlScale = DEFAULT_MDL_SCALE;
+let weaponKey = "axe";
+let weaponFrame = 0;
+let weaponClipWarn = false;
+let weaponSelectedVerts = [];
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
 
@@ -4467,6 +5710,51 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
   },
 });
 
+const weaponView = new WeaponView(document.getElementById("view-canvas"), {
+  stage: document.getElementById("map-stage"),
+  previewCanvas: document.getElementById("weapon-preview-canvas"),
+  getMdl: () => sharewareWeapons[weaponKey] || null,
+  getScale: () => doc.weapons.scale,
+  getPan: () => {
+    const item = doc.weapons.items[weaponKey];
+    return item?.pan || { x: 0, y: 0 };
+  },
+  getPreviewFrame: () => weaponFrame,
+  getOnionFrames: () => selectedWeaponFrames(),
+  getSelectedVerts: () => weaponSelectedVerts,
+  onSelectVerts: (indices, additive) => {
+    if (!indices.length) {
+      if (!additive) weaponSelectedVerts = [];
+    } else if (additive) {
+      const set = new Set(weaponSelectedVerts);
+      for (const i of indices) set.add(i);
+      weaponSelectedVerts = [...set].sort((a, b) => a - b);
+    } else weaponSelectedVerts = [...indices].sort((a, b) => a - b);
+    refreshPanels();
+    if (editorMode === "weapons") weaponView.draw();
+  },
+  setScale: (v) => {
+    doc.weapons.scale = clampWeaponScale(v);
+    syncWeaponScaleInputs();
+  },
+  setPan: (x, y) => {
+    const item = ensureWeaponItem(weaponKey);
+    item.pan = { x, y };
+  },
+  beginUndo,
+  endUndo,
+  onChange: () => {
+    markDirty();
+  },
+  onPanEnd: () => {
+    refreshWeaponClipStatus();
+  },
+  onClipWarn: (clipped) => {
+    weaponClipWarn = !!clipped;
+    if (editorMode === "weapons") refreshWeaponClipStatus();
+  },
+});
+
 function setStatus(msg, isError = false) {
   statusEl.textContent = msg || "";
   statusEl.classList.toggle("error", isError);
@@ -4556,6 +5844,8 @@ function syncEditorToDoc() {
     },
     animOrbit: { yaw: orb.yaw, pitch: orb.pitch, dist: orb.dist },
     mdlScale,
+    weapon: weaponKey,
+    weaponFrame,
   };
 }
 
@@ -4582,6 +5872,8 @@ function applyEditorState(d) {
   selectedIds = ed.selectedIds.filter((id) => have.has(id));
   selectedVerts = [...ed.selectedVerts];
   setMdlScale(ed.mdlScale, false);
+  weaponKey = WEAPON_KEYS.includes(ed.weapon) ? ed.weapon : "axe";
+  weaponFrame = Math.max(0, ed.weaponFrame | 0);
   setDrawMode(ed.localDraw);
   setMode(ed.mode);
 }
@@ -4614,6 +5906,7 @@ function snapshot() {
     activeLevel: doc.activeLevel,
     maps: doc.maps,
     enemies: doc.enemies,
+    weapons: doc.weapons,
   });
 }
 
@@ -4643,6 +5936,7 @@ function restore(json) {
   if (enemyIndex >= doc.enemies.length) enemyIndex = 0;
   clampFrameIndex(activeEnemy());
   syncClipFromFrameIndex(activeEnemy());
+  clampWeaponPreviewFrame();
   syncEditorToDoc();
   markDirty();
   refreshAll();
@@ -4757,25 +6051,33 @@ function setMode(mode) {
   editorMode = mode;
   document.getElementById("btn-mode-layout").classList.toggle("active", mode === "layout");
   document.getElementById("btn-mode-anim").classList.toggle("active", mode === "anim");
+  document.getElementById("btn-mode-weapons").classList.toggle("active", mode === "weapons");
   document.getElementById("layout-left").hidden = mode !== "layout";
   document.getElementById("anim-left").hidden = mode !== "anim";
+  document.getElementById("weapons-left").hidden = mode !== "weapons";
   document.getElementById("draw-mode-group").hidden = mode !== "layout";
   document.getElementById("overhead-panel").hidden = mode !== "layout";
+  document.getElementById("weapon-preview-panel").hidden = mode !== "weapons";
+  const map = activeMap(doc);
   document.getElementById("center-title").textContent =
     mode === "layout"
-      ? (() => {
-          const map = activeMap(doc);
-          return map.name ? `Map ${doc.activeLevel} — ${map.name}` : `Map ${doc.activeLevel}`;
-        })()
-      : "Enemy";
+      ? map.name
+        ? `Map ${doc.activeLevel} — ${map.name}`
+        : `Map ${doc.activeLevel}`
+      : mode === "weapons"
+        ? WEAPON_LABELS[weaponKey] || "Weapons"
+        : "Enemy";
   document.getElementById("hint").textContent =
     mode === "layout"
       ? "Drag palette to place · LMB line/box-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+RMB zoom · MMB orbit · F focus · G drop · gizmo moves selection · Del"
-      : bindJoint >= 0
-        ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-        : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit · Alt+RMB zoom";
+      : mode === "weapons"
+        ? "LMB vertex to inspect · Shift add · click empty clears · drag empty pans · wheel scale"
+        : bindJoint >= 0
+          ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
+          : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
+  weaponView.enabled = mode === "weapons";
   if (mode !== "anim") stopAnimPlay();
   refreshAll();
 }
@@ -5101,6 +6403,330 @@ function renderEnemyList() {
   });
 }
 
+function ensureWeaponItem(key) {
+  if (!doc.weapons) doc.weapons = { scale: DEFAULT_WEAPON_SCALE, items: {} };
+  if (!doc.weapons.items[key]) {
+    doc.weapons.items[key] = { pan: { x: 0, y: 0 }, frames: null };
+  }
+  return doc.weapons.items[key];
+}
+
+function selectedWeaponFrames() {
+  const mdl = sharewareWeapons[weaponKey];
+  const item = ensureWeaponItem(weaponKey);
+  return resolveWeaponFrames(item, mdl, weaponKey);
+}
+
+function clampWeaponPreviewFrame() {
+  const mdl = sharewareWeapons[weaponKey];
+  const selected = selectedWeaponFrames();
+  if (mdl?.frames?.length) {
+    weaponFrame = Math.max(0, Math.min(weaponFrame, mdl.frames.length - 1));
+  }
+  if (selected.length && !selected.includes(weaponFrame)) {
+    weaponFrame = selected[0];
+  }
+}
+
+function syncWeaponScaleInputs() {
+  const range = document.getElementById("weapon-scale");
+  const num = document.getElementById("weapon-scale-num");
+  const shown = String(doc.weapons.scale);
+  if (range && range.value !== shown) range.value = shown;
+  if (num && document.activeElement !== num && num.value !== shown) num.value = shown;
+}
+
+function syncWeaponGlobalButtons() {
+  const folder = sharewareFolderName();
+  const openBtn = document.getElementById("btn-weapon-folder");
+  if (openBtn) openBtn.textContent = folder ? "Change folder…" : "Open shareware folder";
+  const exportBtn = document.getElementById("btn-weapon-export");
+  if (exportBtn) exportBtn.disabled = !Object.keys(sharewareWeapons).length;
+}
+
+function refreshWeaponClipStatus() {
+  if (editorMode !== "weapons") return;
+  if (!sharewareWeapons[weaponKey]) return;
+  if (weaponClipWarn) {
+    setStatus("Current frame leaves the 48×42 window — pan this weapon to fit", true);
+  } else {
+    const n = selectedWeaponFrames().length;
+    setStatus(`${WEAPON_LABELS[weaponKey]} · ${n} export frame${n === 1 ? "" : "s"}`);
+  }
+}
+
+function pixelsToPngBlob(pixels) {
+  const canvas = document.createElement("canvas");
+  canvas.width = WEAPON_SPRITE_W;
+  canvas.height = WEAPON_SPRITE_H;
+  const ctx = canvas.getContext("2d");
+  const img = ctx.createImageData(WEAPON_SPRITE_W, WEAPON_SPRITE_H);
+  for (let i = 0; i < pixels.length; i++) {
+    const on = pixels[i] ? 1 : 0;
+    const o = i * 4;
+    img.data[o] = on ? 232 : 0;
+    img.data[o + 1] = on ? 228 : 0;
+    img.data[o + 2] = on ? 216 : 0;
+    img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("PNG encode failed"));
+    }, "image/png");
+  });
+}
+
+async function exportWeaponPngs() {
+  if (!Object.keys(sharewareWeapons).length) {
+    setStatus("Load shareware to export", true);
+    return;
+  }
+  const dir = await ensureWeaponsPngDirectory();
+  if (!dir) return;
+  let n = 0;
+  for (const key of WEAPON_KEYS) {
+    const mdl = sharewareWeapons[key];
+    if (!mdl) continue;
+    const item = ensureWeaponItem(key);
+    const frames = resolveWeaponFrames(item, mdl, key);
+    const pan = item.pan || { x: 0, y: 0 };
+    for (const fi of frames) {
+      const { pixels } = rasterWeaponFrame(mdl, fi, doc.weapons.scale, pan);
+      const blob = await pixelsToPngBlob(pixels);
+      await writePngFile(dir, `${key}_${fi}.png`, blob);
+      n++;
+    }
+  }
+  setStatus(`Exported ${n} PNG${n === 1 ? "" : "s"} (copy to *_edit.png to clean)`);
+}
+
+function renderWeaponList() {
+  const ul = document.getElementById("weapon-list");
+  if (!ul) return;
+  ul.innerHTML = "";
+  for (const key of WEAPON_KEYS) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = WEAPON_LABELS[key];
+    if (key === weaponKey) btn.className = "active";
+    btn.addEventListener("click", () => {
+      weaponKey = key;
+      weaponSelectedVerts = [];
+      clampWeaponPreviewFrame();
+      markDirty();
+      refreshAll();
+    });
+    li.appendChild(btn);
+    ul.appendChild(li);
+  }
+}
+
+function renderWeaponInspector(root) {
+  const h = document.createElement("h2");
+  h.textContent = WEAPON_LABELS[weaponKey] || weaponKey;
+  root.appendChild(h);
+
+  const mdl = sharewareWeapons[weaponKey];
+  const item = ensureWeaponItem(weaponKey);
+  const folder = sharewareFolderName();
+
+  const status = document.createElement("p");
+  status.className = "muted";
+  if (mdl) {
+    status.textContent = folder
+      ? `${folder} · ${mdl.numVerts} verts · ${mdl.frames.length} frames`
+      : `${mdl.numVerts} verts · ${mdl.frames.length} frames`;
+  } else if (sharewareWeaponMissing.includes(weaponKey)) {
+    status.textContent = folder
+      ? `${WEAPON_MDL_PATHS[weaponKey]} is not in ${folder}`
+      : "View-model not in the opened PAK";
+  } else {
+    status.textContent = folder
+      ? `Opened ${folder}. Open again if models did not load.`
+      : "Open a folder that contains pak0.pak or id1/pak0.pak";
+  }
+  root.appendChild(status);
+
+  root.appendChild(
+    vec3Field("Pan XY", [
+      {
+        value: Math.round(item.pan.x * 100) / 100,
+        onChange: (v) => {
+          pushUndo();
+          item.pan.x = Number.isFinite(v) ? v : 0;
+          markDirty();
+          refreshAll();
+        },
+      },
+      {
+        value: Math.round(item.pan.y * 100) / 100,
+        onChange: (v) => {
+          pushUndo();
+          item.pan.y = Number.isFinite(v) ? v : 0;
+          markDirty();
+          refreshAll();
+        },
+      },
+    ])
+  );
+
+  if (mdl && weaponSelectedVerts.length) {
+    const vh = document.createElement("h2");
+    vh.textContent = "Vertex";
+    root.appendChild(vh);
+    const verts = mdlQuakeVerts(mdl, weaponFrame);
+    const packed = mdl.frames[weaponFrame]?.verts;
+    const fmt = (n) => (Number.isFinite(n) ? n.toFixed(4) : "—");
+    const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+    for (const i of weaponSelectedVerts) {
+      const v = verts[i];
+      const box = document.createElement("div");
+      box.className = "weapon-vert-info";
+      const title = document.createElement("p");
+      title.textContent = `Index ${i}`;
+      box.appendChild(title);
+      if (v) {
+        const xyz = document.createElement("p");
+        xyz.className = "muted";
+        xyz.textContent = `Quake XYZ  ${fmt(v.x)}  ${fmt(v.y)}  ${fmt(v.z)}`;
+        box.appendChild(xyz);
+      }
+      if (packed && i * 3 + 2 < packed.length) {
+        const pk = document.createElement("p");
+        pk.className = "muted";
+        pk.textContent = `Packed  ${packed[i * 3]}  ${packed[i * 3 + 1]}  ${packed[i * 3 + 2]}`;
+        box.appendChild(pk);
+      }
+      const twins = [];
+      if (v) {
+        for (let j = 0; j < verts.length; j++) {
+          if (j === i) continue;
+          if (dist3(v, verts[j]) <= 1e-4) twins.push(j);
+        }
+      }
+      const tw = document.createElement("p");
+      tw.className = "muted";
+      tw.textContent = twins.length ? `Same position as  ${twins.join(", ")}` : "No coincident verts";
+      box.appendChild(tw);
+      root.appendChild(box);
+    }
+    if (weaponSelectedVerts.length === 2) {
+      const a = verts[weaponSelectedVerts[0]];
+      const b = verts[weaponSelectedVerts[1]];
+      if (a && b) {
+        const d = document.createElement("p");
+        d.className = "muted";
+        d.textContent = `Distance  ${fmt(dist3(a, b))}`;
+        root.appendChild(d);
+      }
+    }
+    if (weaponSelectedVerts.length === 3) {
+      const pts = weaponSelectedVerts.map((i) => verts[i]);
+      if (pts.every(Boolean)) {
+        const n = inspectTriNormal(pts[0], pts[1], pts[2]);
+        const box = document.createElement("p");
+        box.className = "muted";
+        box.textContent = n
+          ? `Normal  ${fmt(n.x)}  ${fmt(n.y)}  ${fmt(n.z)}  (pair if n·n ≥ ${QUAD_COPLANAR_DOT})`
+          : "Normal  degenerate triangle";
+        root.appendChild(box);
+        const asTri = (mdl.tris || []).some((t) => {
+          const s = new Set(t);
+          return weaponSelectedVerts.every((i) => s.has(i));
+        });
+        const note = document.createElement("p");
+        note.className = "muted";
+        note.textContent = asTri ? "These indices are an MDL triangle" : "Not an MDL triangle (by index)";
+        root.appendChild(note);
+      }
+    }
+    if (weaponSelectedVerts.length === 4) {
+      const pts = weaponSelectedVerts.map((i) => verts[i]);
+      if (pts.every(Boolean)) {
+        const rest = weaponFrame === 0 ? verts : mdlQuakeVerts(mdl, 0);
+        const q = inspectQuadPair(mdl.tris, weaponSelectedVerts, rest, mdlEnsureQuads(mdl));
+        const box = document.createElement("div");
+        box.className = "weapon-vert-info";
+        if (!q || q.noModelPair) {
+          const p = document.createElement("p");
+          p.className = "muted";
+          p.textContent = "Not two MDL triangles sharing an edge";
+          box.appendChild(p);
+        } else {
+          const lines = [
+            `Shared edge  ${q.shared[0]}–${q.shared[1]}`,
+            `Normal score  n·n  ${fmt(q.coplanarDot)}  (need ≥ ${QUAD_COPLANAR_DOT})`,
+            `Plane error  ${fmt(q.planeRel)}  (need < ${QUAD_PLANE_REL})`,
+            `Parallel / trap  ${fmt(q.parallelMax)}  (score only)`,
+            `Convex  ${q.convex ? "yes" : "no"}`,
+            `Diagonal split  ${q.diagonal ? "yes" : "no"}`,
+            q.paired ? "Paired in mesh" : q.pass ? "Gates pass, not paired" : "Would not pair",
+          ];
+          for (const line of lines) {
+            const p = document.createElement("p");
+            p.className = "muted";
+            p.textContent = line;
+            box.appendChild(p);
+          }
+        }
+        root.appendChild(box);
+      }
+    }
+  }
+
+  const fh = document.createElement("h2");
+  fh.textContent = "Export frames";
+  root.appendChild(fh);
+  if (!mdl) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "Load shareware to pick frames.";
+    root.appendChild(p);
+    return;
+  }
+
+  const selected = new Set(selectedWeaponFrames());
+  const ul = document.createElement("ul");
+  ul.className = "weapon-frame-list";
+  for (const clip of mdl.clips || []) {
+    const head = document.createElement("li");
+    head.className = "clip-head";
+    head.textContent = clip.name;
+    ul.appendChild(head);
+    for (const fr of clip.frames) {
+      const li = document.createElement("li");
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = selected.has(fr.index);
+      chk.addEventListener("change", () => {
+        pushUndo();
+        const next = new Set(selectedWeaponFrames());
+        if (chk.checked) next.add(fr.index);
+        else next.delete(fr.index);
+        item.frames = [...next].sort((a, b) => a - b);
+        clampWeaponPreviewFrame();
+        markDirty();
+        refreshAll();
+      });
+      const nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "frame-name" + (weaponFrame === fr.index ? " current" : "");
+      nameBtn.textContent = fr.name || `frame ${fr.index}`;
+      nameBtn.addEventListener("click", () => {
+        weaponFrame = fr.index;
+        markDirty();
+        refreshAll();
+      });
+      li.append(chk, nameBtn);
+      ul.appendChild(li);
+    }
+  }
+  root.appendChild(ul);
+}
+
 function field(label, input) {
   const row = document.createElement("label");
   row.className = "field";
@@ -5158,6 +6784,10 @@ function colorPicker(label, value, onPick) {
 function renderInspector() {
   const root = document.getElementById("right-editors");
   root.innerHTML = "";
+  if (editorMode === "weapons") {
+    renderWeaponInspector(root);
+    return;
+  }
   if (editorMode === "layout") {
     const obj = selectedObject();
     const h = document.createElement("h2");
@@ -5579,6 +7209,8 @@ async function loadSharewareFromHandle(handle) {
     if (!buffers.length) {
       sharewareModels = {};
       sharewareMissing = ENEMY_TYPES.map((t) => t.name);
+      sharewareWeapons = {};
+      sharewareWeaponMissing = [...WEAPON_KEYS];
       setStatus("No pak0.pak / pak1.pak in that folder", true);
       refreshPanels();
       return;
@@ -5587,16 +7219,28 @@ async function loadSharewareFromHandle(handle) {
     const { models, missing } = loadEnemyMdls(lumps);
     sharewareModels = models;
     sharewareMissing = missing;
+    const weapons = loadWeaponMdls(lumps);
+    sharewareWeapons = weapons.models;
+    sharewareWeaponMissing = weapons.missing;
+    clampWeaponPreviewFrame();
+    markDirty();
     const n = Object.keys(models).length;
+    const wn = Object.keys(sharewareWeapons).length;
     const miss = missing.length ? ` · missing ${missing.join(", ")}` : "";
-    setStatus(`Loaded ${n} Quake model${n === 1 ? "" : "s"} from ${sharewareFolderName()}${miss}`);
+    const wmiss = weapons.missing.length ? ` · weapons missing ${weapons.missing.join(", ")}` : "";
+    setStatus(
+      `Loaded ${n} enemy / ${wn} weapon model${wn === 1 ? "" : "s"} from ${sharewareFolderName()}${miss}${wmiss}`
+    );
   } catch (err) {
     sharewareModels = {};
     sharewareMissing = ENEMY_TYPES.map((t) => t.name);
+    sharewareWeapons = {};
+    sharewareWeaponMissing = [...WEAPON_KEYS];
     setStatus(String(err.message || err), true);
   }
   refreshPanels();
   if (editorMode === "anim") animView.draw();
+  if (editorMode === "weapons") weaponView.draw();
 }
 
 async function openSharewareFolder() {
@@ -5783,6 +7427,16 @@ function stepFrame(d) {
   refreshAll();
 }
 
+function stepWeaponFrame(d) {
+  const frames = selectedWeaponFrames();
+  if (!frames.length) return;
+  let i = frames.indexOf(weaponFrame);
+  if (i < 0) i = 0;
+  weaponFrame = frames[(i + d + frames.length) % frames.length];
+  markDirty();
+  refreshAll();
+}
+
 function copyFrame() {
   const e = activeEnemy();
   if (!e.clips?.length) {
@@ -5924,14 +7578,19 @@ function refreshPanels() {
   renderLevelList();
   renderObjectList();
   renderEnemyList();
+  renderWeaponList();
   renderInspector();
+  syncWeaponScaleInputs();
+  syncWeaponGlobalButtons();
   overheadView.draw();
   if (editorMode === "anim") animView.draw();
+  if (editorMode === "weapons") weaponView.draw();
 }
 
 function refreshAll() {
   refreshPanels();
   if (editorMode === "layout") layoutView.draw();
+  else if (editorMode === "weapons") weaponView.draw();
   else animView.draw();
 }
 
@@ -5943,6 +7602,10 @@ document.getElementById("btn-mode-anim").addEventListener("click", () => {
   setMode("anim");
   markDirty();
 });
+document.getElementById("btn-mode-weapons").addEventListener("click", () => {
+  setMode("weapons");
+  markDirty();
+});
 document.getElementById("mdl-scale").addEventListener("input", (e) => {
   setMdlScale(e.target.value);
 });
@@ -5951,6 +7614,29 @@ document.getElementById("mdl-scale-num").addEventListener("change", (e) => {
 });
 document.getElementById("btn-mdl-overlay").addEventListener("click", () => {
   setOverlayOn(!overlayOn);
+});
+document.getElementById("weapon-scale").addEventListener("input", (e) => {
+  doc.weapons.scale = clampWeaponScale(e.target.value);
+  syncWeaponScaleInputs();
+  if (editorMode === "weapons") weaponView.draw();
+});
+document.getElementById("weapon-scale").addEventListener("change", (e) => {
+  pushUndo();
+  doc.weapons.scale = clampWeaponScale(e.target.value);
+  syncWeaponScaleInputs();
+  markDirty();
+  refreshAll();
+});
+document.getElementById("weapon-scale-num").addEventListener("change", (e) => {
+  pushUndo();
+  doc.weapons.scale = clampWeaponScale(e.target.value);
+  syncWeaponScaleInputs();
+  markDirty();
+  refreshAll();
+});
+document.getElementById("btn-weapon-folder")?.addEventListener("click", () => void openSharewareFolder());
+document.getElementById("btn-weapon-export")?.addEventListener("click", () => {
+  exportWeaponPngs().catch((err) => setStatus(String(err.message || err), true));
 });
 document.getElementById("btn-draw-all").addEventListener("click", () => {
   setDrawMode(false);
@@ -6141,6 +7827,26 @@ window.addEventListener("keydown", (e) => {
     if (k === "x" || k === "y" || k === "z") {
       e.preventDefault();
       nudgeVert(k, e.shiftKey ? -1 : 1);
+      return;
+    }
+  }
+  if (editorMode === "weapons") {
+    if (e.key === "Escape") {
+      if (weaponSelectedVerts.length) {
+        e.preventDefault();
+        weaponSelectedVerts = [];
+        refreshAll();
+        return;
+      }
+    }
+    if (e.key === "[" || e.key === "," || e.key === "ArrowLeft") {
+      e.preventDefault();
+      stepWeaponFrame(-1);
+      return;
+    }
+    if (e.key === "]" || e.key === "." || e.key === "ArrowRight") {
+      e.preventDefault();
+      stepWeaponFrame(1);
       return;
     }
   }

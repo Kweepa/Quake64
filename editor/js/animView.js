@@ -1,4 +1,4 @@
-import { clipForFrame, clampVert } from "./model.js";
+import { clipForFrame, clampVert, ANIM_ORBIT_DIST_MIN, ANIM_ORBIT_DIST_MAX } from "./model.js";
 import {
   distPointToSegment2d,
   intersectPlane,
@@ -11,7 +11,9 @@ import {
 const AXIS_LEN = 8;
 const AXIS_HIT = 9;
 const ANIM_BOX_CLICK = 4;
-const ANIM_ZOOM_K = 0.008;
+function clampAnimDist(d) {
+  return Math.max(ANIM_ORBIT_DIST_MIN, Math.min(ANIM_ORBIT_DIST_MAX, d));
+}
 const AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 export class AnimView {
@@ -168,7 +170,7 @@ export class AnimView {
   #onWheel(e) {
     if (!this.enabled) return;
     e.preventDefault();
-    this.orbit.dist = Math.max(16, Math.min(120, this.orbit.dist + (e.deltaY > 0 ? 4 : -4)));
+    this.orbit.dist = clampAnimDist(this.orbit.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1));
     this.opts.onViewChanged?.();
     this.draw();
   }
@@ -266,7 +268,7 @@ export class AnimView {
       this.drag.last = p;
       const delta = dx + dy;
       if (delta) {
-        this.orbit.dist = Math.max(16, Math.min(120, this.orbit.dist * Math.exp(-delta * ANIM_ZOOM_K)));
+        this.orbit.dist = clampAnimDist(this.orbit.dist * Math.exp(-delta * ANIM_ZOOM_K));
       }
       this.draw();
       return;

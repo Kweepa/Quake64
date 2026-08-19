@@ -2,6 +2,7 @@ const HANDLE_DB = "quake64-editor";
 const HANDLE_STORE = "handles";
 const HANDLE_KEY = "doc";
 const SHAREWARE_KEY = "shareware";
+const WEAPONS_PNG_KEY = "weapons-png";
 
 export const DEFAULT_DOC_PATH = "quake64.json";
 
@@ -9,6 +10,8 @@ export const DEFAULT_DOC_PATH = "quake64.json";
 let docFileHandle = null;
 /** @type {FileSystemDirectoryHandle | null} */
 let sharewareDirHandle = null;
+/** @type {FileSystemDirectoryHandle | null} */
+let weaponsPngDirHandle = null;
 
 export function docFileName() {
   return docFileHandle?.name || DEFAULT_DOC_PATH;
@@ -303,6 +306,43 @@ export async function loadSharewarePakBuffers(dirHandle) {
     buffers.push(await file.arrayBuffer());
   }
   return buffers;
+}
+
+export async function ensureWeaponsPngDirectory() {
+  if (weaponsPngDirHandle && (await ensurePermission(weaponsPngDirHandle, "readwrite"))) {
+    return weaponsPngDirHandle;
+  }
+  const stored = await loadStoredHandle(WEAPONS_PNG_KEY);
+  if (stored && (await ensurePermission(stored, "readwrite"))) {
+    weaponsPngDirHandle = stored;
+    return stored;
+  }
+  return pickWeaponsPngDirectory();
+}
+
+export async function pickWeaponsPngDirectory() {
+  if (!window.showDirectoryPicker) {
+    throw new Error("This browser cannot open a folder (needs Chromium file access)");
+  }
+  try {
+    const opts = { id: "quake-assets-weapons", mode: "readwrite" };
+    const startIn = weaponsPngDirHandle || (await loadStoredHandle(WEAPONS_PNG_KEY));
+    if (startIn) opts.startIn = startIn;
+    const handle = await window.showDirectoryPicker(opts);
+    weaponsPngDirHandle = handle;
+    await storeHandle(WEAPONS_PNG_KEY, handle);
+    return handle;
+  } catch (e) {
+    if (e.name === "AbortError") return null;
+    throw e;
+  }
+}
+
+export async function writePngFile(dirHandle, filename, blob) {
+  const fh = await dirHandle.getFileHandle(filename, { create: true });
+  const writable = await fh.createWritable();
+  await writable.write(blob);
+  await writable.close();
 }
 
 export function downloadJSON(doc, filename = DEFAULT_DOC_PATH) {

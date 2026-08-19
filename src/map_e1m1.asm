@@ -10,7 +10,7 @@ spawn_room	!byte 0
 room_x
 	!byte 0,22,29
 room_y
-	!byte 104,64,64
+	!byte 104,64,65
 room_z
 	!byte 117,124,112
 room_sx
@@ -29,7 +29,7 @@ room_line
 door_x
 	!byte 23,28,93
 door_y
-	!byte 104,64,64
+	!byte 104,65,65
 door_z
 	!byte 123,135,126
 door_sx
@@ -43,24 +43,24 @@ door_ra
 door_rb
 	!byte 1,2,255
 door_home_y
-	!byte 104,64,64
+	!byte 104,65,65
 door_face
 	!byte 1,2,2
 
 crate_x
-	!byte 0,22,89,89
+	!byte 0,22,63
 crate_y
-	!byte 104,64,64,64
+	!byte 104,64,82
 crate_z
-	!byte 118,124,130,122
+	!byte 118,124,122
 crate_sx
-	!byte 4,6,4,4
+	!byte 4,6,4
 crate_sy
-	!byte 2,40,6,6
+	!byte 2,40,6
 crate_sz
-	!byte 4,10,4,4
+	!byte 4,10,4
 crate_room
-	!byte 0,1,2,2
+	!byte 0,1,2
 
 slope_x
 	!byte 4
@@ -139,7 +139,7 @@ sw_face
 en_x
 	!byte 83,83
 en_y
-	!byte 64,64
+	!byte 65,65
 en_z
 	!byte 120,135
 en_type

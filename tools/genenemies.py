@@ -135,6 +135,8 @@ def main() -> None:
         edge_bytes.append(int(b))
     parts.append("enemy_edges")
     parts.append("\t!byte " + ",".join(str(b) for b in edge_bytes))
+    parts.append("enemy_edge_vert")
+    parts.append("\t!byte " + ",".join("0" for _ in all_edges))
     parts.append("")
     # Lo/hi pointers for type select
     parts.append("enemy_gx_lo\t!byte <grunt_gx, <rott_gx")

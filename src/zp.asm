@@ -169,7 +169,11 @@ save_xl		= $a4
 save_zl		= $a5
 dt_msh		= $a6			; frame dt milliseconds (hi)
 vel_msh		= $a7			; hold duration ms (hi)
-; $a8–$ad free (were 8-bit hold snapshots)
+; $a8–$ad were 8-bit hold snapshots
+inv_l		= $a8			; (FOCAL<<16)/(z>>k) lo, mesh project
+inv_h		= $a9
+inv_k		= $aa			; unsigned 8-bit fit shift of z
+; $ab–$ad free
 scale_s		= $ae			; scale_vel sign
 fn_lx		= $af			; frustum inward normals (XZ)
 fn_lz		= $b0
@@ -198,12 +202,10 @@ fn_rz		= $c4
 fn_fx		= $c5			; near/forward
 fn_fz		= $c6
 
-; Last-XZ yaw cache for xform_world_vert (vertical pairs skip 4 muls)
-xf_ok		= $c7			; 0 = empty (cleared each draw_world)
-xf_wx		= $c8
-xf_wz		= $c9
-xf_xl		= $ca			; cached view x'
-xf_xh		= $cb
-xf_zl		= $cc			; cached view z'
-xf_zh		= $cd
+; Unique X/Z mesh rotate (xform_mesh_xz)
+mesh_nx		= $c7			; unique X count
+mesh_nz		= $c8
+xid_ptr		= $c9			; + $ca → per-vert X slot
+zid_ptr		= $cb			; + $cc → per-vert Z slot
+edge_vert_ptr	= $cd			; + $ce → per-edge vertical flags
 

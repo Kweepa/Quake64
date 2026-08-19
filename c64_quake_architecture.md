@@ -63,7 +63,7 @@
 * **Message Triggers:** Covered by trigger purpose **message** — undrawn AABB, one HUD line while the player is inside.
 
 ### Cuboid Hidden Surface / Hidden Line Removal
-* Rooms, crates, and elevators are convex axis-aligned boxes. Use **Elite-style** face culling, then drop any edge that is not on a visible face.
+* Rooms, crates, and elevators are convex axis-aligned boxes. Use **back-face culling**, then drop any edge that is not on a visible face.
 * **Outside** (crate, elevator): keep faces whose outward normal points toward the camera (at most three faces).
 * **Inside** (room): invert the test — keep the interior faces the camera looks at.
 * Shared edges of two culled faces are never stroked. No painter's algorithm; convexity makes the visible silhouette enough.

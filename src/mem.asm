@@ -181,3 +181,16 @@ hold_strafer	= $CB78
 hold_turn_l	= $CB7A
 hold_turn_r	= $CB7C
 sw_latched	= $CB7E			; MAP_NSWITCHES (≤8); 1 while held
+
+; Unique world X/Z + 8.8 sin/cos products for xform_mesh_xz (cap 4+4, 8 verts)
+UX		= $CB86
+UZ		= $CB8A
+VY		= $CB8E
+XC_L		= $CB96
+XC_H		= $CB9A
+XS_L		= $CB9E
+XS_H		= $CBA2
+ZC_L		= $CBA6
+ZC_H		= $CBAA
+ZS_L		= $CBAE
+ZS_H		= $CBB2

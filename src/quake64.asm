@@ -31,6 +31,10 @@ start
 	sta edge_ptr
 	lda #>enemy_edges
 	sta edge_ptr+1
+	lda #<enemy_edge_vert
+	sta edge_vert_ptr
+	lda #>enemy_edge_vert
+	sta edge_vert_ptr+1
 
 	jsr fill_colour
 	jsr init_vic
@@ -291,7 +295,7 @@ copy_luts
 !source "pcsfreq.asm"
 !source "process.asm"
 !source "world.asm"
-!source "box.asm"
+!source "mesh.asm"
 !source "cube.asm"
 
 !source "map_e1m1.asm"

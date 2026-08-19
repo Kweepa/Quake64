@@ -1,5 +1,5 @@
-; Axis-aligned box wireframe with Elite face cull
-!zone box
+; World object meshes — AABB / door / switch / slope / plat wireframes
+!zone mesh
 
 ; Edge list: pairs of corner indices 0..7
 box_edges
@@ -18,6 +18,52 @@ door_closed_edges
 door_open_edges
 	!byte 0,1, 1,4, 4,0,  2,5, 2,3
 
+; World-vertical edges (same xid/zid, different Y) — 1 = Y-only clip
+box_edge_vert
+	!byte 0,0,0,0, 0,0,0,0, 1,1,1,1
+door_closed_vert
+	!byte 1,0,0,1
+door_open_vert
+	!byte 1,0,0,0,1
+quad_vert
+	!byte 0,0,0,0
+tri_vert
+	!byte 0,0,0
+
+; Per-vert slots into UX[] / UZ[] (sharing across the mesh)
+box_xid
+	!byte 0,1,1,0, 0,1,1,0
+box_zid
+	!byte 0,0,1,1, 0,0,1,1
+door_closed_z_xid
+	!byte 0,0,1,1
+door_closed_z_zid
+	!byte 0,0,0,0
+door_closed_x_xid
+	!byte 0,0,0,0
+door_closed_x_zid
+	!byte 0,0,1,1
+door_open_z_xid
+	!byte 0,0,3,3,1,2
+door_open_z_zid
+	!byte 0,0,0,0,0,0
+door_open_x_xid
+	!byte 0,0,0,0,0,0
+door_open_x_zid
+	!byte 0,0,3,3,1,2
+sw_z_xid
+	!byte 1,0,2
+sw_z_zid
+	!byte 0,0,0
+sw_x_xid
+	!byte 0,0,0
+sw_x_zid
+	!byte 1,0,2
+slope_x_xid
+	!byte 0,0,1,1
+slope_x_zid
+	!byte 0,1,1,0
+
 ; Which faces each edge belongs to (bit0=-X bit1=+X bit2=-Y bit3=+Y bit4=-Z bit5=+Z)
 ; Edge kept if either face visible. Matches box_fill_verts corners.
 box_edge_faces
@@ -27,9 +73,11 @@ box_edge_faces
 
 box_vis_edges
 	!fill 24, 0
+box_vis_vert
+	!fill 12, 0
 
 ; ------------------------------------------------------------------
-; draw_box — box_* set, box_inside=0/1 (Elite face cull)
+; draw_box — box_* set, box_inside=0/1 (back-face cull)
 ; ------------------------------------------------------------------
 draw_box
 	jsr load_view_trig
@@ -46,6 +94,10 @@ draw_box
 	sta edge_ptr
 	lda #>box_vis_edges
 	sta edge_ptr+1
+	lda #<box_vis_vert
+	sta edge_vert_ptr
+	lda #>box_vis_vert
+	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
 stroke_mesh
@@ -62,67 +114,50 @@ stroke_mesh
 	jsr prof_add_bucket
 	rts
 
-; Fill CAM[0..7] from box corners (world → view via xform_world_vert)
-; Column order so consecutive verts share XZ (cache x'/z').
+; Fill CAM[0..7] from box corners via unique X/Z products
 box_fill_verts
-	; 0: x,y,z  then  4: x,y+sy,z
-	lda box_x
-	sta ent_wx
+	jsr aabb_uxuz
 	lda box_y
-	sta ent_wy
-	lda box_z
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
+	sta VY
+	sta VY+1
+	sta VY+2
+	sta VY+3
 	clc
-	lda box_y
 	adc box_sy
-	sta ent_wy
-	ldx #4
-	jsr xform_world_vert
-	; 1: x+sx,y,z  then  5: x+sx,y+sy,z
-	clc
+	sta VY+4
+	sta VY+5
+	sta VY+6
+	sta VY+7
+	lda #BOX_NVERTS
+	sta mesh_nv
+	jsr set_box_xzid
+	jmp xform_mesh_xz
+
+aabb_uxuz
 	lda box_x
+	sta UX
+	clc
 	adc box_sx
-	sta ent_wx
-	lda box_y
-	sta ent_wy
-	ldx #1
-	jsr xform_world_vert
-	clc
-	lda box_y
-	adc box_sy
-	sta ent_wy
-	ldx #5
-	jsr xform_world_vert
-	; 2: x+sx,y,z+sz  then  6: x+sx,y+sy,z+sz
-	clc
+	sta UX+1
 	lda box_z
+	sta UZ
+	clc
 	adc box_sz
-	sta ent_wz
-	lda box_y
-	sta ent_wy
-	ldx #2
-	jsr xform_world_vert
-	clc
-	lda box_y
-	adc box_sy
-	sta ent_wy
-	ldx #6
-	jsr xform_world_vert
-	; 3: x,y,z+sz  then  7: x,y+sy,z+sz
-	lda box_x
-	sta ent_wx
-	lda box_y
-	sta ent_wy
-	ldx #3
-	jsr xform_world_vert
-	clc
-	lda box_y
-	adc box_sy
-	sta ent_wy
-	ldx #7
-	jsr xform_world_vert
+	sta UZ+1
+	lda #2
+	sta mesh_nx
+	sta mesh_nz
+	rts
+
+set_box_xzid
+	lda #<box_xid
+	sta xid_ptr
+	lda #>box_xid
+	sta xid_ptr+1
+	lda #<box_zid
+	sta zid_ptr
+	lda #>box_zid
+	sta zid_ptr+1
 	rts
 
 ; A = exterior keep 0/1, Y = face bit. XOR box_inside into face_bits.
@@ -135,7 +170,7 @@ box_apply_face
 .baf_rts
 	rts
 
-; 8-bit Elite planes → face_bits (interior inverts via XOR)
+; 8-bit back-face planes → face_bits (interior inverts via XOR)
 cull_box_faces
 	lda #0
 	sta face_bits
@@ -243,6 +278,8 @@ cull_box_faces
 box_pack_edges
 	ldx #0
 	ldy #0
+	lda #0
+	sta rot1
 .pe
 	lda box_edge_faces,x
 	and face_bits
@@ -257,6 +294,11 @@ box_pack_edges
 	lda box_edges+1,x
 	sta box_vis_edges,y
 	iny
+	ldx rot0
+	lda box_edge_vert,x
+	ldx rot1
+	sta box_vis_vert,x
+	inc rot1
 	ldx rot0
 .pe_n
 	inx
@@ -489,6 +531,10 @@ draw_door_mesh
 	sta edge_ptr
 	lda #>door_closed_edges
 	sta edge_ptr+1
+	lda #<door_closed_vert
+	sta edge_vert_ptr
+	lda #>door_closed_vert
+	sta edge_vert_ptr+1
 	jmp stroke_mesh
 .dd_open
 	lda #6
@@ -499,6 +545,10 @@ draw_door_mesh
 	sta edge_ptr
 	lda #>door_open_edges
 	sta edge_ptr+1
+	lda #<door_open_vert
+	sta edge_vert_ptr
+	lda #>door_open_vert
+	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
 draw_switch_mesh
@@ -512,6 +562,10 @@ draw_switch_mesh
 	sta edge_ptr
 	lda #>tri_edges
 	sta edge_ptr+1
+	lda #<tri_vert
+	sta edge_vert_ptr
+	lda #>tri_vert
+	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
 draw_slope_mesh
@@ -525,6 +579,10 @@ draw_slope_mesh
 	sta edge_ptr
 	lda #>quad_edges
 	sta edge_ptr+1
+	lda #<quad_vert
+	sta edge_vert_ptr
+	lda #>quad_vert
+	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
 draw_plat_mesh
@@ -538,54 +596,23 @@ draw_plat_mesh
 	sta edge_ptr
 	lda #>quad_edges
 	sta edge_ptr+1
+	lda #<quad_vert
+	sta edge_vert_ptr
+	lda #>quad_vert
+	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
 fill_plat_verts
-	; p0 x,y,z
-	lda box_x
-	sta ent_wx
+	jsr aabb_uxuz
 	lda box_y
-	sta ent_wy
-	lda box_z
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; p1 x+sx,y,z
-	clc
-	lda box_x
-	adc box_sx
-	sta ent_wx
-	lda box_y
-	sta ent_wy
-	lda box_z
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; p2 x+sx,y,z+sz
-	clc
-	lda box_x
-	adc box_sx
-	sta ent_wx
-	lda box_y
-	sta ent_wy
-	clc
-	lda box_z
-	adc box_sz
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	; p3 x,y,z+sz
-	lda box_x
-	sta ent_wx
-	lda box_y
-	sta ent_wy
-	clc
-	lda box_z
-	adc box_sz
-	sta ent_wz
-	ldx #3
-	jsr xform_world_vert
-	rts
+	sta VY
+	sta VY+1
+	sta VY+2
+	sta VY+3
+	lda #4
+	sta mesh_nv
+	jsr set_box_xzid
+	jmp xform_mesh_xz
 
 ; Closed: 4 corners of the face. Open: two full-width leaves, each slides open/2.
 fill_door_verts
@@ -612,111 +639,83 @@ fill_door_verts
 .fdmz
 	lda box_z
 .fdzp
-	sta pv4				; plane z
+	sta UZ
+	lda #1
+	sta mesh_nz
 	ldx obj_i
 	lda door_open,x
 	bne .fdz_op
-	; v0 BL
 	lda box_x
-	sta ent_wx
-	lda pv1
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; v1 TL
-	lda box_x
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; v2 TR
+	sta UX
 	clc
-	lda box_x
 	adc box_sx
 	bcc .fdz_c2
 	lda #255
 .fdz_c2
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	; v3 BR
+	sta UX+1
+	lda #2
+	sta mesh_nx
 	lda pv1
-	sta ent_wy
-	ldx #3
-	jmp xform_world_vert
+	sta VY
+	lda pv2
+	sta VY+1
+	sta VY+2
+	lda pv1
+	sta VY+3
+	lda #<door_closed_z_xid
+	sta xid_ptr
+	lda #>door_closed_z_xid
+	sta xid_ptr+1
+	lda #<door_closed_z_zid
+	sta zid_ptr
+	lda #>door_closed_z_zid
+	sta zid_ptr+1
+	lda #4
+	sta mesh_nv
+	jmp xform_mesh_xz
 .fdz_op
 	lda box_x
 	jsr coord_sub
-	sta pv0				; xL
-	; v0 BL left
-	sta ent_wx
-	lda pv1
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; v1 TL left
-	lda pv0
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; v4 TR left (xL + sx)
+	sta UX				; xL
 	clc
-	lda pv0
 	adc box_sx
 	bcc .fdl1
 	lda #255
 .fdl1
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #4
-	jsr xform_world_vert
+	sta UX+1			; xL+sx
 	lda box_x
 	jsr coord_add
-	sta pv0				; xR
-	; v3 BR right (xR + sx)
+	sta UX+2			; xR
 	clc
-	lda pv0
 	adc box_sx
 	bcc .fdr1
 	lda #255
 .fdr1
-	sta ent_wx
+	sta UX+3			; xR+sx
+	lda #4
+	sta mesh_nx
 	lda pv1
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #3
-	jsr xform_world_vert
-	; v2 TR right (same XZ)
+	sta VY
 	lda pv2
-	sta ent_wy
-	ldx #2
-	jsr xform_world_vert
-	; v5 BL right
-	lda pv0
-	sta ent_wx
+	sta VY+1
+	sta VY+2
 	lda pv1
-	sta ent_wy
-	ldx #5
-	jmp xform_world_vert
+	sta VY+3
+	lda pv2
+	sta VY+4
+	lda pv1
+	sta VY+5
+	lda #<door_open_z_xid
+	sta xid_ptr
+	lda #>door_open_z_xid
+	sta xid_ptr+1
+	lda #<door_open_z_zid
+	sta zid_ptr
+	lda #>door_open_z_zid
+	sta zid_ptr+1
+	lda #6
+	sta mesh_nv
+	jmp xform_mesh_xz
 .fdx
 	ldx obj_i
 	cmp #FACE_MX
@@ -728,112 +727,83 @@ fill_door_verts
 .fdmx
 	lda box_x
 .fdxp
-	sta pv4				; plane x
+	sta UX
+	lda #1
+	sta mesh_nx
 	ldx obj_i
 	lda door_open,x
 	bne .fdx_op
-	; v0 BL
-	lda pv4
-	sta ent_wx
-	lda pv1
-	sta ent_wy
 	lda box_z
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; v1 TL
-	lda pv4
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda box_z
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; v2 TR
-	lda pv4
-	sta ent_wx
-	lda pv2
-	sta ent_wy
+	sta UZ
 	clc
-	lda box_z
 	adc box_sz
 	bcc .fdx_c2
 	lda #255
 .fdx_c2
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	; v3 BR
+	sta UZ+1
+	lda #2
+	sta mesh_nz
 	lda pv1
-	sta ent_wy
-	ldx #3
-	jmp xform_world_vert
+	sta VY
+	lda pv2
+	sta VY+1
+	sta VY+2
+	lda pv1
+	sta VY+3
+	lda #<door_closed_x_xid
+	sta xid_ptr
+	lda #>door_closed_x_xid
+	sta xid_ptr+1
+	lda #<door_closed_x_zid
+	sta zid_ptr
+	lda #>door_closed_x_zid
+	sta zid_ptr+1
+	lda #4
+	sta mesh_nv
+	jmp xform_mesh_xz
 .fdx_op
 	lda box_z
 	jsr coord_sub
-	sta pv0				; zL
-	; v0 BL left
-	lda pv4
-	sta ent_wx
-	lda pv1
-	sta ent_wy
-	lda pv0
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; v1 TL left
-	lda pv4
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda pv0
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; v4 TR left (zL + sz)
-	lda pv4
-	sta ent_wx
-	lda pv2
-	sta ent_wy
+	sta UZ				; zL
 	clc
-	lda pv0
 	adc box_sz
 	bcc .fdzl1
 	lda #255
 .fdzl1
-	sta ent_wz
-	ldx #4
-	jsr xform_world_vert
+	sta UZ+1			; zL+sz
 	lda box_z
 	jsr coord_add
-	sta pv0				; zR
-	; v3 BR right (zR + sz)
-	lda pv4
-	sta ent_wx
-	lda pv1
-	sta ent_wy
+	sta UZ+2			; zR
 	clc
-	lda pv0
 	adc box_sz
 	bcc .fdzr1
 	lda #255
 .fdzr1
-	sta ent_wz
-	ldx #3
-	jsr xform_world_vert
-	; v2 TR right (same XZ)
-	lda pv2
-	sta ent_wy
-	ldx #2
-	jsr xform_world_vert
-	; v5 BL right
+	sta UZ+3			; zR+sz
+	lda #4
+	sta mesh_nz
 	lda pv1
-	sta ent_wy
-	lda pv0
-	sta ent_wz
-	ldx #5
-	jmp xform_world_vert
+	sta VY
+	lda pv2
+	sta VY+1
+	sta VY+2
+	lda pv1
+	sta VY+3
+	lda pv2
+	sta VY+4
+	lda pv1
+	sta VY+5
+	lda #<door_open_x_xid
+	sta xid_ptr
+	lda #>door_open_x_xid
+	sta xid_ptr+1
+	lda #<door_open_x_zid
+	sta zid_ptr
+	lda #>door_open_x_zid
+	sta zid_ptr+1
+	lda #6
+	sta mesh_nv
+	jmp xform_mesh_xz
 
 ; Up-pointing triangle on the switch face
 fill_switch_verts
@@ -852,48 +822,43 @@ fill_switch_verts
 .fsmz
 	lda box_z
 .fszp
-	sta pv4
-	; apex: x+sx/2, y+sy, plane
+	sta UZ
+	lda #1
+	sta mesh_nz
+	lda box_x
+	sta UX
 	lda box_sx
 	lsr
 	clc
 	adc box_x
-	sta ent_wx
-	clc
-	lda box_y
-	adc box_sy
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; left: x, y+sy/2, plane
-	lda box_x
-	sta ent_wx
-	lda box_sy
-	lsr
-	clc
-	adc box_y
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; right: x+sx, y+sy/2, plane
+	sta UX+1
 	clc
 	lda box_x
 	adc box_sx
-	sta ent_wx
+	sta UX+2
+	lda #3
+	sta mesh_nx
+	clc
+	lda box_y
+	adc box_sy
+	sta VY
 	lda box_sy
 	lsr
 	clc
 	adc box_y
-	sta ent_wy
-	lda pv4
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	rts
+	sta VY+1
+	sta VY+2
+	lda #<sw_z_xid
+	sta xid_ptr
+	lda #>sw_z_xid
+	sta xid_ptr+1
+	lda #<sw_z_zid
+	sta zid_ptr
+	lda #>sw_z_zid
+	sta zid_ptr+1
+	lda #3
+	sta mesh_nv
+	jmp xform_mesh_xz
 .fsx
 	cmp #FACE_MX
 	beq .fsmx
@@ -904,48 +869,43 @@ fill_switch_verts
 .fsmx
 	lda box_x
 .fsxp
-	sta pv4
-	; apex: plane, y+sy, z+sz/2
-	lda pv4
-	sta ent_wx
-	clc
-	lda box_y
-	adc box_sy
-	sta ent_wy
+	sta UX
+	lda #1
+	sta mesh_nx
+	lda box_z
+	sta UZ
 	lda box_sz
 	lsr
 	clc
 	adc box_z
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; left: plane, y+sy/2, z
-	lda pv4
-	sta ent_wx
-	lda box_sy
-	lsr
-	clc
-	adc box_y
-	sta ent_wy
-	lda box_z
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; right: plane, y+sy/2, z+sz
-	lda pv4
-	sta ent_wx
-	lda box_sy
-	lsr
-	clc
-	adc box_y
-	sta ent_wy
+	sta UZ+1
 	clc
 	lda box_z
 	adc box_sz
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	rts
+	sta UZ+2
+	lda #3
+	sta mesh_nz
+	clc
+	lda box_y
+	adc box_sy
+	sta VY
+	lda box_sy
+	lsr
+	clc
+	adc box_y
+	sta VY+1
+	sta VY+2
+	lda #<sw_x_xid
+	sta xid_ptr
+	lda #>sw_x_xid
+	sta xid_ptr+1
+	lda #<sw_x_zid
+	sta zid_ptr
+	lda #>sw_x_zid
+	sta zid_ptr+1
+	lda #3
+	sta mesh_nv
+	jmp xform_mesh_xz
 
 ; Four sloped ramp edges (no AABB)
 fill_slope_verts
@@ -973,47 +933,24 @@ fill_slope_verts
 	clc
 	adc box_sy
 	sta pv3
-	; p0 xlow,ylow,z
 	lda pv0
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda box_z
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; p1 xlow,ylow,z+sz
-	lda pv0
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	clc
-	lda box_z
-	adc box_sz
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; p2 xhigh,yhigh,z+sz
+	sta UX
 	lda pv1
-	sta ent_wx
-	lda pv3
-	sta ent_wy
+	sta UX+1
+	lda box_z
+	sta UZ
 	clc
-	lda box_z
 	adc box_sz
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	; p3 xhigh,yhigh,z
-	lda pv1
-	sta ent_wx
-	lda pv3
-	sta ent_wy
-	lda box_z
-	sta ent_wz
-	ldx #3
-	jsr xform_world_vert
-	rts
+	sta UZ+1
+	lda #<slope_x_xid
+	sta xid_ptr
+	lda #>slope_x_xid
+	sta xid_ptr+1
+	lda #<slope_x_zid
+	sta zid_ptr
+	lda #>slope_x_zid
+	sta zid_ptr+1
+	jmp .sl_emit
 .slz
 	ldx obj_i
 	lda slope_dir,x
@@ -1037,52 +974,32 @@ fill_slope_verts
 	clc
 	adc box_sy
 	sta pv3
-	; p0 x,ylow,zlow
 	lda box_x
-	sta ent_wx
-	lda pv2
-	sta ent_wy
-	lda pv0
-	sta ent_wz
-	ldx #0
-	jsr xform_world_vert
-	; p1 x+sx,ylow,zlow
+	sta UX
 	clc
-	lda box_x
 	adc box_sx
-	sta ent_wx
-	lda pv2
-	sta ent_wy
+	sta UX+1
 	lda pv0
-	sta ent_wz
-	ldx #1
-	jsr xform_world_vert
-	; p2 x+sx,yhigh,zhigh
-	clc
-	lda box_x
-	adc box_sx
-	sta ent_wx
-	lda pv3
-	sta ent_wy
+	sta UZ
 	lda pv1
-	sta ent_wz
-	ldx #2
-	jsr xform_world_vert
-	; p3 x,yhigh,zhigh
-	lda box_x
-	sta ent_wx
+	sta UZ+1
+	jsr set_box_xzid
+.sl_emit
+	lda #2
+	sta mesh_nx
+	sta mesh_nz
+	lda pv2
+	sta VY
+	sta VY+1
 	lda pv3
-	sta ent_wy
-	lda pv1
-	sta ent_wz
-	ldx #3
-	jsr xform_world_vert
-	rts
+	sta VY+2
+	sta VY+3
+	lda #4
+	sta mesh_nv
+	jmp xform_mesh_xz
 
 ; ------------------------------------------------------------------
 draw_world
-	lda #0
-	sta xf_ok
 	jsr update_frustum
 	; active room (inside cull) — not frustum-culled
 	ldx room_idx

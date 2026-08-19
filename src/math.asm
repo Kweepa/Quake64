@@ -134,6 +134,77 @@ smul16_7
 	sta nhi
 	rts
 
+; nlo:nhi (signed) * ylo:yhi (unsigned) >> 16 → nlo:nhi unsigned abs.
+; mul_sign = $80 if coord was negative. Four umul8j plus add. Clobbers dlo/dhi/rot2.
+smul16u16h
+	lda #0
+	sta mul_sign
+	lda nhi
+	bpl .su_p
+	lda #$80
+	sta mul_sign
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+	lda #0
+	sbc nhi
+	sta nhi
+.su_p
+	lda nlo
+	ora nhi
+	beq .su_z
+	lda ylo
+	ora yhi
+	beq .su_z
+	lda nlo
+	ldy ylo
+	jsr umul8j			; bits 0–15; keep hi for carry
+	lda prod_h
+	sta dlo
+	lda nlo
+	ldy yhi
+	jsr umul8j			; bits 8–23
+	clc
+	lda dlo
+	adc prod_l
+	sta dlo
+	lda prod_h
+	adc #0
+	sta dhi
+	lda #0
+	adc #0
+	sta rot2
+	lda nhi
+	ldy ylo
+	jsr umul8j			; bits 8–23
+	clc
+	lda dlo
+	adc prod_l
+	sta dlo
+	lda dhi
+	adc prod_h
+	sta dhi
+	lda rot2
+	adc #0
+	sta rot2
+	lda nhi
+	ldy yhi
+	jsr umul8j			; bits 16–31
+	clc
+	lda dhi
+	adc prod_l
+	sta nlo
+	lda rot2
+	adc prod_h
+	sta nhi
+	rts
+.su_z
+	lda #0
+	sta nlo
+	sta nhi
+	rts
+
 ; Unsigned A*Y → prod_l:prod_h. sq[a+b] - sq[|a-b|], tables (i*i)/4.
 umul8j
 	sta mul_a

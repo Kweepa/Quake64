@@ -312,22 +312,24 @@ cube_project
 	jsr .offxy
 	jmp .pnext
 .pfront
+	jsr .invz
 	ldx vindex
 	lda CAM_X,x
-	sta ylo
+	sta nlo
 	lda CAM_XH,x
-	sta yhi
-	jsr .p16
+	sta nhi
+	jsr .cam_to_proj
 	ldx vindex
 	lda nlo
 	sta PROJ_X,x
 	lda nhi
 	sta PROJ_XH,x
+	ldx vindex
 	lda CAM_Y,x
-	sta ylo
+	sta nlo
 	lda CAM_YH,x
-	sta yhi
-	jsr .p16
+	sta nhi
+	jsr .cam_to_proj
 	ldx vindex
 	lda nlo
 	sta PROJ_Y,x
@@ -430,6 +432,68 @@ cube_project
 	sta nhi
 	rts
 
+; inv = (FOCAL<<16) / (z>>k), k = unsigned 8-bit fit of z_eye (always ≥128 here).
+.invz
+	lda z_eye
+	sta dlo
+	lda z_eye_h
+	sta dhi
+	lda #0
+	sta inv_k
+.fz
+	lda dhi
+	beq .gotz
+	lsr dhi
+	ror dlo
+	inc inv_k
+	jmp .fz
+.gotz
+	lda dlo
+	bne .idiv
+	lda #$ff
+	sta inv_l
+	sta inv_h
+	rts
+.idiv
+	lda #0
+	sta rot0
+	sta rot1
+	lda #FOCAL
+	sta rot2
+	jsr div24u8
+	lda rot0
+	sta inv_l
+	lda rot1
+	sta inv_h
+	rts
+
+; nlo:nhi * inv >> (16+k) → nlo:nhi. Full coord (no pre-shift) so 8.8 LSBs survive.
+.cam_to_proj
+	lda inv_l
+	sta ylo
+	lda inv_h
+	sta yhi
+	jsr smul16u16h
+	ldx inv_k
+	beq .csgn
+.cls
+	lsr nhi
+	ror nlo
+	dex
+	bne .cls
+.csgn
+	bit mul_sign
+	bpl .cdone
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+	lda #0
+	sbc nhi
+	sta nhi
+.cdone
+	rts
+
 ; Near-plane interpolate, then Cohen-Sutherland to 192x128
 mesh_clip
 cube_clip
@@ -488,6 +552,9 @@ cube_clip
 	lda PROJ_YH,y
 	sta oy1h
 
+	ldy vindex
+	lda (edge_vert_ptr),y
+	bne .clip_v
 	jsr .zb0
 	bcs .z0b
 	jsr .zb1
@@ -505,12 +572,7 @@ cube_clip
 .frustum
 	jsr .csclip
 	bcs .reject
-	ldx #0
-	jsr .mkoc
-	bne .reject
-	ldx #1
-	jsr .mkoc
-	bne .reject
+.clip_out
 	ldx vindex
 	lda ox0l
 	ldy ox0h
@@ -531,6 +593,12 @@ cube_clip
 	lda #1
 	sta EDGE_VIS,x
 	jmp .next
+.clip_v
+	jsr .zb0
+	bcs .reject
+	jsr .csclip_v
+	bcs .reject
+	jmp .clip_out
 .reject
 	ldx vindex
 	lda #0
@@ -573,7 +641,24 @@ cube_clip
 	rts
 
 .near0
+	jsr .nd01
+	lda nlo
+	pha
+	lda nhi
+	pha
+	lda dlo
+	pha
+	lda dhi
+	pha
 	jsr .nlx0
+	pla
+	sta dhi
+	pla
+	sta dlo
+	pla
+	sta nhi
+	pla
+	sta nlo
 	jsr .nly0
 	lda #<ZCLIP
 	sta e0z
@@ -582,7 +667,24 @@ cube_clip
 	rts
 
 .near1
+	jsr .nd10
+	lda nlo
+	pha
+	lda nhi
+	pha
+	lda dlo
+	pha
+	lda dhi
+	pha
 	jsr .nlx1
+	pla
+	sta dhi
+	pla
+	sta dlo
+	pla
+	sta nhi
+	pla
+	sta nlo
 	jsr .nly1
 	lda #<ZCLIP
 	sta e1z
@@ -591,7 +693,6 @@ cube_clip
 	rts
 
 .nlx0
-	jsr .nd01
 	sec
 	lda e1x
 	sbc e0x
@@ -609,7 +710,6 @@ cube_clip
 	rts
 
 .nly0
-	jsr .nd01
 	sec
 	lda e1y
 	sbc e0y
@@ -627,7 +727,6 @@ cube_clip
 	rts
 
 .nlx1
-	jsr .nd10
 	sec
 	lda e0x
 	sbc e1x
@@ -645,7 +744,6 @@ cube_clip
 	rts
 
 .nly1
-	jsr .nd10
 	sec
 	lda e0y
 	sbc e1y
@@ -713,20 +811,21 @@ cube_clip
 	sta z_eye
 	lda e0zh
 	sta z_eye_h
+	jsr .invz
 	lda e0x
-	sta ylo
+	sta nlo
 	lda e0xh
-	sta yhi
-	jsr .p16
+	sta nhi
+	jsr .cam_to_proj
 	lda nlo
 	sta ox0l
 	lda nhi
 	sta ox0h
 	lda e0y
-	sta ylo
+	sta nlo
 	lda e0yh
-	sta yhi
-	jsr .p16
+	sta nhi
+	jsr .cam_to_proj
 	lda nlo
 	sta oy0l
 	lda nhi
@@ -735,24 +834,87 @@ cube_clip
 	sta z_eye
 	lda e1zh
 	sta z_eye_h
+	jsr .invz
 	lda e1x
-	sta ylo
+	sta nlo
 	lda e1xh
-	sta yhi
-	jsr .p16
+	sta nhi
+	jsr .cam_to_proj
 	lda nlo
 	sta ox1l
 	lda nhi
 	sta ox1h
 	lda e1y
-	sta ylo
+	sta nlo
 	lda e1yh
-	sta yhi
-	jsr .p16
+	sta nhi
+	jsr .cam_to_proj
 	lda nlo
 	sta oy1l
 	lda nhi
 	sta oy1h
+	rts
+
+; Vertical edge: L/R trivial reject (same X); top/bottom set Y only
+.csclip_v
+	lda #16
+	sta cs_n
+.cvlp
+	ldx #0
+	jsr .mkoc
+	sta oc0
+	ldx #1
+	jsr .mkoc
+	sta oc1
+	lda oc0
+	ora oc1
+	bne .cvneed
+	clc
+	rts
+.cvneed
+	lda oc0
+	and oc1
+	beq .cvwork
+	sec
+	rts
+.cvwork
+	dec cs_n
+	bne +
+	sec
+	rts
++
+	lda oc0
+	bne .cvp0
+	lda oc1
+	ldx #1
+	bne .cvbit
+.cvp0
+	ldx #0
+.cvbit
+	lsr
+	bcs .cvrej
+	lsr
+	bcs .cvrej
+	lsr
+	bcs .cvtop
+	lda #$3f
+	ldy #0
+	jmp .cvsety
+.cvtop
+	lda #$c0
+	ldy #$ff
+.cvsety
+	cpx #0
+	bne .cv1
+	sta oy0l
+	sty oy0h
+	jmp .cvlp
+.cv1
+	sta oy1l
+	sty oy1h
+	jmp .cvlp
+.cvrej
+	sec
 	rts
 
 ; C=0 accept (ox/oy inside), C=1 reject
@@ -1185,35 +1347,8 @@ cube_draw
 
 ; X = CAM slot; world int ent_wx/wy/wz → view CAM[X]
 ; Caller must jsr load_view_trig first.
-; Same XZ as last call: reuse cached x'/z', only redo Y.
 xform_world_vert
 	stx vindex
-	lda xf_ok
-	beq .full
-	lda ent_wx
-	cmp xf_wx
-	bne .full
-	lda ent_wz
-	cmp xf_wz
-	bne .full
-	lda #0
-	sec
-	sbc cam_yl
-	sta e1x
-	lda ent_wy
-	sbc cam_yh
-	sta e1xh
-	lda xf_xl
-	sta e0x
-	lda xf_xh
-	sta e0xh
-	lda xf_zl
-	sta e0y
-	lda xf_zh
-	sta e0yh
-	jmp .store
-
-.full
 	; dx (kept in e0x until x' overwrites it)
 	lda #0
 	sec
@@ -1289,22 +1424,6 @@ xform_world_vert
 	sbc nhi
 	sta e0xh
 
-	lda ent_wx
-	sta xf_wx
-	lda ent_wz
-	sta xf_wz
-	lda e0x
-	sta xf_xl
-	lda e0xh
-	sta xf_xh
-	lda e0y
-	sta xf_zl
-	lda e0yh
-	sta xf_zh
-	lda #1
-	sta xf_ok
-
-.store
 	ldx vindex
 	lda e1x
 	sta CAM_Y,x
@@ -1318,6 +1437,127 @@ xform_world_vert
 	sta CAM_X,x
 	lda e0xh
 	sta CAM_XH,x
+	rts
+
+; Unique UX/UZ * sin/cos, then CAM[v] from (xid,zid,VY[v]).
+; Caller sets mesh_nx/nz/nv, UX/UZ/VY, xid_ptr/zid_ptr; jsr load_view_trig.
+xform_mesh_xz
+	ldx #0
+.xm_x
+	cpx mesh_nx
+	beq .xm_z
+	lda #0
+	sec
+	sbc cam_xl
+	sta e0x
+	lda UX,x
+	sbc cam_xh
+	sta e0xh
+	stx vindex
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	ldy cs_b
+	jsr smul16_7
+	ldx vindex
+	lda nlo
+	sta XC_L,x
+	lda nhi
+	sta XC_H,x
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	ldy sn_b
+	jsr smul16_7
+	ldx vindex
+	lda nlo
+	sta XS_L,x
+	lda nhi
+	sta XS_H,x
+	inx
+	jmp .xm_x
+.xm_z
+	ldx #0
+.xm_zl
+	cpx mesh_nz
+	beq .xm_v
+	lda #0
+	sec
+	sbc cam_zl
+	sta e0x
+	lda UZ,x
+	sbc cam_zh
+	sta e0xh
+	stx vindex
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	ldy cs_b
+	jsr smul16_7
+	ldx vindex
+	lda nlo
+	sta ZC_L,x
+	lda nhi
+	sta ZC_H,x
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	ldy sn_b
+	jsr smul16_7
+	ldx vindex
+	lda nlo
+	sta ZS_L,x
+	lda nhi
+	sta ZS_H,x
+	inx
+	jmp .xm_zl
+.xm_v
+	lda #0
+	sta vindex
+.xm_vl
+	ldy vindex
+	lda (xid_ptr),y
+	tax
+	lda (zid_ptr),y
+	tay
+	lda XC_L,x
+	sec
+	sbc ZS_L,y
+	sta e0x
+	lda XC_H,x
+	sbc ZS_H,y
+	sta e0xh
+	lda XS_L,x
+	clc
+	adc ZC_L,y
+	sta e0y
+	lda XS_H,x
+	adc ZC_H,y
+	sta e0yh
+	ldx vindex
+	lda #0
+	sec
+	sbc cam_yl
+	sta CAM_Y,x
+	lda VY,x
+	sbc cam_yh
+	sta CAM_YH,x
+	lda e0x
+	sta CAM_X,x
+	lda e0xh
+	sta CAM_XH,x
+	lda e0y
+	sta CAM_Z,x
+	lda e0yh
+	sta CAM_ZH,x
+	inc vindex
+	lda vindex
+	cmp mesh_nv
+	bne .xm_vl
 	rts
 
 ; True-project feet (vert 11); limb PROJ = feet + dCAM * trunc(FOCAL/z) >> 8
@@ -1581,6 +1821,10 @@ draw_enemies
 	sta edge_ptr
 	lda #>enemy_edges
 	sta edge_ptr+1
+	lda #<enemy_edge_vert
+	sta edge_vert_ptr
+	lda #>enemy_edge_vert
+	sta edge_vert_ptr+1
 	jsr ent_rotate
 	ldy #PROF_ROT
 	jsr prof_add_bucket

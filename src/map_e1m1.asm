@@ -48,17 +48,17 @@ door_face
 	!byte 1,2,2
 
 crate_x
-	!byte 0,22,63
+	!byte 0,22,60
 crate_y
-	!byte 104,64,82
+	!byte 104,64,84
 crate_z
-	!byte 118,124,122
+	!byte 118,124,112
 crate_sx
-	!byte 4,6,4
+	!byte 4,6,6
 crate_sy
-	!byte 2,40,6
+	!byte 2,40,4
 crate_sz
-	!byte 4,10,4
+	!byte 4,10,32
 crate_room
 	!byte 0,1,2
 

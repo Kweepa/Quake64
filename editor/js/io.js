@@ -1,11 +1,14 @@
 const HANDLE_DB = "quake64-editor";
 const HANDLE_STORE = "handles";
 const HANDLE_KEY = "doc";
+const SHAREWARE_KEY = "shareware";
 
 export const DEFAULT_DOC_PATH = "quake64.json";
 
 /** @type {FileSystemFileHandle | null} */
 let docFileHandle = null;
+/** @type {FileSystemDirectoryHandle | null} */
+let sharewareDirHandle = null;
 
 export function docFileName() {
   return docFileHandle?.name || DEFAULT_DOC_PATH;
@@ -187,6 +190,119 @@ function pickJsonFile() {
     input.addEventListener("cancel", () => resolve(null));
     input.click();
   });
+}
+
+export function sharewareFolderName() {
+  return sharewareDirHandle?.name || "";
+}
+
+export function hasSharewareDirHandle() {
+  return !!sharewareDirHandle;
+}
+
+async function storeHandle(key, handle) {
+  if (!window.indexedDB || !handle) return;
+  const db = await openHandleDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, "readwrite");
+    tx.objectStore(HANDLE_STORE).put(handle, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function loadStoredHandle(key) {
+  if (!window.indexedDB) return null;
+  try {
+    const db = await openHandleDb();
+    const handle = await new Promise((resolve, reject) => {
+      const tx = db.transaction(HANDLE_STORE, "readonly");
+      const req = tx.objectStore(HANDLE_STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return handle || null;
+  } catch {
+    return null;
+  }
+}
+
+async function storeSharewareHandle(handle) {
+  sharewareDirHandle = handle;
+  await storeHandle(SHAREWARE_KEY, handle);
+}
+
+export async function getStoredSharewareHandle() {
+  return loadStoredHandle(SHAREWARE_KEY);
+}
+
+export async function tryRestoreSharewareDir() {
+  const handle = await loadStoredHandle(SHAREWARE_KEY);
+  if (!handle) return null;
+  const state = await queryPermission(handle, "read");
+  if (state !== "granted") return null;
+  sharewareDirHandle = handle;
+  return handle;
+}
+
+export async function allowStoredSharewareDir(handle) {
+  if (!handle) return null;
+  if (!(await ensurePermission(handle, "read"))) return null;
+  await storeSharewareHandle(handle);
+  return handle;
+}
+
+export async function pickSharewareDirectory() {
+  if (!window.showDirectoryPicker) {
+    throw new Error("This browser cannot open a folder (needs Chromium file access)");
+  }
+  try {
+    const handle = await window.showDirectoryPicker({
+      id: "quake-shareware",
+      mode: "read",
+    });
+    await storeSharewareHandle(handle);
+    return handle;
+  } catch (e) {
+    if (e.name === "AbortError") return null;
+    throw e;
+  }
+}
+
+async function getFileInDir(dir, relPath) {
+  const parts = relPath.split("/");
+  let cur = dir;
+  for (let i = 0; i < parts.length - 1; i++) {
+    try {
+      cur = await cur.getDirectoryHandle(parts[i]);
+    } catch {
+      return null;
+    }
+  }
+  try {
+    return await cur.getFileHandle(parts[parts.length - 1]);
+  } catch {
+    return null;
+  }
+}
+
+/** Load pak0 then pak1 from the folder or an id1/ child. */
+export async function loadSharewarePakBuffers(dirHandle) {
+  const buffers = [];
+  const seen = new Set();
+  const candidates = ["pak0.pak", "id1/pak0.pak", "pak1.pak", "id1/pak1.pak"];
+  for (const rel of candidates) {
+    const fh = await getFileInDir(dirHandle, rel);
+    if (!fh) continue;
+    const file = await fh.getFile();
+    const key = `${file.name}:${file.size}:${file.lastModified}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    buffers.push(await file.arrayBuffer());
+  }
+  return buffers;
 }
 
 export function downloadJSON(doc, filename = DEFAULT_DOC_PATH) {

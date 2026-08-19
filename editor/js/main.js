@@ -1,9 +1,9 @@
 import {
   KINDS,
   PALETTE_ORDER,
-  FRAME_NAMES,
   ENEMY_TYPES,
   ENEMY_FACINGS,
+  JOINT_NAMES,
   clampEnemyRot,
   clampObject,
   clampTriggerText,
@@ -29,12 +29,15 @@ import {
   LEVEL_NAMES,
   activeMap,
   clipForFrame,
-  flipFrameX,
+  dummyFrameFor,
   isFigureObject,
   objectLabel,
   objectTree,
   roomUnderObject,
   usesLinkTag,
+  emptyMdlRig,
+  DEFAULT_MDL_SCALE,
+  clampMdlScale,
 } from "./model.js";
 import {
   autosaveDocJSON,
@@ -46,7 +49,22 @@ import {
   saveDocJSON,
   tryRestoreDocFile,
   allowStoredDocFile,
+  pickSharewareDirectory,
+  tryRestoreSharewareDir,
+  getStoredSharewareHandle,
+  allowStoredSharewareDir,
+  sharewareFolderName,
+  loadSharewarePakBuffers,
 } from "./io.js";
+import { parsePakBuffers } from "./pak.js";
+import {
+  loadEnemyMdls,
+  mdlEditorVerts,
+  averageJointPositions,
+  filterMdlClips,
+  mdlFrameIndexAt,
+  buildStickFramesFromMdl,
+} from "./mdl.js";
 import { LayoutView } from "./layoutView.js";
 import { OverheadView } from "./overheadView.js";
 import { AnimView } from "./animView.js";
@@ -57,6 +75,8 @@ const btnUndo = document.getElementById("btn-undo");
 const btnRedo = document.getElementById("btn-redo");
 const UNDO_LIMIT = 40;
 const AUTOSAVE_MS = 8000;
+/** Match Quake monster default: one MDL frame per 0.1s think. */
+const ANIM_PLAY_MS = 100;
 
 let doc = createDefaultDocument();
 let editorMode = "layout";
@@ -75,6 +95,14 @@ let undoGesture = false;
 let frameClipboard = null;
 let animPlaying = false;
 let animPlayTimer = null;
+let animLoop = false;
+let sharewareModels = {};
+let sharewareMissing = [];
+let overlayOn = true;
+let bindJoint = -1;
+let clipIndex = 0;
+let frameLocal = 0;
+let mdlScale = DEFAULT_MDL_SCALE;
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
 
@@ -123,7 +151,11 @@ const overheadView = new OverheadView(document.getElementById("overhead-canvas")
 const animView = new AnimView(document.getElementById("view-canvas"), {
   stage: document.getElementById("map-stage"),
   getEnemy: () => doc.enemies[enemyIndex],
-  getFrame: () => frameIndex,
+  getFrame: () => {
+    const e = doc.enemies[enemyIndex];
+    if (!e?.clips?.length) return 0;
+    return frameIndex;
+  },
   getSelectedVerts: () => selectedVerts,
   onSelectVert: (i, additive) => {
     if (i < 0) selectedVerts = [];
@@ -152,6 +184,38 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
   },
   beginUndo,
   endUndo,
+  getMeshOverlay: () => {
+    if (!overlayOn) return null;
+    const e = doc.enemies[enemyIndex];
+    if (!e) return null;
+    const mdl = sharewareModels[e.name];
+    if (!mdl) return null;
+    const timeline = getTimeline(e);
+    const clip = timeline[clipIndex] || timeline[0];
+    if (!clip) return null;
+    const local = Math.max(0, Math.min(frameLocal, clip.len - 1));
+    const frameName = clip.frameNames?.[local] || `${clip.name}${local}`;
+    const mdlFi = e.clips?.length
+      ? mdlFrameIndexAt(mdl, e.clips[clipIndex].start + local)
+      : clip.mdlFrames[local]?.index ?? 0;
+    const verts = mdlEditorVerts(mdl, mdlFi, mdlScale);
+    const rig = e.mdlRig || emptyMdlRig();
+    return {
+      verts,
+      edges: mdl.edges,
+      bindJoint,
+      jointVerts: rig.jointVerts,
+      ghost: averageJointPositions(verts, rig.jointVerts),
+      lines: e.lines,
+      frameName,
+    };
+  },
+  onSelectMeshVert: (i, additive) => {
+    assignMeshVerts([i], additive);
+  },
+  onSelectMeshVerts: (indices, additive) => {
+    assignMeshVerts(indices, additive);
+  },
 });
 
 function setStatus(msg, isError = false) {
@@ -242,6 +306,7 @@ function syncEditorToDoc() {
       speed: cam.speed,
     },
     animOrbit: { yaw: orb.yaw, pitch: orb.pitch, dist: orb.dist },
+    mdlScale,
   };
 }
 
@@ -262,9 +327,12 @@ function applyEditorState(d) {
   const ei = d.enemies.findIndex((e) => e.name === ed.enemy);
   enemyIndex = ei >= 0 ? ei : 0;
   frameIndex = ed.frameIndex;
+  clampFrameIndex(activeEnemy());
+  syncClipFromFrameIndex(activeEnemy());
   const have = new Set(activeMap(d).objects.map((o) => o.id));
   selectedIds = ed.selectedIds.filter((id) => have.has(id));
   selectedVerts = [...ed.selectedVerts];
+  setMdlScale(ed.mdlScale, false);
   setDrawMode(ed.localDraw);
   setMode(ed.mode);
 }
@@ -324,6 +392,8 @@ function restore(json) {
   selectedIds = selectedIds.filter((id) => have.has(id));
   selectedVerts = selectedVerts.filter((i) => i >= 0 && i < 13);
   if (enemyIndex >= doc.enemies.length) enemyIndex = 0;
+  clampFrameIndex(activeEnemy());
+  syncClipFromFrameIndex(activeEnemy());
   syncEditorToDoc();
   markDirty();
   refreshAll();
@@ -360,6 +430,80 @@ function activeEnemy() {
   return doc.enemies[enemyIndex];
 }
 
+function getTimeline(e) {
+  if (e.clips?.length) {
+    const mdl = sharewareModels[e.name];
+    const kept = mdl ? filterMdlClips(mdl.clips) : [];
+    let ki = 0;
+    return e.clips.map((c) => {
+      const mdlClip = kept[ki];
+      const frameNames = [];
+      const mdlFrames = [];
+      if (mdlClip && mdlClip.name === c.name) {
+        for (const fr of mdlClip.frames) {
+          frameNames.push(fr.name);
+          mdlFrames.push(fr);
+        }
+        ki++;
+      }
+      return { name: c.name, len: c.len, start: c.start, frameNames, mdlFrames };
+    });
+  }
+  const mdl = sharewareModels[e.name];
+  if (!mdl) return [];
+  return filterMdlClips(mdl.clips).map((c) => ({
+    name: c.name,
+    len: c.frames.length,
+    start: 0,
+    frameNames: c.frames.map((fr) => fr.name),
+    mdlFrames: c.frames,
+  }));
+}
+
+function clampFrameIndex(e) {
+  if (!e?.frames?.length) {
+    frameIndex = 0;
+    return;
+  }
+  if (e.clips?.length) {
+    frameIndex = Math.max(0, Math.min(frameIndex, e.frames.length - 1));
+  }
+}
+
+function syncClipFromFrameIndex(e) {
+  const timeline = getTimeline(e);
+  if (!timeline.length) {
+    clipIndex = 0;
+    frameLocal = 0;
+    return;
+  }
+  if (e.clips?.length) {
+    const clip = clipForFrame(e.clips, frameIndex);
+    if (clip) {
+      clipIndex = Math.max(0, e.clips.indexOf(clip));
+      frameLocal = frameIndex - clip.start;
+      return;
+    }
+  }
+  if (clipIndex >= timeline.length) clipIndex = 0;
+  const clip = timeline[clipIndex];
+  frameLocal = Math.max(0, Math.min(frameLocal, clip.len - 1));
+}
+
+function frameLabel(e, fi) {
+  if (!e?.clips?.length) return "rest";
+  const clip = clipForFrame(e.clips, fi);
+  if (!clip) return `frame ${fi}`;
+  return `${clip.name} ${fi - clip.start}`;
+}
+
+function activeTimelineClip() {
+  const timeline = getTimeline(activeEnemy());
+  if (!timeline.length) return null;
+  if (clipIndex >= timeline.length) clipIndex = 0;
+  return timeline[clipIndex];
+}
+
 function setMode(mode) {
   editorMode = mode;
   document.getElementById("btn-mode-layout").classList.toggle("active", mode === "layout");
@@ -377,8 +521,10 @@ function setMode(mode) {
       : "Enemy";
   document.getElementById("hint").textContent =
     mode === "layout"
-      ? "Drag palette to place · LMB line/box-select · Shift add · WASD/wheel fly · Q/E up · RMB look · MMB orbit · F focus · G drop · gizmo moves selection · Del"
-      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit";
+      ? "Drag palette to place · LMB line/box-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+RMB zoom · MMB orbit · F focus · G drop · gizmo moves selection · Del"
+      : bindJoint >= 0
+        ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
+        : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   if (mode !== "anim") stopAnimPlay();
@@ -686,8 +832,18 @@ function renderEnemyList() {
     btn.textContent = e.name;
     if (i === enemyIndex) btn.className = "active";
     btn.addEventListener("click", () => {
+      const prevClip = activeTimelineClip()?.name;
       enemyIndex = i;
       selectedVerts = [];
+      bindJoint = -1;
+      clampFrameIndex(activeEnemy());
+      const timeline = getTimeline(activeEnemy());
+      if (prevClip) {
+        const idx = timeline.findIndex((c) => c.name === prevClip);
+        clipIndex = idx >= 0 ? idx : 0;
+      } else clipIndex = 0;
+      frameLocal = 0;
+      syncClipFromFrameIndex(activeEnemy());
       markDirty();
       refreshAll();
     });
@@ -1013,44 +1169,84 @@ function renderInspector() {
   });
   root.appendChild(field("Name", name));
 
-  const strip = document.createElement("div");
-  strip.className = "frame-strip";
-  FRAME_NAMES.forEach((n, i) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = n;
-    if (i === frameIndex) b.className = "active";
-    b.addEventListener("click", () => {
-      frameIndex = i;
+  const timeline = getTimeline(e);
+  if (timeline.length) {
+    const clip = activeTimelineClip() || timeline[0];
+    if (clipIndex >= timeline.length) clipIndex = 0;
+    frameLocal = Math.max(0, Math.min(frameLocal, clip.len - 1));
+
+    const clipSel = document.createElement("select");
+    timeline.forEach((c, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = `${c.name} (${c.len})`;
+      if (i === clipIndex) opt.selected = true;
+      clipSel.appendChild(opt);
+    });
+    clipSel.addEventListener("change", () => {
+      clipIndex = Number(clipSel.value) | 0;
+      frameLocal = 0;
+      if (e.clips?.length) {
+        frameIndex = e.clips[clipIndex].start;
+      }
       markDirty();
       refreshAll();
     });
-    strip.appendChild(b);
-  });
-  root.appendChild(strip);
+    root.appendChild(field("Clip", clipSel));
+
+    const frameName = clip.frameNames?.[frameLocal] || `${clip.name}${frameLocal}`;
+    const sliderRow = document.createElement("label");
+    sliderRow.className = "field block";
+    const sliderLbl = document.createElement("span");
+    sliderLbl.id = "anim-frame-label";
+    sliderLbl.textContent = frameName;
+    const slider = document.createElement("input");
+    slider.id = "anim-frame-slider";
+    slider.type = "range";
+    slider.min = "0";
+    slider.max = String(Math.max(0, clip.len - 1));
+    slider.value = String(frameLocal);
+    slider.addEventListener("input", () => {
+      frameLocal = Number(slider.value) | 0;
+      sliderLbl.textContent = clip.frameNames?.[frameLocal] || `${clip.name}${frameLocal}`;
+      if (e.clips?.length) {
+        frameIndex = e.clips[clipIndex].start + frameLocal;
+      }
+      animView.draw();
+    });
+    sliderRow.append(sliderLbl, slider);
+    root.appendChild(sliderRow);
+
+    const playRow = document.createElement("div");
+    playRow.className = "btn-row";
+    const playBtn = document.createElement("button");
+    playBtn.id = "btn-anim-play";
+    playBtn.type = "button";
+    playBtn.textContent = animPlaying ? "Pause" : "Play";
+    if (animPlaying) playBtn.className = "active";
+    playBtn.addEventListener("click", toggleAnimPlay);
+    const loopLbl = document.createElement("label");
+    loopLbl.className = "check-inline";
+    const loopChk = document.createElement("input");
+    loopChk.id = "anim-loop";
+    loopChk.type = "checkbox";
+    loopChk.checked = animLoop;
+    loopChk.addEventListener("change", () => {
+      animLoop = loopChk.checked;
+    });
+    loopLbl.append(loopChk, document.createTextNode(" Loop"));
+    playRow.append(playBtn, loopLbl);
+    root.appendChild(playRow);
+  }
 
   const counts = document.createElement("p");
   counts.className = "muted";
-  const clip = clipForFrame(frameIndex);
-  const height = frameHeight(e.frames[frameIndex]);
-  counts.textContent = `13 verts · 13 lines · ${clip.name} · height ${height} · 24 frames`;
+  const clip = e.clips?.length ? clipForFrame(e.clips, frameIndex) : activeTimelineClip();
+  const stickFrame = e.clips?.length ? frameIndex : 0;
+  const height = frameHeight(e.frames[stickFrame] || e.frames[0]);
+  const frameTotal = e.clips?.length ? e.frames.length : timeline.length ? "MDL preview" : 1;
+  counts.textContent = `13 verts · 13 lines · ${clip?.name || "rest"} · height ${height} · ${frameTotal} frames`;
   root.appendChild(counts);
-
-  const scaleRow = document.createElement("label");
-  scaleRow.className = "field";
-  const scaleLbl = document.createElement("span");
-  scaleLbl.textContent = "Scale";
-  const scaleInp = document.createElement("input");
-  scaleInp.type = "number";
-  scaleInp.step = "0.1";
-  scaleInp.placeholder = "1.0";
-  scaleInp.title = "Scale this frame, then clears";
-  scaleInp.addEventListener("change", () => {
-    scaleCurrentFrame(Number(scaleInp.value));
-    scaleInp.value = "";
-  });
-  scaleRow.append(scaleLbl, scaleInp);
-  root.appendChild(scaleRow);
 
   const editRow = document.createElement("div");
   editRow.className = "btn-row";
@@ -1063,17 +1259,13 @@ function renderInspector() {
   pasteBtn.textContent = "Paste frame";
   pasteBtn.disabled = !frameClipboard;
   pasteBtn.addEventListener("click", pasteFrame);
-  const flipBtn = document.createElement("button");
-  flipBtn.type = "button";
-  flipBtn.textContent = "Flip";
-  flipBtn.title = "Mirror this frame on X; weapon stays on the right wrist";
-  flipBtn.addEventListener("click", flipCurrentFrame);
-  editRow.append(copyBtn, pasteBtn, flipBtn);
+  editRow.append(copyBtn, pasteBtn);
   root.appendChild(editRow);
 
   if (selectedVerts.length === 1) {
     const vi = selectedVerts[0];
-    const v = e.frames[frameIndex][vi];
+    const stickFi = e.clips?.length ? frameIndex : 0;
+    const v = e.frames[stickFi][vi];
     const setC = (k, val) => {
       pushUndo();
       v[k] = clampVert(val);
@@ -1089,23 +1281,214 @@ function renderInspector() {
     );
   }
 
-  const row = document.createElement("div");
-  row.className = "btn-row";
-  const playBtn = document.createElement("button");
-  playBtn.type = "button";
-  playBtn.textContent = animPlaying ? "Pause" : "Play";
-  if (animPlaying) playBtn.className = "active";
-  playBtn.addEventListener("click", toggleAnimPlay);
-  const prev = document.createElement("button");
-  prev.type = "button";
-  prev.textContent = "Prev frame";
-  prev.addEventListener("click", () => stepFrame(-1));
-  const next = document.createElement("button");
-  next.type = "button";
-  next.textContent = "Next frame";
-  next.addEventListener("click", () => stepFrame(1));
-  row.append(playBtn, prev, next);
-  root.appendChild(row);
+  renderQuakeSource(root, e);
+}
+
+function ensureEnemyRig(e) {
+  if (!e.mdlRig || !Array.isArray(e.mdlRig.jointVerts) || e.mdlRig.jointVerts.length !== 13) {
+    e.mdlRig = emptyMdlRig();
+  }
+  return e.mdlRig;
+}
+
+function activeMdl() {
+  return sharewareModels[activeEnemy()?.name] || null;
+}
+
+function updateAnimHint() {
+  if (editorMode !== "anim") return;
+  const hint = document.getElementById("hint");
+  if (!hint) return;
+  hint.textContent =
+    bindJoint >= 0
+      ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
+      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit · Alt+RMB zoom";
+}
+
+function assignMeshVerts(indices, additive) {
+  if (bindJoint < 0) return;
+  const e = activeEnemy();
+  if (!e) return;
+  const rig = ensureEnemyRig(e);
+  const mdl = activeMdl();
+  const max = mdl ? mdl.numVerts : Infinity;
+  pushUndo();
+  const set = new Set(additive ? rig.jointVerts[bindJoint] : []);
+  for (const i of indices) {
+    const n = i | 0;
+    if (n >= 0 && n < max) set.add(n);
+  }
+  rig.jointVerts[bindJoint] = [...set].sort((a, b) => a - b);
+  markDirty();
+  refreshPanels();
+  animView.draw();
+}
+
+async function loadSharewareFromHandle(handle) {
+  try {
+    const buffers = await loadSharewarePakBuffers(handle);
+    if (!buffers.length) {
+      sharewareModels = {};
+      sharewareMissing = ENEMY_TYPES.map((t) => t.name);
+      setStatus("No pak0.pak / pak1.pak in that folder", true);
+      refreshPanels();
+      return;
+    }
+    const lumps = parsePakBuffers(buffers);
+    const { models, missing } = loadEnemyMdls(lumps);
+    sharewareModels = models;
+    sharewareMissing = missing;
+    const n = Object.keys(models).length;
+    const miss = missing.length ? ` · missing ${missing.join(", ")}` : "";
+    setStatus(`Loaded ${n} Quake model${n === 1 ? "" : "s"} from ${sharewareFolderName()}${miss}`);
+  } catch (err) {
+    sharewareModels = {};
+    sharewareMissing = ENEMY_TYPES.map((t) => t.name);
+    setStatus(String(err.message || err), true);
+  }
+  refreshPanels();
+  if (editorMode === "anim") animView.draw();
+}
+
+async function openSharewareFolder() {
+  try {
+    const stored = await getStoredSharewareHandle();
+    if (stored) {
+      const allowed = await allowStoredSharewareDir(stored);
+      if (allowed) {
+        await loadSharewareFromHandle(allowed);
+        return;
+      }
+    }
+    const handle = await pickSharewareDirectory();
+    if (!handle) {
+      setStatus("Open cancelled", true);
+      return;
+    }
+    await loadSharewareFromHandle(handle);
+  } catch (err) {
+    setStatus(String(err.message || err), true);
+  }
+}
+
+function copyAllMdlFrames() {
+  const e = activeEnemy();
+  const mdl = activeMdl();
+  if (!e || !mdl) {
+    setStatus("Load shareware first", true);
+    return;
+  }
+  const rig = ensureEnemyRig(e);
+  const bound = rig.jointVerts.some((list) => list.length);
+  if (!bound) {
+    setStatus("Assign mesh verts to at least one joint first", true);
+    return;
+  }
+  const rest = e.frames[0] || dummyFrameFor(e.name);
+  const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVert);
+  if (!frames.length) {
+    setStatus("No Quake frames to copy", true);
+    return;
+  }
+  pushUndo();
+  e.frames = frames;
+  e.clips = clips;
+  frameIndex = 0;
+  clipIndex = 0;
+  frameLocal = 0;
+  markDirty();
+  refreshAll();
+  setStatus(`Copied ${frames.length} frames from Quake MDL`);
+}
+
+function renderQuakeSource(root, e) {
+  const wrap = document.createElement("section");
+  wrap.className = "quake-source";
+  const h = document.createElement("h2");
+  h.textContent = "Quake source";
+  wrap.appendChild(h);
+
+  const status = document.createElement("p");
+  status.className = "muted";
+  const mdl = sharewareModels[e.name];
+  const folder = sharewareFolderName();
+  const kept = mdl ? filterMdlClips(mdl.clips) : [];
+  const keptCount = kept.reduce((n, c) => n + c.frames.length, 0);
+  if (mdl) {
+    status.textContent = folder
+      ? `${folder} · ${mdl.numVerts} mesh verts · ${keptCount} kept frames`
+      : `${mdl.numVerts} mesh verts · ${keptCount} kept frames`;
+  } else if (sharewareMissing.includes(e.name)) {
+    status.textContent = folder
+      ? `${e.name} is not in ${folder}`
+      : `${e.name} model not in the opened PAK`;
+  } else {
+    status.textContent = folder
+      ? `Opened ${folder}. Open again if models did not load.`
+      : "Open a folder that contains pak0.pak or id1/pak0.pak";
+  }
+  wrap.appendChild(status);
+
+  const openRow = document.createElement("div");
+  openRow.className = "btn-row";
+  const openBtn = document.createElement("button");
+  openBtn.type = "button";
+  openBtn.textContent = folder ? "Change folder…" : "Open shareware folder";
+  openBtn.addEventListener("click", () => void openSharewareFolder());
+  openRow.appendChild(openBtn);
+  wrap.appendChild(openRow);
+
+  if (mdl && kept.length) {
+    const copyAllBtn = document.createElement("button");
+    copyAllBtn.type = "button";
+    copyAllBtn.textContent = "Copy all frames";
+    copyAllBtn.title = "Write all kept Quake poses onto stick frames using current joint bindings";
+    copyAllBtn.addEventListener("click", copyAllMdlFrames);
+    const copyRow = document.createElement("div");
+    copyRow.className = "btn-row";
+    copyRow.appendChild(copyAllBtn);
+    wrap.appendChild(copyRow);
+  }
+
+  const jointList = document.createElement("ul");
+  jointList.className = "joint-list";
+  const rig = ensureEnemyRig(e);
+  JOINT_NAMES.forEach((name, i) => {
+    const li = document.createElement("li");
+    li.className = "joint-row" + (bindJoint === i ? " active" : "");
+    const label = document.createElement("span");
+    label.className = "joint-name";
+    const n = rig.jointVerts[i].length;
+    label.textContent = n ? `${name} · ${n}` : name;
+    const bindBtn = document.createElement("button");
+    bindBtn.type = "button";
+    bindBtn.textContent = bindJoint === i ? "Done" : "Bind";
+    if (bindJoint === i) bindBtn.className = "active";
+    bindBtn.addEventListener("click", () => {
+      bindJoint = bindJoint === i ? -1 : i;
+      if (bindJoint >= 0) setOverlayOn(true);
+      updateAnimHint();
+      refreshPanels();
+      animView.draw();
+    });
+    const clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.textContent = "Clear";
+    clearBtn.disabled = !rig.jointVerts[i].length;
+    clearBtn.addEventListener("click", () => {
+      pushUndo();
+      rig.jointVerts[i] = [];
+      if (bindJoint === i) bindJoint = -1;
+      markDirty();
+      updateAnimHint();
+      refreshPanels();
+      animView.draw();
+    });
+    li.append(label, bindBtn, clearBtn);
+    jointList.appendChild(li);
+  });
+  wrap.appendChild(jointList);
+  root.appendChild(wrap);
 }
 
 function frameHeight(verts) {
@@ -1116,34 +1499,50 @@ function frameHeight(verts) {
   return Number.isFinite(maxY) ? maxY : 0;
 }
 
-function stepFrame(d) {
-  frameIndex = (frameIndex + d + FRAME_NAMES.length) % FRAME_NAMES.length;
-  markDirty();
-  refreshAll();
+function applyFrameLocal() {
+  const e = activeEnemy();
+  if (e?.clips?.length) {
+    const clip = e.clips[clipIndex];
+    if (clip) frameIndex = clip.start + frameLocal;
+  }
 }
 
-function scaleCurrentFrame(factor) {
-  if (!Number.isFinite(factor) || factor === 0) {
-    setStatus("Enter a non-zero scale", true);
-    return;
+function advanceFrame(d) {
+  const timeline = getTimeline(activeEnemy());
+  if (!timeline.length) return false;
+  const clip = timeline[clipIndex] || timeline[0];
+  const len = Math.max(1, clip.len);
+  frameLocal = (frameLocal + d + len) % len;
+  applyFrameLocal();
+  return true;
+}
+
+function syncPlayUi() {
+  const clip = activeTimelineClip();
+  const slider = document.getElementById("anim-frame-slider");
+  const lbl = document.getElementById("anim-frame-label");
+  if (clip && slider) {
+    slider.value = String(frameLocal);
+    if (lbl) lbl.textContent = clip.frameNames?.[frameLocal] || `${clip.name}${frameLocal}`;
   }
-  const e = activeEnemy();
-  const fr = e.frames[frameIndex];
-  pushUndo();
-  for (const v of fr) {
-    v.x = clampVert(Math.round(v.x * factor));
-    v.y = clampVert(Math.round(v.y * factor));
-    v.z = clampVert(Math.round(v.z * factor));
-  }
+  if (editorMode === "anim") animView.draw();
+}
+
+function stepFrame(d) {
+  if (!advanceFrame(d)) return;
   markDirty();
   refreshAll();
-  setStatus(`Scaled ${FRAME_NAMES[frameIndex]} × ${factor}`);
 }
 
 function copyFrame() {
-  const fr = activeEnemy().frames[frameIndex];
+  const e = activeEnemy();
+  if (!e.clips?.length) {
+    setStatus("Copy frames from Quake MDL first", true);
+    return;
+  }
+  const fr = e.frames[frameIndex];
   frameClipboard = fr.map((v) => ({ x: v.x, y: v.y, z: v.z }));
-  setStatus(`Copied ${FRAME_NAMES[frameIndex]}`);
+  setStatus(`Copied ${frameLabel(e, frameIndex)}`);
   refreshPanels();
 }
 
@@ -1152,7 +1551,12 @@ function pasteFrame() {
     setStatus("Copy a frame first", true);
     return;
   }
-  const fr = activeEnemy().frames[frameIndex];
+  const e = activeEnemy();
+  if (!e.clips?.length) {
+    setStatus("Copy frames from Quake MDL first", true);
+    return;
+  }
+  const fr = e.frames[frameIndex];
   pushUndo();
   for (let i = 0; i < fr.length; i++) {
     const src = frameClipboard[i] || fr[i];
@@ -1162,16 +1566,7 @@ function pasteFrame() {
   }
   markDirty();
   refreshAll();
-  setStatus(`Pasted onto ${FRAME_NAMES[frameIndex]}`);
-}
-
-function flipCurrentFrame() {
-  const e = activeEnemy();
-  pushUndo();
-  flipFrameX(e.frames[frameIndex]);
-  markDirty();
-  refreshAll();
-  setStatus(`Flipped ${FRAME_NAMES[frameIndex]} on X`);
+  setStatus(`Pasted onto ${frameLabel(e, frameIndex)}`);
 }
 
 function stopAnimPlay() {
@@ -1182,32 +1577,86 @@ function stopAnimPlay() {
   }
 }
 
+function updatePlayButton() {
+  const playBtn = document.getElementById("btn-anim-play");
+  if (!playBtn) return;
+  playBtn.textContent = animPlaying ? "Pause" : "Play";
+  playBtn.classList.toggle("active", animPlaying);
+}
+
 function toggleAnimPlay() {
   if (animPlaying) {
     stopAnimPlay();
-    refreshPanels();
+    updatePlayButton();
     setStatus("Paused");
     return;
   }
+  const clip = activeTimelineClip();
+  if (!clip) {
+    setStatus("No clip to play", true);
+    return;
+  }
+  frameLocal = 0;
+  applyFrameLocal();
+  syncPlayUi();
   animPlaying = true;
-  animPlayTimer = setInterval(tickAnimPlay, 500);
-  refreshPanels();
-  setStatus(`Playing ${clipForFrame(frameIndex).name}`);
+  animPlayTimer = setInterval(tickAnimPlay, ANIM_PLAY_MS);
+  updatePlayButton();
+  setStatus(`Playing ${clip.name}`);
 }
 
 function tickAnimPlay() {
   if (editorMode !== "anim") {
     stopAnimPlay();
+    updatePlayButton();
     return;
   }
-  const clip = clipForFrame(frameIndex);
-  const local = frameIndex - clip.start;
-  frameIndex = clip.start + ((local + 1) % clip.len);
-  refreshAll();
+  const clip = activeTimelineClip();
+  if (!clip) {
+    stopAnimPlay();
+    updatePlayButton();
+    return;
+  }
+  if (frameLocal >= clip.len - 1) {
+    if (!animLoop) {
+      stopAnimPlay();
+      updatePlayButton();
+      setStatus("Paused");
+      return;
+    }
+    frameLocal = 0;
+  } else {
+    frameLocal++;
+  }
+  applyFrameLocal();
+  syncPlayUi();
+}
+
+function setOverlayOn(on) {
+  overlayOn = !!on;
+  document.getElementById("btn-mdl-overlay")?.classList.toggle("active", overlayOn);
+  if (editorMode === "anim") animView.draw();
+}
+
+function setMdlScale(value, dirty = true) {
+  mdlScale = clampMdlScale(value);
+  const range = document.getElementById("mdl-scale");
+  const numInp = document.getElementById("mdl-scale-num");
+  const shown = String(mdlScale);
+  if (range && range.value !== shown) range.value = shown;
+  if (numInp && numInp.value !== shown) numInp.value = shown;
+  if (dirty) {
+    markDirty();
+    if (editorMode === "anim") animView.draw();
+  }
 }
 
 function nudgeVert(axis, delta) {
   const e = activeEnemy();
+  if (!e.clips?.length) {
+    setStatus("Copy frames from Quake MDL first", true);
+    return;
+  }
   const idxs = selectedVerts.length ? selectedVerts : [];
   if (!idxs.length) {
     setStatus("Select a vertex first", true);
@@ -1244,6 +1693,15 @@ document.getElementById("btn-mode-layout").addEventListener("click", () => {
 document.getElementById("btn-mode-anim").addEventListener("click", () => {
   setMode("anim");
   markDirty();
+});
+document.getElementById("mdl-scale").addEventListener("input", (e) => {
+  setMdlScale(e.target.value);
+});
+document.getElementById("mdl-scale-num").addEventListener("change", (e) => {
+  setMdlScale(e.target.value);
+});
+document.getElementById("btn-mdl-overlay").addEventListener("click", () => {
+  setOverlayOn(!overlayOn);
 });
 document.getElementById("btn-draw-all").addEventListener("click", () => {
   setDrawMode(false);
@@ -1410,6 +1868,16 @@ window.addEventListener("keydown", (e) => {
     }
   }
   if (editorMode === "anim") {
+    if (e.key === "Escape") {
+      if (bindJoint >= 0) {
+        e.preventDefault();
+        bindJoint = -1;
+        updateAnimHint();
+        refreshPanels();
+        animView.draw();
+        return;
+      }
+    }
     if (e.key === "[" || e.key === "," || e.key === "ArrowLeft") {
       e.preventDefault();
       stepFrame(-1);
@@ -1437,6 +1905,15 @@ buildPalette();
 setMode("layout");
 updateUndoButtons();
 
+async function restoreSharewareQuietly() {
+  try {
+    const dir = await tryRestoreSharewareDir();
+    if (dir) await loadSharewareFromHandle(dir);
+  } catch {
+    /* folder optional */
+  }
+}
+
 async function boot() {
   updateDirtyIndicator();
   refreshAll();
@@ -1444,6 +1921,7 @@ async function boot() {
     const loaded = await tryRestoreDocFile();
     if (loaded) {
       applyLoadedDoc(loaded);
+      await restoreSharewareQuietly();
       return;
     }
     const stored = await getStoredDocHandle();
@@ -1454,6 +1932,7 @@ async function boot() {
         : `Open ${DEFAULT_DOC_PATH} to edit the project map`,
       false
     );
+    await restoreSharewareQuietly();
   } catch (err) {
     setStatus(String(err.message || err), true);
   }

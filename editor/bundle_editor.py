@@ -14,6 +14,8 @@ JS_ORDER = [
     "js/model.js",
     "js/math3d.js",
     "js/io.js",
+    "js/pak.js",
+    "js/mdl.js",
     "js/layoutView.js",
     "js/overheadView.js",
     "js/animView.js",
@@ -87,6 +89,14 @@ def main() -> None:
       <section id="anim-left" hidden>
         <h2>Enemies</h2>
         <ul id="enemy-list" class="object-list"></ul>
+        <div class="toolbar-actions mdl-overlay-row">
+          <button type="button" id="btn-mdl-overlay" class="active">Ref wireframe</button>
+        </div>
+        <label class="field mdl-scale-field">
+          <span>Ref scale</span>
+          <input type="range" id="mdl-scale" min="0.1" max="2" step="0.01" value="0.7" />
+          <input type="number" id="mdl-scale-num" min="0.1" max="2" step="0.01" value="0.7" />
+        </label>
       </section>
     </aside>
 

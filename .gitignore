@@ -11,6 +11,10 @@ src/grunt_data.asm
 __pycache__/
 *.pyc
 
+# Quake shareware (PAK / id1)
+shareware/
+*.pak
+
 # Editor / OS
 .DS_Store
 Thumbs.db

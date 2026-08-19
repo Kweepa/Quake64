@@ -518,6 +518,21 @@ button:disabled {
   flex-wrap: wrap;
   gap: 0.35rem;
   margin-top: 0.5rem;
+  align-items: center;
+}
+
+.check-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--muted, #8b91a0);
+  cursor: pointer;
+  user-select: none;
+}
+
+.check-inline input {
+  margin: 0;
 }
 
 .frame-strip {
@@ -529,6 +544,85 @@ button:disabled {
 .frame-strip button {
   font-size: 0.65rem;
   padding: 0.25rem 0.2rem;
+}
+
+.quake-source {
+  margin-top: 0.35rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.quake-source .field input[type="range"] {
+  width: 100%;
+  flex: 1 1 auto;
+  accent-color: var(--accent);
+}
+
+.quake-source .field input[type="checkbox"] {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.joint-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.joint-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.joint-row.active {
+  background: #2a3040;
+}
+
+.joint-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+}
+
+.joint-row button {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.35rem;
+  font-size: 0.7rem;
+}
+
+.mdl-overlay-row {
+  margin-top: 0.75rem;
+}
+
+.mdl-overlay-row button {
+  width: 100%;
+}
+
+.mdl-scale-field {
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.mdl-scale-field > span {
+  flex: 1 0 100%;
+  min-width: 0;
+}
+
+.mdl-scale-field input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+
+.mdl-scale-field input[type="number"] {
+  flex: 0 0 3.4rem;
+  width: 3.4rem;
+  min-width: 3.4rem;
 }
 
 @media (max-width: 900px) {

@@ -11,10 +11,27 @@ ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "editor" / "quake64.json"
 OUT = ROOT / "src" / "enemy_data.asm"
 
-WALK_START = 4
 WALK_LEN = 4
+LEGACY_WALK_START = 4
 NVERTS = 13
 TYPES = ["Grunt", "Rottweiler"]
+
+
+def walk_frame_indices(enemy: dict) -> list[int]:
+    clips = enemy.get("clips") or []
+    if clips:
+        preferred = {"Grunt": "prowl", "Scrag": "fly"}
+        key = preferred.get(enemy["name"], "walk")
+        for name in (key, "walk", "prowl", "fly"):
+            for c in clips:
+                if c.get("name") == name:
+                    start = int(c["start"])
+                    ln = min(WALK_LEN, int(c["len"]))
+                    return list(range(start, start + ln))
+    frames = enemy.get("frames") or []
+    if len(frames) >= LEGACY_WALK_START + WALK_LEN:
+        return list(range(LEGACY_WALK_START, LEGACY_WALK_START + WALK_LEN))
+    raise SystemExit(f"{enemy['name']}: no walk/prowl/fly clip and frames too short for legacy export")
 
 
 INV_SQRT2 = 1.0 / sqrt(2.0)
@@ -57,12 +74,13 @@ def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list
     frames = enemy["frames"]
     if len(lines) != NVERTS:
         raise SystemExit(f"{enemy['name']}: expected {NVERTS} lines, got {len(lines)}")
-    if len(frames) < WALK_START + WALK_LEN:
-        raise SystemExit(f"{enemy['name']}: frames shorter than walk clip")
+    walk_frames = walk_frame_indices(enemy)
+    if len(walk_frames) < WALK_LEN:
+        raise SystemExit(f"{enemy['name']}: walk clip shorter than {WALK_LEN} frames")
     gx: list[int] = []
     gy: list[int] = []
     gz: list[int] = []
-    for fi in range(WALK_START, WALK_START + WALK_LEN):
+    for fi in walk_frames[:WALK_LEN]:
         fr = frames[fi]
         if len(fr) != NVERTS:
             raise SystemExit(f"{enemy['name']} frame {fi}: bad vert count")

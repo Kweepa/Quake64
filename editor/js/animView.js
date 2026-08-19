@@ -1,4 +1,4 @@
-import { FRAME_NAMES, clampVert } from "./model.js";
+import { clipForFrame, clampVert } from "./model.js";
 import {
   distPointToSegment2d,
   intersectPlane,
@@ -11,6 +11,7 @@ import {
 const AXIS_LEN = 8;
 const AXIS_HIT = 9;
 const ANIM_BOX_CLICK = 4;
+const ANIM_ZOOM_K = 0.008;
 const AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 export class AnimView {
@@ -49,6 +50,15 @@ export class AnimView {
     this.cssW = w;
     this.cssH = h;
     this.draw();
+  }
+
+  #overlay() {
+    return this.opts.getMeshOverlay?.() || null;
+  }
+
+  #binding() {
+    const overlay = this.#overlay();
+    return overlay && overlay.bindJoint >= 0;
   }
 
   #cam() {
@@ -109,13 +119,10 @@ export class AnimView {
     };
   }
 
-  #hitVert(mx, my) {
-    const enemy = this.opts.getEnemy();
-    const frame = this.opts.getFrame();
+  #hitAmong(verts, mx, my, radius = 10) {
     const cam = this.#cam();
-    const verts = enemy.frames[frame];
     let best = -1;
-    let bestD = 10;
+    let bestD = radius;
     verts.forEach((v, i) => {
       const p = projectPoint(v, cam, this.cssW, this.cssH);
       if (!p.ok) return;
@@ -126,6 +133,14 @@ export class AnimView {
       }
     });
     return best;
+  }
+
+  #hitVert(mx, my) {
+    const overlay = this.#overlay();
+    if (overlay && overlay.bindJoint >= 0) return this.#hitAmong(overlay.verts, mx, my, 8);
+    const enemy = this.opts.getEnemy();
+    const frame = this.opts.getFrame();
+    return this.#hitAmong(enemy.frames[frame], mx, my, 10);
   }
 
   #hitAxis(mx, my) {
@@ -162,6 +177,11 @@ export class AnimView {
     if (!this.enabled) return;
     this.canvas.focus();
     const p = this.#eventPos(e);
+    if (e.button === 2 && e.altKey) {
+      this.drag = { kind: "zoom", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
     if (e.button === 2 || e.button === 1) {
       this.drag = { kind: "orbit", last: p };
       this.canvas.setPointerCapture(e.pointerId);
@@ -169,7 +189,8 @@ export class AnimView {
     }
     if (e.button !== 0) return;
 
-    const axis = this.#hitAxis(p.x, p.y);
+    const binding = this.#binding();
+    const axis = binding ? null : this.#hitAxis(p.x, p.y);
     if (axis) {
       const prim = this.#selectionAnchor();
       const enemy = this.opts.getEnemy();
@@ -189,6 +210,13 @@ export class AnimView {
 
     const vi = this.#hitVert(p.x, p.y);
     if (vi >= 0) {
+      if (binding) {
+        this.opts.onSelectMeshVert?.(vi, e.shiftKey);
+        this.drag = { kind: "select" };
+        this.canvas.setPointerCapture(e.pointerId);
+        this.draw();
+        return;
+      }
       const selected = this.opts.getSelectedVerts?.() || [];
       const wasSelected = selected.includes(vi);
       this.opts.onSelectVert?.(vi, e.shiftKey);
@@ -218,7 +246,7 @@ export class AnimView {
     if (!this.enabled) return;
     const p = this.#eventPos(e);
     if (!this.drag) {
-      this.hoverAxis = this.#hitAxis(p.x, p.y);
+      this.hoverAxis = this.#binding() ? null : this.#hitAxis(p.x, p.y);
       this.hover = this.hoverAxis ? -1 : this.#hitVert(p.x, p.y);
       this.draw();
       return;
@@ -229,6 +257,17 @@ export class AnimView {
       this.drag.last = p;
       this.orbit.yaw += dx * 0.01;
       this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch - dy * 0.01));
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "zoom") {
+      const dx = p.x - this.drag.last.x;
+      const dy = p.y - this.drag.last.y;
+      this.drag.last = p;
+      const delta = dx + dy;
+      if (delta) {
+        this.orbit.dist = Math.max(16, Math.min(120, this.orbit.dist * Math.exp(-delta * ANIM_ZOOM_K)));
+      }
       this.draw();
       return;
     }
@@ -313,11 +352,14 @@ export class AnimView {
   }
 
   #vertsInBox(rect) {
-    const enemy = this.opts.getEnemy();
-    const frame = this.opts.getFrame();
+    const overlay = this.#overlay();
+    const verts =
+      overlay && overlay.bindJoint >= 0
+        ? overlay.verts
+        : this.opts.getEnemy().frames[this.opts.getFrame()];
     const cam = this.#cam();
     const hits = [];
-    enemy.frames[frame].forEach((v, i) => {
+    verts.forEach((v, i) => {
       const p = projectPoint(v, cam, this.cssW, this.cssH);
       if (!p.ok) return;
       if (p.sx >= rect.x0 && p.sx <= rect.x1 && p.sy >= rect.y0 && p.sy <= rect.y1) hits.push(i);
@@ -328,16 +370,19 @@ export class AnimView {
   #finishBox() {
     const rect = this.#boxRect();
     const additive = this.drag.additive;
+    const binding = this.#binding();
     if (rect.w < ANIM_BOX_CLICK && rect.h < ANIM_BOX_CLICK) {
-      if (!additive) this.opts.onSelectVerts?.([]);
+      if (!binding && !additive) this.opts.onSelectVerts?.([]);
       return;
     }
-    this.opts.onSelectVerts?.(this.#vertsInBox(rect), additive);
+    const hits = this.#vertsInBox(rect);
+    if (binding) this.opts.onSelectMeshVerts?.(hits, additive);
+    else this.opts.onSelectVerts?.(hits, additive);
   }
 
   #onUp(e) {
     if (!this.enabled) return;
-    const orbitEnded = this.drag?.kind === "orbit";
+    const orbitEnded = this.drag?.kind === "orbit" || this.drag?.kind === "zoom";
     if (this.drag?.kind === "box") this.#finishBox();
     if (this.drag?.kind === "axis" || this.drag?.undoStarted) this.opts.endUndo?.();
     this.drag = null;
@@ -405,13 +450,20 @@ export class AnimView {
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
     const selected = this.opts.getSelectedVerts?.() || [];
-    const verts = enemy.frames[frame];
+    const verts = enemy.frames[frame] || enemy.frames[0];
+    const overlay = this.#overlay();
+    const binding = overlay && overlay.bindJoint >= 0;
     let shown = selected;
+    let meshShown = overlay ? [...(overlay.jointVerts[overlay.bindJoint] || [])] : [];
     if (this.drag?.kind === "box") {
       const r = this.#boxRect();
       if (r.w >= ANIM_BOX_CLICK || r.h >= ANIM_BOX_CLICK) {
         const hits = this.#vertsInBox(r);
-        shown = this.drag.additive ? [...new Set([...selected, ...hits])] : hits;
+        if (binding) {
+          meshShown = this.drag.additive ? [...new Set([...meshShown, ...hits])] : hits;
+        } else {
+          shown = this.drag.additive ? [...new Set([...selected, ...hits])] : hits;
+        }
       }
     }
 
@@ -425,6 +477,31 @@ export class AnimView {
     this.#strokeSeg(ctx, cam, w, h, { x: 0, y: 0, z: -20 }, { x: 0, y: 0, z: 20 }, "#66a");
     this.#drawForwardArrow(ctx, cam, w, h);
 
+    if (overlay) {
+      ctx.lineWidth = 1;
+      for (const [i, j] of overlay.edges) {
+        const a = overlay.verts[i];
+        const b = overlay.verts[j];
+        if (a && b) this.#strokeSeg(ctx, cam, w, h, a, b, "#3a4458", 1);
+      }
+      if (overlay.ghost) {
+        for (const [i, j] of overlay.lines || enemy.lines) {
+          const a = overlay.ghost[i];
+          const b = overlay.ghost[j];
+          if (a && b) this.#strokeSeg(ctx, cam, w, h, a, b, "#5ec8c8", 1.5);
+        }
+        overlay.ghost.forEach((v) => {
+          if (!v) return;
+          const p = projectPoint(v, cam, w, h);
+          if (!p.ok) return;
+          ctx.fillStyle = "#5ec8c8";
+          ctx.beginPath();
+          ctx.arc(p.sx, p.sy, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+    }
+
     ctx.lineWidth = 1.5;
     for (const [i, j] of enemy.lines) {
       this.#strokeSeg(ctx, cam, w, h, verts[i], verts[j], "#c8ccd4", 1.5);
@@ -433,8 +510,8 @@ export class AnimView {
     verts.forEach((v, i) => {
       const p = projectPoint(v, cam, w, h);
       if (!p.ok) return;
-      const sel = shown.includes(i);
-      const hover = i === this.hover;
+      const sel = !binding && shown.includes(i);
+      const hover = !binding && i === this.hover;
       ctx.fillStyle = sel ? "#d4a017" : hover ? "#fff" : "#8b91a0";
       const r = sel ? 5 : 4;
       ctx.beginPath();
@@ -442,8 +519,28 @@ export class AnimView {
       ctx.fill();
     });
 
+    if (binding) {
+      const assignedOther = new Set();
+      overlay.jointVerts.forEach((list, ji) => {
+        if (ji === overlay.bindJoint) return;
+        for (const i of list) assignedOther.add(i);
+      });
+      overlay.verts.forEach((v, i) => {
+        const p = projectPoint(v, cam, w, h);
+        if (!p.ok) return;
+        const sel = meshShown.includes(i);
+        const hover = i === this.hover;
+        const other = assignedOther.has(i);
+        ctx.fillStyle = sel ? "#d4a017" : hover ? "#fff" : other ? "#5ec8c8" : "#5a6270";
+        const r = sel || hover ? 3.5 : 2.5;
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
     const prim = this.#selectionAnchor();
-    if (prim) this.#drawGizmo(ctx, cam, w, h, prim.v);
+    if (prim && !binding) this.#drawGizmo(ctx, cam, w, h, prim.v);
 
     if (this.drag?.kind === "box") {
       const r = this.#boxRect();
@@ -458,10 +555,16 @@ export class AnimView {
 
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";
-    ctx.fillText(
-      `${enemy.name} · ${FRAME_NAMES[frame]} · 13 verts · 24 frames`,
-      8,
-      16
-    );
+    const clip = clipForFrame(enemy.clips, frame);
+    let label;
+    if (enemy.clips?.length && clip) {
+      label = `${clip.name} ${frame - clip.start}`;
+    } else if (overlay?.frameName) {
+      label = overlay.frameName;
+    } else {
+      label = "rest";
+    }
+    const frameTotal = enemy.clips?.length ? enemy.frames.length : overlay ? "MDL" : enemy.frames.length;
+    ctx.fillText(`${enemy.name} · ${label} · 13 verts · ${frameTotal} frames`, 8, 16);
   }
 }

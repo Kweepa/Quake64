@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "editor" / "quake64.json"
 OUT = ROOT / "src" / "grunt_data.asm"
 
-WALK_START = 4
 WALK_LEN = 4
+LEGACY_WALK_START = 4
 NVERTS = 13
 
 
@@ -30,6 +30,21 @@ def bchunk(data: list[int], w: int = 13) -> str:
     return "\n".join(lines) + "\n"
 
 
+def walk_frame_indices(enemy: dict) -> list[int]:
+    clips = enemy.get("clips") or []
+    if clips:
+        for name in ("prowl", "walk", "fly"):
+            for c in clips:
+                if c.get("name") == name:
+                    start = int(c["start"])
+                    ln = min(WALK_LEN, int(c["len"]))
+                    return list(range(start, start + ln))
+    frames = enemy.get("frames") or []
+    if len(frames) >= LEGACY_WALK_START + WALK_LEN:
+        return list(range(LEGACY_WALK_START, LEGACY_WALK_START + WALK_LEN))
+    raise SystemExit("Grunt: no prowl/walk/fly clip and frames too short for legacy export")
+
+
 def main() -> None:
     doc = json.loads(DOC.read_text(encoding="utf-8"))
     grunt = next(e for e in doc["enemies"] if e["name"] == "Grunt")
@@ -37,13 +52,14 @@ def main() -> None:
     frames = grunt["frames"]
     if len(lines) != NVERTS:
         raise SystemExit(f"expected {NVERTS} lines, got {len(lines)}")
-    if len(frames) < WALK_START + WALK_LEN:
-        raise SystemExit("Grunt frames shorter than walk clip")
+    walk_frames = walk_frame_indices(grunt)
+    if len(walk_frames) < WALK_LEN:
+        raise SystemExit("Grunt walk clip shorter than 4 frames")
 
     gx: list[int] = []
     gy: list[int] = []
     gz: list[int] = []
-    for fi in range(WALK_START, WALK_START + WALK_LEN):
+    for fi in walk_frames[:WALK_LEN]:
         fr = frames[fi]
         if len(fr) != NVERTS:
             raise SystemExit(f"frame {fi}: expected {NVERTS} verts, got {len(fr)}")

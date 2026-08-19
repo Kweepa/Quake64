@@ -10,16 +10,31 @@ export const MAX_VERTS = 13;
 export const MAX_LINES = 13;
 export const WEAPON_VERT = 12;
 export const WRIST_R = 7;
-/** L/R hip, elbow, wrist, knee, ankle. Neck 2 and head 3 stay. */
-export const SKELETON_MIRROR_PAIRS = [
-  [0, 1],
-  [4, 6],
-  [5, 7],
-  [8, 10],
-  [9, 11],
+export const JOINT_NAMES = [
+  "Hip L",
+  "Hip R",
+  "Neck",
+  "Head",
+  "Elbow L",
+  "Wrist L",
+  "Elbow R",
+  "Wrist R",
+  "Knee L",
+  "Ankle L",
+  "Knee R",
+  "Ankle R",
+  "Weapon",
 ];
 export const VERT_MIN = -64;
 export const VERT_MAX = 63;
+export const DEFAULT_MDL_SCALE = 0.7;
+const OLD_DEFAULT_MDL_SCALE = 0.57;
+
+export function clampMdlScale(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return DEFAULT_MDL_SCALE;
+  return Math.max(0.1, Math.min(2, v));
+}
 
 /** Default room viewport colours (C64 indices). */
 export const ROOM_SKY_DEFAULT = 9;
@@ -202,7 +217,7 @@ export function usesLinkTag(kind) {
   );
 }
 
-/** Layout placements draw Idle 0 at this fraction of anim units (Grunt ~4 world high). */
+/** Layout placements draw the first stick frame at this fraction of anim units (Grunt ~4 world high). */
 export const LAYOUT_ENEMY_SCALE = 1 / 8;
 
 /** Yaw octants, 0 = +Z (N / game forward). */
@@ -241,46 +256,25 @@ export function clampElevType(s) {
 
 export const LEVEL_NAMES = ["E1M1", "E1M2", "E1M3", "E1M4", "E1M5", "E1M6", "E1M7", "E1M8"];
 
-export const FRAME_NAMES = [
-  "Idle 0",
-  "Idle 1",
-  "Alert 0",
-  "Alert 1",
-  "Walk 0",
-  "Walk 1",
-  "Walk 2",
-  "Walk 3",
-  "AtkA 0",
-  "AtkA 1",
-  "AtkA 2",
-  "AtkA 3",
-  "AtkB 0",
-  "AtkB 1",
-  "AtkB 2",
-  "AtkB 3",
-  "AtkC 0",
-  "AtkC 1",
-  "AtkC 2",
-  "AtkC 3",
-  "Flinch",
-  "Death 0",
-  "Death 1",
-  "Death 2",
-];
+export function clipForFrame(clips, index) {
+  const list = Array.isArray(clips) ? clips : [];
+  const i = index | 0;
+  return list.find((c) => i >= c.start && i < c.start + c.len) || list[0] || null;
+}
 
-export const ANIM_CLIPS = [
-  { name: "Idle", start: 0, len: 2 },
-  { name: "Alert", start: 2, len: 2 },
-  { name: "Walk", start: 4, len: 4 },
-  { name: "AtkA", start: 8, len: 4 },
-  { name: "AtkB", start: 12, len: 4 },
-  { name: "AtkC", start: 16, len: 4 },
-  { name: "Flinch", start: 20, len: 1 },
-  { name: "Death", start: 21, len: 3 },
-];
-
-export function clipForFrame(index) {
-  return ANIM_CLIPS.find((c) => index >= c.start && index < c.start + c.len) || ANIM_CLIPS[0];
+export function normalizeClips(raw, frameCount) {
+  const n = Math.max(0, frameCount | 0);
+  if (!n || !Array.isArray(raw) || !raw.length) return [];
+  const out = [];
+  for (const c of raw) {
+    const name = String(c?.name || "clip");
+    if (name === "legacy") continue;
+    const start = Math.max(0, c.start | 0);
+    const len = Math.max(1, c.len | 0);
+    if (start >= n) continue;
+    out.push({ name, start, len: Math.min(len, n - start) });
+  }
+  return out;
 }
 
 /** Shared 13-vert skeleton: L/R hip, neck, head, L/R elbow, L/R wrist, L/R knee, L/R ankle, weapon tip on right wrist. */
@@ -374,28 +368,6 @@ export function clampSize(origin, size) {
 export function clampVert(n) {
   const v = n | 0;
   return Math.max(VERT_MIN, Math.min(VERT_MAX, v));
-}
-
-/** Mirror one pose across X: swap L/R limbs, keep weapon offset from right wrist. */
-export function flipFrameX(verts) {
-  const snap = verts.map((v) => ({ x: v.x, y: v.y, z: v.z }));
-  const srcOf = verts.map((_, i) => i);
-  for (const [a, b] of SKELETON_MIRROR_PAIRS) {
-    srcOf[a] = b;
-    srcOf[b] = a;
-  }
-  for (let i = 0; i < WEAPON_VERT; i++) {
-    const src = snap[srcOf[i]];
-    verts[i].x = clampVert(-src.x);
-    verts[i].y = clampVert(src.y);
-    verts[i].z = clampVert(src.z);
-  }
-  const relx = snap[WEAPON_VERT].x - snap[WRIST_R].x;
-  const rely = snap[WEAPON_VERT].y - snap[WRIST_R].y;
-  const relz = snap[WEAPON_VERT].z - snap[WRIST_R].z;
-  verts[WEAPON_VERT].x = clampVert(verts[WRIST_R].x + relx);
-  verts[WEAPON_VERT].y = clampVert(verts[WRIST_R].y + rely);
-  verts[WEAPON_VERT].z = clampVert(verts[WRIST_R].z + relz);
 }
 
 export function aabbEnd(box) {
@@ -601,7 +573,7 @@ export function figureTemplateName(obj) {
   return obj.kind === "spawn" ? "Grunt" : obj.enemy || "Grunt";
 }
 
-/** World-space Idle-0 stick verts for a placed enemy (1/8 scale, feet on floor center). */
+/** World-space first-frame stick verts for a placed enemy (1/8 scale, feet on floor center). */
 export function enemyPlacementWorldVerts(obj, template) {
   const frame = template?.frames?.[0];
   if (!frame) return [];
@@ -778,62 +750,6 @@ const TEMPLATE_LINES = [
   [7, 12],
 ];
 
-function swing(phase, amp) {
-  const s = [0, amp, 0, -amp][phase & 3];
-  return {
-    4: [0, 0, (s / 2) | 0],
-    5: [0, 0, s],
-    6: [0, 0, (-s / 2) | 0],
-    7: [0, 0, -s],
-    12: [0, 0, -s],
-    8: [0, 0, (-s / 2) | 0],
-    9: [0, 0, -s],
-    10: [0, 0, (s / 2) | 0],
-    11: [0, 0, s],
-  };
-}
-
-const FRAME_OFFSETS = [
-  { 2: [0, 0, 0], 3: [0, 0, 0] },
-  { 2: [0, 1, 0], 3: [0, 1, 0] },
-  { 3: [0, 2, 1], 4: [-2, 1, 0], 5: [-3, 2, 1], 6: [2, 1, 0], 7: [3, 2, 1] },
-  { 3: [1, 3, 2], 4: [-3, 2, 1], 5: [-4, 3, 2], 6: [3, 2, 1], 7: [4, 3, 2] },
-  swing(0, 3),
-  swing(1, 3),
-  swing(2, 3),
-  swing(3, 3),
-  { 4: [0, 1, 2], 5: [0, 2, 4], 3: [1, 0, 1] },
-  { 4: [0, 2, 3], 5: [1, 3, 6], 3: [2, 0, 2] },
-  { 4: [0, 1, 4], 5: [2, 2, 7], 3: [1, 0, 3] },
-  { 4: [0, 0, 1], 5: [0, 0, 2], 3: [0, 0, 0] },
-  { 6: [0, 1, 2], 7: [0, 2, 4], 5: [0, 1, -1] },
-  { 6: [0, 2, 3], 7: [1, 4, 6], 5: [0, 2, -2] },
-  { 6: [0, 1, 5], 7: [2, 3, 8], 5: [0, 1, -1] },
-  { 6: [0, 0, 1], 7: [0, 1, 2] },
-  { 4: [-1, 2, 0], 5: [-2, 4, 0], 6: [1, 2, 0], 7: [2, 4, 0], 2: [0, -1, 0] },
-  { 4: [-2, 3, 1], 5: [-3, 6, 2], 6: [2, 3, 1], 7: [3, 6, 2], 2: [0, -2, 0] },
-  { 4: [-1, 1, 2], 5: [-2, 2, 4], 6: [1, 1, 2], 7: [2, 2, 4] },
-  { 4: [0, 0, 0], 5: [0, 0, 0], 6: [0, 0, 0], 7: [0, 0, 0] },
-  { 2: [2, -2, -1], 3: [3, -2, 0], 4: [1, -1, -1], 6: [-1, -1, -1] },
-  { 2: [0, -3, 2], 3: [0, -4, 3], 5: [0, -2, 0], 7: [0, -2, 0] },
-  { 0: [2, -4, 2], 1: [3, -5, 3], 2: [3, -4, 4], 3: [5, -3, 5], 9: [2, -5, 1], 11: [3, -5, 2] },
-  {
-    0: [5, -6, 3],
-    1: [7, -6, 4],
-    2: [6, -5, 5],
-    3: [8, -4, 6],
-    8: [5, -6, 2],
-    9: [5, -6, 1],
-    10: [8, -6, 3],
-    11: [8, -6, 2],
-  },
-];
-
-function add3(a, b) {
-  const o = b || [0, 0, 0];
-  return [a[0] + o[0], a[1] + o[1], a[2] + o[2]];
-}
-
 function skeletonBase(type) {
   const [sx, sy, sz] = type.scale;
   return BASE_SKELETON.map((p, i) => {
@@ -850,15 +766,58 @@ function enemyTypeByName(name) {
   return ENEMY_TYPES.find((t) => t.name === name) || ENEMY_TYPES[0];
 }
 
-export function dummyFramesFor(name) {
+export function restSkeletonHeight(name) {
   const base = skeletonBase(enemyTypeByName(name));
-  return FRAME_OFFSETS.map((off) =>
-    base.map((p, i) => {
-      const o = off[i] || (i === 12 ? off[7] : null);
-      const v = add3(p, o);
-      return { x: clampVert(v[0]), y: clampVert(v[1]), z: clampVert(v[2]) };
-    })
-  );
+  let maxY = 1;
+  for (const p of base) {
+    if (p[1] > maxY) maxY = p[1];
+  }
+  return maxY;
+}
+
+export function emptyMdlRig() {
+  return { jointVerts: Array.from({ length: 13 }, () => []) };
+}
+
+export function normalizeMdlRig(raw) {
+  const rig = emptyMdlRig();
+  const src = raw?.jointVerts;
+  if (!Array.isArray(src)) return rig;
+  for (let i = 0; i < 13; i++) {
+    const list = src[i];
+    if (!Array.isArray(list)) continue;
+    const seen = new Set();
+    for (const v of list) {
+      const n = v | 0;
+      if (n < 0 || seen.has(n)) continue;
+      seen.add(n);
+      rig.jointVerts[i].push(n);
+    }
+  }
+  return rig;
+}
+
+export function dummyFrameFor(name) {
+  const base = skeletonBase(enemyTypeByName(name));
+  return base.map((p) => ({
+    x: clampVert(p[0]),
+    y: clampVert(p[1]),
+    z: clampVert(p[2]),
+  }));
+}
+
+function parseEnemyFrames(rawFrames, name) {
+  const rest = dummyFrameFor(name);
+  const srcFrames = Array.isArray(rawFrames) ? rawFrames : [];
+  if (!srcFrames.length) return [rest.map((v) => ({ x: v.x, y: v.y, z: v.z }))];
+  return srcFrames.map((src) => {
+    const verts = [];
+    for (let i = 0; i < 13; i++) {
+      const v = src?.[i] || rest[i];
+      verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
+    }
+    return verts;
+  });
 }
 
 export function createEnemy(name = "Grunt") {
@@ -867,7 +826,9 @@ export function createEnemy(name = "Grunt") {
     name,
     verts: 13,
     lines: TEMPLATE_LINES.map((p) => [p[0], p[1]]),
-    frames: dummyFramesFor(name),
+    frames: [dummyFrameFor(name)],
+    clips: [],
+    mdlRig: emptyMdlRig(),
   };
 }
 
@@ -949,6 +910,7 @@ export function defaultEditorState() {
     selectedVerts: [],
     layoutCamera: { x: 28, y: 10, z: -6, yaw: 0.35, pitch: -0.2, speed: 28 },
     animOrbit: { yaw: 0.5, pitch: 0.15, dist: 48 },
+    mdlScale: DEFAULT_MDL_SCALE,
   };
 }
 
@@ -964,7 +926,7 @@ export function parseEditorState(raw) {
   d.localDraw = !!raw.localDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
-  d.frameIndex = Math.max(0, Math.min(FRAME_NAMES.length - 1, num(raw.frameIndex, 0) | 0));
+  d.frameIndex = Math.max(0, num(raw.frameIndex, 0) | 0);
   if (Array.isArray(raw.selectedVerts)) {
     d.selectedVerts = raw.selectedVerts.map((i) => i | 0).filter((i) => i >= 0 && i < 13);
   }
@@ -983,6 +945,13 @@ export function parseEditorState(raw) {
     pitch: num(orb.pitch, d.animOrbit.pitch),
     dist: Math.max(16, Math.min(120, num(orb.dist, d.animOrbit.dist))),
   };
+  const scaleIn = raw.mdlScale;
+  const scaleNum = Number(scaleIn);
+  if (scaleIn == null || !Number.isFinite(scaleNum) || Math.abs(scaleNum - OLD_DEFAULT_MDL_SCALE) < 1e-6) {
+    d.mdlScale = DEFAULT_MDL_SCALE;
+  } else {
+    d.mdlScale = clampMdlScale(scaleNum);
+  }
   return d;
 }
 
@@ -991,7 +960,7 @@ export function createDefaultDocument() {
   for (const name of LEVEL_NAMES) maps[name] = emptyMap();
   maps.E1M1 = { name: "Slipgate Complex", objects: starterObjects() };
   return {
-    version: 4,
+    version: 5,
     activeLevel: "E1M1",
     maps,
     enemies: createAllCreatures(),
@@ -1033,17 +1002,9 @@ export function normalizeDocument(raw) {
       enemy.name = e.name || enemy.name;
       enemy.verts = 13;
       enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
-      const srcFrames = Array.isArray(e.frames) ? e.frames : [];
-      const dummy = dummyFramesFor(enemy.name);
-      enemy.frames = FRAME_NAMES.map((_, fi) => {
-        const src = srcFrames[fi] || srcFrames[0] || dummy[fi];
-        const verts = [];
-        for (let i = 0; i < 13; i++) {
-          const v = src[i] || dummy[fi][i];
-          verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
-        }
-        return verts;
-      });
+      enemy.frames = parseEnemyFrames(e.frames, enemy.name);
+      enemy.clips = normalizeClips(e.clips, enemy.frames.length);
+      enemy.mdlRig = normalizeMdlRig(e.mdlRig);
       doc.enemies.push(enemy);
     }
     const have = new Set(doc.enemies.map((e) => e.name));
@@ -1052,7 +1013,7 @@ export function normalizeDocument(raw) {
     }
   }
   if (!doc.enemies.length) doc.enemies = createAllCreatures();
-  doc.version = 4;
+  doc.version = 5;
   doc.editor = parseEditorState(raw.editor);
   return doc;
 }

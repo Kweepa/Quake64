@@ -34,6 +34,7 @@ import {
 const HANDLE = 7;
 const LINE_HIT = 8;
 const LAYOUT_BOX_CLICK = 4;
+const ZOOM_K = 0.008;
 
 export class LayoutView {
   /**
@@ -55,6 +56,7 @@ export class LayoutView {
     this.keys = new Set();
     this.look = false;
     this.orbit = null;
+    this.zoom = null;
     this.lastT = 0;
     this.hoverId = null;
     this.drag = null;
@@ -208,6 +210,11 @@ export class LayoutView {
       return;
     }
     if (e.button === 2) {
+      if (e.altKey) {
+        this.zoom = this.#beginOrbit(p);
+        this.canvas.setPointerCapture(e.pointerId);
+        return;
+      }
       this.look = true;
       this.lookLast = p;
       this.canvas.setPointerCapture(e.pointerId);
@@ -319,11 +326,34 @@ export class LayoutView {
     cam.z = pz - f2.z * dist;
   }
 
+  #applyZoom(p) {
+    const z = this.zoom;
+    const dx = p.x - z.last.x;
+    const dy = p.y - z.last.y;
+    z.last = p;
+    const delta = dx + dy;
+    if (!delta) return;
+
+    const cam = this.camera;
+    const { forward } = lookVectors(cam.yaw, cam.pitch);
+    const px = cam.x + forward.x * z.dist;
+    const py = cam.y + forward.y * z.dist;
+    const pz = cam.z + forward.z * z.dist;
+    z.dist = Math.max(1, z.dist * Math.exp(-delta * ZOOM_K));
+    cam.x = px - forward.x * z.dist;
+    cam.y = py - forward.y * z.dist;
+    cam.z = pz - forward.z * z.dist;
+  }
+
   #onMove(e) {
     if (!this.enabled) return;
     const p = this.#eventPos(e);
     if (this.orbit) {
       this.#applyOrbit(p);
+      return;
+    }
+    if (this.zoom) {
+      this.#applyZoom(p);
       return;
     }
     if (this.look) {
@@ -350,9 +380,10 @@ export class LayoutView {
 
   #onUp(e) {
     if (!this.enabled) return;
-    const viewEnded = this.look || this.orbit;
+    const viewEnded = this.look || this.orbit || this.zoom;
     if (this.look) this.look = false;
     if (this.orbit) this.orbit = null;
+    if (this.zoom) this.zoom = null;
     if (this.drag?.kind === "box") this.#finishBox();
     else if (this.drag && this.drag.kind !== "select") this.opts.endUndo?.();
     this.drag = null;

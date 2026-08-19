@@ -18,9 +18,13 @@ Rotate error (`smul16_7`) is ~0. Log `persp88` vs an exact divide is ~1 px. Neit
 
 A near-clipped room corner has large view X/Y at `z = ZCLIP` (1.0). Clamping that projection to **±127** (`PERSP_MAX`) before Cohen–Sutherland bends the 2D line. The door BL is in front of the near plane, so it projects correctly and sits **off** the bent wall.
 
-3D-colinear points stay 2D-colinear only if **both** endpoints use the true perspective (`x * FOCAL / z`) with enough range for CS to hit the real screen edge.
+3D-colinear points stay 2D-colinear only if **both** endpoints use the true perspective (`x * FOCAL / z`) with enough range to hit the real screen edge.
 
-**Do now:** 16-bit `(x * FOCAL) / z` via `scale_nd` + `lerp16` (`.p16`). No ±127 clamp. CS uses the same 16-bit lerp.
+**8-bit screen CS is unsafe.** Clipping after a ±127 (or even 8-bit unclamped) project still bends near full-width walls: a near-plane corner wants hundreds of pixels of `x * FOCAL / z` before the frustum cut. Cohen–Sutherland in that crushed space cannot keep a 1–2 px door-wall join.
+
+**Do now:** unclamped 16-bit project (`x * FOCAL / z` via `.invz` + `.cam_to_proj`, no ±127 clamp) and 16-bit screen CS, then `.to_sx` / `.to_sy` for draw. Near clip stays 8.8 (`scale_nd` + `lerp16`, `ZCLIP`). Far enemies still `persp88`.
+
+View-space FOV lerp then 8-bit `persp88` is geometrically fine (1–2 px join) but CLIP was ~137 vs ~60 for 16-bit screen CS — a net frame-time loss. Do not revive 8-bit screen CS to “save” project.
 
 ### Near-plane lerp — what not to do
 

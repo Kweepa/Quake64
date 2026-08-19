@@ -296,7 +296,7 @@ ent_rotate
 .face_lo	!byte <.face_n, <.face_e, <.face_s, <.face_w
 .face_hi	!byte >.face_n, >.face_e, >.face_s, >.face_w
 
-; 8.8 view ??? persp if z ??? 1.0
+; 8.8 view → unclamped 16-bit screen, then CS. persp88 is far enemies only.
 mesh_project
 cube_project
 	lda #0
@@ -400,38 +400,6 @@ cube_project
 	sta PROJ_YH,x
 	rts
 
-; 8.8 ylo:yhi * FOCAL / z_eye:z_eye_h → nlo:nhi signed 16-bit (no ±127 clamp)
-.p16
-	lda ylo
-	sta nlo
-	lda yhi
-	sta nhi
-	lda z_eye
-	sta dlo
-	lda z_eye_h
-	sta dhi
-	jsr scale_nd
-	lda nlo
-	sta ylo
-	lda nhi
-	sta yhi
-	lda #FOCAL
-	sta nlo
-	lda dlo
-	ora dhi
-	bne +
-	lda #0
-	sta nlo
-	sta nhi
-	rts
-+
-	jsr lerp16
-	lda rot0
-	sta nlo
-	lda rot1
-	sta nhi
-	rts
-
 ; inv = (FOCAL<<16) / (z>>k), k = unsigned 8-bit fit of z_eye (always ≥128 here).
 .invz
 	lda z_eye
@@ -494,7 +462,7 @@ cube_project
 .cdone
 	rts
 
-; Near-plane interpolate, then Cohen-Sutherland to 192x128
+; Near-plane interpolate, then 16-bit screen Cohen-Sutherland
 mesh_clip
 cube_clip
 	lda #0
@@ -590,6 +558,7 @@ cube_clip
 	ldy oy1h
 	jsr .to_sy
 	sta CLIP_Y1,x
+	ldx vindex
 	lda #1
 	sta EDGE_VIS,x
 	jmp .next
@@ -1270,7 +1239,7 @@ cube_clip
 	lda oc_tmp
 	rts
 
-; A=ox lo Y=ox hi ??? screen x 0..191
+; A=ox lo Y=ox hi → screen x 0..191
 .to_sx
 	clc
 	adc #SCREEN_CX
@@ -1570,34 +1539,32 @@ ent_far_project
 	sta ylo
 	lda CAM_XH+11
 	sta yhi
-	jsr .p16
-	lda nlo
+	jsr persp88
 	sta ox0l
-	lda nhi
-	sta ox0h
+	ldy #0
+	ora #0
+	bpl +
+	ldy #$ff
++
+	sty ox0h
 	lda CAM_Y+11
 	sta ylo
 	lda CAM_YH+11
 	sta yhi
-	jsr .p16
-	lda nlo
+	jsr persp88
 	sta oy0l
-	lda nhi
-	sta oy0h
+	ldy #0
+	ora #0
+	bpl +
+	ldy #$ff
++
+	sty oy0h
 	lda #0
 	sta ylo
 	lda #1
 	sta yhi
-	jsr .p16
-	lda nhi
-	beq .far_sc
-	lda #127
+	jsr persp88
 	sta far_scale
-	jmp .far_pv0
-.far_sc
-	lda nlo
-	sta far_scale
-.far_pv0
 	lda #0
 	sta vindex
 .far_pv

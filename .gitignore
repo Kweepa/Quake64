@@ -15,6 +15,10 @@ __pycache__/
 shareware/
 *.pak
 
+# Reference materials
+ref/
+tmp/
+
 # Editor / OS
 .DS_Store
 Thumbs.db

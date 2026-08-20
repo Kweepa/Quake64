@@ -118,6 +118,7 @@ init_weapon
 	sta splat_skip
 	lda #$ff
 	sta emuz_pending
+	sta bite_splat_i
 	lda #0
 	sta fire_rpt_l
 	sta fire_rpt_h
@@ -166,6 +167,8 @@ init_weapon
 	lda #PLAYER_HP_START
 	sta player_hp
 
+	lda #COL_WPN
+	sta col_wpn
 	lda #$ff
 	sta cur_weapon
 	ldx #WPN_SHOT
@@ -216,7 +219,7 @@ setup_weapon
 .su_dx
 	lda wpn_flashdy,x
 	sta wpn_flash_dy
-	lda #COL_WPN
+	lda col_wpn
 	sta $d027
 	sta $d028
 	sta $d029

@@ -72,6 +72,36 @@ DOOM_KEEP = [
     ("dpsgtdth", "SGTDTH", 50),
 ]
 
+# SID channel: 0 = player V1 pulse, 1 = enemy V2 pulse, 2 = world V3 noise
+VOICE_WORLD = frozenset({"OPENDOOR", "CLOSEDOOR", "STNMOV", "PUSHWALL"})
+VOICE_ENEMY = frozenset(
+    {
+        "DOGDEATH",
+        "HALT",
+        "DEATHSCREAM1",
+        "DEATHSCREAM2",
+        "DEATHSCREAM3",
+        "SHOOT",
+        "DOGBARK",
+        "SCHUTZAD",
+        "NAZIFIRE",
+        "SSFIRE",
+        "CLAW",
+        "GURGLE",
+        "DMPAIN",
+        "POPAIN",
+        "SGTDTH",
+    }
+)
+
+
+def sound_voice(name: str) -> int:
+    if name in VOICE_WORLD:
+        return 2
+    if name in VOICE_ENEMY:
+        return 1
+    return 0
+
 
 def emit_bytes(arr: list[int], per_line: int = 16) -> str:
     lines = []
@@ -162,6 +192,7 @@ def main() -> None:
     blocks: list[str] = []
     labels: list[str] = []
     priorities: list[int] = []
+    voices: list[int] = []
     aliases: list[str] = []
     total = 0
     local_i = 0
@@ -186,6 +217,7 @@ def main() -> None:
         blocks.append(f"{emit_label}\n{emit_bytes(body)}")
         labels.append(emit_label)
         priorities.append(wolf_pri[src_i])
+        voices.append(sound_voice(emit_name))
         local_i += 1
 
     for src_label, name, pri in DOOM_KEEP:
@@ -201,6 +233,7 @@ def main() -> None:
         blocks.append(f"{emit_label}\n{emit_bytes(body)}")
         labels.append(emit_label)
         priorities.append(pri)
+        voices.append(sound_voice(name))
         local_i += 1
 
     header = (
@@ -222,6 +255,10 @@ def main() -> None:
         f"; unique sound payload {total} bytes\n"
         "sound_priorities\n"
         + emit_bytes(priorities)
+        + "\n\n"
+        "; 0 = player V1 pulse, 1 = enemy V2 pulse, 2 = world V3 noise\n"
+        "sound_voices\n"
+        + emit_bytes(voices)
         + "\n\n"
         "sound_table\n"
         + "\n".join(f"\t!word {lab}" for lab in labels)

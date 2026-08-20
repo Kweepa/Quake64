@@ -1,4 +1,4 @@
-; Timed movers — doors + elevators (SquareDoom process.asm adapted)
+; Timed movers — doors (SquareDoom process.asm adapted); elevators in elevator.asm
 !zone process
 
 proc_init
@@ -13,20 +13,12 @@ proc_init
 	lda #0
 .pd
 	cpx #MAP_NDOORS
-	beq .pe0
+	beq .psw0
 	sta door_open,x
 	inx
 	bne .pd
-.pe0
-	ldx #0
-.pe
-	cpx #MAP_NELEVS
-	beq .psw0
-	lda elev_y0,x
-	sta elev_y,x
-	inx
-	bne .pe
 .psw0
+	jsr elev_init
 	lda #0
 	sta in_use
 	sta key_use
@@ -157,98 +149,6 @@ door_activate
 	rts
 
 ; ------------------------------------------------------------------
-; elev_activate — X = elev SoA index; C=0 success
-; toggle: one-shot to the other stop; else lower→wait→raise from home
-; ------------------------------------------------------------------
-elev_activate
-	stx proc_tmp5			; local SoA
-	lda elev_id,x
-	sta proc_tmp1			; world id for busy / PROC_A
-	jsr proc_target_busy
-	bcs .ea_fail
-	ldx proc_tmp5
-	lda elev_type,x
-	cmp #ELEV_TYPE_TOGGLE
-	beq .ea_toggle
-	jsr proc_count_free
-	cmp #2
-	bcc .ea_fail
-	ldx proc_tmp5
-	lda elev_y,x
-	cmp elev_home,x
-	bne .ea_fail			; only start from home (top)
-	lda elev_home,x
-	pha				; return height
-	lda elev_id,x
-	sta proc_tmp1
-	lda #PROC_LOWER_ELEV
-	sta proc_tmp0
-	lda elev_dest,x
-	sta proc_tmp2
-	lda #0
-	sta proc_tmp3
-	sta proc_tmp4
-	jsr proc_alloc
-	bcs .ea_fail_pl
-	lda proc_tmp5
-	sta PROC_L,y
-	lda #PROC_TIMER
-	sta proc_tmp0
-	lda #PROC_RAISE_ELEV
-	sta proc_tmp2
-	lda #<ELEV_WAIT_MS
-	sta proc_tmp3
-	lda #>ELEV_WAIT_MS
-	sta proc_tmp4
-	jsr proc_alloc
-	bcs .ea_fail_pl
-	lda proc_tmp5
-	sta PROC_L,y
-	pla
-	sta PROC_E,y
-	jmp .ea_snd
-.ea_fail_pl
-	pla
-.ea_fail
-	sec
-	ldx proc_tmp5
-	rts
-.ea_toggle
-	jsr proc_count_free
-	cmp #1
-	bcc .ea_fail
-	ldx proc_tmp5
-	lda elev_y,x
-	cmp elev_home,x
-	bne .ea_tog_up
-	lda #PROC_LOWER_ELEV
-	sta proc_tmp0
-	lda elev_dest,x
-	sta proc_tmp2
-	jmp .ea_tog_go
-.ea_tog_up
-	lda #PROC_RAISE_ELEV
-	sta proc_tmp0
-	lda elev_home,x
-	sta proc_tmp2
-.ea_tog_go
-	lda elev_id,x
-	sta proc_tmp1
-	lda #0
-	sta proc_tmp3
-	sta proc_tmp4
-	jsr proc_alloc
-	bcs .ea_fail
-	lda proc_tmp5
-	sta PROC_L,y
-.ea_snd
-	lda #SOUND_STNMOV
-	jsr play_sound
-	clc
-	ldx proc_tmp5
-	rts
-
-; ------------------------------------------------------------------
 ; Accumulate motion: add dt once, then try one 64ms step (C=0 if stepped)
 ; ------------------------------------------------------------------
 proc_add_dt
@@ -281,39 +181,19 @@ proc_try_step
 	sec
 	rts
 
-; Same as proc_try_step but ELEV_STEP_MS (slower elevators)
-proc_try_elev_step
-	lda PROC_D,x
-	bne .ees_hi
-	lda PROC_C,x
-	cmp #ELEV_STEP_MS
-	bcc .ees_no
-.ees_hi
-	sec
-	lda PROC_C,x
-	sbc #ELEV_STEP_MS
-	sta PROC_C,x
-	lda PROC_D,x
-	sbc #0
-	sta PROC_D,x
-	clc
-	rts
-.ees_no
-	sec
-	rts
-
 ; ------------------------------------------------------------------
+; Loop / next / work are global so elevator.asm can jmp proc_update_next
 proc_update
 	ldx #0
-.pu_loop
+proc_update_loop
 	lda PROC_KIND,x
-	bne .pu_work
-.pu_next
+	bne proc_update_work
+proc_update_next
 	inx
 	cpx #PROC_NUM
-	bcc .pu_loop
+	bcc proc_update_loop
 	rts
-.pu_work
+proc_update_work
 	cmp #PROC_TIMER
 	bne .pu_n1
 	jmp .pu_timer
@@ -328,13 +208,13 @@ proc_update
 .pu_n3
 	cmp #PROC_LOWER_ELEV
 	bne .pu_n4
-	jmp .pu_le
+	jmp elev_pu_le
 .pu_n4
 	cmp #PROC_RAISE_ELEV
 	bne .pu_n5
-	jmp .pu_re
+	jmp elev_pu_re
 .pu_n5
-	jmp .pu_next
+	jmp proc_update_next
 
 .pu_timer
 	stx proc_tmp5
@@ -360,17 +240,13 @@ proc_update
 	sta PROC_KIND,x
 	lda proc_tmp0
 	cmp #PROC_RAISE_ELEV
-	beq .pu_tsnd_el
+	beq .pu_talloc
 	cmp #PROC_LOWER_DOOR
 	bne .pu_talloc
 	lda #SOUND_CLOSEDOOR
 	jsr play_sound
 	lda #0
 	sta proc_tmp2			; LOWER_DOOR dest open=0
-	jmp .pu_talloc
-.pu_tsnd_el
-	lda #SOUND_STNMOV
-	jsr play_sound
 .pu_talloc
 	lda #0
 	sta proc_tmp3
@@ -379,25 +255,30 @@ proc_update
 	bcs .pu_talloc_fail
 	pla
 	sta PROC_L,y
+	lda proc_tmp0
+	cmp #PROC_RAISE_ELEV
+	bne .pu_talloc_ok
+	jsr elev_noise_on
+.pu_talloc_ok
 	ldx proc_tmp5
-	jmp .pu_next
+	jmp proc_update_next
 .pu_talloc_fail
 	pla
 	ldx proc_tmp5
-	jmp .pu_next
+	jmp proc_update_next
 .pu_tstill
 	lda PROC_C,x
 	ora PROC_D,x
 	beq .pu_tfire
 	ldx proc_tmp5
-	jmp .pu_next
+	jmp proc_update_next
 
 .pu_rd
 	jsr proc_add_dt
 .pu_rd_lp
 	jsr proc_try_step
 	bcc .pu_rd_go
-	jmp .pu_next
+	jmp proc_update_next
 .pu_rd_go
 	ldy PROC_L,x
 	lda door_open,y
@@ -410,7 +291,7 @@ proc_update
 .pu_rd_done
 	lda #PROC_FREE
 	sta PROC_KIND,x
-	jmp .pu_next
+	jmp proc_update_next
 
 .pu_ld
 	; stall if player in door volume
@@ -431,54 +312,9 @@ proc_update
 	jmp .pu_ld_lp
 .pu_ld_wait
 	ldx proc_tmp5
-	jmp .pu_next
+	jmp proc_update_next
 .pu_ld_done
 	lda #PROC_FREE
 	sta PROC_KIND,x
 	ldx proc_tmp5
-	jmp .pu_next
-
-.pu_le
-	jsr proc_add_dt
-.pu_le_lp
-	jsr proc_try_elev_step
-	bcc .pu_le_go
-	jmp .pu_next
-.pu_le_go
-	ldy PROC_L,x
-	lda elev_y,y
-	cmp PROC_B,x
-	beq .pu_le_done
-	bcc .pu_le_done
-	sec
-	sbc #1
-	sta elev_y,y
-	jmp .pu_le_lp
-.pu_le_done
-	lda PROC_B,x
-	sta elev_y,y
-	lda #PROC_FREE
-	sta PROC_KIND,x
-	jmp .pu_next
-
-.pu_re
-	jsr proc_add_dt
-.pu_re_lp
-	jsr proc_try_elev_step
-	bcc .pu_re_go
-	jmp .pu_next
-.pu_re_go
-	ldy PROC_L,x
-	lda elev_y,y
-	cmp PROC_B,x
-	bcs .pu_re_done
-	clc
-	adc #1
-	sta elev_y,y
-	jmp .pu_re_lp
-.pu_re_done
-	lda PROC_B,x
-	sta elev_y,y
-	lda #PROC_FREE
-	sta PROC_KIND,x
-	jmp .pu_next
+	jmp proc_update_next

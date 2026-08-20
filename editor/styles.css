@@ -462,20 +462,6 @@ button:disabled {
   min-height: 2.2rem;
 }
 
-.level-list .level-sub {
-  display: block;
-  font-size: 0.65rem;
-  color: var(--muted);
-  font-weight: 400;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.level-list button.active .level-sub {
-  color: var(--accent);
-}
-
 .panel .muted,
 .muted {
   color: var(--muted);
@@ -551,7 +537,7 @@ button:disabled {
 .color-field {
   flex-direction: column;
   align-items: stretch;
-  gap: 0.2rem;
+  gap: 0.35rem;
 }
 
 .color-field > span {
@@ -562,6 +548,34 @@ button:disabled {
 .color-field .color-swatches {
   flex: none;
   width: 100%;
+}
+
+.room-color-channels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.room-color-channel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 2rem;
+  padding: 0 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: #fff;
+  text-shadow: 0 0 2px #000, 0 1px 2px #000;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.room-color-channel.active {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-color: #fff;
 }
 
 .color-swatches {

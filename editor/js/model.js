@@ -51,6 +51,7 @@ export function clampMdlScale(n) {
 export const ROOM_BG_DEFAULT = 9;
 export const ROOM_LINE_DEFAULT = 7;
 export const ROOM_FX_DEFAULT = 1;
+export const ROOM_WPN_DEFAULT = 0;
 /** @deprecated Use ROOM_BG_DEFAULT */
 export const ROOM_SKY_DEFAULT = ROOM_BG_DEFAULT;
 /** @deprecated */
@@ -557,6 +558,7 @@ export function clampObject(obj) {
     obj.bgColor = normalizeColor(obj.bgColor ?? obj.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(obj.lineColor, ROOM_LINE_DEFAULT);
     obj.fxColor = normalizeColor(obj.fxColor, ROOM_FX_DEFAULT);
+    obj.weaponColor = normalizeColor(obj.weaponColor, ROOM_WPN_DEFAULT);
     delete obj.skyColor;
     delete obj.floorColor;
   }
@@ -609,6 +611,7 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.bgColor = normalizeColor(extra.bgColor ?? extra.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(extra.lineColor, ROOM_LINE_DEFAULT);
     obj.fxColor = normalizeColor(extra.fxColor, ROOM_FX_DEFAULT);
+    obj.weaponColor = normalizeColor(extra.weaponColor, ROOM_WPN_DEFAULT);
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
@@ -713,7 +716,7 @@ export const MAX_MAP_OBJECTS = 255;
  * Trigger text blob is counted separately. Spawn is always 5 bytes in the map.
  */
 export const C64_OBJECT_BYTES = {
-  room: 8,
+  room: 11,
   doorway: 10,
   crate: 7,
   slope: 9,
@@ -1051,6 +1054,7 @@ function parseObjects(list) {
       skyColor: o.skyColor,
       lineColor: o.lineColor,
       fxColor: o.fxColor,
+      weaponColor: o.weaponColor,
     });
     if (!KINDS[o.kind].fixed) {
       obj.sx = o.sx ?? obj.sx;
@@ -1068,6 +1072,7 @@ function parseObjects(list) {
       if (bg != null) obj.bgColor = normalizeColor(bg, ROOM_BG_DEFAULT);
       if (o.lineColor != null) obj.lineColor = normalizeColor(o.lineColor, ROOM_LINE_DEFAULT);
       if (o.fxColor != null) obj.fxColor = normalizeColor(o.fxColor, ROOM_FX_DEFAULT);
+      if (o.weaponColor != null) obj.weaponColor = normalizeColor(o.weaponColor, ROOM_WPN_DEFAULT);
       delete obj.skyColor;
       delete obj.floorColor;
     }

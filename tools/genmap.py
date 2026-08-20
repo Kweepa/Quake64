@@ -18,6 +18,7 @@ FACE = {"+z": 0, "-z": 1, "+x": 2, "-x": 3}
 ROOM_BG_DEFAULT = 9
 ROOM_LINE_DEFAULT = 7
 ROOM_FX_DEFAULT = 1
+ROOM_WPN_DEFAULT = 0
 ROOM_SKY_DEFAULT = ROOM_BG_DEFAULT  # legacy alias
 
 
@@ -178,6 +179,7 @@ def main() -> None:
     ]
     room_line = [norm_color(r.get("lineColor"), ROOM_LINE_DEFAULT) for r in rooms]
     room_fx = [norm_color(r.get("fxColor"), ROOM_FX_DEFAULT) for r in rooms]
+    room_wpn = [norm_color(r.get("weaponColor"), ROOM_WPN_DEFAULT) for r in rooms]
     room_id = [map_id[id(r)] for r in rooms]
 
     # Doors
@@ -434,6 +436,7 @@ def main() -> None:
         btable("room_bg", room_bg).rstrip(),
         btable("room_line", room_line).rstrip(),
         btable("room_fx", room_fx).rstrip(),
+        btable("room_wpn", room_wpn).rstrip(),
         btable("room_id", room_id).rstrip(),
         "",
         btable("door_x", door_x).rstrip(),

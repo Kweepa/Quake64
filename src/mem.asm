@@ -145,7 +145,9 @@ EN_DYING		= 5
 EN_GONE		= 6
 ENEMY_DETECT	= 12		; Chebyshev XZ wake distance
 ENEMY_STEP_MS	= 200		; approach cell cadence (dt acc + remainder)
-APPROACH_MIN_MS	= 1500		; min time in approach before attack
+APPROACH_MIN_MS	= 1500		; min time in approach before attack (grunt)
+DOG_REPATH_MS	= 1000		; Rottweiler chase repath cadence (~Wolf DOG_REPATH)
+GRUNT_BACKOFF	= 8		; Chebyshev ≤ this → weight dodge away from player
 AXE_DMG		= 4			; Quake axe 20 ÷ 5
 AXE_HIT_R		= 3			; XZ chebyshev radius for axe hit test
 SHOT_DMG_MAX	= 11		; Quake SSG 14×4=56 ÷ 5
@@ -174,6 +176,7 @@ PROC_L		= $CB50			; local door/elev SoA index
 
 door_open	= $CB58			; MAP_NDOORS (≤8)
 elev_y		= $CB60			; MAP_NELEVS (≤4)
+elev_noise_n	= $CB64			; refcount: SID V3 rumble while elevs move
 proc_tmp0	= $CB68
 proc_tmp1	= $CB69
 proc_tmp2	= $CB6A
@@ -232,7 +235,7 @@ WPN_SPLAT	= $C9C0			; sprite 7 impact splat (hit/miss)
 WPN_PTR0	= (WPN_RAM - SCR_A) / 64	; $20
 WPN_PTR_EMUZ	= (WPN_EMUZ - SCR_A) / 64	; $26
 WPN_PTR_SPLAT	= (WPN_SPLAT - SCR_A) / 64	; $27
-COL_WPN		= 0 			; 
+COL_WPN		= 0 			; default weapon colour (room_wpn / col_wpn)
 COL_FLASH_Y	= 1			    ; yellow
 COL_FLASH_R	= 2			    ; red
 COL_SPLAT_HIT	= 2			; red (blood) (DO NOT CHANGE BACK TO PINK!)
@@ -365,8 +368,8 @@ drop_z		= $CD1E
 drop_room	= $CD2E
 drop_type	= $CD3E			; BP_* when active
 en_hp		= $CD4E			; ENEMY_MAX
-en_timer	= $CD5E			; ENEMY_MAX: approach min ms lo
-en_timer_h	= $CD6E			; ENEMY_MAX: approach min ms hi
+en_timer	= $CD5E			; ENEMY_MAX: approach min / dog repath ms lo
+en_timer_h	= $CD6E			; ENEMY_MAX: approach min / dog repath ms hi
 en_step		= $CD7E			; ENEMY_MAX: walk acc lo
 en_step_h	= $CD8E			; ENEMY_MAX: walk acc hi
 en_dir		= $CD9E			; ENEMY_MAX: 0..7 dodge facing
@@ -389,3 +392,6 @@ splat_col	= $CDC1			; COL_SPLAT_HIT or col_line (miss)
 splat_skip	= $CDC2			; 1 = skip next tick (spawn frame)
 shot_hit_i	= $CDC3			; closest SSG hit enemy, $ff = miss
 shot_hit_z	= $CDC4			; CAM_ZH of that hit
+dog_dbg_slot	= $CDC5			; DOG_AI_DEBUG: last dodge try index, $ff=fail
+dog_dbg_dir	= $CDC6			; DOG_AI_DEBUG: last chosen en_dir 0..7
+bite_splat_i	= $CDC7			; dog idx pending blood splat, $ff = none

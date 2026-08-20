@@ -470,20 +470,6 @@ button:disabled {
   min-height: 2.2rem;
 }
 
-.level-list .level-sub {
-  display: block;
-  font-size: 0.65rem;
-  color: var(--muted);
-  font-weight: 400;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.level-list button.active .level-sub {
-  color: var(--accent);
-}
-
 .panel .muted,
 .muted {
   color: var(--muted);
@@ -559,7 +545,7 @@ button:disabled {
 .color-field {
   flex-direction: column;
   align-items: stretch;
-  gap: 0.2rem;
+  gap: 0.35rem;
 }
 
 .color-field > span {
@@ -570,6 +556,34 @@ button:disabled {
 .color-field .color-swatches {
   flex: none;
   width: 100%;
+}
+
+.room-color-channels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.room-color-channel {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 2rem;
+  padding: 0 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: #fff;
+  text-shadow: 0 0 2px #000, 0 1px 2px #000;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.room-color-channel.active {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+  border-color: #fff;
 }
 
 .color-swatches {
@@ -883,6 +897,7 @@ function clampMdlScale(n) {
 const ROOM_BG_DEFAULT = 9;
 const ROOM_LINE_DEFAULT = 7;
 const ROOM_FX_DEFAULT = 1;
+const ROOM_WPN_DEFAULT = 0;
 /** @deprecated Use ROOM_BG_DEFAULT */
 const ROOM_SKY_DEFAULT = ROOM_BG_DEFAULT;
 /** @deprecated */
@@ -1389,6 +1404,7 @@ function clampObject(obj) {
     obj.bgColor = normalizeColor(obj.bgColor ?? obj.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(obj.lineColor, ROOM_LINE_DEFAULT);
     obj.fxColor = normalizeColor(obj.fxColor, ROOM_FX_DEFAULT);
+    obj.weaponColor = normalizeColor(obj.weaponColor, ROOM_WPN_DEFAULT);
     delete obj.skyColor;
     delete obj.floorColor;
   }
@@ -1441,6 +1457,7 @@ function createObject(kind, x, y, z, extra = {}) {
     obj.bgColor = normalizeColor(extra.bgColor ?? extra.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(extra.lineColor, ROOM_LINE_DEFAULT);
     obj.fxColor = normalizeColor(extra.fxColor, ROOM_FX_DEFAULT);
+    obj.weaponColor = normalizeColor(extra.weaponColor, ROOM_WPN_DEFAULT);
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
@@ -1545,7 +1562,7 @@ const MAX_MAP_OBJECTS = 255;
  * Trigger text blob is counted separately. Spawn is always 5 bytes in the map.
  */
 const C64_OBJECT_BYTES = {
-  room: 8,
+  room: 11,
   doorway: 10,
   crate: 7,
   slope: 9,
@@ -1883,6 +1900,7 @@ function parseObjects(list) {
       skyColor: o.skyColor,
       lineColor: o.lineColor,
       fxColor: o.fxColor,
+      weaponColor: o.weaponColor,
     });
     if (!KINDS[o.kind].fixed) {
       obj.sx = o.sx ?? obj.sx;
@@ -1900,6 +1918,7 @@ function parseObjects(list) {
       if (bg != null) obj.bgColor = normalizeColor(bg, ROOM_BG_DEFAULT);
       if (o.lineColor != null) obj.lineColor = normalizeColor(o.lineColor, ROOM_LINE_DEFAULT);
       if (o.fxColor != null) obj.fxColor = normalizeColor(o.fxColor, ROOM_FX_DEFAULT);
+      if (o.weaponColor != null) obj.weaponColor = normalizeColor(o.weaponColor, ROOM_WPN_DEFAULT);
       delete obj.skyColor;
       delete obj.floorColor;
     }
@@ -6530,15 +6549,8 @@ function renderLevelList() {
     btn.type = "button";
     const map = doc.maps[name];
     const display = clampName(map?.name);
-    btn.textContent = display ? `${name}` : name;
+    btn.textContent = name;
     btn.title = display ? `${name} — ${display}` : name;
-    if (display) {
-      const sub = document.createElement("span");
-      sub.className = "level-sub";
-      sub.textContent = display;
-      btn.appendChild(document.createElement("br"));
-      btn.appendChild(sub);
-    }
     if (name === doc.activeLevel) btn.className = "active";
     btn.addEventListener("click", () => switchLevel(name));
     li.appendChild(btn);
@@ -7024,24 +7036,57 @@ function numInput(value, onChange, min, max) {
   return inp;
 }
 
-function colorPicker(label, value, onPick) {
+/** @type {"bg"|"line"|"fx"|"wpn"} */
+let roomColorChannel = "bg";
+
+const ROOM_COLOR_CHANNELS = [
+  { id: "bg", label: "Background", get: (o) => o.bgColor ?? ROOM_BG_DEFAULT, set: (o, v) => (o.bgColor = v) },
+  { id: "line", label: "Lines", get: (o) => o.lineColor ?? ROOM_LINE_DEFAULT, set: (o, v) => (o.lineColor = v) },
+  { id: "fx", label: "FX", get: (o) => o.fxColor ?? ROOM_FX_DEFAULT, set: (o, v) => (o.fxColor = v) },
+  { id: "wpn", label: "Weapon", get: (o) => o.weaponColor ?? ROOM_WPN_DEFAULT, set: (o, v) => (o.weaponColor = v) },
+];
+
+function roomPaletteEditor(obj, apply) {
   const wrap = document.createElement("div");
-  wrap.className = "field color-field";
+  wrap.className = "field color-field room-palette";
   const span = document.createElement("span");
-  span.textContent = label;
+  span.textContent = "Colours";
+  const channels = document.createElement("div");
+  channels.className = "room-color-channels";
+  const active = ROOM_COLOR_CHANNELS.find((c) => c.id === roomColorChannel) || ROOM_COLOR_CHANNELS[0];
+  for (const ch of ROOM_COLOR_CHANNELS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "room-color-channel" + (ch.id === active.id ? " active" : "");
+    const val = ch.get(obj);
+    btn.title = `${ch.label}: ${val} ${C64_NAMES[val]}`;
+    btn.style.background = C64_HEX[val];
+    const lbl = document.createElement("span");
+    lbl.textContent = ch.label;
+    btn.appendChild(lbl);
+    btn.addEventListener("click", () => {
+      roomColorChannel = ch.id;
+      renderInspector();
+    });
+    channels.appendChild(btn);
+  }
   const row = document.createElement("div");
   row.className = "color-swatches";
+  const cur = active.get(obj);
   for (let i = 0; i < 16; i++) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "swatch" + (i === value ? " selected" : "");
+    btn.className = "swatch" + (i === cur ? " selected" : "");
     btn.title = `${i}: ${C64_NAMES[i]}`;
-    btn.dataset.color = String(i);
     btn.style.background = C64_HEX[i];
-    btn.addEventListener("click", () => onPick(i));
+    btn.addEventListener("click", () =>
+      apply(() => {
+        active.set(obj, i);
+      })
+    );
     row.appendChild(btn);
   }
-  wrap.append(span, row);
+  wrap.append(span, channels, row);
   return wrap;
 }
 
@@ -7116,27 +7161,7 @@ function renderInspector() {
       nameInp.placeholder = "Display name";
       nameInp.addEventListener("change", () => apply(() => (obj.name = clampName(nameInp.value))));
       root.appendChild(field("Name", nameInp));
-      root.appendChild(
-        colorPicker("Background", obj.bgColor ?? ROOM_BG_DEFAULT, (v) =>
-          apply(() => {
-            obj.bgColor = v;
-          })
-        )
-      );
-      root.appendChild(
-        colorPicker("Lines", obj.lineColor ?? ROOM_LINE_DEFAULT, (v) =>
-          apply(() => {
-            obj.lineColor = v;
-          })
-        )
-      );
-      root.appendChild(
-        colorPicker("FX", obj.fxColor ?? ROOM_FX_DEFAULT, (v) =>
-          apply(() => {
-            obj.fxColor = v;
-          })
-        )
-      );
+      root.appendChild(roomPaletteEditor(obj, apply));
     }
     if (obj.kind === "enemy") {
       const sel = document.createElement("select");

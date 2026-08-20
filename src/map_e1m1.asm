@@ -21,11 +21,13 @@ room_sy
 room_sz
 	!byte 6,16,32,80,16,24,80
 room_bg
-	!byte 9,2,5,9,6,11,9
+	!byte 9,2,5,9,6,0,9
 room_line
-	!byte 7,7,8,7,7,7,7
+	!byte 7,7,7,7,7,7,7
 room_fx
 	!byte 1,1,1,1,1,1,1
+room_wpn
+	!byte 0,0,0,0,0,12,0
 room_id
 	!byte 0,1,9,19,20,28,29
 

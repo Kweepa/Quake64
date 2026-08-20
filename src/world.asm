@@ -64,6 +64,11 @@ init_enemies
 	sta random8
 	lda #0
 	sta gunshot_wake
+!if DOG_AI_DEBUG = 1 {
+	lda #$ff
+	sta dog_dbg_slot
+	sta dog_dbg_dir
+}
 	ldx #0
 .ie_lp
 	cpx #MAP_NENEMIES
@@ -213,7 +218,7 @@ update_floor
 	ldx #0
 .uf_pl
 	cpx #MAP_NPLATS
-	bcs .uf_e0
+	bcs .uf_plats_done
 	lda plat_solid,x
 	beq .uf_pn
 	lda plat_room,x
@@ -248,52 +253,8 @@ update_floor
 .uf_pn
 	inx
 	bne .uf_pl
-.uf_e0
-	; elevators in this room
-	ldx #0
-.uf_e
-	cpx #MAP_NELEVS
-	bcs .uf_slope
-	lda elev_room,x
-	cmp room_idx
-	bne .uf_en
-	lda elev_x,x
-	sta box_x
-	lda elev_z,x
-	sta box_z
-	lda elev_sx,x
-	sta box_sx
-	lda elev_sz,x
-	sta box_sz
-	lda cam_xh
-	sta col_x
-	lda cam_zh
-	sta col_z
-	jsr point_in_box_xz
-	bcc .uf_en
-	; on elevator footprint — floor = elev_y + sy
-	; reject only if under the car (feet < elev_y); top is sy above elev_y
-	; so feet>=top would block boarding from a flush room floor
-	clc
-	lda elev_y,x
-	adc elev_sy,x
-	cmp floor_y
-	bcc .uf_en			; below current floor
-	sta col_y			; elev_top
-	cpx obj_i
-	beq .uf_e_on			; already riding — feet lag while elev moves
-	sec
-	lda cam_yh
-	sbc #EYE_HEIGHT			; feet
-	cmp elev_y,x
-	bcc .uf_en			; feet < elev_y — walking under
-.uf_e_on
-	lda col_y
-	sta floor_y
-	stx pl_on_elev
-.uf_en
-	inx
-	bne .uf_e
+.uf_plats_done
+	jsr elev_update_floor
 .uf_slope
 	ldx #0
 .uf_s
@@ -810,24 +771,7 @@ try_proximity
 	inx
 	bne .tp_s
 .tp_el
-	; automatic elevators
-	ldx #0
-.tp_e
-	cpx #MAP_NELEVS
-	bcs .tp_bp
-	lda elev_type,x
-	cmp #ELEV_TYPE_AUTO
-	bne .tp_en
-	lda elev_room,x
-	cmp room_idx
-	bne .tp_en
-	cpx pl_on_elev
-	bne .tp_en
-	jsr elev_activate
-.tp_en
-	inx
-	bne .tp_e
-.tp_bp
+	jsr elev_try_auto
 	jsr try_backpack_pickup
 .tp_rts
 	rts

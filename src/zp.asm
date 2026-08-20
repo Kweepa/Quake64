@@ -190,13 +190,13 @@ col_line	= $b8			; active room lines → viewport colour RAM
 palette_room	= $b9			; last room_idx palette applied ($ff = none)
 far_scale	= $ba			; FOCAL/z integer, far enemy project
 
-; SFX (playsound.asm) — raster Timer A poll only
-sound_index	= $bb			; $ff = idle
-sound_ptr_l	= $bc
-sound_ptr_h	= $bd
-sound_priority	= $be
-sound_count	= $bf
-sound_max	= $c0
+; SFX (playsound.asm) — channel queues in abs; ZP scratch only
+sfx_zp_l	= $bb			; (ptr),y while arming / stepping
+sfx_zp_h	= $bc
+sfx_ch		= $bd			; current channel 0..2
+sfx_id		= $be			; sound id / freq scratch
+col_wpn		= $bf			; active room weapon sprite colour → $d027–$d02a
+; $c0 free (was single-channel count/max)
 ps_save_x	= $c1
 ps_save_y	= $c2
 fn_rx		= $c3

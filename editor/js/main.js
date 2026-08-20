@@ -16,6 +16,7 @@ import {
   ROOM_BG_DEFAULT,
   ROOM_LINE_DEFAULT,
   ROOM_FX_DEFAULT,
+  ROOM_WPN_DEFAULT,
   MAX_TRIGGER_TEXT,
   MAX_NAME_LEN,
   MAX_TAG_LEN,
@@ -810,15 +811,8 @@ function renderLevelList() {
     btn.type = "button";
     const map = doc.maps[name];
     const display = clampName(map?.name);
-    btn.textContent = display ? `${name}` : name;
+    btn.textContent = name;
     btn.title = display ? `${name} — ${display}` : name;
-    if (display) {
-      const sub = document.createElement("span");
-      sub.className = "level-sub";
-      sub.textContent = display;
-      btn.appendChild(document.createElement("br"));
-      btn.appendChild(sub);
-    }
     if (name === doc.activeLevel) btn.className = "active";
     btn.addEventListener("click", () => switchLevel(name));
     li.appendChild(btn);
@@ -1304,24 +1298,57 @@ function numInput(value, onChange, min, max) {
   return inp;
 }
 
-function colorPicker(label, value, onPick) {
+/** @type {"bg"|"line"|"fx"|"wpn"} */
+let roomColorChannel = "bg";
+
+const ROOM_COLOR_CHANNELS = [
+  { id: "bg", label: "Background", get: (o) => o.bgColor ?? ROOM_BG_DEFAULT, set: (o, v) => (o.bgColor = v) },
+  { id: "line", label: "Lines", get: (o) => o.lineColor ?? ROOM_LINE_DEFAULT, set: (o, v) => (o.lineColor = v) },
+  { id: "fx", label: "FX", get: (o) => o.fxColor ?? ROOM_FX_DEFAULT, set: (o, v) => (o.fxColor = v) },
+  { id: "wpn", label: "Weapon", get: (o) => o.weaponColor ?? ROOM_WPN_DEFAULT, set: (o, v) => (o.weaponColor = v) },
+];
+
+function roomPaletteEditor(obj, apply) {
   const wrap = document.createElement("div");
-  wrap.className = "field color-field";
+  wrap.className = "field color-field room-palette";
   const span = document.createElement("span");
-  span.textContent = label;
+  span.textContent = "Colours";
+  const channels = document.createElement("div");
+  channels.className = "room-color-channels";
+  const active = ROOM_COLOR_CHANNELS.find((c) => c.id === roomColorChannel) || ROOM_COLOR_CHANNELS[0];
+  for (const ch of ROOM_COLOR_CHANNELS) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "room-color-channel" + (ch.id === active.id ? " active" : "");
+    const val = ch.get(obj);
+    btn.title = `${ch.label}: ${val} ${C64_NAMES[val]}`;
+    btn.style.background = C64_HEX[val];
+    const lbl = document.createElement("span");
+    lbl.textContent = ch.label;
+    btn.appendChild(lbl);
+    btn.addEventListener("click", () => {
+      roomColorChannel = ch.id;
+      renderInspector();
+    });
+    channels.appendChild(btn);
+  }
   const row = document.createElement("div");
   row.className = "color-swatches";
+  const cur = active.get(obj);
   for (let i = 0; i < 16; i++) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "swatch" + (i === value ? " selected" : "");
+    btn.className = "swatch" + (i === cur ? " selected" : "");
     btn.title = `${i}: ${C64_NAMES[i]}`;
-    btn.dataset.color = String(i);
     btn.style.background = C64_HEX[i];
-    btn.addEventListener("click", () => onPick(i));
+    btn.addEventListener("click", () =>
+      apply(() => {
+        active.set(obj, i);
+      })
+    );
     row.appendChild(btn);
   }
-  wrap.append(span, row);
+  wrap.append(span, channels, row);
   return wrap;
 }
 
@@ -1396,27 +1423,7 @@ function renderInspector() {
       nameInp.placeholder = "Display name";
       nameInp.addEventListener("change", () => apply(() => (obj.name = clampName(nameInp.value))));
       root.appendChild(field("Name", nameInp));
-      root.appendChild(
-        colorPicker("Background", obj.bgColor ?? ROOM_BG_DEFAULT, (v) =>
-          apply(() => {
-            obj.bgColor = v;
-          })
-        )
-      );
-      root.appendChild(
-        colorPicker("Lines", obj.lineColor ?? ROOM_LINE_DEFAULT, (v) =>
-          apply(() => {
-            obj.lineColor = v;
-          })
-        )
-      );
-      root.appendChild(
-        colorPicker("FX", obj.fxColor ?? ROOM_FX_DEFAULT, (v) =>
-          apply(() => {
-            obj.fxColor = v;
-          })
-        )
-      );
+      root.appendChild(roomPaletteEditor(obj, apply));
     }
     if (obj.kind === "enemy") {
       const sel = document.createElement("select");

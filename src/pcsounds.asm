@@ -172,6 +172,12 @@ sound_priorities
 	!byte 50, 50, 50, 50, 49, 90, 80, 80, 85, 85, 99, 50, 1, 70, 0, 50
 	!byte 50, 50, 50, 0, 20, 50, 0, 50, 50, 50, 50
 
+; 0 = player V1 pulse, 1 = enemy V2 pulse, 2 = world V3 noise
+sound_voices
+	!byte 0, 0, 1, 0, 0, 2, 2, 1, 1, 0, 1, 0, 0, 1, 1, 1
+	!byte 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 2, 0
+	!byte 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1
+
 sound_table
 	!word pc_hitwall
 	!word pc_playerdeath

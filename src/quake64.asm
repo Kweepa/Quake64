@@ -7,6 +7,7 @@ PROFILE		= 0				; 1 = R/P/K/D bucket HUD + CIA samples
 HUD_FRAME_MS	= 1				; 1 = frame time ms on HUD row 1
 HUD_POS		= 0				; 1 = X/Y/Z/yaw/pitch on HUD row 2
 INF_AMMO		= 1				; 1 = guns fire without spending ammo
+DOG_AI_DEBUG	= 1				; 1 = Rott dodge picks on HUD row 4
 
 !source "mem.asm"
 !source "zp.asm"
@@ -285,6 +286,7 @@ copy_luts
 !source "splat_spr.asm"
 !source "enemy_muzzle.asm"
 !source "process.asm"
+!source "elevator.asm"
 !source "door.asm"
 !source "world.asm"
 !source "mesh.asm"

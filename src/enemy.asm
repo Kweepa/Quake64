@@ -131,14 +131,32 @@ eu_approach
 	sta en_timer,x
 	sta en_timer_h,x
 .eu_ap_step
-	; Rottweiler: stand when already in melee range (Wolf64-like)
+	; Rottweiler: stand in melee range; repath when chase timer expires
 	lda en_type,x
 	beq .eu_ap_acc			; grunt — keep strafing
 	jsr enemy_chebyshev
 	ldy en_type,x
 	cmp enemy_range,y
-	beq .eu_ap_rng
-	bcc .eu_ap_rng
+	beq .eu_ap_stand
+	bcc .eu_ap_stand
+	lda en_timer,x
+	ora en_timer_h,x
+	bne .eu_ap_acc
+	jsr select_dodge_dir
+	ldx enemy_idx
+	lda #<DOG_REPATH_MS
+	sta en_timer,x
+	lda #>DOG_REPATH_MS
+	sta en_timer_h,x
+	jmp .eu_ap_acc
+.eu_ap_stand
+	lda #0				; clear repath so resume chases immediately
+	sta en_timer,x
+	sta en_timer_h,x
+!if DOG_AI_DEBUG = 1 {
+	jsr dog_ai_debug_hud
+}
+	jmp .eu_ap_rng
 .eu_ap_acc
 	clc
 	lda en_step,x
@@ -147,6 +165,13 @@ eu_approach
 	lda en_step_h,x
 	adc dt_msh
 	sta en_step_h,x
+!if DOG_AI_DEBUG = 1 {
+	; live dx/dz/C while chasing (last pick kept in dog_dbg_*)
+	lda en_type,x
+	beq .eu_ap_slp
+	jsr dog_ai_debug_hud
+	ldx enemy_idx
+}
 .eu_ap_slp
 	lda en_step_h,x
 	bne .eu_ap_go
@@ -425,12 +450,20 @@ enemy_facing_ok
 
 ; ------------------------------------------------------------------
 ; Wolf-style dodge: pick en_dir toward player (diagonal first)
+; Rottweiler: nodir turnaround (may 180°); grunt: forbid reverse while walking
 select_dodge_dir
 	ldx enemy_idx
+	lda en_type,x
+	bne .sdd_nodir
 	lda en_dir,x
 	tay
 	lda en_opp,y
 	sta ai_turn
+	jmp .sdd_dlt
+.sdd_nodir
+	lda #$ff
+	sta ai_turn
+.sdd_dlt
 	lda cam_xh
 	sec
 	sbc en_x,x
@@ -458,11 +491,11 @@ select_dodge_dir
 	bmi .sdd_nz
 	bne .sdd_sz
 .sdd_nz
-	; dz < 0 → toward -Z (4)
-	lda #4
-	sta ai_dirtry+1
+	; dz < 0 → toward -Z (4); A must stay nonzero for bne
 	lda #0
 	sta ai_dirtry+3
+	lda #4
+	sta ai_dirtry+1
 	bne .sdd_diag
 .sdd_sz
 	; dz > 0 → toward +Z (0)
@@ -497,7 +530,7 @@ select_dodge_dir
 	adc #1
 +
 	cmp rot2
-	bcc .sdd_rnd
+	bcc .sdd_ord			; |dz| < |dx| — X already major
 	lda ai_dirtry
 	sta rot2
 	lda ai_dirtry+1
@@ -510,7 +543,35 @@ select_dodge_dir
 	sta ai_dirtry+2
 	lda rot2
 	sta ai_dirtry+3
-.sdd_rnd
+.sdd_ord
+	; Grunt too close: prefer away (swap toward↔away, rebuild diag)
+	ldx enemy_idx
+	lda en_type,x
+	bne .sdd_zig
+	jsr enemy_chebyshev
+	cmp #GRUNT_BACKOFF + 1
+	bcs .sdd_zig
+	lda ai_dirtry
+	ldx ai_dirtry+2
+	sta ai_dirtry+2
+	stx ai_dirtry
+	lda ai_dirtry+1
+	ldx ai_dirtry+3
+	sta ai_dirtry+3
+	stx ai_dirtry+1
+	lda ai_dirtry
+	and #4
+	lsr
+	sta rot2
+	lda ai_dirtry+1
+	lsr
+	lsr
+	ora rot2
+	tay
+	lda .sdd_diag4,y
+	sta ai_dirtry+4
+.sdd_zig
+	; diagonal-first + random toward/away shuffle (zigzag)
 	jsr rnd8
 	bmi .sdd_try
 	lda ai_dirtry
@@ -526,7 +587,7 @@ select_dodge_dir
 	lda rot2
 	sta ai_dirtry+3
 .sdd_try
-	lda #4
+	lda #4				; diagonal first
 	sta rot2
 .sdd_lp
 	ldx rot2
@@ -538,6 +599,16 @@ select_dodge_dir
 	ldx enemy_idx
 	lda ai_probe
 	jsr enemy_set_geom
+!if DOG_AI_DEBUG = 1 {
+	lda en_type,x
+	beq .sdd_ok_rts
+	lda rot2
+	sta dog_dbg_slot
+	lda ai_probe
+	sta dog_dbg_dir
+	jsr dog_ai_debug_hud
+.sdd_ok_rts
+}
 	rts
 .sdd_n
 	inc rot2
@@ -551,16 +622,179 @@ select_dodge_dir
 	bne .sdd_lp
 	lda ai_turn
 	cmp #$ff
-	beq .sdd_rts
+	beq .sdd_fail
 	jsr enemy_probe_dir
-	bcc .sdd_rts
+	bcc .sdd_fail
 	ldx enemy_idx
 	lda ai_probe
 	jsr enemy_set_geom
+!if DOG_AI_DEBUG = 1 {
+	lda en_type,x
+	beq .sdd_rts
+	lda #$fe			; last-resort turnaround
+	sta dog_dbg_slot
+	lda ai_probe
+	sta dog_dbg_dir
+	jsr dog_ai_debug_hud
+}
+	rts
+.sdd_fail
+!if DOG_AI_DEBUG = 1 {
+	ldx enemy_idx
+	lda en_type,x
+	beq .sdd_rts
+	lda #$ff
+	sta dog_dbg_slot
+	lda en_dir,x
+	sta dog_dbg_dir
+	jsr dog_ai_debug_hud
+}
 .sdd_rts
 	rts
 .sdd_diag4
 	!byte 1, 3, 7, 5
+
+!if DOG_AI_DEBUG = 1 {
+; HUD row4: D<dir>#<slot> X<dx> Z<dz> C<cheby>
+; slot 0=majToward 1=minToward 2=awayMaj 3=awayMin 4=diag T=turnaround F=fail
+dog_ai_debug_hud
+	ldx enemy_idx
+	lda cam_xh
+	sec
+	sbc en_x,x
+	sta rot0				; dx = player − dog
+	lda cam_zh
+	sec
+	sbc en_z,x
+	sta rot1				; dz
+	jsr enemy_chebyshev
+	sta e0x				; cheby (scratch; enemy_chebyshev reloads X)
+
+	ldx #0
+	lda #HUD_CH_SP
+.dad_bl
+	sta SCR_A + HUD_OFF4,x
+	sta SCR_B + HUD_OFF4,x
+	inx
+	cpx #24
+	bne .dad_bl
+
+	lda #$44			; 'D'
+	ldx #0
+	jsr .dad_ch
+	lda dog_dbg_dir
+	and #7
+	ora #$30
+	ldx #1
+	jsr .dad_ch
+	lda #$23			; '#'
+	ldx #2
+	jsr .dad_ch
+	lda dog_dbg_slot
+	cmp #$ff
+	bne +
+	lda #$46			; 'F'
+	bne .dad_sl
++
+	cmp #$fe
+	bne +
+	lda #$54			; 'T'
+	bne .dad_sl
++
+	and #7
+	ora #$30
+.dad_sl
+	ldx #3
+	jsr .dad_ch
+
+	lda #$58			; 'X'
+	ldx #5
+	jsr .dad_ch
+	lda rot0
+	ldx #6
+	jsr .dad_s8
+
+	lda #$5a			; 'Z'
+	ldx #11
+	jsr .dad_ch
+	lda rot1
+	ldx #12
+	jsr .dad_s8
+
+	lda #$43			; 'C'
+	ldx #17
+	jsr .dad_ch
+	lda e0x
+	ldx #18
+	jsr .dad_u8
+	rts
+
+.dad_ch
+	sta SCR_A + HUD_OFF4,x
+	sta SCR_B + HUD_OFF4,x
+	rts
+
+; A signed → ±DDD at HUD_OFF4+X (4 chars)
+.dad_s8
+	stx pp_col
+	cmp #0
+	bpl .dad_sp
+	eor #$ff
+	clc
+	adc #1
+	pha
+	lda #HUD_CH_MINUS
+	bne .dad_ss
+.dad_sp
+	pha
+	lda #HUD_CH_PLUS
+.dad_ss
+	ldx pp_col
+	jsr .dad_ch
+	inc pp_col
+	pla
+	ldx pp_col
+	; fall through — 3 digits at X
+.dad_u8
+	stx pp_col
+	sta pp_tmp_l
+	ldx #0
+.dad_h
+	lda pp_tmp_l
+	cmp #100
+	bcc .dad_t
+	sbc #100
+	sta pp_tmp_l
+	inx
+	bne .dad_h
+.dad_t
+	txa
+	ora #$30
+	ldx pp_col
+	jsr .dad_ch
+	ldx #0
+	lda pp_tmp_l
+.dad_te
+	cmp #10
+	bcc .dad_o
+	sbc #10
+	inx
+	bne .dad_te
+.dad_o
+	sta pp_tmp_l
+	txa
+	ora #$30
+	ldx pp_col
+	inx
+	jsr .dad_ch
+	lda pp_tmp_l
+	ora #$30
+	ldx pp_col
+	inx
+	inx
+	jsr .dad_ch
+	rts
+}
 
 ; A = geometric octant (0=+Z N .. 2=+X E). Mesh yaw = octant*32.
 enemy_set_geom
@@ -589,7 +823,7 @@ enemy_face_player
 	sta en_rot,x
 	rts
 
-; Enter approach: grunt 1.5s min; Rott no lockout. Zero step; pick dodge.
+; Enter approach: grunt APPROACH_MIN; Rott DOG_REPATH. Zero step; pick dodge.
 enemy_enter_approach
 	stx enemy_idx
 	lda #EN_APPROACH
@@ -598,13 +832,17 @@ enemy_enter_approach
 	sta en_frame,x
 	sta en_step,x
 	sta en_step_h,x
-	sta en_timer,x
-	sta en_timer_h,x
 	lda en_type,x
-	bne .eea_dodge			; Rottweiler — attack as soon as in range
+	bne .eea_dog
 	lda #<APPROACH_MIN_MS
 	sta en_timer,x
 	lda #>APPROACH_MIN_MS
+	sta en_timer_h,x
+	jmp .eea_dodge
+.eea_dog
+	lda #<DOG_REPATH_MS
+	sta en_timer,x
+	lda #>DOG_REPATH_MS
 	sta en_timer_h,x
 .eea_dodge
 	jsr select_dodge_dir
@@ -631,7 +869,9 @@ enemy_bite
 	beq .eb_rts
 	lda rot0
 	jsr take_damage
-	jmp bite_hit_splat
+	; latch splat for draw (same view-space origin as mesh — not AI re-project)
+	lda enemy_idx
+	sta bite_splat_i
 .eb_rts
 	rts
 
@@ -653,44 +893,6 @@ take_damage
 	lda #SOUND_PLAYERDEATH
 	jmp play_sound
 .td_rts
-	rts
-
-; Blood splat at dog origin +3 Y (vert-3 project looked wrong).
-bite_hit_splat
-	lda $01
-	pha
-	lda #$34
-	sta $01
-	jsr load_view_trig
-	ldx enemy_idx
-	lda en_x,x
-	sta ent_wx
-	lda en_y,x
-	clc
-	adc #3
-	sta ent_wy
-	lda en_z,x
-	sta ent_wz
-	lda cs_b
-	jsr mulset_a
-	lda sn_b
-	jsr mulset_b
-	ldx #0
-	jsr xform_world_vert
-	jsr project_cam0_screen
-	bcc .bhs_done
-	ldx CAM_ZH
-	stx rot0
-	jsr splat_aim_jitter
-	sta rot2
-	lda #COL_SPLAT_HIT
-	sta splat_col
-	ldx rot0
-	lda rot2
-	jsr start_splat
-.bhs_done
-	pla
-	sta $01
 	rts
 
 ; A = dir to probe. C=1 walkable; ai_probe = dir
@@ -934,7 +1136,7 @@ axe_try_kill
 ; ------------------------------------------------------------------
 ; Super shotgun: screen-aim hit. Mid-body project → |sx−CX|≤SHOT_HIT_X,
 ; damage = SHOT_DMG_MAX*(SHOT_Z_MAX−z)/SHOT_Z_MAX for z in 0..SHOT_Z_MAX-1.
-; Pink splat on closest hit; col_line wall splat on miss.
+; Blood splat on closest hit; col_line wall splat on miss.
 shotgun_hitscan
 	lda $01
 	pha
@@ -1048,7 +1250,7 @@ shotgun_hitscan
 	sta $01
 	rts
 
-; Pink mid-body splat on shot_hit_i (expects $01=$34, view trig loaded).
+; Mid-body blood splat on shot_hit_i (expects $01=$34, view trig loaded).
 shotgun_hit_splat
 	ldx shot_hit_i
 	lda en_x,x

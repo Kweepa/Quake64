@@ -91,7 +91,7 @@ fill_viewport_colour
 	bne .vrow
 	rts
 
-; room_idx → col_bg/line, viewport colour RAM, live $d021 if safe
+; room_idx → col_bg/line/fx/wpn, viewport colour RAM, live $d021 / weapon if safe
 apply_room_palette
 	ldx room_idx
 	lda room_bg,x
@@ -100,6 +100,12 @@ apply_room_palette
 	sta col_line
 	lda room_fx,x
 	sta col_fx
+	lda room_wpn,x
+	sta col_wpn
+	sta $d027
+	sta $d028
+	sta $d029
+	sta $d02a
 	jsr fill_viewport_colour
 	; irq_phase: 0=HUD (leave $d021), 1/2=viewport → background
 	lda irq_phase

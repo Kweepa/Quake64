@@ -1913,6 +1913,7 @@ draw_enemies
 	jsr xform_world_vert
 	jsr enemy_in_view
 	bcc .de_one_rts
+	jsr try_bite_splat			; CAM[0] still feet origin
 	ldx obj_i
 	lda en_type,x
 	sta ent_type
@@ -1980,6 +1981,39 @@ draw_enemies
 }
 .de_one_rts
 	ldx obj_i
+	rts
+
+; Pending dog bite splat: CAM[0] = feet origin; +3 Y, jitter, start_splat.
+try_bite_splat
+	lda bite_splat_i
+	cmp obj_i
+	bne .tbs_rts
+	lda CAM_Y
+	pha
+	lda CAM_YH
+	pha
+	clc
+	adc #3
+	sta CAM_YH
+	jsr project_cam0_screen
+	bcc .tbs_rest
+	ldx CAM_ZH
+	stx rot0
+	jsr splat_aim_jitter
+	sta rot2
+	lda #COL_SPLAT_HIT
+	sta splat_col
+	ldx rot0
+	lda rot2
+	jsr start_splat
+.tbs_rest
+	pla
+	sta CAM_YH
+	pla
+	sta CAM_Y
+	lda #$ff
+	sta bite_splat_i
+.tbs_rts
 	rts
 
 ; If this enemy is on its ranged fire frame (or latched pending), claim sprite-6 muzzle at tip.

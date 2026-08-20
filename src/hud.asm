@@ -33,6 +33,7 @@ init_hud
 	cpx #24
 	bne -
 
+!if PROFILE = 1 {
 	lda #HUD_CH_R
 	sta SCR_A + HUD_OFF + 4
 	sta SCR_B + HUD_OFF + 4
@@ -45,6 +46,7 @@ init_hud
 	lda #HUD_CH_D
 	sta SCR_A + HUD_OFF + 19
 	sta SCR_B + HUD_OFF + 19
+}
 
 	ldx #0
 	lda #0
@@ -64,12 +66,13 @@ init_hud
 	sta $d800 + HUD_OFF,x
 	dex
 	bpl -
+!if PROFILE = 1 {
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF + 4
 	sta $d800 + HUD_OFF + 9
 	sta $d800 + HUD_OFF + 14
 	sta $d800 + HUD_OFF + 19
-
+}
 	ldx #0
 	lda #HUD_CH_SP
 -
@@ -113,22 +116,54 @@ init_hud
 	sta SCR_A + HUD_OFF3,x
 	sta SCR_B + HUD_OFF3,x
 	inx
-	cpx #HUD_MSG_W
+	cpx #24
 	bne -
+!if PROFILE = 1 {
+	lda #HUD_CH_R
+	sta SCR_A + HUD_OFF3
+	sta SCR_B + HUD_OFF3
+	lda #HUD_CH_P
+	sta SCR_A + HUD_OFF3 + 4
+	sta SCR_B + HUD_OFF3 + 4
+	lda #HUD_CH_K
+	sta SCR_A + HUD_OFF3 + 8
+	sta SCR_B + HUD_OFF3 + 8
 	ldx #23
 -
 	lda #COL_HUD
 	sta $d800 + HUD_OFF3,x
 	dex
 	bpl -
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF3
+	sta $d800 + HUD_OFF3 + 4
+	sta $d800 + HUD_OFF3 + 8
+}
+
+	ldx #0
+	lda #HUD_CH_SP
+-
+	sta SCR_A + HUD_OFF4,x
+	sta SCR_B + HUD_OFF4,x
+	inx
+	cpx #HUD_MSG_W
+	bne -
+	ldx #23
+-
+	lda #COL_HUD
+	sta $d800 + HUD_OFF4,x
+	dex
+	bpl -
 	rts
 
 ; F R P K D — 4-digit ms (xxxxRxxxxPxxxxKxxxxDxxxx)
+; Row 3: vertex counts RNNNPNNNKNNN (PROFILE=1)
 hud_print
 	ldx #0
 	lda dt_msh
 	ldy dt_ms
 	jsr .dec4
+!if PROFILE = 1 {
 	ldx #5
 	lda prof_cy + PROF_ROT * 4 + 2
 	ldy prof_cy + PROF_ROT * 4 + 1
@@ -145,6 +180,20 @@ hud_print
 	lda prof_cy + PROF_DRAW * 4 + 2
 	ldy prof_cy + PROF_DRAW * 4 + 1
 	jsr .ms4
+
+	ldx #1
+	lda nv_rot + 1
+	ldy nv_rot
+	jsr .dec3n
+	ldx #5
+	lda nv_proj + 1
+	ldy nv_proj
+	jsr .dec3n
+	ldx #9
+	lda nv_clip + 1
+	ldy nv_clip
+	jsr .dec3n
+}
 
 	ldx #1
 	lda cam_xh
@@ -243,7 +292,7 @@ hud_print
 	ldy pp_tmp_l
 	; fall through
 
-; A:Y = 16-bit ms → 4 ASCII digits at HUD_OFF+X; saturate 9999
+; A:Y = 16-bit → 4 ASCII digits at HUD_OFF+X; saturate 9999
 .dec4
 	stx pp_col
 	sta pp_tmp_h
@@ -341,15 +390,85 @@ hud_print
 	sta SCR_B + HUD_OFF,x
 	rts
 
-; Message trigger on HUD_ROW3, centered in the 24-col viewport
+; A:Y = 16-bit → 3 ASCII digits at HUD_OFF3+X; saturate 999
+.dec3n
+	stx pp_col
+	sta pp_tmp_h
+	sty pp_tmp_l
+	cmp #>1000
+	bcc .d3go
+	bne .d3sat
+	cpy #<1000
+	bcc .d3go
+.d3sat
+	lda #$39
+	sta hud_n
+	sta pp_tmp_h
+	sta pp_tmp_l
+	jmp .d3out
+.d3go
+	ldx #0
+.d3hlp
+	lda pp_tmp_h
+	bne .d3hsub
+	lda pp_tmp_l
+	cmp #100
+	bcc .d3tens
+.d3hsub
+	sec
+	lda pp_tmp_l
+	sbc #100
+	sta pp_tmp_l
+	lda pp_tmp_h
+	sbc #0
+	sta pp_tmp_h
+	inx
+	bne .d3hlp
+.d3tens
+	stx hud_n
+	ldy #0
+.d3tlp
+	lda pp_tmp_l
+	cmp #10
+	bcc .d3ones
+	sbc #10
+	sta pp_tmp_l
+	iny
+	bne .d3tlp
+.d3ones
+	lda hud_n
+	ora #$30
+	sta hud_n
+	tya
+	ora #$30
+	sta pp_tmp_h
+	lda pp_tmp_l
+	ora #$30
+	sta pp_tmp_l
+.d3out
+	ldx pp_col
+	lda hud_n
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	lda pp_tmp_h
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	lda pp_tmp_l
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	rts
+
+; Message trigger on HUD_ROW4, centered in the 24-col viewport
 hud_message
 	lda msg_on
 	bne .hm_show
 	ldx #0
 	lda #HUD_CH_SP
 .hm_blank
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
+	sta SCR_A + HUD_OFF4,x
+	sta SCR_B + HUD_OFF4,x
 	inx
 	cpx #HUD_MSG_W
 	bne .hm_blank
@@ -358,8 +477,8 @@ hud_message
 	ldx #0
 	lda #HUD_CH_SP
 .hm_clr
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
+	sta SCR_A + HUD_OFF4,x
+	sta SCR_B + HUD_OFF4,x
 	inx
 	cpx #HUD_MSG_W
 	bne .hm_clr
@@ -388,8 +507,8 @@ hud_message
 .hm_cp
 	lda (src_ptr),y
 	beq .hm_done
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
+	sta SCR_A + HUD_OFF4,x
+	sta SCR_B + HUD_OFF4,x
 	inx
 	iny
 	cpy #HUD_MSG_W

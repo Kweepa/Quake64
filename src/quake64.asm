@@ -2,6 +2,9 @@
 !cpu 6510
 !to "quake64.prg", cbm
 
+; --- build flags (Wolf64-style) -------------------------------------------
+PROFILE		= 0				; 1 = R/P/K/D bucket HUD + CIA samples
+
 !source "mem.asm"
 !source "zp.asm"
 !source "map_counts.asm"
@@ -49,16 +52,24 @@ start
 	jsr play_sound_init
 	jsr init_weapon
 	jsr prof_init
+	jsr mulset_init
 	jsr world_init
 	cli
 
 main
+!if PROFILE = 1 {
 	jsr prof_reset_frame
+} else {
+	lda #$ff
+	sta mesh_vmask
+}
 	lda #$34
 	sta $01
 	jsr clear_draw
+!if PROFILE = 1 {
 	ldy #PROF_CLEAR
 	jsr prof_add_bucket
+}
 	jsr draw_world
 	jsr draw_enemies
 	lda #$35
@@ -298,6 +309,7 @@ copy_luts
 !source "weapon.asm"
 !source "weapon_spr.asm"
 !source "process.asm"
+!source "door.asm"
 !source "world.asm"
 !source "mesh.asm"
 !source "cube.asm"
@@ -311,9 +323,19 @@ lut_end
 	!error "LUT blob must be 1280 bytes"
 }
 
+!if PROFILE = 1 {
 casc_snap
 	!fill 4, 0
 prof_dt
 	!fill 4, 0
 prof_cy
 	!fill PROF_NBUCKET * 4, 0
+; Per-frame vertex totals (R/P/K stages)
+nv_cnt
+nv_rot
+	!fill 2, 0
+nv_proj
+	!fill 2, 0
+nv_clip
+	!fill 2, 0
+}

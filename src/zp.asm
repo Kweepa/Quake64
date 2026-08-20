@@ -173,7 +173,8 @@ vel_msh		= $a7			; hold duration ms (hi)
 inv_l		= $a8			; (FOCAL<<16)/(z>>k) lo, mesh project
 inv_h		= $a9
 inv_k		= $aa			; unsigned 8-bit fit shift of z
-; $ab–$ad free
+mesh_vmask	= $ab			; $ff = all mesh_nv slots; else 8-bit box corner mask
+mesh_nwork	= $ac			; verts/edges counted this stage
 scale_s		= $ae			; scale_vel sign
 fn_lx		= $af			; frustum inward normals (XZ)
 fn_lz		= $b0
@@ -208,4 +209,32 @@ mesh_nz		= $c8
 xid_ptr		= $c9			; + $ca → per-vert X slot
 zid_ptr		= $cb			; + $cc → per-vert Z slot
 edge_vert_ptr	= $cd			; + $ce → per-edge vertical flags
+
+; Clip / project / enemy-rotate hoist scratch
+ei0		= $cf			; mesh_clip edge endpoint indices
+ei1		= $d0
+cur_col		= $d1			; mesh_project XZ column index
+col_ptr		= $d2			; + $d3 → per-vert column id table
+org_xl		= $d4			; enemy view-space origin (8.8)
+org_xh		= $d5
+org_yl		= $d6
+org_yh		= $d7
+org_zl		= $d8
+org_zh		= $d9
+lx_b		= $dc			; enemy local vert scratch
+lz_b		= $dd
+
+; Quarter-square fast-multiply pointer sets (tables page-aligned; hi bytes
+; fixed by mulset_init, mulset_a/b store lo bytes = multiplier per frame/
+; enemy/column). a*m = (pa_s1),a − (pa_s2),a.
+pa_s1l		= $de			; + $df → sqlo + m
+pa_s1h		= $e0			; + $e1 → sqhi + m
+pa_s2l		= $e2			; + $e3 → negsqlo + (255-m)
+pa_s2h		= $e4			; + $e5 → negsqhi + (255-m)
+sg_a		= $e6			; raw multiplier (bit7 = sign)
+pb_s1l		= $e7			; + $e8
+pb_s1h		= $e9			; + $ea
+pb_s2l		= $eb			; + $ec
+pb_s2h		= $ed			; + $ee
+sg_b		= $ef
 

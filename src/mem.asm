@@ -39,11 +39,13 @@ UI_CHARSET	= $F000
 UI_FONT_PAGES	= 8			; 256 glyphs, ASCII-indexed from quakefont.png
 HUD_ROW		= 2
 HUD_ROW2	= 3
-HUD_ROW3	= 5
+HUD_ROW3	= 4			; vertex counts R/P/K
+HUD_ROW4	= 5			; trigger message
 HUD_COL		= 8
 HUD_OFF		= HUD_ROW * 40 + HUD_COL
 HUD_OFF2	= HUD_ROW2 * 40 + HUD_COL
 HUD_OFF3	= HUD_ROW3 * 40 + HUD_COL
+HUD_OFF4	= HUD_ROW4 * 40 + HUD_COL
 HUD_CH_SP	= $20			; ASCII space / digits / letters in UI charset
 HUD_CH_PLUS	= $2b
 HUD_CH_MINUS	= $2d
@@ -124,7 +126,8 @@ OC_BOT		= 8
 
 ; Player / world
 EYE_HEIGHT	= 3
-DOOR_PROX	= 1			; open trigger: thin axis only
+PLAYER_H	= 4			; Y collision height [feet, feet+PLAYER_H)
+DOOR_PROX	= 3			; open trigger: depth in front of door face
 MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
 ENEMY_CULL_R	= 2			; view-space |x| vs z+R (8.8 high)
@@ -249,3 +252,24 @@ wpn_tmp0	= $CBD0
 flash5_ms_l	= $CBD1
 flash5_ms_h	= $CBD2
 flash5_phase	= $CBD3			; sprite 5 (nail right)
+
+; Per-room door view (canonical door_* in map; game uses these at runtime)
+door_vx		= $CBD4			; MAP_NDOORS (≤8)
+door_vz		= $CBDC
+door_vsx	= $CBE4
+door_vsz	= $CBEC
+door_vface	= $CBF4
+
+; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
+VOC		= $CC00			; Cohen–Sutherland outcode (front verts)
+VBEHIND		= $CC10			; 1 = z < ZCLIP
+VSX		= $CC20			; screen X/Y (front verts with outcode 0)
+VSY		= $CC30
+
+; Per-XZ-column project cache (verts sharing x,z share z_eye/inv/PROJ_X)
+COL_DONE	= $CC40			; 0 = new, 1 = front cached, 2 = behind
+COL_INVL	= $CC50
+COL_INVH	= $CC60
+COL_INVK	= $CC70
+COL_PXL		= $CC80
+COL_PXH		= $CC90

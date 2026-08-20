@@ -61,6 +61,224 @@ smul7
 	lda #0
 	rts
 
+; ------------------------------------------------------------------
+; Pointer-based quarter-square multiply: a*m = sq[a+m] − negsq[a+255−m].
+; Tables are page-aligned, so selecting multiplier m costs 4 zp lo-byte
+; stores; each 8×8 product is then two (zp),y loads + sbc per byte.
+
+; Pointer high bytes never change — set once at startup.
+mulset_init
+	lda #>sqlo
+	sta pa_s1l+1
+	sta pb_s1l+1
+	lda #>sqhi
+	sta pa_s1h+1
+	sta pb_s1h+1
+	lda #>negsqlo
+	sta pa_s2l+1
+	sta pb_s2l+1
+	lda #>negsqhi
+	sta pa_s2h+1
+	sta pb_s2h+1
+	rts
+
+; A = signed multiplier → set A/B pointers on |m|, sg_a/b keeps raw byte
+; (bit7 = sign). Preserves X and Y.
+mulset_a
+	sta sg_a
+	bpl +
+	eor #$ff
+	clc
+	adc #1
++
+	sta pa_s1l
+	sta pa_s1h
+	eor #$ff
+	sta pa_s2l
+	sta pa_s2h
+	rts
+
+mulset_b
+	sta sg_b
+	bpl +
+	eor #$ff
+	clc
+	adc #1
++
+	sta pb_s1l
+	sta pb_s1h
+	eor #$ff
+	sta pb_s2l
+	sta pb_s2h
+	rts
+
+; A = unsigned multiplier → set A/B (no sign byte)
+mulset_au
+	sta pa_s1l
+	sta pa_s1h
+	eor #$ff
+	sta pa_s2l
+	sta pa_s2h
+	rts
+
+mulset_bu
+	sta pb_s1l
+	sta pb_s1h
+	eor #$ff
+	sta pb_s2l
+	sta pb_s2h
+	rts
+
+; Y = unsigned multiplicand → prod = Y * m. Preserves X and Y.
+umul8a
+	sec
+	lda (pa_s1l),y
+	sbc (pa_s2l),y
+	sta prod_l
+	lda (pa_s1h),y
+	sbc (pa_s2h),y
+	sta prod_h
+	rts
+
+umul8b
+	sec
+	lda (pb_s1l),y
+	sbc (pb_s2l),y
+	sta prod_l
+	lda (pb_s1h),y
+	sbc (pb_s2h),y
+	sta prod_h
+	rts
+
+; nlo:nhi (signed) * set-A/B multiplier >> 7 → nlo:nhi (smul16_7 contract)
+smul16_a
+	lda nhi
+	eor sg_a
+	sta mul_sign
+	lda nhi
+	bpl +
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+	lda #0
+	sbc nhi
+	sta nhi
++
+	ldy nlo
+	jsr umul8a
+	lda prod_l
+	sta dlo
+	lda prod_h
+	sta dhi
+	ldy nhi
+	jsr umul8a
+	jmp smul16_tail
+
+smul16_b
+	lda nhi
+	eor sg_b
+	sta mul_sign
+	lda nhi
+	bpl +
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+	lda #0
+	sbc nhi
+	sta nhi
++
+	ldy nlo
+	jsr umul8b
+	lda prod_l
+	sta dlo
+	lda prod_h
+	sta dhi
+	ldy nhi
+	jsr umul8b
+smul16_tail
+	clc
+	lda dhi
+	adc prod_l
+	sta dhi
+	lda prod_h
+	adc #0
+	sta ylo
+	asl dlo				; (p>>7) == (p<<1)>>8, p < 2^23
+	rol dhi
+	rol ylo
+	lda dhi
+	sta nlo
+	lda ylo
+	sta nhi
+	bit mul_sign
+	bpl +
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+	lda #0
+	sbc nhi
+	sta nhi
++
+	rts
+
+; A signed 8-bit × set-A/B multiplier → nlo:nhi = (A*m) >> 2 signed 16-bit.
+; For enemy locals: 8.8 of (A/8)·(m/128) — same truncation as
+; scale_s8_88 (A*32) then smul16_7 (>>7). Clobbers X.
+smul8_88a
+	ldx #0
+	tay
+	bpl +
+	dex				; X=$ff marks negative A
+	eor #$ff
+	clc
+	adc #1
+	tay
++
+	txa
+	eor sg_a
+	sta mul_sign
+	jsr umul8a
+	jmp smul8_88_tail
+
+smul8_88b
+	ldx #0
+	tay
+	bpl +
+	dex
+	eor #$ff
+	clc
+	adc #1
+	tay
++
+	txa
+	eor sg_b
+	sta mul_sign
+	jsr umul8b
+smul8_88_tail
+	lsr prod_h
+	ror prod_l
+	lsr prod_h
+	ror prod_l
+	bit mul_sign
+	bmi +
+	lda prod_l
+	sta nlo
+	lda prod_h
+	sta nhi
+	rts
++
+	sec
+	lda #0
+	sbc prod_l
+	sta nlo
+	lda #0
+	sbc prod_h
+	sta nhi
+	rts
+
 ; nlo:nhi * Y (signed) >> 7 → nlo:nhi. Judd 8×8 twice, then >>7.
 smul16_7
 	sty mul_y
@@ -106,16 +324,13 @@ smul16_7
 	lda prod_h
 	adc #0
 	sta ylo
-	ldx #7
-.sh7
-	lsr ylo
-	ror dhi
-	ror dlo
-	dex
-	bne .sh7
-	lda dlo
-	sta nlo
+	; (p >> 7) == (p << 1) >> 8; product < 2^23 so bit 23 is clear
+	asl dlo
+	rol dhi
+	rol ylo
 	lda dhi
+	sta nlo
+	lda ylo
 	sta nhi
 	bit mul_sign
 	bpl +
@@ -135,7 +350,8 @@ smul16_7
 	rts
 
 ; nlo:nhi (signed) * ylo:yhi (unsigned) >> 16 → nlo:nhi unsigned abs.
-; mul_sign = $80 if coord was negative. Four umul8j plus add. Clobbers dlo/dhi/rot2.
+; mul_sign = $80 if coord was negative. Pointer sets A/B ← ylo/yhi
+; (clobbered!), then four fast 8×8 products. Clobbers dlo/dhi/rot2.
 smul16u16h
 	lda #0
 	sta mul_sign
@@ -155,16 +371,14 @@ smul16u16h
 	ora nhi
 	beq .su_z
 	lda ylo
-	ora yhi
-	beq .su_z
-	lda nlo
-	ldy ylo
-	jsr umul8j			; bits 0–15; keep hi for carry
+	jsr mulset_au
+	lda yhi
+	jsr mulset_bu
+	ldy nlo
+	jsr umul8a			; bits 0–15; keep hi for carry
 	lda prod_h
 	sta dlo
-	lda nlo
-	ldy yhi
-	jsr umul8j			; bits 8–23
+	jsr umul8b			; nlo*yhi → bits 8–23 (Y kept)
 	clc
 	lda dlo
 	adc prod_l
@@ -175,9 +389,8 @@ smul16u16h
 	lda #0
 	adc #0
 	sta rot2
-	lda nhi
-	ldy ylo
-	jsr umul8j			; bits 8–23
+	ldy nhi
+	jsr umul8a			; bits 8–23
 	clc
 	lda dlo
 	adc prod_l
@@ -188,9 +401,7 @@ smul16u16h
 	lda rot2
 	adc #0
 	sta rot2
-	lda nhi
-	ldy yhi
-	jsr umul8j			; bits 16–31
+	jsr umul8b			; nhi*yhi → bits 16–31 (Y kept)
 	clc
 	lda dhi
 	adc prod_l
@@ -565,10 +776,28 @@ lerp16
 	rts
 
 ; unsigned 24-bit rot0:rot1:rot2 / dlo → 16-bit quot rot0:rot1 (sat $ffff)
+; Leading zero bytes of the numerator only shift zeros through the
+; remainder, so skip them: shuffle bytes up and run 16 (or 8) iterations.
 div24u8
 	lda #0
 	sta nlo				; remainder
 	ldx #24
+	lda rot2
+	bne .d24
+	lda rot1
+	sta rot2
+	lda rot0
+	sta rot1
+	lda #0
+	sta rot0
+	ldx #16
+	lda rot2
+	bne .d24
+	lda rot1
+	sta rot2
+	lda #0
+	sta rot1
+	ldx #8
 .d24
 	asl rot0
 	rol rot1

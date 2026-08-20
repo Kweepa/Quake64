@@ -28,25 +28,6 @@ load_view_trig
 	!source "_rotate_body.asm"
 	rts
 
-; gidx = anim_frame * 13 + vindex → Y; also sets for (gx_ptr)
-grunt_gindex
-	lda anim_frame
-	asl
-	asl
-	asl				; *8
-	sta gidx
-	lda anim_frame
-	asl
-	asl				; *4
-	clc
-	adc gidx			; *12
-	adc anim_frame			; *13
-	clc
-	adc vindex
-	sta gidx
-	tay
-	rts
-
 ; Load type pointers for ent_type
 ent_set_ptrs
 	ldx ent_type
@@ -64,93 +45,72 @@ ent_set_ptrs
 	sta gz_ptr+1
 	rts
 
-cube_rotate
-	; demo path unused — ent_rotate draws map enemies
-	rts
-
-; Rotate one enemy instance at ent_wx/wy/wz, ent_rot, ent_type
-; Caller already jsr load_view_trig
-; Facing: odd octant uses 45° tables; (rot>>1)&3 picks N/E/S/W
-; Editor yaw: x' = x c + z s, z' = -x s + z c  (local +Z → N/E/S/W)
+; Rotate one enemy instance at ent_wx/wy/wz, ent_rot, ent_type.
+; Caller already ran load_view_trig + xform_world_vert (CAM[0] = view origin).
+; view(v) = R_yaw(world − cam) + R(yaw − facing)(local): the rotated origin
+; is hoisted per enemy and facing (octants of 45° = 32 yaw ticks) folds into
+; the trig angle — 8-bit local products replace 16-bit smul16_7s.
 ent_rotate
 	jsr ent_set_ptrs
+	; combined angle a = yaw − ent_rot*32 → fast-mul sets (A=cos, B=sin)
 	lda ent_rot
-	lsr
-	bcc .face_even
-	ldx ent_type
-	lda enemy_gx45_lo,x
-	sta gx_ptr
-	lda enemy_gx45_hi,x
-	sta gx_ptr+1
-	lda enemy_gz45_lo,x
-	sta gz_ptr
-	lda enemy_gz45_hi,x
-	sta gz_ptr+1
-.face_even
-	lda ent_rot
-	lsr
-	and #3
-	tax
-	lda .face_lo,x
-	sta .facejsr+1
-	lda .face_hi,x
-	sta .facejsr+2
+	asl
+	asl
+	asl
+	asl
+	asl
+	sta rot0
+	sec
+	lda yaw
+	sbc rot0
+	tay
+	lda COSTAB,y
+	jsr mulset_a
+	lda SINTAB,y
+	jsr mulset_b
+	; view-space origin from CAM[0] (xform_world_vert output)
+	lda CAM_X
+	sta org_xl
+	lda CAM_XH
+	sta org_xh
+	lda CAM_Y
+	sta org_yl
+	lda CAM_YH
+	sta org_yh
+	lda CAM_Z
+	sta org_zl
+	lda CAM_ZH
+	sta org_zh
+	; gidx = anim_frame*13, then +1 per vertex (hoisted multiply)
+	lda anim_frame
+	asl
+	asl
+	asl				; *8
+	sta gidx
+	lda anim_frame
+	asl
+	asl				; *4
+	clc
+	adc gidx			; *12
+	adc anim_frame			; *13
+	sta gidx
 	lda #0
 	sta vindex
 .rvert
-	jsr grunt_gindex
-.facejsr
-	jsr .face_n
-	; now e0x/xh = lx', e1z/zh = lz' — add world + cam
-	clc
-	lda e0xh
-	adc ent_wx
-	sta e0xh
-	sec
-	lda e0x
-	sbc cam_xl
-	sta nlo
-	lda e0xh
-	sbc cam_xh
-	sta nhi
-	ldx vindex
-	lda nlo
-	sta CAM_X,x
-	lda nhi
-	sta CAM_XH,x
+	ldy gidx
+	lda (gx_ptr),y
+	sta lx_b
+	lda (gz_ptr),y
+	sta lz_b
+	; x' = (lx*cc − lz*ss) >> 2
+	lda lx_b
+	jsr smul8_88a
 	lda nlo
 	sta e0x
 	lda nhi
 	sta e0xh
-	clc
-	lda e1zh
-	adc ent_wz
-	sta e1zh
-	sec
-	lda e1z
-	sbc cam_zl
-	sta e1z
-	lda e1zh
-	sbc cam_zh
-	sta e1zh
-	lda e0x
-	sta nlo
-	lda e0xh
-	sta nhi
-
-	; x1 = dx*cs - dz*sn  (view yaw)
-	ldy cs_b
-	jsr smul16_7
-	lda nlo
-	sta e0x
-	lda nhi
-	sta e0xh
-	lda e1z
-	sta nlo
-	lda e1zh
-	sta nhi
-	ldy sn_b
-	jsr smul16_7
+	lda lz_b
+	jsr smul8_88b
 	sec
 	lda e0x
 	sbc nlo
@@ -158,173 +118,165 @@ ent_rotate
 	lda e0xh
 	sbc nhi
 	sta e0xh
-
-	ldx vindex
-	lda CAM_X,x
-	sta nlo
-	lda CAM_XH,x
-	sta nhi
-	ldy sn_b
-	jsr smul16_7
+	; z' = (lx*ss + lz*cc) >> 2
+	lda lx_b
+	jsr smul8_88b
 	lda nlo
-	sta e0y
+	sta e1z
 	lda nhi
-	sta e0yh
-	lda e1z
-	sta nlo
-	lda e1zh
-	sta nhi
-	ldy cs_b
-	jsr smul16_7
+	sta e1zh
+	lda lz_b
+	jsr smul8_88a
 	clc
-	lda e0y
+	lda e1z
 	adc nlo
-	sta e0y
-	lda e0yh
+	sta e1z
+	lda e1zh
 	adc nhi
-	sta e0yh
-
+	sta e1zh
+	; CAM[v] = origin + rotated local (y unrotated: yaw-only view)
+	ldx vindex
+	clc
+	lda org_xl
+	adc e0x
+	sta CAM_X,x
+	lda org_xh
+	adc e0xh
+	sta CAM_XH,x
+	clc
+	lda org_zl
+	adc e1z
+	sta CAM_Z,x
+	lda org_zh
+	adc e1zh
+	sta CAM_ZH,x
 	ldy gidx
 	lda (gy_ptr),y
-	jsr scale_s8_88
+	jsr scale_s8_88			; nlo:nhi = gy·32 (8.8 of gy/8)
 	clc
-	lda nhi
-	adc ent_wy
-	sta nhi
-	sec
-	lda nlo
-	sbc cam_yl
-	sta nlo
-	lda nhi
-	sbc cam_yh
-	sta nhi
-	ldx vindex
-	lda nlo
+	lda org_yl
+	adc nlo
 	sta CAM_Y,x
-	lda nhi
+	lda org_yh
+	adc nhi
 	sta CAM_YH,x
-	lda e0y
-	sta CAM_Z,x
-	lda e0yh
-	sta CAM_ZH,x
-	lda e0x
-	sta CAM_X,x
-	lda e0xh
-	sta CAM_XH,x
-
+	inc gidx
 	inc vindex
 	lda vindex
 	cmp #NVERTS
 	beq +
 	jmp .rvert
 +
+	lda #NVERTS
+	sta mesh_nwork
+!if PROFILE = 1 {
+	ldx #NV_ROT
+	jmp prof_add_nv
+} else {
 	rts
+}
 
-; Y = gidx. Local signed XZ → 8.8 in e0x / e1z. scale_s8_88 preserves Y.
-.face_n					; (x, z)  editor +Z
-	lda (gx_ptr),y
-	jsr scale_s8_88
-	lda nlo
-	sta e0x
-	lda nhi
-	sta e0xh
-	lda (gz_ptr),y
-	jsr scale_s8_88
-	lda nlo
-	sta e1z
-	lda nhi
-	sta e1zh
-	rts
-
-.face_e					; (z, -x)  editor +X
-	lda (gz_ptr),y
-	jsr scale_s8_88
-	lda nlo
-	sta e0x
-	lda nhi
-	sta e0xh
-	lda (gx_ptr),y
-	eor #$ff
+; Y = vert index. C=1 if culled by mesh_vmask (skip transform/project).
+.vert_skip
+	lda mesh_vmask
+	cmp #$ff
+	beq .vs_ok
+	and box_vbit,y
+	beq .vs_skip
+.vs_ok
 	clc
-	adc #1
-	jsr scale_s8_88
-	lda nlo
-	sta e1z
-	lda nhi
-	sta e1zh
 	rts
-
-.face_s					; (-x, -z)  editor -Z
-	lda (gx_ptr),y
-	eor #$ff
-	clc
-	adc #1
-	jsr scale_s8_88
-	lda nlo
-	sta e0x
-	lda nhi
-	sta e0xh
-	lda (gz_ptr),y
-	eor #$ff
-	clc
-	adc #1
-	jsr scale_s8_88
-	lda nlo
-	sta e1z
-	lda nhi
-	sta e1zh
+.vs_skip
+	sec
 	rts
-
-.face_w					; (-z, x)  editor -X
-	lda (gz_ptr),y
-	eor #$ff
-	clc
-	adc #1
-	jsr scale_s8_88
-	lda nlo
-	sta e0x
-	lda nhi
-	sta e0xh
-	lda (gx_ptr),y
-	jsr scale_s8_88
-	lda nlo
-	sta e1z
-	lda nhi
-	sta e1zh
-	rts
-
-.face_lo	!byte <.face_n, <.face_e, <.face_s, <.face_w
-.face_hi	!byte >.face_n, >.face_e, >.face_s, >.face_w
 
 ; 8.8 view → unclamped 16-bit screen, then CS. persp88 is far enemies only.
+; Verts sharing an XZ column (col_ptr table) share z_eye, inv and PROJ_X:
+; box corners come in vertical pairs, so half the divides/X-projections.
 mesh_project
 cube_project
+	lda mesh_vmask
+	cmp #$ff
+	bne .mp_go
+	lda mesh_nv
+	sta mesh_nwork
+.mp_go
+!if PROFILE = 1 {
+	ldx #NV_PROJ
+	jsr prof_add_nv
+}
+	ldx #15
 	lda #0
+.mp_clr
+	sta COL_DONE,x
+	dex
+	bpl .mp_clr
 	sta vindex
 .pvert
-	ldx vindex
-	lda CAM_Z,x
-	sta PROJ_Z,x
-	lda CAM_ZH,x
-	sta PROJ_ZH,x
-	jsr .zbcam
-	bcc .pfront
-	jsr .offxy
+	ldy vindex
+	jsr .vert_skip
+	bcc .pgo
 	jmp .pnext
-.pfront
-	jsr .invz
+.pgo
+	lda (col_ptr),y
+	sta cur_col
+	tax
+	lda COL_DONE,x
+	beq .col_new
+	cmp #2
+	bne .col_front
+	ldx vindex			; column already known behind
+	lda #1
+	sta VBEHIND,x
+	jmp .pnext
+.col_new
+	jsr .zbcam
+	bcc .col_calc
+	ldx cur_col			; behind: flag column + vertex
+	lda #2
+	sta COL_DONE,x
+	ldx vindex
+	lda #1
+	sta VBEHIND,x
+	jmp .pnext
+.col_calc
+	jsr .invz			; z_eye set by .zbcam
+	ldx cur_col
+	lda inv_l
+	sta COL_INVL,x
+	lda inv_h
+	sta COL_INVH,x
+	lda inv_k
+	sta COL_INVK,x
+	lda #1
+	sta COL_DONE,x
 	ldx vindex
 	lda CAM_X,x
 	sta nlo
 	lda CAM_XH,x
 	sta nhi
 	jsr .cam_to_proj
-	ldx vindex
+	ldx cur_col
 	lda nlo
-	sta PROJ_X,x
+	sta COL_PXL,x
 	lda nhi
-	sta PROJ_XH,x
+	sta COL_PXH,x
+	jmp .col_py
+.col_front
+	ldy cur_col			; reuse cached reciprocal
+	lda COL_INVL,y
+	sta inv_l
+	lda COL_INVH,y
+	sta inv_h
+	lda COL_INVK,y
+	sta inv_k
+.col_py
 	ldx vindex
+	ldy cur_col
+	lda COL_PXL,y
+	sta PROJ_X,x
+	lda COL_PXH,y
+	sta PROJ_XH,x
 	lda CAM_Y,x
 	sta nlo
 	lda CAM_YH,x
@@ -335,6 +287,7 @@ cube_project
 	sta PROJ_Y,x
 	lda nhi
 	sta PROJ_YH,x
+	jsr .vhoist
 .pnext
 	inc vindex
 	lda vindex
@@ -342,6 +295,39 @@ cube_project
 	beq +
 	jmp .pvert
 +
+	rts
+
+; Per-vertex clip data hoisted out of mesh_clip: behind flag (0 here),
+; outcode from 16-bit PROJ, and screen coords when fully inside.
+.vhoist
+	ldx vindex
+	lda #0
+	sta VBEHIND,x
+	lda PROJ_X,x
+	sta ox0l
+	lda PROJ_XH,x
+	sta ox0h
+	lda PROJ_Y,x
+	sta oy0l
+	lda PROJ_YH,x
+	sta oy0h
+	ldx #0
+	jsr .mkoc
+	ldx vindex
+	sta VOC,x
+	cmp #0
+	bne .vh_rts			; VSX/VSY only read on trivial accept
+	lda ox0l
+	ldy ox0h
+	jsr .to_sx
+	ldx vindex
+	sta VSX,x
+	lda oy0l
+	ldy oy0h
+	jsr .to_sy
+	ldx vindex
+	sta VSY,x
+.vh_rts
 	rts
 
 ; C=1 if this vertex z8.8 < ZCLIP
@@ -371,36 +357,8 @@ cube_project
 	sta z_eye_h
 	rts
 
-.offxy
-	ldx vindex
-	lda CAM_XH,x
-	bmi .offn
-	lda #$90
-	sta PROJ_X,x
-	lda #$01
-	sta PROJ_XH,x
-	jmp .offy
-.offn
-	lda #$70
-	sta PROJ_X,x
-	lda #$fe
-	sta PROJ_XH,x
-.offy
-	lda CAM_YH,x
-	bmi .offyn
-	lda #$90
-	sta PROJ_Y,x
-	lda #$01
-	sta PROJ_YH,x
-	rts
-.offyn
-	lda #$70
-	sta PROJ_Y,x
-	lda #$fe
-	sta PROJ_YH,x
-	rts
-
 ; inv = (FOCAL<<16) / (z>>k), k = unsigned 8-bit fit of z_eye (always ≥128 here).
+; z >= ZCLIP guarantees z_eye_h >= 1, so dlo lands in [128,255] → invzl/h LUT.
 .invz
 	lda z_eye
 	sta dlo
@@ -417,21 +375,11 @@ cube_project
 	jmp .fz
 .gotz
 	lda dlo
-	bne .idiv
-	lda #$ff
+	and #$7f
+	tax
+	lda invzl,x
 	sta inv_l
-	sta inv_h
-	rts
-.idiv
-	lda #0
-	sta rot0
-	sta rot1
-	lda #FOCAL
-	sta rot2
-	jsr div24u8
-	lda rot0
-	sta inv_l
-	lda rot1
+	lda invzh,x
 	sta inv_h
 	rts
 
@@ -462,9 +410,17 @@ cube_project
 .cdone
 	rts
 
-; Near-plane interpolate, then 16-bit screen Cohen-Sutherland
+; Near-plane interpolate, then 16-bit screen Cohen-Sutherland.
+; Trivial accept/reject runs on per-vertex VOC/VBEHIND/VSX/VSY hoisted
+; into mesh_project — no CAM/PROJ copies unless an edge needs real work.
 mesh_clip
 cube_clip
+	lda mesh_ne
+	sta mesh_nwork
+!if PROFILE = 1 {
+	ldx #NV_CLIP
+	jsr prof_add_nv
+}
 	lda #0
 	sta vindex
 .cel
@@ -472,74 +428,76 @@ cube_clip
 	asl
 	tay
 	lda (edge_ptr),y
-	tay
-	lda CAM_X,y
-	sta e0x
-	lda CAM_XH,y
-	sta e0xh
-	lda CAM_Y,y
-	sta e0y
-	lda CAM_YH,y
-	sta e0yh
-	lda CAM_Z,y
-	sta e0z
-	lda CAM_ZH,y
-	sta e0zh
-	lda PROJ_X,y
-	sta ox0l
-	lda PROJ_XH,y
-	sta ox0h
-	lda PROJ_Y,y
-	sta oy0l
-	lda PROJ_YH,y
-	sta oy0h
-	lda vindex
-	asl
-	tay
+	sta ei0
 	iny
 	lda (edge_ptr),y
-	tay
-	lda CAM_X,y
-	sta e1x
-	lda CAM_XH,y
-	sta e1xh
-	lda CAM_Y,y
-	sta e1y
-	lda CAM_YH,y
-	sta e1yh
-	lda CAM_Z,y
-	sta e1z
-	lda CAM_ZH,y
-	sta e1zh
-	lda PROJ_X,y
-	sta ox1l
-	lda PROJ_XH,y
-	sta ox1h
-	lda PROJ_Y,y
-	sta oy1l
-	lda PROJ_YH,y
-	sta oy1h
-
+	sta ei1
 	ldy vindex
 	lda (edge_vert_ptr),y
-	bne .clip_v
-	jsr .zb0
-	bcs .z0b
-	jsr .zb1
-	bcs .z1b
-	jmp .frustum
-.z0b
-	jsr .zb1
-	bcs .reject
+	beq .cgen
+	jmp .clip_v
+.cgen
+	ldy ei0
+	lda VBEHIND,y
+	beq .b0f
+	ldy ei1
+	lda VBEHIND,y
+	beq .n0
+	jmp .reject			; both behind near plane
+.n0
+	jsr .load_cam
 	jsr .near0
-	jsr .projpair
-	jmp .frustum
-.z1b
+	jmp .near_oc
+.b0f
+	ldy ei1
+	lda VBEHIND,y
+	beq .bothf
+	jsr .load_cam
 	jsr .near1
+.near_oc
 	jsr .projpair
-.frustum
-	jsr .csclip
-	bcs .reject
+	ldx #0
+	jsr .mkoc
+	sta oc0
+	ldx #1
+	jsr .mkoc
+	sta oc1
+	jsr .csrun
+	bcc .clip_out
+	jmp .reject
+.bothf
+	ldy ei0
+	lda VOC,y
+	sta oc0
+	ldy ei1
+	lda VOC,y
+	sta oc1
+	ora oc0
+	beq .accept
+	lda oc0
+	and oc1
+	beq .cswk
+	jmp .reject
+.cswk
+	jsr .load_proj
+	jsr .csrun
+	bcc .clip_out
+	jmp .reject
+.accept
+	ldx vindex
+	ldy ei0
+	lda VSX,y
+	sta CLIP_X0,x
+	lda VSY,y
+	sta CLIP_Y0,x
+	ldy ei1
+	lda VSX,y
+	sta CLIP_X1,x
+	lda VSY,y
+	sta CLIP_Y1,x
+	lda #1
+	sta EDGE_VIS,x
+	jmp .next
 .clip_out
 	ldx vindex
 	lda ox0l
@@ -563,10 +521,26 @@ cube_clip
 	sta EDGE_VIS,x
 	jmp .next
 .clip_v
-	jsr .zb0
-	bcs .reject
-	jsr .csclip_v
-	bcs .reject
+	ldy ei0
+	lda VBEHIND,y			; vertical edge shares z — one check
+	bne .reject
+	lda VOC,y
+	sta oc0
+	ldy ei1
+	lda VOC,y
+	sta oc1
+	ora oc0
+	beq .accept2
+	lda oc0
+	and oc1
+	bne .reject
+	jsr .load_proj
+	jsr .csrun_v
+	bcc .clip_out2
+	jmp .reject
+.accept2
+	jmp .accept
+.clip_out2
 	jmp .clip_out
 .reject
 	ldx vindex
@@ -581,32 +555,56 @@ cube_clip
 +
 	rts
 
-.zb0
-	lda e0zh
-	bmi .zby2
-	cmp #>ZCLIP
-	bcc .zby2
-	bne .zbn2
-	lda e0z
-	cmp #<ZCLIP
-	bcc .zby2
-.zbn2
-	clc
-	rts
-.zby2
-	sec
+; CAM endpoints → e0*/e1* (near-clip path only)
+.load_cam
+	ldy ei0
+	lda CAM_X,y
+	sta e0x
+	lda CAM_XH,y
+	sta e0xh
+	lda CAM_Y,y
+	sta e0y
+	lda CAM_YH,y
+	sta e0yh
+	lda CAM_Z,y
+	sta e0z
+	lda CAM_ZH,y
+	sta e0zh
+	ldy ei1
+	lda CAM_X,y
+	sta e1x
+	lda CAM_XH,y
+	sta e1xh
+	lda CAM_Y,y
+	sta e1y
+	lda CAM_YH,y
+	sta e1yh
+	lda CAM_Z,y
+	sta e1z
+	lda CAM_ZH,y
+	sta e1zh
 	rts
 
-.zb1
-	lda e1zh
-	bmi .zby2
-	cmp #>ZCLIP
-	bcc .zby2
-	bne .zbn2
-	lda e1z
-	cmp #<ZCLIP
-	bcc .zby2
-	clc
+; PROJ endpoints → ox/oy (screen-clip path only)
+.load_proj
+	ldy ei0
+	lda PROJ_X,y
+	sta ox0l
+	lda PROJ_XH,y
+	sta ox0h
+	lda PROJ_Y,y
+	sta oy0l
+	lda PROJ_YH,y
+	sta oy0h
+	ldy ei1
+	lda PROJ_X,y
+	sta ox1l
+	lda PROJ_XH,y
+	sta ox1h
+	lda PROJ_Y,y
+	sta oy1l
+	lda PROJ_YH,y
+	sta oy1h
 	rts
 
 .near0
@@ -824,17 +822,12 @@ cube_clip
 	sta oy1h
 	rts
 
-; Vertical edge: L/R trivial reject (same X); top/bottom set Y only
-.csclip_v
+; Vertical edge: L/R trivial reject (same X); top/bottom set Y only.
+; oc0/oc1 preloaded; only the moved endpoint's outcode is recomputed.
+.csrun_v
 	lda #16
 	sta cs_n
 .cvlp
-	ldx #0
-	jsr .mkoc
-	sta oc0
-	ldx #1
-	jsr .mkoc
-	sta oc1
 	lda oc0
 	ora oc1
 	bne .cvneed
@@ -877,26 +870,25 @@ cube_clip
 	bne .cv1
 	sta oy0l
 	sty oy0h
+	jsr .mkoc
+	sta oc0
 	jmp .cvlp
 .cv1
 	sta oy1l
 	sty oy1h
+	jsr .mkoc
+	sta oc1
 	jmp .cvlp
 .cvrej
 	sec
 	rts
 
-; C=0 accept (ox/oy inside), C=1 reject
-.csclip
+; C=0 accept (ox/oy inside), C=1 reject. oc0/oc1 preloaded by caller;
+; each iteration recomputes only the endpoint that moved.
+.csrun
 	lda #16
 	sta cs_n
 .cslp
-	ldx #0
-	jsr .mkoc
-	sta oc0
-	ldx #1
-	jsr .mkoc
-	sta oc1
 	lda oc0
 	ora oc1
 	bne .csneed
@@ -936,27 +928,35 @@ cube_clip
 	lda #$ff
 	sta rot2
 	jsr .csx
-	jmp .cslp
+	jmp .csupd
 .csright
 	lda #$5f
 	sta rot0
 	lda #0
 	sta rot2
 	jsr .csx
-	jmp .cslp
+	jmp .csupd
 .cstop
 	lda #$c0
 	sta rot0
 	lda #$ff
 	sta rot2
 	jsr .csy
-	jmp .cslp
+	jmp .csupd
 .csbot
 	lda #$3f
 	sta rot0
 	lda #0
 	sta rot2
 	jsr .csy
+.csupd
+	jsr .mkoc			; X = moved endpoint (preserved by .csx/.csy)
+	cpx #0
+	bne .csu1
+	sta oc0
+	jmp .cslp
+.csu1
+	sta oc1
 	jmp .cslp
 
 ; rot0:rot2 = 16-bit plane, X = 0 (p0) or 1 (p1)
@@ -1348,8 +1348,7 @@ xform_world_vert
 	sta nlo
 	lda e0xh
 	sta nhi
-	ldy sn_b
-	jsr smul16_7
+	jsr smul16_b			; × sin(yaw) via set B
 	lda nlo
 	sta rot0
 	lda nhi
@@ -1358,8 +1357,7 @@ xform_world_vert
 	sta nlo
 	lda e1zh
 	sta nhi
-	ldy cs_b
-	jsr smul16_7
+	jsr smul16_a			; × cos(yaw) via set A
 	clc
 	lda rot0
 	adc nlo
@@ -1373,8 +1371,7 @@ xform_world_vert
 	sta nlo
 	lda e0xh
 	sta nhi
-	ldy cs_b
-	jsr smul16_7
+	jsr smul16_a			; × cos(yaw) via set A
 	lda nlo
 	sta rot0
 	lda nhi
@@ -1383,8 +1380,7 @@ xform_world_vert
 	sta nlo
 	lda e1zh
 	sta nhi
-	ldy sn_b
-	jsr smul16_7
+	jsr smul16_b			; × sin(yaw) via set B
 	sec
 	lda rot0
 	sbc nlo
@@ -1427,8 +1423,7 @@ xform_mesh_xz
 	sta nlo
 	lda e0xh
 	sta nhi
-	ldy cs_b
-	jsr smul16_7
+	jsr smul16_a			; × cos(yaw) via set A
 	ldx vindex
 	lda nlo
 	sta XC_L,x
@@ -1438,8 +1433,7 @@ xform_mesh_xz
 	sta nlo
 	lda e0xh
 	sta nhi
-	ldy sn_b
-	jsr smul16_7
+	jsr smul16_b			; × sin(yaw) via set B
 	ldx vindex
 	lda nlo
 	sta XS_L,x
@@ -1464,8 +1458,7 @@ xform_mesh_xz
 	sta nlo
 	lda e0xh
 	sta nhi
-	ldy cs_b
-	jsr smul16_7
+	jsr smul16_a			; × cos(yaw) via set A
 	ldx vindex
 	lda nlo
 	sta ZC_L,x
@@ -1475,8 +1468,7 @@ xform_mesh_xz
 	sta nlo
 	lda e0xh
 	sta nhi
-	ldy sn_b
-	jsr smul16_7
+	jsr smul16_b			; × sin(yaw) via set B
 	ldx vindex
 	lda nlo
 	sta ZS_L,x
@@ -1489,6 +1481,8 @@ xform_mesh_xz
 	sta vindex
 .xm_vl
 	ldy vindex
+	jsr .vert_skip
+	bcs .xm_skip
 	lda (xid_ptr),y
 	tax
 	lda (zid_ptr),y
@@ -1523,14 +1517,32 @@ xform_mesh_xz
 	sta CAM_Z,x
 	lda e0yh
 	sta CAM_ZH,x
+.xm_skip
 	inc vindex
 	lda vindex
 	cmp mesh_nv
 	bne .xm_vl
+	lda mesh_vmask
+	cmp #$ff
+	bne .xr
+	lda mesh_nv
+	sta mesh_nwork
+.xr
+!if PROFILE = 1 {
+	ldx #NV_ROT
+	jmp prof_add_nv
+} else {
 	rts
+}
 
 ; True-project feet (vert 11); limb PROJ = feet + dCAM * trunc(FOCAL/z) >> 8
 ent_far_project
+	lda #NVERTS
+	sta mesh_nwork
+!if PROFILE = 1 {
+	ldx #NV_PROJ
+	jsr prof_add_nv
+}
 	lda CAM_Z+11
 	sta z_eye
 	lda CAM_ZH+11
@@ -1565,6 +1577,7 @@ ent_far_project
 	sta yhi
 	jsr persp88
 	sta far_scale
+	jsr mulset_a			; per-enemy constant → fast-mul set A
 	lda #0
 	sta vindex
 .far_pv
@@ -1576,8 +1589,7 @@ ent_far_project
 	lda CAM_XH,x
 	sbc CAM_XH+11
 	sta nhi
-	ldy far_scale
-	jsr smul16_7
+	jsr smul16_a			; × far_scale
 	lda nhi
 	cmp #$80
 	ror nhi
@@ -1601,8 +1613,7 @@ ent_far_project
 	lda CAM_YH,x
 	sbc CAM_YH+11
 	sta nhi
-	ldy far_scale
-	jsr smul16_7
+	jsr smul16_a			; × far_scale
 	lda nhi
 	cmp #$80
 	ror nhi
@@ -1771,6 +1782,10 @@ draw_enemies
 	sta ent_wy
 	lda en_z,x
 	sta ent_wz
+	lda cs_b			; re-prime view sets (prev enemy clobbered)
+	jsr mulset_a
+	lda sn_b
+	jsr mulset_b
 	ldx #0
 	jsr xform_world_vert
 	jsr enemy_in_view
@@ -1792,29 +1807,43 @@ draw_enemies
 	sta edge_vert_ptr
 	lda #>enemy_edge_vert
 	sta edge_vert_ptr+1
+	lda #<ident_col			; enemy verts: no shared XZ columns
+	sta col_ptr
+	lda #>ident_col
+	sta col_ptr+1
 	jsr ent_rotate
+!if PROFILE = 1 {
 	ldy #PROF_ROT
 	jsr prof_add_bucket
+}
 	ldx ent_type
 	lda CAM_ZH+11
 	bmi .de_full
 	cmp enemy_far_z,x
 	bcc .de_full
 	jsr ent_far_project
+!if PROFILE = 1 {
 	ldy #PROF_PROJ
 	jsr prof_add_bucket
+}
 	jmp .de_draw
 .de_full
 	jsr mesh_project
+!if PROFILE = 1 {
 	ldy #PROF_PROJ
 	jsr prof_add_bucket
+}
 	jsr mesh_clip
+!if PROFILE = 1 {
 	ldy #PROF_CLIP
 	jsr prof_add_bucket
+}
 .de_draw
 	jsr mesh_draw
+!if PROFILE = 1 {
 	ldy #PROF_DRAW
 	jsr prof_add_bucket
+}
 .de_one_rts
 	ldx obj_i
 	rts

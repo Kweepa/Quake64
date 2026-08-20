@@ -1,4 +1,5 @@
 ; CIA2 cascade frame timer (Wolf64 / SquareDoom)
+; PROFILE=1: R/P/K/D buckets + vertex counts on HUD
 ; Do not touch $dd00 — VIC bank lives there.
 !zone profil
 
@@ -9,6 +10,19 @@ CIA2_TB_HI	= $dd07
 CIA2_ICR	= $dd0d
 CIA2_CRA	= $dd0e
 CIA2_CRB	= $dd0f
+
+!if PROFILE = 1 {
+PROF_CLEAR	= 0
+PROF_ROT	= 1
+PROF_PROJ	= 2
+PROF_CLIP	= 3
+PROF_DRAW	= 4
+PROF_NBUCKET	= 5
+
+NV_ROT		= 0
+NV_PROJ		= 2
+NV_CLIP		= 4
+}
 
 prof_init
 	lda #$7f
@@ -117,13 +131,7 @@ prof_frame_sample
 	sta frame_cy + 3
 	jmp prof_store_t0
 
-PROF_CLEAR	= 0
-PROF_ROT	= 1
-PROF_PROJ	= 2
-PROF_CLIP	= 3
-PROF_DRAW	= 4
-PROF_NBUCKET	= 5
-
+!if PROFILE = 1 {
 prof_snap
 	jsr prof_read_casc
 	lda casc_now
@@ -143,7 +151,26 @@ prof_reset_frame
 	sta prof_cy,x
 	dex
 	bpl -
+	sta nv_rot
+	sta nv_rot + 1
+	sta nv_proj
+	sta nv_proj + 1
+	sta nv_clip
+	sta nv_clip + 1
+	lda #$ff
+	sta mesh_vmask
 	jmp prof_snap
+
+; X = NV_ROT / NV_PROJ / NV_CLIP. Add mesh_nwork into that 16-bit counter.
+prof_add_nv
+	clc
+	lda nv_cnt,x
+	adc mesh_nwork
+	sta nv_cnt,x
+	lda nv_cnt + 1,x
+	adc #0
+	sta nv_cnt + 1,x
+	rts
 
 ; Y = bucket 0..N-1. Add (casc_snap − now) into prof_cy[Y], then snap.
 prof_add_bucket
@@ -187,4 +214,5 @@ prof_add_bucket
 	lda casc_now + 3
 	sta casc_snap + 3
 	rts
+}
 

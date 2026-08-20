@@ -30,6 +30,17 @@ quad_vert
 tri_vert
 	!byte 0,0,0
 
+; Per-vert XZ column ids for mesh_project (verts sharing x,z share a column).
+; box_col doubles as identity for ≤4-vert meshes with distinct columns.
+box_col
+	!byte 0,1,2,3, 0,1,2,3
+door_closed_col
+	!byte 0,0,1,1
+door_open_col
+	!byte 0,0,1,1, 2,3
+ident_col
+	!byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+
 ; Per-vert slots into UX[] / UZ[] (sharing across the mesh)
 box_xid
 	!byte 0,1,1,0, 0,1,1,0
@@ -75,19 +86,22 @@ box_vis_edges
 	!fill 24, 0
 box_vis_vert
 	!fill 12, 0
+box_vbit
+	!byte $01,$02,$04,$08,$10,$20,$40,$80
 
 ; ------------------------------------------------------------------
 ; draw_box — box_* set, box_inside=0/1 (back-face cull)
 ; ------------------------------------------------------------------
 draw_box
 	jsr load_view_trig
-	jsr box_fill_verts
 	jsr cull_box_faces
 	jsr box_pack_edges
 	lda mesh_ne
 	bne .db_go
 	rts
 .db_go
+	jsr box_build_vert_mask
+	jsr box_fill_verts
 	lda #BOX_NVERTS
 	sta mesh_nv
 	lda #<box_vis_edges
@@ -101,17 +115,27 @@ draw_box
 	jmp stroke_mesh
 
 stroke_mesh
+!if PROFILE = 1 {
 	ldy #PROF_ROT
 	jsr prof_add_bucket
+}
 	jsr mesh_project
+!if PROFILE = 1 {
 	ldy #PROF_PROJ
 	jsr prof_add_bucket
+}
 	jsr mesh_clip
+!if PROFILE = 1 {
 	ldy #PROF_CLIP
 	jsr prof_add_bucket
+}
 	jsr mesh_draw
+!if PROFILE = 1 {
 	ldy #PROF_DRAW
 	jsr prof_add_bucket
+}
+	lda #$ff
+	sta mesh_vmask
 	rts
 
 ; Fill CAM[0..7] from box corners via unique X/Z products
@@ -158,6 +182,24 @@ set_box_xzid
 	sta zid_ptr
 	lda #>box_zid
 	sta zid_ptr+1
+	lda #<box_col
+	sta col_ptr
+	lda #>box_col
+	sta col_ptr+1
+	rts
+
+set_door_closed_col
+	lda #<door_closed_col
+	sta col_ptr
+	lda #>door_closed_col
+	sta col_ptr+1
+	rts
+
+set_door_open_col
+	lda #<door_open_col
+	sta col_ptr
+	lda #>door_open_col
+	sta col_ptr+1
 	rts
 
 ; A = exterior keep 0/1, Y = face bit. XOR box_inside into face_bits.
@@ -307,6 +349,47 @@ box_pack_edges
 	tya
 	lsr
 	sta mesh_ne
+	rts
+
+; Visible edge list → corner mask + mesh_nwork (1–8 for crates)
+box_build_vert_mask
+	lda #0
+	sta mesh_vmask
+	ldx #0
+.bvm
+	cpx mesh_ne
+	beq .bvm_pop
+	txa
+	asl
+	tay
+	lda box_vis_edges,y
+	tay
+	lda mesh_vmask
+	ora box_vbit,y
+	sta mesh_vmask
+	txa
+	asl
+	tay
+	iny
+	lda box_vis_edges,y
+	tay
+	lda mesh_vmask
+	ora box_vbit,y
+	sta mesh_vmask
+	inx
+	jmp .bvm
+.bvm_pop
+	lda #0
+	sta mesh_nwork
+	ldx #8
+	lda mesh_vmask
+.bvm_cnt
+	asl
+	bcc .bvm_c0
+	inc mesh_nwork
+.bvm_c0
+	dex
+	bne .bvm_cnt
 	rts
 
 ; Inward XZ frustum normals: left/right edges at yaw±FOV_HALF, 90° swap-flip
@@ -625,7 +708,7 @@ fill_door_verts
 	clc
 	adc box_sy
 	sta pv2				; y1
-	lda door_face,x
+	lda door_vface,x
 	cmp #FACE_PX
 	bcc .fdz
 	jmp .fdx
@@ -670,6 +753,7 @@ fill_door_verts
 	sta zid_ptr
 	lda #>door_closed_z_zid
 	sta zid_ptr+1
+	jsr set_door_closed_col
 	lda #4
 	sta mesh_nv
 	jmp xform_mesh_xz
@@ -713,6 +797,7 @@ fill_door_verts
 	sta zid_ptr
 	lda #>door_open_z_zid
 	sta zid_ptr+1
+	jsr set_door_open_col
 	lda #6
 	sta mesh_nv
 	jmp xform_mesh_xz
@@ -758,6 +843,7 @@ fill_door_verts
 	sta zid_ptr
 	lda #>door_closed_x_zid
 	sta zid_ptr+1
+	jsr set_door_closed_col
 	lda #4
 	sta mesh_nv
 	jmp xform_mesh_xz
@@ -801,12 +887,17 @@ fill_door_verts
 	sta zid_ptr
 	lda #>door_open_x_zid
 	sta zid_ptr+1
+	jsr set_door_open_col
 	lda #6
 	sta mesh_nv
 	jmp xform_mesh_xz
 
 ; Up-pointing triangle on the switch face
 fill_switch_verts
+	lda #<box_col			; 3 distinct columns → identity
+	sta col_ptr
+	lda #>box_col
+	sta col_ptr+1
 	ldx obj_i
 	lda sw_face,x
 	cmp #FACE_PX
@@ -985,6 +1076,10 @@ fill_slope_verts
 	sta UZ+1
 	jsr set_box_xzid
 .sl_emit
+	lda #<box_col			; 4 distinct columns → identity
+	sta col_ptr
+	lda #>box_col
+	sta col_ptr+1
 	lda #2
 	sta mesh_nx
 	sta mesh_nz
@@ -1063,17 +1158,17 @@ draw_world
 	bne .dw_dn
 .dw_doku
 	stx obj_i
-	lda door_x,x
+	lda door_vx,x
 	sta box_x
 	lda door_y,x
 	sta box_y
-	lda door_z,x
+	lda door_vz,x
 	sta box_z
-	lda door_sx,x
+	lda door_vsx,x
 	sta box_sx
 	lda door_sy,x
 	sta box_sy
-	lda door_sz,x
+	lda door_vsz,x
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_dn0

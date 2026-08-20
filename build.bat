@@ -22,6 +22,8 @@ python tools\genenemies.py
 if errorlevel 1 exit /b 1
 python tools\genmap.py
 if errorlevel 1 exit /b 1
+python tools\genweapons.py
+if errorlevel 1 exit /b 1
 
 pushd src
 "%ACME%" -v3 --vicelabels ..\quake64.lbl quake64.asm

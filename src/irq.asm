@@ -183,6 +183,18 @@ accum_keys
 	ldy #in_back - in_fwd
 	jsr irq_add_ms
 .nos
+	txa
+	and #$01				; 3 = nailgun
+	bne .no3
+	lda #1
+	sta in_wpn_nail
+.no3
+	txa
+	and #$08				; 4 = grenade launcher
+	bne .no4
+	lda #1
+	sta in_wpn_rock
+.no4
 	; D PA2 $FB
 	lda #$fb
 	sta $dc00
@@ -219,8 +231,28 @@ accum_keys
 	ldy #in_turn_r - in_fwd
 	jsr irq_add_ms
 .nol
+	; 1 / 2 / SPACE on PA7 = $7F
 	lda #$7f
 	sta $dc00
+	lda $dc01
+	tax
+	and #$01				; 1 = axe
+	bne .no1
+	lda #1
+	sta in_wpn_axe
+.no1
+	txa
+	and #$08				; 2 = shotgun
+	bne .no2
+	lda #1
+	sta in_wpn_shot
+.no2
+	txa
+	and #$10				; SPACE
+	bne .nospc
+	lda #1
+	sta in_fire
+.nospc
 	rts
 
 ; Snapshot IRQ hold ms; build turn + 8.8 wish. Call under I/O mapped.
@@ -234,6 +266,18 @@ read_input
 	sta in_fwd,x
 	dex
 	bpl -
+	ldx #3
+-
+	lda in_wpn_axe,x
+	sta key_wpn_axe,x
+	lda #0
+	sta in_wpn_axe,x
+	dex
+	bpl -
+	lda in_fire
+	sta key_fire
+	lda #0
+	sta in_fire
 	cli
 
 	lda #0

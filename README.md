@@ -2,7 +2,7 @@
 
 A Commodore 64 *Quake* demake: a 3D line-drawn world in custom character graphics, with portal rooms, stick-figure monsters, and a hardware-sprite view-model.
 
-This is an early prototype. The running program is the **core line engine** — a double-buffered Bresenham Grunt walk cycle in VIC Bank 3 — plus a HUD font and frame profiler. Portal maps, other enemies, and weapons are designed but not in the binary yet.
+This is an early prototype. The running program is the **core line engine** — a double-buffered Bresenham Grunt walk cycle in VIC Bank 3 — plus a HUD font, frame profiler, and hardware-sprite view-models (axe, shotgun, nailgun, grenade launcher).
 
 ## Display
 
@@ -36,4 +36,4 @@ make.bat           :: build and autostart in VICE
 run-editor.bat     :: local map / skeleton editor
 ```
 
-Keys in the current E1M1 demo: **WASD** move / strafe, **J/L** turn. HUD row 2 shows camera **X Y Z** and heading **H**. Stick-figure Grunt / Rottweiler walk in room 2.
+Keys in the current E1M1 demo: **WASD** move / strafe, **J/L** turn, **SPACE** fire, **1–4** axe / shotgun / nailgun / grenade launcher. HUD row 2 shows camera **X Y Z** and heading **H**. Stick-figure Grunt / Rottweiler walk in room 2.

@@ -47,6 +47,7 @@ start
 	jsr init_hud
 	jsr init_irq
 	jsr play_sound_init
+	jsr init_weapon
 	jsr prof_init
 	jsr world_init
 	cli
@@ -76,6 +77,7 @@ main
 	sta draw_buf
 	jsr set_draw_ptrs
 	jsr read_input
+	jsr update_weapon
 	jsr apply_move_world
 	jsr maybe_room_palette
 	jsr try_proximity
@@ -293,6 +295,8 @@ copy_luts
 !source "playsound.asm"
 !source "pcsounds.asm"
 !source "pcsfreq.asm"
+!source "weapon.asm"
+!source "weapon_spr.asm"
 !source "process.asm"
 !source "world.asm"
 !source "mesh.asm"

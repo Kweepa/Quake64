@@ -19,6 +19,7 @@ init_vic
 	sta $d021
 
 	lda #0
+	sta $d015				; sprites off until init_weapon
 	sta draw_buf
 	sta show_buf
 	lda #D018_A_BOT

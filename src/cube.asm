@@ -1470,6 +1470,60 @@ xform_world_vert
 	sta CAM_XH,x
 	rts
 
+; CAM[0] filled. C=1 → A=sx (0..191), Y=sy (0..127). C=0 behind / invalid.
+project_cam0_screen
+	lda CAM_ZH
+	bmi .pcs_no
+	bne .pcs_zok
+	lda CAM_Z
+	beq .pcs_no
+.pcs_zok
+	lda CAM_Z
+	sta z_eye
+	lda CAM_ZH
+	sta z_eye_h
+	lda CAM_X
+	sta ylo
+	lda CAM_XH
+	sta yhi
+	jsr persp88
+	clc
+	adc #SCREEN_CX
+	bpl .pcs_xp
+	lda #0
+	beq .pcs_xs
+.pcs_xp
+	cmp #192
+	bcc .pcs_xs
+	lda #191
+.pcs_xs
+	sta rot0
+	lda CAM_Y
+	sta ylo
+	lda CAM_YH
+	sta yhi
+	jsr persp88
+	eor #$ff
+	clc
+	adc #1
+	clc
+	adc #64
+	tay
+	bpl .pcs_yp
+	ldy #0
+	beq .pcs_ok
+.pcs_yp
+	cpy #128
+	bcc .pcs_ok
+	ldy #127
+.pcs_ok
+	lda rot0
+	sec
+	rts
+.pcs_no
+	clc
+	rts
+
 ; Unique UX/UZ * sin/cos, then CAM[v] from (xid,zid,VY[v]).
 ; Caller sets mesh_nx/nz/nv, UX/UZ/VY, xid_ptr/zid_ptr; jsr load_view_trig.
 xform_mesh_xz
@@ -1918,6 +1972,7 @@ draw_enemies
 	jsr prof_add_bucket
 }
 .de_draw
+	jsr try_enemy_muzzle
 	jsr mesh_draw
 !if PROFILE = 1 {
 	ldy #PROF_DRAW
@@ -1925,6 +1980,79 @@ draw_enemies
 }
 .de_one_rts
 	ldx obj_i
+	rts
+
+; If this enemy is on its ranged fire frame (or latched pending), claim sprite-6 muzzle at tip.
+try_enemy_muzzle
+	jsr enemy_muzzle_want
+	bcc .temz_rts
+	lda CAM_ZH+12
+	bmi .temz_rts
+	lda PROJ_X+12
+	ldy PROJ_XH+12
+	jsr .to_sx
+	sta rot2				; tip sx
+	lda PROJ_Y+12
+	ldy PROJ_YH+12
+	jsr .to_sy
+	tay
+	lda #$ff
+	sta emuz_pending
+	lda rot2
+	jmp start_enemy_muzzle
+.temz_rts
+	rts
+
+; LOD2: A = feet sy, x0 = feet sx → flash at (sx−2, sy−5), depth = origin Z.
+try_enemy_muzzle_lod2
+	sta rot1				; feet sy
+	jsr enemy_muzzle_want
+	bcc .teml_rts
+	lda CAM_ZH
+	bmi .teml_rts
+	sta CAM_ZH+12			; LOD bands read tip slot
+	lda rot1
+	sec
+	sbc #5
+	bcs +
+	lda #0
++
+	tay
+	lda x0
+	sec
+	sbc #2
+	bcs +
+	lda #0
++
+	sta rot2
+	lda #$ff
+	sta emuz_pending
+	lda rot2
+	jmp start_enemy_muzzle
+.teml_rts
+	rts
+
+; C=1 if this enemy should show a muzzle this draw.
+enemy_muzzle_want
+	ldx obj_i
+	lda en_state,x
+	cmp #EN_ATTACK
+	bne .emw_no
+	ldy en_type,x
+	bne .emw_no			; Rottweiler — leap bite, no muzzle
+	lda enemy_fire_frame,y
+	bmi .emw_no			; $ff = none
+	lda emuz_pending
+	cmp obj_i
+	beq .emw_yes
+	lda enemy_fire_frame,y
+	cmp en_frame,x
+	bne .emw_no
+.emw_yes
+	sec
+	rts
+.emw_no
+	clc
 	rts
 
 ; Far LOD2: project CAM[0] origin, OR 8×8 enemy_lod[ent_type] into charset.
@@ -1964,6 +2092,10 @@ ent_lod2_draw
 	lda oy0l
 	ldy oy0h
 	jsr .to_sy
+	; A = feet sy, x0 = feet sx
+	pha
+	jsr try_enemy_muzzle_lod2
+	pla
 	; place glyph above feet: top = sy - 8 (no Y snap — &$f8 floated them up)
 	sec
 	sbc #8

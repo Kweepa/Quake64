@@ -6,6 +6,7 @@
 PROFILE		= 0				; 1 = R/P/K/D bucket HUD + CIA samples
 HUD_FRAME_MS	= 1				; 1 = frame time ms on HUD row 1
 HUD_POS		= 0				; 1 = X/Y/Z/yaw/pitch on HUD row 2
+INF_AMMO		= 1				; 1 = guns fire without spending ammo
 
 !source "mem.asm"
 !source "zp.asm"
@@ -76,6 +77,12 @@ main
 	jsr draw_enemies
 	lda #$35
 	sta $01
+	; muzzle/splat staged under $01=$34 — poke VIC now so it shows this frame
+	lda emuz_on
+	ora splat_on
+	beq .main_no_fx
+	jsr apply_en
+.main_no_fx
 
 	lda draw_buf
 	sta show_buf
@@ -275,6 +282,8 @@ copy_luts
 !source "pcsfreq.asm"
 !source "weapon.asm"
 !source "weapon_spr.asm"
+!source "splat_spr.asm"
+!source "enemy_muzzle.asm"
 !source "process.asm"
 !source "door.asm"
 !source "world.asm"

@@ -73,7 +73,6 @@ init_hud
 	sta $d800 + HUD_OFF + 14
 	sta $d800 + HUD_OFF + 19
 }
-!if HUD_POS = 1 {
 	ldx #0
 	lda #HUD_CH_SP
 -
@@ -82,6 +81,14 @@ init_hud
 	inx
 	cpx #24
 	bne -
+	ldx #23
+-
+	lda #COL_HUD
+	sta $d800 + HUD_OFF2,x
+	dex
+	bpl -
+
+!if HUD_POS = 1 {
 	lda #HUD_CH_X
 	sta SCR_A + HUD_OFF2
 	sta SCR_B + HUD_OFF2
@@ -97,13 +104,6 @@ init_hud
 	lda #HUD_CH_P
 	sta SCR_A + HUD_OFF2 + 19
 	sta SCR_B + HUD_OFF2 + 19
-
-	ldx #23
--
-	lda #COL_HUD
-	sta $d800 + HUD_OFF2,x
-	dex
-	bpl -
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF2
 	sta $d800 + HUD_OFF2 + 5

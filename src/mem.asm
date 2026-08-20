@@ -146,8 +146,12 @@ EN_GONE		= 6
 ENEMY_DETECT	= 12		; Chebyshev XZ wake distance
 ENEMY_STEP_MS	= 200		; approach cell cadence (dt acc + remainder)
 APPROACH_MIN_MS	= 1500		; min time in approach before attack
-AXE_DMG		= 1
+AXE_DMG		= 4			; Quake axe 20 ÷ 5
 AXE_HIT_R		= 3			; XZ chebyshev radius for axe hit test
+SHOT_DMG_MAX	= 11		; Quake SSG 14×4=56 ÷ 5
+SHOT_HIT_X	= 20		; |sx − SCREEN_CX| ≤ this (pixels)
+SHOT_Z_MAX	= 16		; view-Z high: dmg ∝ (SHOT_Z_MAX − z) / SHOT_Z_MAX (÷16 = lsr×4)
+SHOT_MID_H	= 3			; mid-body Y above feet (≈ ENEMY_CULL_H/2)
 ITEM_CULL_Y	= 2			; AABB |y| vs Chebyshev XZ + pad
 FOV_HALF	= 31			; yaw ticks ≈ atan(SCREEN_CX/FOCAL)
 
@@ -223,10 +227,16 @@ ZS_H		= $CBBA			; 4 bytes → $CBBA–$CBBD
 WPN_RAM		= $C800			; 4 body sprites (256 bytes)
 WPN_FLASH	= $C900			; sprite 4 generic / spark / nail L
 WPN_FLASH2	= $C940			; sprite 5 nail R
+WPN_EMUZ	= $C980			; sprite 6 enemy muzzle (one at a time)
+WPN_SPLAT	= $C9C0			; sprite 7 impact splat (hit/miss)
 WPN_PTR0	= (WPN_RAM - SCR_A) / 64	; $20
+WPN_PTR_EMUZ	= (WPN_EMUZ - SCR_A) / 64	; $26
+WPN_PTR_SPLAT	= (WPN_SPLAT - SCR_A) / 64	; $27
 COL_WPN		= 0 			; 
 COL_FLASH_Y	= 1			    ; yellow
 COL_FLASH_R	= 2			    ; red
+COL_SPLAT_HIT	= 2			; red (blood) (DO NOT CHANGE BACK TO PINK!)
+SPLAT_MSB	= $80			; $d010 / $d015 bit for sprite 7
 WPN_X0		= 160			; 2×2 top-left, visual centre 184
 WPN_Y_FLUSH	= 208			; 42px tall, viewport bottom ~250
 WPN_Y_SHOTIDLE	= 218		; shotgun: 10px below WPN_Y_FLUSH
@@ -242,6 +252,15 @@ FLASH_DY_GUN	= 20			; shotgun / grenade muzzle
 FLASH_DY_NAIL	= -15			; nail vs weapon top
 FLASH_YEL_MS	= 60
 FLASH_RED_MS	= 60
+SPLAT_MS		= FLASH_YEL_MS + FLASH_RED_MS	; same total as muzzle flash
+VIEW_SPR_X0	= 24 + VIEW_COL * 8	; 88 — viewport (0,0) → VIC
+VIEW_SPR_Y0	= 50 + VIEW_ROW * 8	; 122
+EMUZ_OX		= 12			; tip −12 X (center 24px)
+EMUZ_OY		= 10			; tip −10 Y (center 21px)
+EMUZ_MS		= 100
+EMUZ_MSB	= $40			; $d010 / $d015 bit for sprite 6
+EMUZ_Z0		= 8			; tip CAM_ZH LOD bands → spr 0..2
+EMUZ_Z1		= 16
 
 ; Weapon BSS (after unique-XZ products)
 in_fire		= $CBBE
@@ -274,13 +293,17 @@ wpn_tmp0	= $CBD8
 flash5_ms_l	= $CBD9
 flash5_ms_h	= $CBDA
 flash5_phase	= $CBDB			; sprite 5 (nail right)
+emuz_ms_l	= $CBDC			; enemy muzzle remaining ms
+emuz_ms_h	= $CBDD
+emuz_on		= $CBDE			; 1 = sprite 6 enabled
+emuz_xmsb	= $CBDF			; $d010 bit6 when X>=256
 
 ; Per-room door view (canonical door_* in map; game uses these at runtime)
-door_vx		= $CBDC			; MAP_NDOORS (≤8)
-door_vz		= $CBE4
-door_vsx	= $CBEC
-door_vsz	= $CBF4
-door_vface	= $CBFC
+door_vx		= $CBE0			; MAP_NDOORS (≤8)
+door_vz		= $CBE8
+door_vsx	= $CBF0
+door_vsz	= $CBF8
+door_vface	= $CC00
 
 ; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
 VOC		= $CC08			; Cohen–Sutherland outcode (front verts)
@@ -301,6 +324,7 @@ AMMO_SHELLS_MAX		= 100
 AMMO_NAILS_MAX		= 200
 AMMO_GRENADES_MAX	= 100
 AMMO_SHELLS_BOX		= 20
+AMMO_SHELLS_DEATH	= 5			; grunt death backpack
 AMMO_NAILS_BOX		= 25
 AMMO_GRENADES_BOX	= 5
 AMMO_NAILS_GUN		= 30
@@ -350,3 +374,18 @@ gunshot_wake	= $CDAE			; 1 = gun fired this frame (room wake)
 ai_dirtry	= $CDAF			; 5 bytes dodge dir candidates
 ai_turn		= $CDB4			; turnaround dir or $ff
 ai_probe	= $CDB5			; dir under test (probe must not clobber)
+emuz_vx		= $CDB6			; VIC X lo staged (poke in apply_en; draw is $01=$34)
+emuz_vy		= $CDB7			; VIC Y staged
+emuz_col		= $CDB8			; sprite colour staged from col_fx
+emuz_pending	= $CDB9			; enemy idx waiting to muzzle, $ff = none
+emuz_skip	= $CDBA			; 1 = skip next tick (spawn frame; dt ~150ms > 100ms)
+splat_ms_l	= $CDBB			; impact splat remaining ms
+splat_ms_h	= $CDBC
+splat_on		= $CDBD			; 1 = sprite 7 enabled
+splat_xmsb	= $CDBE			; $d010 bit7 when X>=256
+splat_vx		= $CDBF
+splat_vy		= $CDC0
+splat_col	= $CDC1			; COL_SPLAT_HIT or col_line (miss)
+splat_skip	= $CDC2			; 1 = skip next tick (spawn frame)
+shot_hit_i	= $CDC3			; closest SSG hit enemy, $ff = miss
+shot_hit_z	= $CDC4			; CAM_ZH of that hit

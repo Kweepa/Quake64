@@ -15,6 +15,16 @@ NVERTS = 13
 TYPES = ["Grunt", "Rottweiler"]
 PREFIX = ["grunt", "rott"]
 
+# Original Quake HP; ROM stores Quake // 5 (byte-sized, Shambler 120 fits).
+HP_QUAKE = {
+    "Grunt": 30,
+    "Rottweiler": 25,
+    "Knight": 75,
+    "Scrag": 80,
+    "Ogre": 200,
+    "Shambler": 600,
+}
+
 # Facing folds into the runtime rotate angle (ent_rotate: a = yaw − rot),
 # so no pre-baked 45° tables are needed.
 
@@ -159,8 +169,8 @@ def main() -> None:
     parts.append("enemy_alert_len\t\t!byte 11, 2")
     parts.append("enemy_run_start\t\t!byte 35, 23")
     parts.append("enemy_run_len\t\t!byte 8, 12")
-    parts.append("enemy_attack_start\t!byte 43, 0")
-    parts.append("enemy_attack_len\t!byte 9, 8")
+    parts.append("enemy_attack_start\t!byte 43, 35\t\t; Grunt shoot, Rott leap")
+    parts.append("enemy_attack_len\t!byte 9, 9")
     parts.append("enemy_pain_start\t\t!byte 29, 17")
     parts.append("enemy_pain_len\t\t!byte 6, 6")
     parts.append(
@@ -172,10 +182,14 @@ def main() -> None:
         + ", ".join(str(n) for n in death_lens)
     )
     parts.append("enemy_range\t\t!byte 30, 4\t\t; approach stop (Chebyshev XZ)")
-    parts.append("enemy_hp_init\t\t!byte 2, 2")
+    hp_bytes = ", ".join(str(HP_QUAKE[t] // 5) for t in TYPES)
+    hp_note = ", ".join(f"{t} {HP_QUAKE[t]}→{HP_QUAKE[t] // 5}" for t in TYPES)
+    parts.append(f"; Quake HP÷5: {hp_note}")
+    parts.append(f"enemy_hp_init\t\t!byte {hp_bytes}")
     parts.append("enemy_pain_chance\t!byte $80, $c0\t\t; rnd8 < chance → pain")
-    # BP_SHELLS=0; $FF = no drop. Index = ent_type.
-    parts.append("enemy_drop_type\t!byte 0, $ff\t\t; Grunt shells, Rott none")
+    # BP_SHELLS5=7; $FF = no drop. Index = ent_type.
+    parts.append("enemy_drop_type\t!byte 7, $ff\t\t; Grunt 5 shells, Rott none")
+    parts.append("enemy_fire_frame\t!byte 2, 4\t\t; grunt muzzle / rott leap hit frame")
     parts.append("")
     # Absolute frame → byte offset into *_gx/gy/gz (frame * NVERTS)
     parts.append(f"; frame * {NVERTS} as 16-bit offset (0..{max_nframes - 1})")

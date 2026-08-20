@@ -57,6 +57,15 @@ nail_fr_hi
 nail_flash_en
 	!byte $10, $20			; sprite 4 left, sprite 5 right
 
+emuz_spr_lo
+	!byte <spr_emuz_0, <spr_emuz_1, <spr_emuz_2
+emuz_spr_hi
+	!byte >spr_emuz_0, >spr_emuz_1, >spr_emuz_2
+splat_spr_lo
+	!byte <spr_splat_0, <spr_splat_1, <spr_splat_2
+splat_spr_hi
+	!byte >spr_splat_0, >spr_splat_1, >spr_splat_2
+
 ; Axe fire keyframes (right prepare → left/down arc). Idle is not in this table.
 axe_step_x
 	!byte 200, 172, 144, 120, 104
@@ -91,6 +100,25 @@ init_weapon
 	sta flash5_phase
 	sta flash5_ms_l
 	sta flash5_ms_h
+	sta emuz_on
+	sta emuz_ms_l
+	sta emuz_ms_h
+	sta emuz_xmsb
+	sta emuz_vx
+	sta emuz_vy
+	sta emuz_col
+	sta emuz_skip
+	sta splat_on
+	sta splat_ms_l
+	sta splat_ms_h
+	sta splat_xmsb
+	sta splat_vx
+	sta splat_vy
+	sta splat_col
+	sta splat_skip
+	lda #$ff
+	sta emuz_pending
+	lda #0
 	sta fire_rpt_l
 	sta fire_rpt_h
 	sta mg_frame
@@ -120,7 +148,7 @@ init_weapon
 	clc
 	adc #1
 	inx
-	cpx #6
+	cpx #8				; body 0–3, flash 4–5, emuz 6, splat 7
 	bcc .iw_ptr
 
 	; nail R bitmap stays in slot 5
@@ -239,6 +267,32 @@ blit_flash2
 	bcc .bf5
 	rts
 
+; A = src lo, Y = src hi → WPN_EMUZ (64)
+blit_emuz
+	sta .be6 + 1
+	sty .be6 + 2
+	ldx #0
+.be6
+	lda $ffff,x
+	sta WPN_EMUZ,x
+	inx
+	cpx #64
+	bcc .be6
+	rts
+
+; A = src lo, Y = src hi → WPN_SPLAT (64)
+blit_splat
+	sta .bs7 + 1
+	sty .bs7 + 2
+	ldx #0
+.bs7
+	lda $ffff,x
+	sta WPN_SPLAT,x
+	inx
+	cpx #64
+	bcc .bs7
+	rts
+
 apply_xy
 	lda #0
 	sta $d010
@@ -272,9 +326,28 @@ apply_en
 	beq .ae5
 	ora #$20
 .ae5
+	ldx emuz_on
+	beq .ae6
+	ora #EMUZ_MSB
+.ae6
+	ldx splat_on
+	beq .ae7
+	ora #SPLAT_MSB
+.ae7
 	sta wpn_flash_en
 	sta spr_en
 	sta $d015
+	lda #WPN_PTR_EMUZ
+	sta $c3fe
+	sta $c7fe
+	lda #WPN_PTR_SPLAT
+	sta $c3ff
+	sta $c7ff
+	jsr place_enemy_muzzle
+	jsr place_splat
+	lda emuz_xmsb
+	ora splat_xmsb
+	sta $d010
 	rts
 
 ; Flash X is screen-absolute; Y tracks the weapon.
@@ -347,6 +420,8 @@ update_weapon
 	bcc .uw_sw
 
 	jsr tick_flash
+	jsr tick_enemy_muzzle
+	jsr tick_splat
 	jsr tick_anim
 
 	lda fire_rpt_l
@@ -413,6 +488,11 @@ fire_shot
 	lda wpn_sound,x
 	jsr play_sound
 	ldx cur_weapon
+	cpx #WPN_SHOT
+	bne .fs_notshot
+	jsr shotgun_hitscan
+	ldx cur_weapon
+.fs_notshot
 	cpx #WPN_NAIL
 	beq .fs_nail
 	lda #$10
@@ -434,8 +514,12 @@ fire_shot
 	sta mg_frame
 	jmp apply_xy
 
-; X = cur_weapon; C=1 spent, C=0 cannot fire
+; X = cur_weapon; C=1 spent (or free), C=0 cannot fire
 try_spend_ammo
+!if INF_AMMO = 1 {
+	sec
+	rts
+}
 	cpx #WPN_SHOT
 	beq .ts_shell
 	cpx #WPN_NAIL
@@ -653,6 +737,186 @@ flash5_expired
 .f5_off
 	lda #0
 	sta flash5_phase
+	rts
+
+; A = tip viewport sx, Y = tip viewport sy. Depth = CAM_ZH+12.
+; Safe at $01=$34: blit + stage VIC regs (apply_en pokes when I/O is mapped).
+; Sprite top-left at tip −12/−10; LOD 0..2 from distance; colour = col_fx.
+start_enemy_muzzle
+	sta wpn_tmp0			; tip sx
+	tya
+	pha				; tip sy
+	; distance LOD from tip view-z high (0 near … 2 far)
+	ldx #0
+	lda CAM_ZH+12
+	bmi .sem_far
+	cmp #EMUZ_Z0
+	bcc .sem_lod
+	inx
+	cmp #EMUZ_Z1
+	bcc .sem_lod
+.sem_far
+	ldx #2
+.sem_lod
+	lda emuz_spr_lo,x
+	ldy emuz_spr_hi,x
+	jsr blit_emuz
+	; VIC X = sx − 12 + VIEW_SPR_X0 (= sx + 76)
+	clc
+	lda wpn_tmp0
+	adc #VIEW_SPR_X0 - EMUZ_OX
+	sta emuz_vx
+	lda #0
+	bcc .sem_xlo
+	lda #EMUZ_MSB
+.sem_xlo
+	sta emuz_xmsb
+	; VIC Y = sy − 10 + VIEW_SPR_Y0 (= sy + 112)
+	pla
+	clc
+	adc #VIEW_SPR_Y0 - EMUZ_OY
+	sta emuz_vy
+	lda col_fx
+	sta emuz_col
+	lda emuz_on
+	bne .sem_timer			; already up: no re-trigger sound
+	lda #SOUND_SHOOT
+	jsr play_sound
+.sem_timer
+	lda #1
+	sta emuz_on
+	sta emuz_skip			; don't expire on this frame's ~150ms dt
+	lda #<EMUZ_MS
+	sta emuz_ms_l
+	lda #>EMUZ_MS
+	sta emuz_ms_h
+	rts				; apply_en runs later with I/O on
+
+; Write staged enemy-muzzle VIC regs (call with $01=$35).
+place_enemy_muzzle
+	lda emuz_on
+	beq .pem_rts
+	lda emuz_vx
+	sta $d00c
+	lda emuz_vy
+	sta $d00d
+	lda emuz_col
+	sta $d02d
+.pem_rts
+	rts
+
+tick_enemy_muzzle
+	lda emuz_on
+	beq .tem_rts
+	lda emuz_skip
+	beq .tem_sub
+	lda #0
+	sta emuz_skip			; survive spawn frame → next draw
+	rts
+.tem_sub
+	sec
+	lda emuz_ms_l
+	sbc dt_ms
+	sta emuz_ms_l
+	lda emuz_ms_h
+	sbc dt_msh
+	sta emuz_ms_h
+	bcc .tem_off
+	ora emuz_ms_l
+	bne .tem_rts
+.tem_off
+	lda #0
+	sta emuz_on
+	sta emuz_ms_l
+	sta emuz_ms_h
+	sta emuz_xmsb
+	sta emuz_skip
+	jmp apply_en
+.tem_rts
+	rts
+
+; A = tip viewport sx, Y = tip viewport sy, X = depth (EMUZ_Z0/Z1 bands).
+; Colour in splat_col. Sprite top-left at tip −12/−10.
+start_splat
+	sta wpn_tmp0			; tip sx
+	tya
+	pha				; tip sy
+	txa					; depth → LOD 0..2 (same thresholds as emuz)
+	ldx #0
+	cmp #EMUZ_Z0
+	bcc .ssp_lod
+	inx
+	cmp #EMUZ_Z1
+	bcc .ssp_lod
+	ldx #2
+.ssp_lod
+	lda splat_spr_lo,x
+	ldy splat_spr_hi,x
+	jsr blit_splat
+	; VIC X = sx − 12 + VIEW_SPR_X0 (= sx + 76)
+	clc
+	lda wpn_tmp0
+	adc #VIEW_SPR_X0 - EMUZ_OX
+	sta splat_vx
+	lda #0
+	bcc .ssp_xlo
+	lda #SPLAT_MSB
+.ssp_xlo
+	sta splat_xmsb
+	; VIC Y = sy − 10 + VIEW_SPR_Y0 (= sy + 112)
+	pla
+	clc
+	adc #VIEW_SPR_Y0 - EMUZ_OY
+	sta splat_vy
+	lda #1
+	sta splat_on
+	sta splat_skip
+	lda #<SPLAT_MS
+	sta splat_ms_l
+	lda #>SPLAT_MS
+	sta splat_ms_h
+	rts
+
+place_splat
+	lda splat_on
+	beq .psp_rts
+	lda splat_vx
+	sta $d00e
+	lda splat_vy
+	sta $d00f
+	lda splat_col
+	sta $d02e
+.psp_rts
+	rts
+
+tick_splat
+	lda splat_on
+	beq .tsp_rts
+	lda splat_skip
+	beq .tsp_sub
+	lda #0
+	sta splat_skip
+	rts
+.tsp_sub
+	sec
+	lda splat_ms_l
+	sbc dt_ms
+	sta splat_ms_l
+	lda splat_ms_h
+	sbc dt_msh
+	sta splat_ms_h
+	bcc .tsp_off
+	ora splat_ms_l
+	bne .tsp_rts
+.tsp_off
+	lda #0
+	sta splat_on
+	sta splat_ms_l
+	sta splat_ms_h
+	sta splat_xmsb
+	sta splat_skip
+	jmp apply_en
+.tsp_rts
 	rts
 
 tick_anim

@@ -131,6 +131,15 @@ eu_approach
 	sta en_timer,x
 	sta en_timer_h,x
 .eu_ap_step
+	; Rottweiler: stand when already in melee range (Wolf64-like)
+	lda en_type,x
+	beq .eu_ap_acc			; grunt — keep strafing
+	jsr enemy_chebyshev
+	ldy en_type,x
+	cmp enemy_range,y
+	beq .eu_ap_rng
+	bcc .eu_ap_rng
+.eu_ap_acc
 	clc
 	lda en_step,x
 	adc dt_ms
@@ -254,6 +263,8 @@ enemy_anim_step
 	jmp .eas_n
 .eas_oneshot
 	ldy en_type,x
+	lda en_frame,x
+	sta rot2				; old local frame (detect fire-frame skip)
 	inc en_frame,x
 	lda en_frame,x
 	pha
@@ -278,14 +289,38 @@ enemy_anim_step
 	jsr enemy_enter_approach
 	jmp .eas_n
 .eas_atlen
+	; Latch hit if we landed on / skipped past fire frame: old < fire <= new
+	lda enemy_fire_frame,y
+	bmi .eas_atlen_go			; $ff = none
+	cmp rot2
+	beq .eas_atlen_go			; already were on fire frame
+	bcc .eas_atlen_go			; fire < old → already past
+	pla
+	pha
+	cmp enemy_fire_frame,y
+	bcc .eas_atlen_go			; new < fire → not yet
+	lda en_type,x
+	bne .eas_bite			; Rottweiler — leap bite
+	lda enemy_idx
+	sta emuz_pending
+	jmp .eas_atlen_go
+.eas_bite
+	jsr enemy_bite
+	ldx enemy_idx
+	ldy en_type,x
+.eas_atlen_go
 	pla
 	cmp enemy_attack_len,y
 	bcs +
 	jmp .eas_n
 +
-	; 50%: shoot again if still in range, else approach
+	; Grunt 50% re-shoot; Rott always re-bite if still in range
+	ldx enemy_idx
+	lda en_type,x
+	bne .eas_rng_chk
 	jsr rnd8
 	bmi .eas_to_ap
+.eas_rng_chk
 	ldx enemy_idx
 	jsr enemy_chebyshev
 	ldy en_type,x
@@ -554,7 +589,7 @@ enemy_face_player
 	sta en_rot,x
 	rts
 
-; Enter approach: 1.5s min, zero step remainder, pick dodge octant.
+; Enter approach: grunt 1.5s min; Rott no lockout. Zero step; pick dodge.
 enemy_enter_approach
 	stx enemy_idx
 	lda #EN_APPROACH
@@ -563,11 +598,99 @@ enemy_enter_approach
 	sta en_frame,x
 	sta en_step,x
 	sta en_step_h,x
+	sta en_timer,x
+	sta en_timer_h,x
+	lda en_type,x
+	bne .eea_dodge			; Rottweiler — attack as soon as in range
 	lda #<APPROACH_MIN_MS
 	sta en_timer,x
 	lda #>APPROACH_MIN_MS
 	sta en_timer_h,x
+.eea_dodge
 	jsr select_dodge_dir
+	rts
+
+; Rottweiler leap hit — recheck range, then rnd>>4 damage (0 = miss).
+enemy_bite
+	ldx enemy_idx
+	jsr enemy_chebyshev
+	ldy en_type,x
+	cmp enemy_range,y
+	beq .eb_roll
+	bcc .eb_roll
+	rts
+.eb_roll
+	jsr rnd8
+	lsr
+	lsr
+	lsr
+	lsr
+	beq .eb_rts
+	sta rot0
+	lda player_hp
+	beq .eb_rts
+	lda rot0
+	jsr take_damage
+	jmp bite_hit_splat
+.eb_rts
+	rts
+
+; A = damage — subtract from player_hp; hurt/death SFX
+take_damage
+	sta rot0
+	lda player_hp
+	beq .td_rts
+	sec
+	sbc rot0
+	bcs +
+	lda #0
++
+	sta player_hp
+	beq .td_death
+	lda #SOUND_TAKEDAMAGE
+	jmp play_sound
+.td_death
+	lda #SOUND_PLAYERDEATH
+	jmp play_sound
+.td_rts
+	rts
+
+; Blood splat at dog origin +3 Y (vert-3 project looked wrong).
+bite_hit_splat
+	lda $01
+	pha
+	lda #$34
+	sta $01
+	jsr load_view_trig
+	ldx enemy_idx
+	lda en_x,x
+	sta ent_wx
+	lda en_y,x
+	clc
+	adc #3
+	sta ent_wy
+	lda en_z,x
+	sta ent_wz
+	lda cs_b
+	jsr mulset_a
+	lda sn_b
+	jsr mulset_b
+	ldx #0
+	jsr xform_world_vert
+	jsr project_cam0_screen
+	bcc .bhs_done
+	ldx CAM_ZH
+	stx rot0
+	jsr splat_aim_jitter
+	sta rot2
+	lda #COL_SPLAT_HIT
+	sta splat_col
+	ldx rot0
+	lda rot2
+	jsr start_splat
+.bhs_done
+	pla
+	sta $01
 	rts
 
 ; A = dir to probe. C=1 walkable; ai_probe = dir
@@ -806,4 +929,365 @@ axe_try_kill
 	bne .atk_lp
 .atk_no
 	clc
+	rts
+
+; ------------------------------------------------------------------
+; Super shotgun: screen-aim hit. Mid-body project → |sx−CX|≤SHOT_HIT_X,
+; damage = SHOT_DMG_MAX*(SHOT_Z_MAX−z)/SHOT_Z_MAX for z in 0..SHOT_Z_MAX-1.
+; Pink splat on closest hit; col_line wall splat on miss.
+shotgun_hitscan
+	lda $01
+	pha
+	lda #$34
+	sta $01
+	lda #$ff
+	sta shot_hit_i
+	sta shot_hit_z
+	jsr load_view_trig
+	ldx #0
+.sh_lp
+	cpx #MAP_NENEMIES
+	bcc .sh_cont
+	jmp .sh_done
+.sh_cont
+	stx enemy_idx
+	lda en_state,x
+	cmp #EN_DYING
+	bcc .sh_alive
+	jmp .sh_n
+.sh_alive
+	lda en_room,x
+	cmp room_idx
+	beq .sh_room
+	jmp .sh_n
+.sh_room
+	lda en_x,x
+	sta ent_wx
+	lda en_y,x
+	clc
+	adc #SHOT_MID_H
+	sta ent_wy
+	lda en_z,x
+	sta ent_wz
+	lda cs_b
+	jsr mulset_a
+	lda sn_b
+	jsr mulset_b
+	ldx #0
+	jsr xform_world_vert
+	ldx enemy_idx
+	; z_high in [0, SHOT_Z_MAX)
+	lda CAM_ZH
+	bpl .sh_zpos
+	jmp .sh_n
+.sh_zpos
+	cmp #SHOT_Z_MAX
+	bcc .sh_zok
+	jmp .sh_n
+.sh_zok
+	sta gidx				; CAM_ZH for dmg + closest
+	bne .sh_proj
+	lda CAM_Z
+	bne .sh_proj
+	jmp .sh_n				; exactly at camera
+.sh_proj
+	jsr project_cam0_screen
+	bcc .sh_n
+	; |sx − SCREEN_CX| ≤ SHOT_HIT_X
+	sec
+	sbc #SCREEN_CX
+	bpl .sh_xabs
+	eor #$ff
+	clc
+	adc #1
+.sh_xabs
+	cmp #SHOT_HIT_X + 1
+	bcs .sh_n
+	; dmg = SHOT_DMG_MAX * (SHOT_Z_MAX − z) / 16
+	lda #SHOT_Z_MAX
+	sec
+	sbc gidx
+	tay
+	lda #SHOT_DMG_MAX
+	jsr umul8j			; prod ≤ 11*16 = 176
+	lda prod_l
+	lsr
+	lsr
+	lsr
+	lsr
+	bne .sh_do
+	lda #1
+.sh_do
+	ldx enemy_idx
+	jsr damage_enemy
+	ldx enemy_idx
+	lda shot_hit_i
+	cmp #$ff
+	beq .sh_set
+	lda gidx
+	cmp shot_hit_z
+	bcs .sh_n
+.sh_set
+	stx shot_hit_i
+	lda gidx
+	sta shot_hit_z
+.sh_n
+	ldx enemy_idx
+	inx
+	jmp .sh_lp
+.sh_done
+	lda shot_hit_i
+	cmp #$ff
+	beq .sh_miss
+	jsr shotgun_hit_splat
+	jmp .sh_out
+.sh_miss
+	jsr shotgun_miss_splat
+.sh_out
+	pla
+	sta $01
+	rts
+
+; Pink mid-body splat on shot_hit_i (expects $01=$34, view trig loaded).
+shotgun_hit_splat
+	ldx shot_hit_i
+	lda en_x,x
+	sta ent_wx
+	lda en_y,x
+	clc
+	adc #SHOT_MID_H
+	sta ent_wy
+	lda en_z,x
+	sta ent_wz
+	lda cs_b
+	jsr mulset_a
+	lda sn_b
+	jsr mulset_b
+	ldx #0
+	jsr xform_world_vert
+	jsr project_cam0_screen
+	bcc .shs_rts
+	ldx CAM_ZH				; view depth → EMUZ_Z* LOD
+	stx rot0
+	jsr splat_aim_jitter			; A/Y = projected ±8/±4
+	sta rot2
+	lda #COL_SPLAT_HIT
+	sta splat_col
+	ldx rot0
+	lda rot2
+	jmp start_splat
+.shs_rts
+	rts
+
+; Miss splat: LOD = winner-face depth (axis*127/|dir|);
+; umul8j + 16÷8 (PRG sq tabs — not lerpdv/$F800, IRQ-safe).
+; Colour = col_line. Screen centre ±8 X / ±4 Y; start_splat tip−12/−10.
+shotgun_miss_splat
+	ldy room_idx
+	; ax = dist to X exit (facing), $ff if sin=0
+	lda sn_b
+	beq .sms_nox
+	bpl .sms_xp
+	lda cam_xh
+	sec
+	sbc room_x,y
+	jmp .sms_ax
+.sms_xp
+	clc
+	lda room_x,y
+	adc room_sx,y
+	sec
+	sbc #1
+	sec
+	sbc cam_xh
+.sms_ax
+	sta e0z
+	jmp .sms_az
+.sms_nox
+	lda #$ff
+	sta e0z
+.sms_az
+	lda cs_b
+	beq .sms_noz
+	bpl .sms_zp
+	lda cam_zh
+	sec
+	sbc room_z,y
+	jmp .sms_azs
+.sms_zp
+	clc
+	lda room_z,y
+	adc room_sz,y
+	sec
+	sbc #1
+	sec
+	sbc cam_zh
+.sms_azs
+	sta gidx
+	jmp .sms_pick
+.sms_noz
+	lda #$ff
+	sta gidx
+.sms_pick
+	; nearer face: t_x < t_z iff ax*|cs| < az*|sn|
+	; depth = axis*127/|dir| (Q7), clamp 127
+	lda e0z
+	cmp #$ff
+	bne .sms_hasx
+	lda gidx
+	cmp #$ff
+	bne .sms_onlyz
+	lda #127
+	jmp .sms_gotd
+.sms_onlyz
+	lda gidx
+	sta rot1
+	lda cs_b
+	jmp .sms_div
+.sms_hasx
+	lda gidx
+	cmp #$ff
+	bne .sms_cmp
+	lda e0z
+	sta rot1
+	lda sn_b
+	jmp .sms_div
+.sms_cmp
+	lda cs_b
+	bpl .sms_acs
+	eor #$ff
+	clc
+	adc #1
+.sms_acs
+	tay					; |cs|
+	lda e0z				; ax
+	jsr umul8j
+	lda prod_l
+	sta dlo
+	lda prod_h
+	sta dhi
+	lda sn_b
+	bpl .sms_asn
+	eor #$ff
+	clc
+	adc #1
+.sms_asn
+	tay					; |sn|
+	lda gidx				; az
+	jsr umul8j
+	; ax*|cs| <= az*|sn| → X wins, else Z
+	lda dhi
+	cmp prod_h
+	bcc .sms_dx
+	bne .sms_dz2
+	lda dlo
+	cmp prod_l
+	bcc .sms_dx
+	beq .sms_dx
+	jmp .sms_dz2
+.sms_dx
+	lda e0z
+	sta rot1
+	lda sn_b
+	jmp .sms_div
+.sms_dz2
+	lda gidx
+	sta rot1
+	lda cs_b
+.sms_div
+	; A = signed dir → |A|; depth = rot1*127/|dir| via umul8j + 16÷8
+	bpl .sms_dabs
+	eor #$ff
+	clc
+	adc #1
+.sms_dabs
+	sta dlo
+	bne .sms_dnz
+	; |dir|=0 → parallel to winner face; treat as max range
+	lda #127
+	jmp .sms_gotd
+.sms_dnz
+	lda rot1
+	bne .sms_anz
+	lda #1
+	jmp .sms_gotd
+.sms_anz
+	ldy #127
+	jsr umul8j			; prod = axis * 127
+	lda #0
+	sta nlo				; remainder
+	ldx #16
+.sms_qlp
+	asl prod_l
+	rol prod_h
+	rol nlo
+	lda nlo
+	bcs .sms_qsub
+	cmp dlo
+	bcc .sms_qnxt
+.sms_qsub
+	sbc dlo
+	sta nlo
+	inc prod_l
+.sms_qnxt
+	dex
+	bne .sms_qlp
+	lda prod_h
+	bne .sms_sat
+	lda prod_l
+	cmp #128
+	bcc .sms_gotd
+.sms_sat
+	lda #127
+.sms_gotd
+	tax
+	stx rot0				; LOD depth
+	lda #SCREEN_CX
+	ldy #64
+	jsr splat_aim_jitter
+	sta rot2
+	lda col_line
+	sta splat_col
+	ldx rot0
+	lda rot2
+	jmp start_splat
+
+; A/Y = base sx/sy → A/Y = base ±8 X / ±4 Y, clamped to viewport.
+splat_aim_jitter
+	sta rot2
+	tya
+	pha
+	jsr rnd8
+	and #15
+	sec
+	sbc #8
+	clc
+	adc rot2
+	bpl .saj_sx1
+	lda #0
+	beq .saj_sxok
+.saj_sx1
+	cmp #192
+	bcc .saj_sxok
+	lda #191
+.saj_sxok
+	sta rot2
+	pla
+	sta rot1
+	jsr rnd8
+	and #7
+	sec
+	sbc #4
+	clc
+	adc rot1
+	tay
+	bpl .saj_sy1
+	ldy #0
+	beq .saj_done
+.saj_sy1
+	cpy #128
+	bcc .saj_done
+	ldy #127
+.saj_done
+	lda rot2
 	rts

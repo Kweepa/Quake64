@@ -19,7 +19,8 @@
           "dir": 1,
           "name": "Start corridor",
           "bgColor": 9,
-          "lineColor": 7
+          "lineColor": 7,
+          "fxColor": 1
         },
         {
           "id": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
@@ -35,7 +36,8 @@
           "dir": 1,
           "name": "Elevator down",
           "bgColor": 2,
-          "lineColor": 7
+          "lineColor": 7,
+          "fxColor": 1
         },
         {
           "id": "7f98a06a-3a51-401a-b1d4-40b9ebad9a87",
@@ -151,8 +153,9 @@
           "axis": "z",
           "dir": 1,
           "name": "Outside courtyard",
-          "bgColor": 14,
-          "lineColor": 1
+          "bgColor": 5,
+          "lineColor": 8,
+          "fxColor": 1
         },
         {
           "id": "a0e70a0f-f008-4048-8885-8e78c5026f4c",
@@ -228,10 +231,10 @@
         {
           "id": "b3910ac1-09cd-4fa2-9667-bca75256dbc4",
           "kind": "trigger",
-          "x": 11,
+          "x": 0,
           "y": 104,
           "z": 117,
-          "sx": 6,
+          "sx": 18,
           "sy": 6,
           "sz": 6,
           "face": "+z",
@@ -295,7 +298,8 @@
           "dir": 1,
           "name": "Entryway",
           "bgColor": 9,
-          "lineColor": 7
+          "lineColor": 7,
+          "fxColor": 1
         },
         {
           "id": "8fff08eb-f3f6-4448-8608-54c3449f4486",
@@ -311,7 +315,8 @@
           "dir": 1,
           "name": "",
           "bgColor": 6,
-          "lineColor": 7
+          "lineColor": 7,
+          "fxColor": 1
         },
         {
           "id": "54e070d8-96e5-45df-a8a6-c4d0981579aa",
@@ -431,7 +436,8 @@
           "dir": 1,
           "name": "",
           "bgColor": 11,
-          "lineColor": 7
+          "lineColor": 7,
+          "fxColor": 1
         },
         {
           "id": "5815d324-6a01-4d2c-9502-3f3a421cee04",
@@ -447,7 +453,8 @@
           "dir": 1,
           "name": "",
           "bgColor": 9,
-          "lineColor": 7
+          "lineColor": 7,
+          "fxColor": 1
         },
         {
           "id": "b58c5ce8-c742-485a-ba52-319354536a0e",
@@ -39566,20 +39573,20 @@
     }
   },
   "editor": {
-    "mode": "anim",
+    "mode": "layout",
     "localDraw": false,
     "selectedIds": [
-      "060c4ca4-f4c0-4234-9993-9104cc1da69f"
+      "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
     ],
     "enemy": "Grunt",
     "frameIndex": 47,
     "selectedVerts": [],
     "layoutCamera": {
-      "x": 75.9365222718607,
-      "y": 114.4035471684505,
-      "z": 175.78296038472416,
-      "yaw": 14.243333007812307,
-      "pitch": -0.6799995117187481,
+      "x": 30.585088312524434,
+      "y": 158.89901069130696,
+      "z": 231.40914022260802,
+      "yaw": 15.245998046874734,
+      "pitch": -0.8613330078124972,
       "speed": 16
     },
     "animOrbit": {

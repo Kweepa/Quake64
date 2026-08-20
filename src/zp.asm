@@ -185,6 +185,7 @@ pv2		= $b3
 pv3		= $b4
 pv4		= $b5
 col_bg		= $b6			; active room background → $d021 viewport
+col_fx		= $b7			; active room FX (enemy muzzle, etc.)
 col_line	= $b8			; active room lines → viewport colour RAM
 palette_room	= $b9			; last room_idx palette applied ($ff = none)
 far_scale	= $ba			; FOCAL/z integer, far enemy project

@@ -98,6 +98,8 @@ apply_room_palette
 	sta col_bg
 	lda room_line,x
 	sta col_line
+	lda room_fx,x
+	sta col_fx
 	jsr fill_viewport_colour
 	; irq_phase: 0=HUD (leave $d021), 1/2=viewport → background
 	lda irq_phase

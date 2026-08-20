@@ -50,6 +50,7 @@ export function clampMdlScale(n) {
 /** Default room viewport colours (C64 indices). */
 export const ROOM_BG_DEFAULT = 9;
 export const ROOM_LINE_DEFAULT = 7;
+export const ROOM_FX_DEFAULT = 1;
 /** @deprecated Use ROOM_BG_DEFAULT */
 export const ROOM_SKY_DEFAULT = ROOM_BG_DEFAULT;
 /** @deprecated */
@@ -555,6 +556,7 @@ export function clampObject(obj) {
     obj.name = clampName(obj.name);
     obj.bgColor = normalizeColor(obj.bgColor ?? obj.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(obj.lineColor, ROOM_LINE_DEFAULT);
+    obj.fxColor = normalizeColor(obj.fxColor, ROOM_FX_DEFAULT);
     delete obj.skyColor;
     delete obj.floorColor;
   }
@@ -606,6 +608,7 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.name = clampName(extra.name);
     obj.bgColor = normalizeColor(extra.bgColor ?? extra.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(extra.lineColor, ROOM_LINE_DEFAULT);
+    obj.fxColor = normalizeColor(extra.fxColor, ROOM_FX_DEFAULT);
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
@@ -1047,6 +1050,7 @@ function parseObjects(list) {
       bgColor: o.bgColor ?? o.skyColor,
       skyColor: o.skyColor,
       lineColor: o.lineColor,
+      fxColor: o.fxColor,
     });
     if (!KINDS[o.kind].fixed) {
       obj.sx = o.sx ?? obj.sx;
@@ -1063,6 +1067,7 @@ function parseObjects(list) {
       const bg = o.bgColor ?? o.skyColor;
       if (bg != null) obj.bgColor = normalizeColor(bg, ROOM_BG_DEFAULT);
       if (o.lineColor != null) obj.lineColor = normalizeColor(o.lineColor, ROOM_LINE_DEFAULT);
+      if (o.fxColor != null) obj.fxColor = normalizeColor(o.fxColor, ROOM_FX_DEFAULT);
       delete obj.skyColor;
       delete obj.floorColor;
     }

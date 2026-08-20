@@ -962,10 +962,10 @@ grant_bp_type
 
 gb_lo
 	!byte <gb_shells, <gb_nailgun, <gb_nails, <gb_grenlaunch
-	!byte <gb_grenades, <gb_hp25, <gb_hp50
+	!byte <gb_grenades, <gb_hp25, <gb_hp50, <gb_shells5
 gb_hi
 	!byte >gb_shells, >gb_nailgun, >gb_nails, >gb_grenlaunch
-	!byte >gb_grenades, >gb_hp25, >gb_hp50
+	!byte >gb_grenades, >gb_hp25, >gb_hp50, >gb_shells5
 
 gb_hp25
 	lda player_hp
@@ -996,13 +996,19 @@ gb_hp_ok
 	sec
 	rts
 gb_shells
+	lda #AMMO_SHELLS_BOX
+	bne gb_add_shells
+gb_shells5
+	lda #AMMO_SHELLS_DEATH
+gb_add_shells
+	sta rot2
 	lda ammo_shells
 	cmp #AMMO_SHELLS_MAX
 	bcc +
 	jmp gb_no
 +
 	clc
-	adc #AMMO_SHELLS_BOX
+	adc rot2
 	bcs gb_shell_cap
 	cmp #AMMO_SHELLS_MAX
 	bcc gb_shell_ok

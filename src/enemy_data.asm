@@ -470,16 +470,18 @@ enemy_alert_start	!byte 18, 44
 enemy_alert_len		!byte 11, 2
 enemy_run_start		!byte 35, 23
 enemy_run_len		!byte 8, 12
-enemy_attack_start	!byte 43, 0
-enemy_attack_len	!byte 9, 8
+enemy_attack_start	!byte 43, 35		; Grunt shoot, Rott leap
+enemy_attack_len	!byte 9, 9
 enemy_pain_start		!byte 29, 17
 enemy_pain_len		!byte 6, 6
 enemy_death_start	!byte 8, 8
 enemy_death_len		!byte 10, 9
 enemy_range		!byte 30, 4		; approach stop (Chebyshev XZ)
-enemy_hp_init		!byte 2, 2
+; Quake HP÷5: Grunt 30→6, Rottweiler 25→5
+enemy_hp_init		!byte 6, 5
 enemy_pain_chance	!byte $80, $c0		; rnd8 < chance → pain
-enemy_drop_type	!byte 0, $ff		; Grunt shells, Rott none
+enemy_drop_type	!byte 7, $ff		; Grunt 5 shells, Rott none
+enemy_fire_frame	!byte 2, 4		; grunt muzzle / rott leap hit frame
 
 ; frame * 13 as 16-bit offset (0..75)
 frame13_lo

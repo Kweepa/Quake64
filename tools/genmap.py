@@ -17,6 +17,7 @@ ELEV_TOGGLE = 2
 FACE = {"+z": 0, "-z": 1, "+x": 2, "-x": 3}
 ROOM_BG_DEFAULT = 9
 ROOM_LINE_DEFAULT = 7
+ROOM_FX_DEFAULT = 1
 ROOM_SKY_DEFAULT = ROOM_BG_DEFAULT  # legacy alias
 
 
@@ -176,6 +177,7 @@ def main() -> None:
         norm_color(r.get("bgColor", r.get("skyColor")), ROOM_BG_DEFAULT) for r in rooms
     ]
     room_line = [norm_color(r.get("lineColor"), ROOM_LINE_DEFAULT) for r in rooms]
+    room_fx = [norm_color(r.get("fxColor"), ROOM_FX_DEFAULT) for r in rooms]
     room_id = [map_id[id(r)] for r in rooms]
 
     # Doors
@@ -404,7 +406,8 @@ def main() -> None:
         "BP_GRENADES\t= 4",
         "BP_HEALTH25\t= 5",
         "BP_HEALTH50\t= 6",
-        "BP_NTYPES\t= 7",
+        "BP_SHELLS5\t= 7",
+        "BP_NTYPES\t= 8",
         f"MAP_FRUSTUM\t= {frustum}",
         f"MAP_FRUSTUM_HALF\t= {frustum_half}",
         "",
@@ -430,6 +433,7 @@ def main() -> None:
         btable("room_sz", room_sz).rstrip(),
         btable("room_bg", room_bg).rstrip(),
         btable("room_line", room_line).rstrip(),
+        btable("room_fx", room_fx).rstrip(),
         btable("room_id", room_id).rstrip(),
         "",
         btable("door_x", door_x).rstrip(),

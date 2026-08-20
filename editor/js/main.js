@@ -15,6 +15,7 @@ import {
   C64_NAMES,
   ROOM_BG_DEFAULT,
   ROOM_LINE_DEFAULT,
+  ROOM_FX_DEFAULT,
   MAX_TRIGGER_TEXT,
   MAX_NAME_LEN,
   MAX_TAG_LEN,
@@ -1406,6 +1407,13 @@ function renderInspector() {
         colorPicker("Lines", obj.lineColor ?? ROOM_LINE_DEFAULT, (v) =>
           apply(() => {
             obj.lineColor = v;
+          })
+        )
+      );
+      root.appendChild(
+        colorPicker("FX", obj.fxColor ?? ROOM_FX_DEFAULT, (v) =>
+          apply(() => {
+            obj.fxColor = v;
           })
         )
       );

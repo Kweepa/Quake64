@@ -21,9 +21,11 @@ room_sy
 room_sz
 	!byte 6,16,32,80,16,24,80
 room_bg
-	!byte 9,2,14,9,6,11,9
+	!byte 9,2,5,9,6,11,9
 room_line
-	!byte 7,7,1,7,7,7,7
+	!byte 7,7,8,7,7,7,7
+room_fx
+	!byte 1,1,1,1,1,1,1
 room_id
 	!byte 0,1,9,19,20,28,29
 
@@ -165,13 +167,13 @@ en_id
 	!byte 4,12,22,35,36
 
 tr_x
-	!byte 11
+	!byte 0
 tr_y
 	!byte 104
 tr_z
 	!byte 117
 tr_sx
-	!byte 6
+	!byte 18
 tr_sy
 	!byte 6
 tr_sz

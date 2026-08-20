@@ -4,6 +4,8 @@
 
 ; --- build flags (Wolf64-style) -------------------------------------------
 PROFILE		= 0				; 1 = R/P/K/D bucket HUD + CIA samples
+HUD_FRAME_MS	= 1				; 1 = frame time ms on HUD row 1
+HUD_POS		= 0				; 1 = X/Y/Z/yaw/pitch on HUD row 2
 
 !source "mem.asm"
 !source "zp.asm"
@@ -52,6 +54,7 @@ start
 	jsr init_irq
 	jsr play_sound_init
 	jsr init_weapon
+	jsr hud_ammo
 	jsr prof_init
 	jsr mulset_init
 	jsr world_init
@@ -136,8 +139,30 @@ advance_walk
 	inx
 	cpx #ENEMY_NTYPES
 	bcc .aw_type
+	jsr advance_death
 	jmp .aw_try
 .done
+	rts
+
+; Advance EN_DYING enemies one death frame; finish → gone + drop
+advance_death
+	ldx #0
+.ad_lp
+	cpx #MAP_NENEMIES
+	bcs .ad_rts
+	lda en_state,x
+	cmp #EN_DYING
+	bne .ad_n
+	inc en_dframe,x
+	lda en_dframe,x
+	ldy en_type,x
+	cmp enemy_death_len,y
+	bcc .ad_n
+	jsr finish_enemy_death
+.ad_n
+	inx
+	bne .ad_lp
+.ad_rts
 	rts
 
 ; A = signed 8-bit 8.8 step added to cam_xl/xh

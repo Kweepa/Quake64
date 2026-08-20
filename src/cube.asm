@@ -2,6 +2,7 @@
 !zone cube
 
 !source "enemy_data.asm"
+!source "enemylod.asm"
 
 ; A = signed editor byte → nlo:nhi = A/8 as 8.8 (ASL×5)
 scale_s8_88
@@ -45,15 +46,28 @@ ent_set_ptrs
 	sta gz_ptr+1
 	rts
 
-; Point gx/gy/gz at the current walk pose for ent_type.
-; abs_frame = enemy_anim_start[type] + anim_frames[type]; offset via frame13_*.
+; Point gx/gy/gz at the current pose for ent_type / obj_i.
+; Walk: enemy_anim_start[type] + anim_frames[type]
+; Dying: enemy_death_start[type] + en_dframe[obj_i]
 ent_set_pose
 	jsr ent_set_ptrs
+	ldx obj_i
+	lda en_state,x
+	cmp #EN_DYING
+	beq .esp_death
 	ldx ent_type
 	clc
 	lda enemy_anim_start,x
 	adc anim_frames,x
 	tay				; absolute frame
+	jmp .esp_off
+.esp_death
+	lda en_dframe,x
+	ldx ent_type
+	clc
+	adc enemy_death_start,x
+	tay
+.esp_off
 	clc
 	lda gx_ptr
 	adc frame13_lo,y
@@ -1784,6 +1798,9 @@ draw_enemies
 .de
 	cpx #MAP_NENEMIES
 	bcs .de_rts
+	lda en_state,x
+	cmp #EN_GONE
+	beq .de_n
 	lda en_room,x
 	cmp room_idx
 	bne .de_n
@@ -1813,6 +1830,17 @@ draw_enemies
 	ldx obj_i
 	lda en_type,x
 	sta ent_type
+	lda en_state,x
+	cmp #EN_DYING
+	beq .de_mesh			; dying: always full stick mesh
+	lda CAM_ZH
+	bmi .de_mesh
+	cmp #ENEMY_LOD2_Z
+	bcc .de_mesh
+	jsr ent_lod2_draw
+	jmp .de_one_rts
+.de_mesh
+	ldx obj_i
 	lda en_rot,x
 	sta ent_rot
 	lda #NVERTS
@@ -1836,10 +1864,9 @@ draw_enemies
 	ldy #PROF_ROT
 	jsr prof_add_bucket
 }
-	ldx ent_type
 	lda CAM_ZH+11
 	bmi .de_full
-	cmp enemy_far_z,x
+	cmp #ENEMY_LOD_Z
 	bcc .de_full
 	jsr ent_far_project
 !if PROFILE = 1 {
@@ -1865,5 +1892,230 @@ draw_enemies
 	jsr prof_add_bucket
 }
 .de_one_rts
+	ldx obj_i
+	rts
+
+; Far LOD2: project CAM[0] origin, OR 8×8 enemy_lod[ent_type] into charset.
+ent_lod2_draw
+	lda CAM_Z
+	sta z_eye
+	lda CAM_ZH
+	sta z_eye_h
+	lda CAM_X
+	sta ylo
+	lda CAM_XH
+	sta yhi
+	jsr persp88
+	sta ox0l
+	ldy #0
+	ora #0
+	bpl +
+	ldy #$ff
++
+	sty ox0h
+	lda ox0l
+	ldy ox0h
+	jsr .to_sx
+	sta x0
+	lda CAM_Y
+	sta ylo
+	lda CAM_YH
+	sta yhi
+	jsr persp88
+	sta oy0l
+	ldy #0
+	ora #0
+	bpl +
+	ldy #$ff
++
+	sty oy0h
+	lda oy0l
+	ldy oy0h
+	jsr .to_sy
+	; place glyph above feet: top = sy - 8 (no Y snap — &$f8 floated them up)
+	sec
+	sbc #8
+	bcs +
+	lda #0
++
+	sta rot2				; pixel top
+	lda x0
+	cmp #192
+	bcs .eld_rts
+	; center 8px glyph on projected origin
+	sec
+	sbc #4
+	bcs +
+	lda #0
++
+	sta ox0l				; pixel left (no X snap)
+	and #7
+	sta bitpos
+	lda rot2
+	cmp #121				; need room for 8 rows
+	bcs .eld_rts
+	; src = enemy_lod + ent_type*8
+	lda ent_type
+	asl
+	asl
+	asl
+	clc
+	adc #<enemy_lod
+	sta src_ptr
+	lda #0
+	adc #>enemy_lod
+	sta src_ptr+1
+	ldx #0
+.eld_row
+	stx vindex
+	txa
+	clc
+	adc rot2
+	sta y0
+	; shift glyph row into left (rot1) / right (ox0h) for bitpos
+	ldy vindex
+	lda (src_ptr),y
+	sta rot1
+	lda #0
+	sta ox0h
+	ldx bitpos
+	beq .eld_blit
+.eld_sh
+	lsr rot1
+	ror ox0h
+	dex
+	bne .eld_sh
+.eld_blit
+	lda ox0l
+	sta x0
+	jsr line_setup			; left column; Y = dest row
+	tya
+	sta rot0				; dest Y (line_setup clobbers X)
+	lda (colptr),y
+	ora rot1
+	sta (colptr),y
+	lda ox0h
+	beq .eld_next
+	lda ox0l
+	clc
+	adc #8
+	cmp #192
+	bcs .eld_next
+	sta x0
+	jsr line_setup
+	ldy rot0
+	lda (colptr),y
+	ora ox0h
+	sta (colptr),y
+.eld_next
+	ldx vindex
+	inx
+	cpx #8
+	bcc .eld_row
+.eld_rts
+	rts
+
+; X = enemy index → EN_DYING, frame 0, death SFX
+kill_enemy
+	lda #EN_DYING
+	sta en_state,x
+	lda #0
+	sta en_dframe,x
+	lda en_type,x
+	bne .ke_dog
+	lda #SOUND_DEATHSCREAM1
+	jmp play_sound
+.ke_dog
+	lda #SOUND_DOGDEATH
+	jmp play_sound
+
+; Axe proximity: first alive enemy in room within AXE_HIT_R. C=1 hit.
+axe_try_kill
+	ldx #0
+.atk_lp
+	cpx #MAP_NENEMIES
+	bcs .atk_no
+	lda en_state,x
+	cmp #EN_ALIVE
+	bne .atk_n
+	lda en_room,x
+	cmp room_idx
+	bne .atk_n
+	lda en_x,x
+	sec
+	sbc cam_xh
+	bcs +
+	eor #$ff
+	clc
+	adc #1
++
+	cmp #AXE_HIT_R + 1
+	bcs .atk_n
+	lda en_z,x
+	sec
+	sbc cam_zh
+	bcs +
+	eor #$ff
+	clc
+	adc #1
++
+	cmp #AXE_HIT_R + 1
+	bcs .atk_n
+	lda en_y,x
+	sta box_y
+	lda #ENEMY_CULL_H
+	sta box_sy
+	stx obj_i
+	jsr player_overlaps_y
+	ldx obj_i
+	bcc .atk_n
+	jsr kill_enemy
+	sec
+	rts
+.atk_n
+	inx
+	bne .atk_lp
+.atk_no
+	clc
+	rts
+
+; X = enemy finishing death → EN_GONE + optional drop (preserves X)
+finish_enemy_death
+	stx obj_i
+	lda #EN_GONE
+	sta en_state,x
+	lda en_type,x
+	tay
+	lda enemy_drop_type,y
+	cmp #$ff
+	bne .fed_drop
+	rts
+.fed_drop
+	sta rot2			; BP_* type
+	ldx #0
+.fed_slot
+	cpx #MAP_NENEMIES
+	bcs .fed_rts
+	lda drop_taken,x
+	beq .fed_n
+	; free slot (taken=1 inactive)
+	ldy obj_i
+	lda en_x,y
+	sta drop_x,x
+	lda en_y,y
+	sta drop_y,x
+	lda en_z,y
+	sta drop_z,x
+	lda en_room,y
+	sta drop_room,x
+	lda rot2
+	sta drop_type,x
+	lda #0
+	sta drop_taken,x
+	jmp .fed_rts
+.fed_n
+	inx
+	bne .fed_slot
+.fed_rts
 	ldx obj_i
 	rts

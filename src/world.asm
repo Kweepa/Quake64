@@ -36,6 +36,8 @@ world_init
 	sta yaw
 	jsr proc_init
 	jsr init_backpacks
+	jsr init_enemies
+	jsr init_drops
 	jsr update_floor
 	jsr sync_eye
 	lda #$ff
@@ -54,6 +56,33 @@ init_backpacks
 	inx
 	bne .ib_lp
 .ib_rts
+	rts
+
+; All enemies alive, death frame 0
+init_enemies
+	ldx #0
+	lda #0
+.ie_lp
+	cpx #MAP_NENEMIES
+	bcs .ie_rts
+	sta en_state,x
+	sta en_dframe,x
+	inx
+	bne .ie_lp
+.ie_rts
+	rts
+
+; Drop slots inactive (taken=1)
+init_drops
+	ldx #0
+	lda #1
+.id_lp
+	cpx #MAP_NENEMIES
+	bcs .id_rts
+	sta drop_taken,x
+	inx
+	bne .id_lp
+.id_rts
 	rts
 
 ; ------------------------------------------------------------------
@@ -434,26 +463,36 @@ col_in_room_y
 
 ; ------------------------------------------------------------------
 ; in_room_or_portal — col_x/col_z allowed for room_idx?
-; Inside room AABB, or in an open door wall-hole (wide axes, thin ±1).
+; Inside room AABB inset by PLAYER_R, or open door wall-hole (thin ±1).
 ; C=1 allowed
 ; ------------------------------------------------------------------
 in_room_or_portal
 	ldx room_idx
 	lda col_x
+	sec
+	sbc #PLAYER_R
+	bcc .irp_door
 	cmp room_x,x
 	bcc .irp_door
 	clc
 	lda room_x,x
 	adc room_sx,x
+	sec
+	sbc #PLAYER_R
 	cmp col_x
 	bcc .irp_door
 	beq .irp_door
 	lda col_z
+	sec
+	sbc #PLAYER_R
+	bcc .irp_door
 	cmp room_z,x
 	bcc .irp_door
 	clc
 	lda room_z,x
 	adc room_sz,x
+	sec
+	sbc #PLAYER_R
 	cmp col_z
 	bcc .irp_door
 	beq .irp_door
@@ -808,6 +847,7 @@ try_backpack_pickup
 	ldx obj_i
 	jsr grant_backpack
 	bcc .tbp_n
+	jsr hud_ammo
 	ldx obj_i
 	lda #1
 	sta bp_taken,x
@@ -818,11 +858,59 @@ try_backpack_pickup
 	inx
 	bne .tbp_lp
 .tbp_rts
+	; death-drop backpacks
+	ldx #0
+.tdp_lp
+	cpx #MAP_NENEMIES
+	bcs .tdp_rts
+	stx obj_i
+	lda drop_taken,x
+	bne .tdp_n
+	lda drop_room,x
+	cmp room_idx
+	bne .tdp_n
+	lda drop_x,x
+	sta box_x
+	lda drop_y,x
+	sta box_y
+	lda drop_z,x
+	sta box_z
+	lda #BP_FOOT_SX
+	sta box_sx
+	lda #BP_FOOT_SY
+	sta box_sy
+	lda #BP_FOOT_SZ
+	sta box_sz
+	lda cam_xh
+	sta col_x
+	lda cam_zh
+	sta col_z
+	jsr point_in_box_xz
+	bcc .tdp_n
+	jsr player_overlaps_y
+	bcc .tdp_n
+	ldx obj_i
+	lda drop_type,x
+	jsr grant_bp_type
+	bcc .tdp_n
+	jsr hud_ammo
+	ldx obj_i
+	lda #1
+	sta drop_taken,x
+	lda #SOUND_GETAMMO
+	jsr play_sound
+.tdp_n
+	ldx obj_i
+	inx
+	bne .tdp_lp
+.tdp_rts
 	rts
 
 ; X = backpack index; C=1 granted
 grant_backpack
 	lda bp_type,x
+; A = BP_* type; C=1 granted
+grant_bp_type
 	cmp #BP_SHELLS
 	beq .gb_shells
 	cmp #BP_NAILGUN

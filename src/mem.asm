@@ -57,6 +57,9 @@ HUD_CH_H	= $48
 HUD_CH_X	= $58
 HUD_CH_Y	= $59
 HUD_CH_Z	= $5a
+HUD_CH_SHELL	= $7b			; { → shell icon
+HUD_CH_NAIL	= $7c			; | → nail icon
+HUD_CH_GREN	= $7d			; } → grenade icon
 COL_HUD		= 8			; orange digits
 COL_HUD_DIM	= 2			; dark red stage letters
 
@@ -130,6 +133,13 @@ MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
 ENEMY_CULL_R	= 2			; view-space |x| vs z+R (8.8 high)
 ENEMY_CULL_H	= 6			; view-space |y| vs z+H (figure height)
+ENEMY_LOD_Z	= 4			; mid: cheap stick projection (shared)
+ENEMY_LOD2_Z	= 40			; far: 8×8 LOD char (shared, grunt ~8px)
+ENEMY_MAX		= 16		; MAP_NENEMIES ≤ this
+EN_ALIVE		= 0
+EN_DYING		= 1
+EN_GONE		= 2
+AXE_HIT_R		= 3			; XZ chebyshev radius for axe kill test
 ITEM_CULL_Y	= 2			; AABB |y| vs Chebyshev XZ + pad
 FOV_HALF	= 31			; yaw ticks ≈ atan(SCREEN_CX/FOCAL)
 
@@ -309,3 +319,11 @@ ammo_grenades	= $CCA2
 have_wpn	= $CCA3			; bitfield HAVE_*
 bp_taken	= $CCA4			; MAP_NBACKPACKS (≤ BP_MAX)
 anim_frames	= $CCC4			; ENEMY_NTYPES local walk frame indices
+en_state	= $CCC6			; ENEMY_MAX: EN_ALIVE/DYING/GONE
+en_dframe	= $CCD6			; ENEMY_MAX: death clip local frame
+drop_taken	= $CCE6			; ENEMY_MAX: 1=inactive/taken, 0=active
+drop_x		= $CCF6
+drop_y		= $CD06
+drop_z		= $CD16
+drop_room	= $CD26
+drop_type	= $CD36			; BP_* when active

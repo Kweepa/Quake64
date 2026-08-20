@@ -116,23 +116,23 @@ elev_room
 	!byte 1,4,6
 
 sw_x
-	!byte 24,22,121,140
+	!byte 24,22,121,140,124
 sw_y
-	!byte 105,66,67,66
+	!byte 105,66,67,66,79
 sw_z
-	!byte 139,136,175,145
+	!byte 139,136,175,145,175
 sw_sx
-	!byte 2,1,2,1
+	!byte 2,1,2,1,2
 sw_sy
-	!byte 3,3,3,3
+	!byte 3,3,3,3,3
 sw_sz
-	!byte 1,2,1,2
+	!byte 1,2,1,2,1
 sw_elev
-	!byte 0,0,1,2
+	!byte 0,0,1,2,1
 sw_room
-	!byte 1,1,4,6
+	!byte 1,1,4,6,4
 sw_face
-	!byte 0,3,0,3
+	!byte 0,3,0,3,0
 
 en_x
 	!byte 83,83,108,155,145

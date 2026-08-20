@@ -92,6 +92,8 @@ def main() -> None:
     all_edges = None
     walk_starts: list[int] = []
     walk_lens: list[int] = []
+    death_starts: list[int] = []
+    death_lens: list[int] = []
     max_nframes = 0
 
     for ti, name in enumerate(TYPES):
@@ -100,6 +102,15 @@ def main() -> None:
         gx, gy, gz, lines, clips, walk = export_type(by_name[name])
         walk_starts.append(walk[0])
         walk_lens.append(walk[1])
+        death = None
+        for c in clips:
+            if clip_key(c.get("name", "")) == "death":
+                death = (int(c["start"]), int(c["len"]))
+                break
+        if death is None:
+            raise SystemExit(f"{name}: no death clip")
+        death_starts.append(death[0])
+        death_lens.append(death[1])
         if all_edges is None:
             all_edges = lines
         elif lines != all_edges:
@@ -151,7 +162,18 @@ def main() -> None:
         + ", ".join(str(n) for n in walk_lens)
         + "\t; walk/prowl length"
     )
-    parts.append("enemy_far_z\t!byte 13, 4\t\t; Grunt, Rott LOD gate (CAM_ZH)")
+    parts.append(
+        "enemy_death_start\t!byte "
+        + ", ".join(str(s) for s in death_starts)
+        + "\t; death absolute start"
+    )
+    parts.append(
+        "enemy_death_len\t!byte "
+        + ", ".join(str(n) for n in death_lens)
+        + "\t; death length"
+    )
+    # BP_SHELLS=0; $FF = no drop. Index = ent_type.
+    parts.append("enemy_drop_type\t!byte 0, $ff\t\t; Grunt shells, Rott none")
     parts.append("")
     # Absolute frame → byte offset into *_gx/gy/gz (frame * NVERTS)
     parts.append(f"; frame * {NVERTS} as 16-bit offset (0..{max_nframes - 1})")
@@ -166,7 +188,11 @@ def main() -> None:
     parts.append("")
 
     OUT.write_text("\n".join(parts) + "\n", encoding="utf-8")
-    print(f"Wrote {OUT.relative_to(ROOT)} (walk start={walk_starts} len={walk_lens})")
+    print(
+        f"Wrote {OUT.relative_to(ROOT)} "
+        f"(walk start={walk_starts} len={walk_lens} "
+        f"death start={death_starts} len={death_lens})"
+    )
 
 
 if __name__ == "__main__":

@@ -18,6 +18,8 @@ python tools\genrotate.py
 if errorlevel 1 exit /b 1
 python tools\genuifont.py
 if errorlevel 1 exit /b 1
+python tools\genenemylod.py
+if errorlevel 1 exit /b 1
 python tools\genenemies.py
 if errorlevel 1 exit /b 1
 python tools\genmap.py

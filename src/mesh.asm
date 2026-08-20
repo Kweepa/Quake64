@@ -1376,7 +1376,7 @@ draw_world
 	ldx #0
 .dw_bpl
 	cpx #MAP_NBACKPACKS
-	bcs .dw_rts
+	bcs .dw_drops
 	lda bp_taken,x
 	bne .dw_bpn
 	lda bp_room,x
@@ -1403,5 +1403,37 @@ draw_world
 .dw_bpn
 	inx
 	bne .dw_bpl
+	; death drops
+.dw_drops
+	ldx #0
+.dw_dpl
+	cpx #MAP_NENEMIES
+	bcs .dw_rts
+	lda drop_taken,x
+	bne .dw_dpn
+	lda drop_room,x
+	cmp room_idx
+	bne .dw_dpn
+	stx obj_i
+	lda drop_x,x
+	sta box_x
+	lda drop_y,x
+	sta box_y
+	lda drop_z,x
+	sta box_z
+	lda #BP_FOOT_SX
+	sta box_sx
+	lda #BP_FOOT_SY
+	sta box_sy
+	lda #BP_FOOT_SZ
+	sta box_sz
+	jsr frustum_hits
+	bcc .dw_dpr
+	jsr draw_backpack_mesh
+.dw_dpr
+	ldx obj_i
+.dw_dpn
+	inx
+	bne .dw_dpl
 .dw_rts
 	rts

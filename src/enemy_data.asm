@@ -465,7 +465,9 @@ enemy_gz_lo	!byte <grunt_gz, <rott_gz
 enemy_gz_hi	!byte >grunt_gz, >rott_gz
 enemy_anim_start	!byte 52, 53	; walk/prowl absolute start
 enemy_anim_len	!byte 24, 8	; walk/prowl length
-enemy_far_z	!byte 13, 4		; Grunt, Rott LOD gate (CAM_ZH)
+enemy_death_start	!byte 8, 8	; death absolute start
+enemy_death_len	!byte 10, 9	; death length
+enemy_drop_type	!byte 0, $ff		; Grunt shells, Rott none
 
 ; frame * 13 as 16-bit offset (0..75)
 frame13_lo

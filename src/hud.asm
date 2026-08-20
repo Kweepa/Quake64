@@ -73,6 +73,7 @@ init_hud
 	sta $d800 + HUD_OFF + 14
 	sta $d800 + HUD_OFF + 19
 }
+!if HUD_POS = 1 {
 	ldx #0
 	lda #HUD_CH_SP
 -
@@ -109,6 +110,7 @@ init_hud
 	sta $d800 + HUD_OFF2 + 10
 	sta $d800 + HUD_OFF2 + 15
 	sta $d800 + HUD_OFF2 + 19
+}
 
 	ldx #0
 	lda #HUD_CH_SP
@@ -138,6 +140,33 @@ init_hud
 	sta $d800 + HUD_OFF3
 	sta $d800 + HUD_OFF3 + 4
 	sta $d800 + HUD_OFF3 + 8
+	lda #HUD_CH_SHELL
+	sta SCR_A + HUD_OFF3 + 12
+	sta SCR_B + HUD_OFF3 + 12
+	lda #HUD_CH_NAIL
+	sta SCR_A + HUD_OFF3 + 16
+	sta SCR_B + HUD_OFF3 + 16
+	lda #HUD_CH_GREN
+	sta SCR_A + HUD_OFF3 + 20
+	sta SCR_B + HUD_OFF3 + 20
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF3 + 12
+	sta $d800 + HUD_OFF3 + 16
+	sta $d800 + HUD_OFF3 + 20
+} else {
+	lda #HUD_CH_SHELL
+	sta SCR_A + HUD_OFF3
+	sta SCR_B + HUD_OFF3
+	lda #HUD_CH_NAIL
+	sta SCR_A + HUD_OFF3 + 4
+	sta SCR_B + HUD_OFF3 + 4
+	lda #HUD_CH_GREN
+	sta SCR_A + HUD_OFF3 + 8
+	sta SCR_B + HUD_OFF3 + 8
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF3
+	sta $d800 + HUD_OFF3 + 4
+	sta $d800 + HUD_OFF3 + 8
 }
 
 	ldx #0
@@ -156,13 +185,16 @@ init_hud
 	bpl -
 	rts
 
-; F R P K D — 4-digit ms (xxxxRxxxxPxxxxKxxxxDxxxx)
+; Row 1: frame ms (HUD_FRAME_MS) + R/P/K/D buckets (PROFILE)
+; Row 2: X/Y/Z/yaw/pitch (HUD_POS)
 ; Row 3: vertex counts RNNNPNNNKNNN (PROFILE=1)
 hud_print
+!if HUD_FRAME_MS = 1 {
 	ldx #0
 	lda dt_msh
 	ldy dt_ms
 	jsr .dec4
+}
 !if PROFILE = 1 {
 	ldx #5
 	lda prof_cy + PROF_ROT * 4 + 2
@@ -194,7 +226,7 @@ hud_print
 	ldy nv_clip
 	jsr .dec3n
 }
-
+!if HUD_POS = 1 {
 	ldx #1
 	lda cam_xh
 	jsr .s8_3
@@ -210,48 +242,33 @@ hud_print
 	ldx #20
 	lda pitch
 	jsr .s8_3
-	jmp hud_ammo
+}
+	rts
 
-; Current weapon ammo at HUD_OFF3 (col 0, or 15 if PROFILE); axe → ---
+; Shell/nail/grenade counts at HUD_OFF3: {NNN|NNN}NNN (col 0, or 12 if PROFILE)
+; Call on init, after spend, and after backpack grant — not every frame.
 hud_ammo
 !if PROFILE = 1 {
-	ldx #15
+	ldx #13
 } else {
-	ldx #0
+	ldx #1
 }
-	stx pp_col
-	lda cur_weapon
-	cmp #WPN_AXE
-	beq .ha_dash
-	cmp #WPN_SHOT
-	beq .ha_shell
-	cmp #WPN_NAIL
-	beq .ha_nail
-	cmp #WPN_GREN
-	beq .ha_gren
-.ha_dash
-	ldx pp_col
-	lda #HUD_CH_MINUS
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
-	inx
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
-	inx
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
-	rts
-.ha_shell
 	lda ammo_shells
-	jmp .ha_u8
-.ha_nail
+	jsr .u8_3h
+!if PROFILE = 1 {
+	ldx #17
+} else {
+	ldx #5
+}
 	lda ammo_nails
-	jmp .ha_u8
-.ha_gren
+	jsr .u8_3h
+!if PROFILE = 1 {
+	ldx #21
+} else {
+	ldx #9
+}
 	lda ammo_grenades
-.ha_u8
-	ldx pp_col
-	jmp .u8_3h
+	; fall through
 
 ; A unsigned → 3 digits at HUD_OFF3+X (pp_col)
 .u8_3h
@@ -301,6 +318,7 @@ hud_ammo
 	sta SCR_B + HUD_OFF3,x
 	rts
 
+!if HUD_POS = 1 {
 ; A signed → sign + 3 digits at HUD_OFF2+X (horizon pitch = 0)
 .s8_3
 	stx pp_col
@@ -369,7 +387,9 @@ hud_ammo
 	sta SCR_A + HUD_OFF2,x
 	sta SCR_B + HUD_OFF2,x
 	rts
+}
 
+!if HUD_FRAME_MS + PROFILE > 0 {
 ; A:Y = cy[2]:cy[1] → ms (>>2) then 4 digits at HUD_OFF+X
 .ms4
 	sta pp_tmp_h
@@ -479,6 +499,7 @@ hud_ammo
 	sta SCR_A + HUD_OFF,x
 	sta SCR_B + HUD_OFF,x
 	rts
+}
 
 ; A:Y = 16-bit → 3 ASCII digits at HUD_OFF3+X; saturate 999
 .dec3n

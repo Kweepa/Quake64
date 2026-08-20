@@ -378,6 +378,7 @@ update_weapon
 	beq .uw_do_fire
 	jsr try_spend_ammo
 	bcc .uw_done
+	jsr hud_ammo
 .uw_do_fire
 	jsr fire_shot
 	ldx cur_weapon
@@ -517,6 +518,8 @@ axe_apply_step
 	lda wpn_tmp0
 	and #AXE_F_HIT
 	beq .aas_sp
+	jsr axe_try_kill
+	bcc .aas_sp
 	lda #SOUND_HITENEMY
 	jsr play_sound
 .aas_sp

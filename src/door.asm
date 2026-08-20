@@ -293,7 +293,7 @@ try_room_switch
 	clc
 	rts
 
-; X=door, player in its AABB. Place 1 unit inside the other room.
+; X=door, player in its AABB. Place PLAYER_R inside the other room.
 door_push_through
 	jsr door_other_room
 	cmp #$ff
@@ -308,7 +308,9 @@ door_push_through
 	cmp room_z,y
 	bcc .dpt_zd
 	ldy proc_tmp0
+	clc
 	lda room_z,y
+	adc #PLAYER_R
 	sta cam_zh
 	lda #0
 	sta cam_zl
@@ -320,6 +322,7 @@ door_push_through
 	adc room_sz,y
 	sec
 	sbc #1
+	sbc #PLAYER_R
 	sta cam_zh
 	lda #0
 	sta cam_zl
@@ -331,7 +334,9 @@ door_push_through
 	cmp room_x,y
 	bcc .dpt_xd
 	ldy proc_tmp0
+	clc
 	lda room_x,y
+	adc #PLAYER_R
 	sta cam_xh
 	lda #0
 	sta cam_xl
@@ -343,6 +348,7 @@ door_push_through
 	adc room_sx,y
 	sec
 	sbc #1
+	sbc #PLAYER_R
 	sta cam_xh
 	lda #0
 	sta cam_xl

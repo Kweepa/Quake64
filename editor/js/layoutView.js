@@ -661,6 +661,17 @@ export class LayoutView {
         { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: top, z: c.z } }
       );
     }
+    if (obj.kind === "patrol") {
+      const c = aabbCenter(obj);
+      const top = obj.y + obj.sy;
+      const mid = top - 0.75;
+      segs.push(
+        { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: top, z: c.z } },
+        { a: { x: c.x, y: top, z: c.z }, b: { x: c.x + 2, y: mid, z: c.z } },
+        { a: { x: c.x + 2, y: mid, z: c.z }, b: { x: c.x, y: mid - 0.5, z: c.z } },
+        { a: { x: c.x, y: mid - 0.5, z: c.z }, b: { x: c.x, y: top, z: c.z } }
+      );
+    }
     if (obj.kind === "slope") {
       const ramp = this.#rampCorners(obj);
       segs.push(

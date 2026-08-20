@@ -1010,4 +1010,130 @@ alog_fetch
 	lda ALOGTAB,x
 	rts
 
+; atan2_yaw: rot0=dx, rot1=dz (signed) → A = yaw 0..255 (0=+Z, 64=+X).
+; Octant-fold + ATAN32[round(32*atan(i/32)/(π/4))]; error < 1 yaw tick.
+atan2_yaw
+	lda rot0
+	ora rot1
+	bne .a2go
+	rts
+.a2go
+	lda #0
+	sta rot2
+	lda rot0
+	bpl .a2dxp
+	inc rot2
+	eor #$ff
+	clc
+	adc #1
+.a2dxp
+	sta nlo				; |dx|
+	lda rot1
+	bpl .a2dzp
+	tax
+	lda rot2
+	ora #2
+	sta rot2
+	txa
+	eor #$ff
+	clc
+	adc #1
+.a2dzp
+	sta nhi				; |dz|
+	lda nlo
+	cmp nhi
+	bcc .a2ns
+	beq .a2ns
+	ldx nhi
+	ldy nlo
+	stx nlo				; min
+	sty nhi				; max
+	lda rot2
+	ora #4
+	sta rot2
+.a2ns
+	lda nlo
+	beq .a2z
+	sta e0x
+	lda #0
+	sta e0xh
+	asl e0x
+	rol e0xh
+	asl e0x
+	rol e0xh
+	asl e0x
+	rol e0xh
+	asl e0x
+	rol e0xh
+	asl e0x
+	rol e0xh
+	ldx #0
+.a2div
+	lda e0xh
+	bne .a2sub
+	lda e0x
+	cmp nhi
+	bcc .a2got
+.a2sub
+	sec
+	lda e0x
+	sbc nhi
+	sta e0x
+	lda e0xh
+	sbc #0
+	sta e0xh
+	inx
+	bne .a2div
+.a2got
+	lda ATAN32,x
+	jmp .a2app
+.a2z
+	lda #0
+.a2app
+	sta nlo
+	lda rot2
+	and #4
+	beq .a2nsw
+	sec
+	lda #64
+	sbc nlo
+	sta nlo
+.a2nsw
+	lda rot2
+	and #2
+	beq .a2nz
+	sec
+	lda #128
+	sbc nlo
+	sta nlo
+.a2nz
+	lda rot2
+	and #1
+	beq .a2nx
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+.a2nx
+	lda nlo
+	rts
+
+ATAN32
+	!byte 0,1,3,4,5,6,8,9,10,11,12,13,15,16,17
+	!byte 18,19,20,21,22,23,24,25,25,26,27,28,29,29,30,31,31,32
+
+; Deathchase / Wolf GetRandom8 — new = 9 * old + 193; A = next rnd
+GetRandom8
+rnd8
+	lda random8
+	asl
+	asl
+	asl
+	clc
+	adc random8
+	clc
+	adc #193
+	sta random8
+	rts
+
 !source "sqtab.asm"

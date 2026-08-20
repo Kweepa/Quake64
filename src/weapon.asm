@@ -135,6 +135,8 @@ init_weapon
 	lda #0
 	sta ammo_nails
 	sta ammo_grenades
+	lda #PLAYER_HP_START
+	sta player_hp
 
 	lda #$ff
 	sta cur_weapon
@@ -406,6 +408,8 @@ fire_shot
 	bne .fs_gun
 	jmp start_axe
 .fs_gun
+	lda #1
+	sta gunshot_wake
 	lda wpn_sound,x
 	jsr play_sound
 	ldx cur_weapon
@@ -517,12 +521,11 @@ axe_apply_step
 .aas_hit
 	lda wpn_tmp0
 	and #AXE_F_HIT
-	beq .aas_sp
+	beq .aas_rts
 	jsr axe_try_kill
-	bcc .aas_sp
+	bcc .aas_rts
 	lda #SOUND_HITENEMY
 	jsr play_sound
-.aas_sp
 	lda wpn_tmp0
 	and #AXE_F_SPARK
 	beq .aas_rts

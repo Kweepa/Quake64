@@ -47,22 +47,61 @@ ent_set_ptrs
 	rts
 
 ; Point gx/gy/gz at the current pose for ent_type / obj_i.
-; Walk: enemy_anim_start[type] + anim_frames[type]
-; Dying: enemy_death_start[type] + en_dframe[obj_i]
+; Clip from en_state + en_frame[obj_i]
 ent_set_pose
 	jsr ent_set_ptrs
 	ldx obj_i
 	lda en_state,x
 	cmp #EN_DYING
 	beq .esp_death
+	cmp #EN_PAIN
+	beq .esp_pain
+	cmp #EN_ATTACK
+	beq .esp_atk
+	cmp #EN_ALERT
+	beq .esp_alert
+	cmp #EN_APPROACH
+	beq .esp_run
+	; idle (and fallback)
+	jmp .esp_idle
+.esp_idle
+	ldx obj_i
+	lda en_frame,x
 	ldx ent_type
 	clc
-	lda enemy_anim_start,x
-	adc anim_frames,x
-	tay				; absolute frame
+	adc enemy_stand_start,x
+	tay
+	jmp .esp_off
+.esp_run
+	lda en_frame,x
+	ldx ent_type
+	clc
+	adc enemy_run_start,x
+	tay
+	jmp .esp_off
+.esp_alert
+	lda en_frame,x
+	ldx ent_type
+	clc
+	adc enemy_alert_start,x
+	tay
+	jmp .esp_off
+.esp_atk
+	lda en_frame,x
+	ldx ent_type
+	clc
+	adc enemy_attack_start,x
+	tay
+	jmp .esp_off
+.esp_pain
+	lda en_frame,x
+	ldx ent_type
+	clc
+	adc enemy_pain_start,x
+	tay
 	jmp .esp_off
 .esp_death
-	lda en_dframe,x
+	lda en_frame,x
 	ldx ent_type
 	clc
 	adc enemy_death_start,x
@@ -94,21 +133,14 @@ ent_set_pose
 ; Rotate one enemy instance at ent_wx/wy/wz, ent_rot, ent_type.
 ; Caller already ran load_view_trig + xform_world_vert (CAM[0] = view origin).
 ; view(v) = R_yaw(world − cam) + R(yaw − facing)(local): the rotated origin
-; is hoisted per enemy and facing (octants of 45° = 32 yaw ticks) folds into
-; the trig angle — 8-bit local products replace 16-bit smul16_7s.
+; is hoisted per enemy and facing (8-bit yaw ticks) folds into the trig
+; angle — 8-bit local products replace 16-bit smul16_7s.
 ent_rotate
 	jsr ent_set_pose
-	; combined angle a = yaw − ent_rot*32 → fast-mul sets (A=cos, B=sin)
-	lda ent_rot
-	asl
-	asl
-	asl
-	asl
-	asl
-	sta rot0
+	; combined angle a = yaw − ent_rot → fast-mul sets (A=cos, B=sin)
 	sec
 	lda yaw
-	sbc rot0
+	sbc ent_rot
 	tay
 	lda COSTAB,y
 	jsr mulset_a
@@ -2020,7 +2052,7 @@ kill_enemy
 	lda #EN_DYING
 	sta en_state,x
 	lda #0
-	sta en_dframe,x
+	sta en_frame,x
 	lda en_type,x
 	bne .ke_dog
 	lda #SOUND_DEATHSCREAM1
@@ -2028,56 +2060,6 @@ kill_enemy
 .ke_dog
 	lda #SOUND_DOGDEATH
 	jmp play_sound
-
-; Axe proximity: first alive enemy in room within AXE_HIT_R. C=1 hit.
-axe_try_kill
-	ldx #0
-.atk_lp
-	cpx #MAP_NENEMIES
-	bcs .atk_no
-	lda en_state,x
-	cmp #EN_ALIVE
-	bne .atk_n
-	lda en_room,x
-	cmp room_idx
-	bne .atk_n
-	lda en_x,x
-	sec
-	sbc cam_xh
-	bcs +
-	eor #$ff
-	clc
-	adc #1
-+
-	cmp #AXE_HIT_R + 1
-	bcs .atk_n
-	lda en_z,x
-	sec
-	sbc cam_zh
-	bcs +
-	eor #$ff
-	clc
-	adc #1
-+
-	cmp #AXE_HIT_R + 1
-	bcs .atk_n
-	lda en_y,x
-	sta box_y
-	lda #ENEMY_CULL_H
-	sta box_sy
-	stx obj_i
-	jsr player_overlaps_y
-	ldx obj_i
-	bcc .atk_n
-	jsr kill_enemy
-	sec
-	rts
-.atk_n
-	inx
-	bne .atk_lp
-.atk_no
-	clc
-	rts
 
 ; X = enemy finishing death → EN_GONE + optional drop (preserves X)
 finish_enemy_death

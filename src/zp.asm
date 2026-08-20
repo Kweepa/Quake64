@@ -122,7 +122,7 @@ mul_c		= $73			; 16×8 addend high
 anim_acc_l	= $74			; ms accumulator toward ANIM_MS
 anim_acc_h	= $75
 gidx		= $76			; vert index within current pose (0..12)
-; $77 free (was anim_frame; per-type frames in anim_frames BSS)
+enemy_idx	= $77			; current enemy in enemies_update
 
 ; World / map (Step 2)
 room_idx	= $78
@@ -130,7 +130,7 @@ floor_y		= $79
 ent_wx		= $7a			; entity world X (int)
 ent_wy		= $7b
 ent_wz		= $7c
-ent_rot		= $7d			; facing octant 0..7
+ent_rot		= $7d			; facing yaw 0..255 (0=+Z)
 ent_type	= $7e
 mesh_nv		= $7f
 mesh_ne		= $80
@@ -175,6 +175,7 @@ inv_h		= $a9
 inv_k		= $aa			; unsigned 8-bit fit shift of z
 mesh_vmask	= $ab			; $ff = all mesh_nv slots; else 8-bit box corner mask
 mesh_nwork	= $ac			; verts/edges counted this stage
+random8		= $ad			; rnd8 LCG state (Wolf Deathchase)
 scale_s		= $ae			; scale_vel sign
 fn_lx		= $af			; frustum inward normals (XZ)
 fn_lz		= $b0

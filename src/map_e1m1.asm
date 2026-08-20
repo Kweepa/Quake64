@@ -6,6 +6,7 @@ spawn_y	!byte 106
 spawn_z	!byte 119
 spawn_rot	!byte 2
 spawn_room	!byte 0
+spawn_id	!byte 11
 
 room_x
 	!byte 0,22,29,94,115,121,140
@@ -23,6 +24,8 @@ room_bg
 	!byte 9,2,14,9,6,11,9
 room_line
 	!byte 7,7,1,7,7,7,7
+room_id
+	!byte 0,1,9,19,20,28,29
 
 door_x
 	!byte 23,28,93,114,123,139
@@ -44,6 +47,8 @@ door_home_y
 	!byte 104,65,65,65,78,65
 door_face
 	!byte 1,2,2,2,0,2
+door_id
+	!byte 2,6,13,21,23,27
 
 crate_x
 	!byte 0,22,60
@@ -59,6 +64,8 @@ crate_sz
 	!byte 4,10,32
 crate_room
 	!byte 0,1,2
+crate_id
+	!byte 3,5,14
 
 slope_x
 	!byte 4
@@ -78,6 +85,8 @@ slope_dir
 	!byte 0
 slope_room
 	!byte 0
+slope_id
+	!byte 10
 
 plat_x
 	!byte 22,22,123,140,140
@@ -93,6 +102,8 @@ plat_room
 	!byte 1,1,4,6,6
 plat_solid
 	!byte 0,0,1,1,1
+plat_id
+	!byte 16,17,24,30,31
 
 elev_x
 	!byte 22,123,140
@@ -114,6 +125,8 @@ elev_dest
 	!byte 64,65,55
 elev_room
 	!byte 1,4,6
+elev_id
+	!byte 8,25,33
 
 sw_x
 	!byte 24,22,121,140,124
@@ -133,6 +146,8 @@ sw_room
 	!byte 1,1,4,6,4
 sw_face
 	!byte 0,3,0,3,0
+sw_id
+	!byte 7,18,26,32,37
 
 en_x
 	!byte 83,83,108,155,145
@@ -146,6 +161,8 @@ en_rot
 	!byte 6,6,6,0,0
 en_room
 	!byte 2,2,3,6,6
+en_id
+	!byte 4,12,22,35,36
 
 tr_x
 	!byte 11
@@ -163,6 +180,8 @@ tr_room
 	!byte 0
 tr_text_off
 	!byte 0
+tr_id
+	!byte 15
 
 bp_x
 	!byte 124
@@ -174,6 +193,8 @@ bp_type
 	!byte 1
 bp_room
 	!byte 5
+bp_id
+	!byte 34
 
 map_text
 	!byte 84,104,101,32,83,108,105,112,103,97,116,101,32,67,111,109,112,108,101,120,0

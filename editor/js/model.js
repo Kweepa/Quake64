@@ -221,11 +221,24 @@ export const KINDS = {
     fixed: true,
     slope: false,
   },
+  patrol: {
+    id: "patrol",
+    label: "Patrol point",
+    color: "#e89050",
+    defaultSize: [2, 2, 2],
+    fixed: true,
+    slope: false,
+  },
 };
 
 /** Editor-only dashed / ghost volumes (not solid world geometry). */
 export function isGhostKind(kind) {
-  return kind === "trigger" || kind === "teleporter" || kind === "teleporter_dest";
+  return (
+    kind === "trigger" ||
+    kind === "teleporter" ||
+    kind === "teleporter_dest" ||
+    kind === "patrol"
+  );
 }
 
 /** Kinds linked by a shared editor tag (resolved to indices on export). */
@@ -235,7 +248,9 @@ export function usesLinkTag(kind) {
     kind === "elevator" ||
     kind === "teleporter" ||
     kind === "teleporter_dest" ||
-    kind === "key"
+    kind === "key" ||
+    kind === "patrol" ||
+    kind === "enemy"
   );
 }
 
@@ -265,6 +280,7 @@ export const PALETTE_ORDER = [
   "teleporter_dest",
   "key",
   "backpack",
+  "patrol",
 ];
 export const MAX_TRIGGER_TEXT = 80;
 export const MAX_NAME_LEN = 40;
@@ -277,8 +293,16 @@ export function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
 }
 
-/** Backpack contents (ammo or weapon pickup). */
-export const BACKPACK_TYPES = ["shells", "nailgun", "nails", "grenade launcher", "grenades"];
+/** Backpack contents (ammo, weapon, or health pickup). */
+export const BACKPACK_TYPES = [
+  "shells",
+  "nailgun",
+  "nails",
+  "grenade launcher",
+  "grenades",
+  "health 25%",
+  "health 50%",
+];
 
 /** Height / base-side = φ. Fixed backpack: 1.5 tall. */
 export const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
@@ -288,6 +312,13 @@ export const BACKPACK_DEPTH = (BACKPACK_SIDE * Math.sqrt(3)) / 2;
 
 export function clampBackpackType(s) {
   return BACKPACK_TYPES.includes(s) ? s : "shells";
+}
+
+/** Sequence among patrol points that share a tag (lower first). */
+export function clampPatrolOrder(n) {
+  const v = n | 0;
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(0, Math.min(255, v));
 }
 
 /** Fixed equilateral tetra: height 1.5, base side = height/φ. */
@@ -530,6 +561,7 @@ export function clampObject(obj) {
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
   if (obj.kind === "backpack") obj.backpack = clampBackpackType(obj.backpack);
+  if (obj.kind === "patrol") obj.order = clampPatrolOrder(obj.order);
   if (obj.kind === "doorway") {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
@@ -578,6 +610,7 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
   if (kind === "backpack") obj.backpack = clampBackpackType(extra.backpack);
+  if (kind === "patrol") obj.order = clampPatrolOrder(extra.order);
   if (kind === "doorway") {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
@@ -615,6 +648,10 @@ export function objectLabel(obj) {
   }
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
   if (obj.kind === "backpack") return `Backpack (${clampBackpackType(obj.backpack)})`;
+  if (obj.kind === "patrol") {
+    const tag = clampTag(obj.tag);
+    return tag ? `Patrol (${tag})` : "Patrol point";
+  }
   return KINDS[obj.kind].label;
 }
 
@@ -688,6 +725,7 @@ export const C64_OBJECT_BYTES = {
   key: 7,
   teleporter: 8,
   teleporter_dest: 6,
+  patrol: 5,
 };
 
 /** Counts + estimated packed map RAM for the active level. */
@@ -736,6 +774,7 @@ export function formatMapStats(stats) {
     "key",
     "teleporter",
     "teleporter_dest",
+    "patrol",
   ];
   const plurals = {
     room: "rooms",
@@ -752,6 +791,7 @@ export function formatMapStats(stats) {
     key: "keys",
     teleporter: "teleporters",
     teleporter_dest: "dests",
+    patrol: "patrols",
   };
   for (const kind of order) {
     const n = stats.byKind[kind];
@@ -1002,6 +1042,7 @@ function parseObjects(list) {
       keyTag: o.keyTag,
       elevType: o.elevType,
       backpack: o.backpack,
+      order: o.order,
       collide: o.collide,
       bgColor: o.bgColor ?? o.skyColor,
       skyColor: o.skyColor,
@@ -1028,6 +1069,7 @@ function parseObjects(list) {
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
     if (o.kind === "backpack" && o.backpack != null) obj.backpack = clampBackpackType(o.backpack);
+    if (o.kind === "patrol" && o.order != null) obj.order = clampPatrolOrder(o.order);
     if (o.kind === "doorway") {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);

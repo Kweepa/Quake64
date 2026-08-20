@@ -143,12 +143,19 @@ def main() -> None:
         raise SystemExit("E1M1 needs a spawn")
     spawn = spawns[0]
 
+    if len(objs) > 256:
+        raise SystemExit(f"E1M1 has {len(objs)} objects; map id is u8")
+    # Unique id per world object (order in level.objects)
+    map_id = {id(o): i for i, o in enumerate(objs)}
+
     BP_TYPE = {
         "shells": 0,
         "nailgun": 1,
         "nails": 2,
         "grenade launcher": 3,
         "grenades": 4,
+        "health 25%": 5,
+        "health 50%": 6,
     }
 
     # Tag → elevator index
@@ -169,11 +176,13 @@ def main() -> None:
         norm_color(r.get("bgColor", r.get("skyColor")), ROOM_BG_DEFAULT) for r in rooms
     ]
     room_line = [norm_color(r.get("lineColor"), ROOM_LINE_DEFAULT) for r in rooms]
+    room_id = [map_id[id(r)] for r in rooms]
 
     # Doors
     door_x, door_y, door_z = [], [], []
     door_sx, door_sy, door_sz = [], [], []
     door_ra, door_rb, door_home_y, door_face = [], [], [], []
+    door_id = []
     for d in doors:
         ids = rooms_for(rooms, d)
         door_x.append(d["x"])
@@ -186,10 +195,12 @@ def main() -> None:
         door_ra.append(ids[0] if len(ids) > 0 else 255)
         door_rb.append(ids[1] if len(ids) > 1 else 255)
         door_face.append(FACE.get(d.get("face") or "+z", 0))
+        door_id.append(map_id[id(d)])
 
     # Crates
     crate_x, crate_y, crate_z = [], [], []
     crate_sx, crate_sy, crate_sz, crate_room = [], [], [], []
+    crate_id = []
     for c in crates:
         ri = room_under(rooms, c)
         if ri is None:
@@ -201,11 +212,13 @@ def main() -> None:
         crate_sy.append(c["sy"])
         crate_sz.append(c["sz"])
         crate_room.append(ri)
+        crate_id.append(map_id[id(c)])
 
     # Slopes
     slope_x, slope_y, slope_z = [], [], []
     slope_sx, slope_sy, slope_sz = [], [], []
     slope_axis, slope_dir, slope_room = [], [], []
+    slope_id = []
     for s in slopes:
         ri = room_under(rooms, s)
         if ri is None:
@@ -219,10 +232,12 @@ def main() -> None:
         slope_axis.append(0 if s.get("axis") == "x" else 1)
         slope_dir.append(1 if s.get("dir", 1) >= 0 else 0)  # 1=+ 0=-
         slope_room.append(ri)
+        slope_id.append(map_id[id(s)])
 
     # Platforms (horizontal floor quads)
     plat_x, plat_y, plat_z = [], [], []
     plat_sx, plat_sz, plat_room, plat_solid = [], [], [], []
+    plat_id = []
     for p in plats:
         ri = room_under(rooms, p)
         if ri is None:
@@ -234,11 +249,13 @@ def main() -> None:
         plat_sz.append(p["sz"])
         plat_room.append(ri)
         plat_solid.append(0 if p.get("collide") is False else 1)
+        plat_id.append(map_id[id(p)])
 
     # Elevators
     elev_x, elev_y, elev_z = [], [], []
     elev_sx, elev_sy, elev_sz = [], [], []
     elev_type, elev_home, elev_dest, elev_room = [], [], [], []
+    elev_id = []
     for e in elevs:
         ri = room_under(rooms, e)
         if ri is None:
@@ -265,11 +282,13 @@ def main() -> None:
         elev_home.append(home)
         elev_dest.append(floor_y)
         elev_room.append(ri)
+        elev_id.append(map_id[id(e)])
 
     # Switches
     sw_x, sw_y, sw_z = [], [], []
     sw_sx, sw_sy, sw_sz = [], [], []
     sw_elev, sw_room, sw_face = [], [], []
+    sw_id = []
     for s in switches:
         ri = room_under(rooms, s)
         if ri is None:
@@ -286,10 +305,12 @@ def main() -> None:
         sw_elev.append(elev_by_tag[tag])
         sw_room.append(ri)
         sw_face.append(FACE.get(s.get("face") or "+z", 0))
+        sw_id.append(map_id[id(s)])
 
     # Enemies
     en_x, en_y, en_z = [], [], []
     en_type, en_rot, en_room = [], [], []
+    en_id = []
     for e in enemies:
         ri = room_under(rooms, e)
         if ri is None:
@@ -304,11 +325,13 @@ def main() -> None:
         en_type.append(ENEMY_TYPE[name])
         en_rot.append(int(e.get("rot") or 0) & 7)
         en_room.append(ri)
+        en_id.append(map_id[id(e)])
 
     # Message triggers
     tr_x, tr_y, tr_z = [], [], []
     tr_sx, tr_sy, tr_sz, tr_room = [], [], [], []
     tr_text_off = []
+    tr_id = []
     text_blob: list[int] = []
     for t in triggers:
         ri = room_under(rooms, t)
@@ -327,9 +350,11 @@ def main() -> None:
         tr_sz.append(t["sz"])
         tr_room.append(ri)
         tr_text_off.append(off)
+        tr_id.append(map_id[id(t)])
 
     # Backpacks (pickup tetrahedrons)
     bp_x, bp_y, bp_z, bp_type, bp_room = [], [], [], [], []
+    bp_id = []
     for b in backpacks:
         ri = room_under(rooms, b)
         if ri is None:
@@ -340,10 +365,12 @@ def main() -> None:
         bp_z.append(b["z"])
         bp_type.append(bt)
         bp_room.append(ri)
+        bp_id.append(map_id[id(b)])
 
     spawn_room = room_under(rooms, spawn)
     if spawn_room is None:
         raise SystemExit("spawn has no room")
+    spawn_id = map_id[id(spawn)]
 
     frustum = 1
     for r in rooms:
@@ -375,6 +402,9 @@ def main() -> None:
         "BP_NAILS\t= 2",
         "BP_GRENLAUNCHER\t= 3",
         "BP_GRENADES\t= 4",
+        "BP_HEALTH25\t= 5",
+        "BP_HEALTH50\t= 6",
+        "BP_NTYPES\t= 7",
         f"MAP_FRUSTUM\t= {frustum}",
         f"MAP_FRUSTUM_HALF\t= {frustum_half}",
         "",
@@ -390,6 +420,7 @@ def main() -> None:
         f"spawn_z\t!byte {spawn['z']}",
         f"spawn_rot\t!byte {int(spawn.get('rot') or 0) & 7}",
         f"spawn_room\t!byte {spawn_room}",
+        f"spawn_id\t!byte {spawn_id}",
         "",
         btable("room_x", room_x).rstrip(),
         btable("room_y", room_y).rstrip(),
@@ -399,6 +430,7 @@ def main() -> None:
         btable("room_sz", room_sz).rstrip(),
         btable("room_bg", room_bg).rstrip(),
         btable("room_line", room_line).rstrip(),
+        btable("room_id", room_id).rstrip(),
         "",
         btable("door_x", door_x).rstrip(),
         btable("door_y", door_y).rstrip(),
@@ -410,6 +442,7 @@ def main() -> None:
         btable("door_rb", door_rb).rstrip(),
         btable("door_home_y", door_home_y).rstrip(),
         btable("door_face", door_face).rstrip(),
+        btable("door_id", door_id).rstrip(),
         "",
         btable("crate_x", crate_x).rstrip(),
         btable("crate_y", crate_y).rstrip(),
@@ -418,6 +451,7 @@ def main() -> None:
         btable("crate_sy", crate_sy).rstrip(),
         btable("crate_sz", crate_sz).rstrip(),
         btable("crate_room", crate_room).rstrip(),
+        btable("crate_id", crate_id).rstrip(),
         "",
         btable("slope_x", slope_x).rstrip(),
         btable("slope_y", slope_y).rstrip(),
@@ -428,6 +462,7 @@ def main() -> None:
         btable("slope_axis", slope_axis).rstrip(),
         btable("slope_dir", slope_dir).rstrip(),
         btable("slope_room", slope_room).rstrip(),
+        btable("slope_id", slope_id).rstrip(),
         "",
         btable("plat_x", plat_x).rstrip(),
         btable("plat_y", plat_y).rstrip(),
@@ -436,6 +471,7 @@ def main() -> None:
         btable("plat_sz", plat_sz).rstrip(),
         btable("plat_room", plat_room).rstrip(),
         btable("plat_solid", plat_solid).rstrip(),
+        btable("plat_id", plat_id).rstrip(),
         "",
         btable("elev_x", elev_x).rstrip(),
         btable("elev_y0", elev_y).rstrip(),  # home/init Y (const)
@@ -447,6 +483,7 @@ def main() -> None:
         btable("elev_home", elev_home).rstrip(),
         btable("elev_dest", elev_dest).rstrip(),
         btable("elev_room", elev_room).rstrip(),
+        btable("elev_id", elev_id).rstrip(),
         "",
         btable("sw_x", sw_x).rstrip(),
         btable("sw_y", sw_y).rstrip(),
@@ -457,6 +494,7 @@ def main() -> None:
         btable("sw_elev", sw_elev).rstrip(),
         btable("sw_room", sw_room).rstrip(),
         btable("sw_face", sw_face).rstrip(),
+        btable("sw_id", sw_id).rstrip(),
         "",
         btable("en_x", en_x).rstrip(),
         btable("en_y", en_y).rstrip(),
@@ -464,6 +502,7 @@ def main() -> None:
         btable("en_type", en_type).rstrip(),
         btable("en_rot", en_rot).rstrip(),
         btable("en_room", en_room).rstrip(),
+        btable("en_id", en_id).rstrip(),
         "",
         btable("tr_x", tr_x).rstrip(),
         btable("tr_y", tr_y).rstrip(),
@@ -473,12 +512,14 @@ def main() -> None:
         btable("tr_sz", tr_sz).rstrip(),
         btable("tr_room", tr_room).rstrip(),
         btable("tr_text_off", tr_text_off).rstrip(),
+        btable("tr_id", tr_id).rstrip(),
         "",
         btable("bp_x", bp_x).rstrip(),
         btable("bp_y", bp_y).rstrip(),
         btable("bp_z", bp_z).rstrip(),
         btable("bp_type", bp_type).rstrip(),
         btable("bp_room", bp_room).rstrip(),
+        btable("bp_id", bp_id).rstrip(),
         "",
         "map_text",
         "\t!byte " + ",".join(str(b) for b in text_blob) if text_blob else "\t!byte 0",

@@ -21,6 +21,7 @@ import {
   ELEV_TYPES,
   BACKPACK_TYPES,
   clampBackpackType,
+  clampPatrolOrder,
   createObject,
   createDefaultDocument,
   currentRoom,
@@ -1459,9 +1460,15 @@ function renderInspector() {
           ? "elevator link"
           : obj.kind === "key"
             ? "key id"
-            : "teleporter link";
+            : obj.kind === "patrol" || obj.kind === "enemy"
+              ? "patrol link"
+              : "teleporter link";
       tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
       root.appendChild(field("Tag", tagInp));
+    }
+    if (obj.kind === "patrol") {
+      const orderInp = numInput(obj.order ?? 0, (v) => apply(() => (obj.order = clampPatrolOrder(v))), 0, 255);
+      root.appendChild(field("Order", orderInp));
     }
     if (obj.kind === "elevator") {
       const sel = document.createElement("select");

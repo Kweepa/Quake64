@@ -78,7 +78,8 @@
           "axis": "z",
           "dir": 1,
           "rot": 6,
-          "enemy": "Grunt"
+          "enemy": "Grunt",
+          "tag": ""
         },
         {
           "id": "62c4f964-bfa2-4ebd-ada1-14b0cf62882e",
@@ -193,7 +194,8 @@
           "axis": "z",
           "dir": 1,
           "rot": 6,
-          "enemy": "Rottweiler"
+          "enemy": "Rottweiler",
+          "tag": ""
         },
         {
           "id": "0d9293ec-43a9-4ea6-8505-b8fbe04e89bb",
@@ -339,7 +341,8 @@
           "axis": "z",
           "dir": 1,
           "rot": 6,
-          "enemy": "Grunt"
+          "enemy": "Grunt",
+          "tag": ""
         },
         {
           "id": "a507d16c-e206-4d55-8bee-2ae92c2322cf",
@@ -530,7 +533,8 @@
           "axis": "z",
           "dir": 1,
           "rot": 0,
-          "enemy": "Grunt"
+          "enemy": "Grunt",
+          "tag": ""
         },
         {
           "id": "407fb003-7727-4917-b4bd-93775665b031",
@@ -545,7 +549,8 @@
           "axis": "z",
           "dir": 1,
           "rot": 0,
-          "enemy": "Grunt"
+          "enemy": "Grunt",
+          "tag": ""
         },
         {
           "id": "56bf6182-22f3-4597-8b74-fe9036b65200",
@@ -560,6 +565,21 @@
           "axis": "z",
           "dir": 1,
           "tag": "hidden"
+        },
+        {
+          "id": "060c4ca4-f4c0-4234-9993-9104cc1da69f",
+          "kind": "patrol",
+          "x": 108,
+          "y": 65,
+          "z": 153,
+          "sx": 2,
+          "sy": 2,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "tag": "",
+          "order": 0
         }
       ]
     },
@@ -39549,23 +39569,23 @@
     "mode": "anim",
     "localDraw": false,
     "selectedIds": [
-      "56bf6182-22f3-4597-8b74-fe9036b65200"
+      "060c4ca4-f4c0-4234-9993-9104cc1da69f"
     ],
-    "enemy": "Chthon",
-    "frameIndex": 56,
+    "enemy": "Grunt",
+    "frameIndex": 47,
     "selectedVerts": [],
     "layoutCamera": {
-      "x": 65.20685281127703,
-      "y": 89.29649669401253,
-      "z": 157.21018270080577,
-      "yaw": 13.896666015624811,
-      "pitch": -0.24799951171874873,
+      "x": 75.9365222718607,
+      "y": 114.4035471684505,
+      "z": 175.78296038472416,
+      "yaw": 14.243333007812307,
+      "pitch": -0.6799995117187481,
       "speed": 16
     },
     "animOrbit": {
-      "yaw": -2.1600085449218582,
-      "pitch": -0.14666564941406476,
-      "dist": 363.63636363636374
+      "yaw": -1.966674194335918,
+      "pitch": -1.2,
+      "dist": 65.4031963306232
     },
     "mdlScale": 0.7,
     "weapon": "nail",

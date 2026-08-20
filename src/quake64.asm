@@ -25,8 +25,6 @@ start
 
 	lda #0
 	sta keys
-	sta anim_frames
-	sta anim_frames+1
 	sta anim_acc_l
 	sta anim_acc_h
 	lda #NVERTS
@@ -100,70 +98,8 @@ main
 	jsr update_floor
 	jsr sync_eye
 	jsr update_message
-	jsr advance_walk
+	jsr enemies_update
 	jmp main
-
-advance_walk
-	clc
-	lda anim_acc_l
-	adc dt_ms
-	sta anim_acc_l
-	lda anim_acc_h
-	adc dt_msh
-	sta anim_acc_h
-.aw_try
-	lda anim_acc_h
-	cmp #>ANIM_MS
-	bcc .done
-	bne .step
-	lda anim_acc_l
-	cmp #<ANIM_MS
-	bcc .done
-.step
-	sec
-	lda anim_acc_l
-	sbc #<ANIM_MS
-	sta anim_acc_l
-	lda anim_acc_h
-	sbc #>ANIM_MS
-	sta anim_acc_h
-	ldx #0
-.aw_type
-	inc anim_frames,x
-	lda anim_frames,x
-	cmp enemy_anim_len,x
-	bcc +
-	lda #0
-	sta anim_frames,x
-+
-	inx
-	cpx #ENEMY_NTYPES
-	bcc .aw_type
-	jsr advance_death
-	jmp .aw_try
-.done
-	rts
-
-; Advance EN_DYING enemies one death frame; finish → gone + drop
-advance_death
-	ldx #0
-.ad_lp
-	cpx #MAP_NENEMIES
-	bcs .ad_rts
-	lda en_state,x
-	cmp #EN_DYING
-	bne .ad_n
-	inc en_dframe,x
-	lda en_dframe,x
-	ldy en_type,x
-	cmp enemy_death_len,y
-	bcc .ad_n
-	jsr finish_enemy_death
-.ad_n
-	inx
-	bne .ad_lp
-.ad_rts
-	rts
 
 ; A = signed 8-bit 8.8 step added to cam_xl/xh
 camaddx
@@ -344,6 +280,7 @@ copy_luts
 !source "world.asm"
 !source "mesh.asm"
 !source "cube.asm"
+!source "enemy.asm"
 
 !source "map_e1m1.asm"
 

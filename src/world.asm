@@ -58,15 +58,35 @@ init_backpacks
 .ib_rts
 	rts
 
-; All enemies alive, death frame 0
+; All enemies idle, HP from type, frame 0
 init_enemies
-	ldx #0
+	lda #$a5
+	sta random8
 	lda #0
+	sta gunshot_wake
+	ldx #0
 .ie_lp
 	cpx #MAP_NENEMIES
 	bcs .ie_rts
+	lda #EN_IDLE
 	sta en_state,x
-	sta en_dframe,x
+	lda #0
+	sta en_frame,x
+	sta en_timer,x
+	sta en_timer_h,x
+	sta en_step,x
+	sta en_step_h,x
+	lda en_rot,x			; map rot = editor octant (0=+Z)
+	sta en_dir,x
+	asl
+	asl
+	asl
+	asl
+	asl
+	sta en_rot,x
+	ldy en_type,x
+	lda enemy_hp_init,y
+	sta en_hp,x
 	inx
 	bne .ie_lp
 .ie_rts
@@ -757,7 +777,7 @@ SW_USE_RANGE	= 4			; max XZ distance to switch AABB
 
 try_proximity
 	jsr try_door_proximity
-	; K rising edge (SquareDoom try_use) — one fire per press
+	; K rising edge — one fire per press
 	lda key_use
 	bne .tp_kd
 	sta key_use_was			; A = 0
@@ -847,11 +867,28 @@ try_backpack_pickup
 	ldx obj_i
 	jsr grant_backpack
 	bcc .tbp_n
-	jsr hud_ammo
 	ldx obj_i
+	lda bp_type,x
+	cmp #BP_HEALTH25
+	beq .tbp_hp
+	cmp #BP_HEALTH50
+	beq .tbp_hp
+	jsr hud_ammo
+	lda #SOUND_GETAMMO
+	bne .tbp_snd
+.tbp_hp
+	cmp #BP_HEALTH50
+	beq .tbp_hp2
+	lda #SOUND_HEALTH1
+	bne .tbp_snd
+.tbp_hp2
+	lda #SOUND_HEALTH2
+.tbp_snd
+	ldx obj_i
+	pha
 	lda #1
 	sta bp_taken,x
-	lda #SOUND_GETAMMO
+	pla
 	jsr play_sound
 .tbp_n
 	ldx obj_i
@@ -911,110 +948,157 @@ grant_backpack
 	lda bp_type,x
 ; A = BP_* type; C=1 granted
 grant_bp_type
-	cmp #BP_SHELLS
-	beq .gb_shells
-	cmp #BP_NAILGUN
-	beq .gb_nailgun
-	cmp #BP_NAILS
-	beq .gb_nails
-	cmp #BP_GRENLAUNCHER
-	beq .gb_grenlaunch
-	cmp #BP_GRENADES
-	beq .gb_grenades
-.gb_no
+	cmp #BP_NTYPES
+	bcc .gb_go
 	clc
 	rts
-.gb_shells
+.gb_go
+	tay
+	lda gb_lo,y
+	sta rot0
+	lda gb_hi,y
+	sta rot1
+	jmp (rot0)
+
+gb_lo
+	!byte <gb_shells, <gb_nailgun, <gb_nails, <gb_grenlaunch
+	!byte <gb_grenades, <gb_hp25, <gb_hp50
+gb_hi
+	!byte >gb_shells, >gb_nailgun, >gb_nails, >gb_grenlaunch
+	!byte >gb_grenades, >gb_hp25, >gb_hp50
+
+gb_hp25
+	lda player_hp
+	cmp #PLAYER_HP_MAX
+	bcc +
+	jmp gb_no
++
+	clc
+	adc #HP_PACK_25
+	jmp gb_hp_clamp
+gb_hp50
+	lda player_hp
+	cmp #PLAYER_HP_MAX
+	bcc +
+	jmp gb_no
++
+	clc
+	adc #HP_PACK_50
+gb_hp_clamp
+	bcs gb_hp_cap
+	cmp #PLAYER_HP_MAX
+	bcc gb_hp_ok
+	beq gb_hp_ok
+gb_hp_cap
+	lda #PLAYER_HP_MAX
+gb_hp_ok
+	sta player_hp
+	sec
+	rts
+gb_shells
 	lda ammo_shells
 	cmp #AMMO_SHELLS_MAX
-	bcs .gb_no
+	bcc +
+	jmp gb_no
++
 	clc
 	adc #AMMO_SHELLS_BOX
-	bcs .gb_shell_cap
+	bcs gb_shell_cap
 	cmp #AMMO_SHELLS_MAX
-	bcc .gb_shell_ok
-	beq .gb_shell_ok
-.gb_shell_cap
+	bcc gb_shell_ok
+	beq gb_shell_ok
+gb_shell_cap
 	lda #AMMO_SHELLS_MAX
-.gb_shell_ok
+gb_shell_ok
 	sta ammo_shells
 	sec
 	rts
-.gb_nails
+gb_nails
 	lda ammo_nails
 	cmp #AMMO_NAILS_MAX
-	bcs .gb_no
+	bcc +
+	jmp gb_no
++
 	clc
 	adc #AMMO_NAILS_BOX
-	bcs .gb_nail_cap
+	bcs gb_nail_cap
 	cmp #AMMO_NAILS_MAX
-	bcc .gb_nail_ok
-	beq .gb_nail_ok
-.gb_nail_cap
+	bcc gb_nail_ok
+	beq gb_nail_ok
+gb_nail_cap
 	lda #AMMO_NAILS_MAX
-.gb_nail_ok
+gb_nail_ok
 	sta ammo_nails
 	sec
 	rts
-.gb_grenades
+gb_grenades
 	lda ammo_grenades
 	cmp #AMMO_GRENADES_MAX
-	bcs .gb_no
+	bcc +
+	jmp gb_no
++
 	clc
 	adc #AMMO_GRENADES_BOX
-	bcs .gb_gren_cap
+	bcs gb_gren_cap
 	cmp #AMMO_GRENADES_MAX
-	bcc .gb_gren_ok
-	beq .gb_gren_ok
-.gb_gren_cap
+	bcc gb_gren_ok
+	beq gb_gren_ok
+gb_gren_cap
 	lda #AMMO_GRENADES_MAX
-.gb_gren_ok
+gb_gren_ok
 	sta ammo_grenades
 	sec
 	rts
-.gb_nailgun
+gb_nailgun
 	lda have_wpn
 	and #HAVE_NAIL
-	bne .gb_no
+	beq gb_ng_new
+	jmp gb_no
+gb_ng_new
 	lda have_wpn
 	ora #HAVE_NAIL
 	sta have_wpn
 	lda ammo_nails
 	clc
 	adc #AMMO_NAILS_GUN
-	bcs .gb_ng_cap
+	bcs gb_ng_cap
 	cmp #AMMO_NAILS_MAX
-	bcc .gb_ng_ok
-	beq .gb_ng_ok
-.gb_ng_cap
+	bcc gb_ng_ok
+	beq gb_ng_ok
+gb_ng_cap
 	lda #AMMO_NAILS_MAX
-.gb_ng_ok
+gb_ng_ok
 	sta ammo_nails
 	ldx #WPN_NAIL
 	jsr switch_weapon
 	sec
 	rts
-.gb_grenlaunch
+gb_grenlaunch
 	lda have_wpn
 	and #HAVE_GREN
-	bne .gb_no
+	beq gb_gl_new
+	jmp gb_no
+gb_gl_new
 	lda have_wpn
 	ora #HAVE_GREN
 	sta have_wpn
 	lda ammo_grenades
 	clc
 	adc #AMMO_GRENADES_GUN
-	bcs .gb_gl_cap
+	bcs gb_gl_cap
 	cmp #AMMO_GRENADES_MAX
-	bcc .gb_gl_ok
-	beq .gb_gl_ok
-.gb_gl_cap
+	bcc gb_gl_ok
+	beq gb_gl_ok
+gb_gl_cap
 	lda #AMMO_GRENADES_MAX
-.gb_gl_ok
+gb_gl_ok
 	sta ammo_grenades
 	ldx #WPN_GREN
 	jsr switch_weapon
 	sec
+	rts
+gb_no
+	clc
 	rts
 
 ; X=switch; C=1 if within SW_USE_RANGE of pad XZ, Y overlaps, facing the face

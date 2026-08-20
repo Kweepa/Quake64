@@ -153,9 +153,6 @@ eu_approach
 	lda #0				; clear repath so resume chases immediately
 	sta en_timer,x
 	sta en_timer_h,x
-!if DOG_AI_DEBUG = 1 {
-	jsr dog_ai_debug_hud
-}
 	jmp .eu_ap_rng
 .eu_ap_acc
 	clc
@@ -165,13 +162,6 @@ eu_approach
 	lda en_step_h,x
 	adc dt_msh
 	sta en_step_h,x
-!if DOG_AI_DEBUG = 1 {
-	; live dx/dz/C while chasing (last pick kept in dog_dbg_*)
-	lda en_type,x
-	beq .eu_ap_slp
-	jsr dog_ai_debug_hud
-	ldx enemy_idx
-}
 .eu_ap_slp
 	lda en_step_h,x
 	bne .eu_ap_go
@@ -599,16 +589,6 @@ select_dodge_dir
 	ldx enemy_idx
 	lda ai_probe
 	jsr enemy_set_geom
-!if DOG_AI_DEBUG = 1 {
-	lda en_type,x
-	beq .sdd_ok_rts
-	lda rot2
-	sta dog_dbg_slot
-	lda ai_probe
-	sta dog_dbg_dir
-	jsr dog_ai_debug_hud
-.sdd_ok_rts
-}
 	rts
 .sdd_n
 	inc rot2
@@ -622,179 +602,16 @@ select_dodge_dir
 	bne .sdd_lp
 	lda ai_turn
 	cmp #$ff
-	beq .sdd_fail
+	beq .sdd_rts
 	jsr enemy_probe_dir
-	bcc .sdd_fail
+	bcc .sdd_rts
 	ldx enemy_idx
 	lda ai_probe
 	jsr enemy_set_geom
-!if DOG_AI_DEBUG = 1 {
-	lda en_type,x
-	beq .sdd_rts
-	lda #$fe			; last-resort turnaround
-	sta dog_dbg_slot
-	lda ai_probe
-	sta dog_dbg_dir
-	jsr dog_ai_debug_hud
-}
-	rts
-.sdd_fail
-!if DOG_AI_DEBUG = 1 {
-	ldx enemy_idx
-	lda en_type,x
-	beq .sdd_rts
-	lda #$ff
-	sta dog_dbg_slot
-	lda en_dir,x
-	sta dog_dbg_dir
-	jsr dog_ai_debug_hud
-}
 .sdd_rts
 	rts
 .sdd_diag4
 	!byte 1, 3, 7, 5
-
-!if DOG_AI_DEBUG = 1 {
-; HUD row4: D<dir>#<slot> X<dx> Z<dz> C<cheby>
-; slot 0=majToward 1=minToward 2=awayMaj 3=awayMin 4=diag T=turnaround F=fail
-dog_ai_debug_hud
-	ldx enemy_idx
-	lda cam_xh
-	sec
-	sbc en_x,x
-	sta rot0				; dx = player − dog
-	lda cam_zh
-	sec
-	sbc en_z,x
-	sta rot1				; dz
-	jsr enemy_chebyshev
-	sta e0x				; cheby (scratch; enemy_chebyshev reloads X)
-
-	ldx #0
-	lda #HUD_CH_SP
-.dad_bl
-	sta SCR_A + HUD_OFF4,x
-	sta SCR_B + HUD_OFF4,x
-	inx
-	cpx #24
-	bne .dad_bl
-
-	lda #$44			; 'D'
-	ldx #0
-	jsr .dad_ch
-	lda dog_dbg_dir
-	and #7
-	ora #$30
-	ldx #1
-	jsr .dad_ch
-	lda #$23			; '#'
-	ldx #2
-	jsr .dad_ch
-	lda dog_dbg_slot
-	cmp #$ff
-	bne +
-	lda #$46			; 'F'
-	bne .dad_sl
-+
-	cmp #$fe
-	bne +
-	lda #$54			; 'T'
-	bne .dad_sl
-+
-	and #7
-	ora #$30
-.dad_sl
-	ldx #3
-	jsr .dad_ch
-
-	lda #$58			; 'X'
-	ldx #5
-	jsr .dad_ch
-	lda rot0
-	ldx #6
-	jsr .dad_s8
-
-	lda #$5a			; 'Z'
-	ldx #11
-	jsr .dad_ch
-	lda rot1
-	ldx #12
-	jsr .dad_s8
-
-	lda #$43			; 'C'
-	ldx #17
-	jsr .dad_ch
-	lda e0x
-	ldx #18
-	jsr .dad_u8
-	rts
-
-.dad_ch
-	sta SCR_A + HUD_OFF4,x
-	sta SCR_B + HUD_OFF4,x
-	rts
-
-; A signed → ±DDD at HUD_OFF4+X (4 chars)
-.dad_s8
-	stx pp_col
-	cmp #0
-	bpl .dad_sp
-	eor #$ff
-	clc
-	adc #1
-	pha
-	lda #HUD_CH_MINUS
-	bne .dad_ss
-.dad_sp
-	pha
-	lda #HUD_CH_PLUS
-.dad_ss
-	ldx pp_col
-	jsr .dad_ch
-	inc pp_col
-	pla
-	ldx pp_col
-	; fall through — 3 digits at X
-.dad_u8
-	stx pp_col
-	sta pp_tmp_l
-	ldx #0
-.dad_h
-	lda pp_tmp_l
-	cmp #100
-	bcc .dad_t
-	sbc #100
-	sta pp_tmp_l
-	inx
-	bne .dad_h
-.dad_t
-	txa
-	ora #$30
-	ldx pp_col
-	jsr .dad_ch
-	ldx #0
-	lda pp_tmp_l
-.dad_te
-	cmp #10
-	bcc .dad_o
-	sbc #10
-	inx
-	bne .dad_te
-.dad_o
-	sta pp_tmp_l
-	txa
-	ora #$30
-	ldx pp_col
-	inx
-	jsr .dad_ch
-	lda pp_tmp_l
-	ora #$30
-	ldx pp_col
-	inx
-	inx
-	jsr .dad_ch
-	rts
-}
 
 ; A = geometric octant (0=+Z N .. 2=+X E). Mesh yaw = octant*32.
 enemy_set_geom

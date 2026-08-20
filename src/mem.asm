@@ -392,6 +392,4 @@ splat_col	= $CDC1			; COL_SPLAT_HIT or col_line (miss)
 splat_skip	= $CDC2			; 1 = skip next tick (spawn frame)
 shot_hit_i	= $CDC3			; closest SSG hit enemy, $ff = miss
 shot_hit_z	= $CDC4			; CAM_ZH of that hit
-dog_dbg_slot	= $CDC5			; DOG_AI_DEBUG: last dodge try index, $ff=fail
-dog_dbg_dir	= $CDC6			; DOG_AI_DEBUG: last chosen en_dir 0..7
 bite_splat_i	= $CDC7			; dog idx pending blood splat, $ff = none

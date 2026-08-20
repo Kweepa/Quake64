@@ -64,11 +64,6 @@ init_enemies
 	sta random8
 	lda #0
 	sta gunshot_wake
-!if DOG_AI_DEBUG = 1 {
-	lda #$ff
-	sta dog_dbg_slot
-	sta dog_dbg_dir
-}
 	ldx #0
 .ie_lp
 	cpx #MAP_NENEMIES

@@ -107,7 +107,7 @@ raster_body
 	sta $d018
 	lda show_bot_tab,x
 	sta show_d018_bot
-	lda col_sky
+	lda col_bg
 	sta $d021
 	lda #RASTER_SPLIT
 	sta $d012
@@ -118,7 +118,7 @@ raster_body
 .split
 	lda show_d018_bot
 	sta $d018
-	lda col_floor
+	lda col_bg
 	sta $d021
 	lda #RASTER_TOP
 	sta $d012
@@ -193,7 +193,7 @@ accum_keys
 	and #$08				; 4 = grenade launcher
 	bne .no4
 	lda #1
-	sta in_wpn_rock
+	sta in_wpn_gren
 .no4
 	; D PA2 $FB
 	lda #$fb
@@ -207,10 +207,11 @@ accum_keys
 	ldy #in_strafer - in_fwd
 	jsr irq_add_ms
 .nod
-	; J/K share PA4 $EF — only J is look (yaw)
+	; J/K share PA4 $EF — J look left, K use (SquareDoom)
 	lda #$ef
 	sta $dc00
 	lda $dc01
+	tax
 	and #$04
 	bne .noj
 	lda keys
@@ -219,6 +220,15 @@ accum_keys
 	ldy #in_turn_l - in_fwd
 	jsr irq_add_ms
 .noj
+	txa
+	and #$20				; K = use
+	bne .nok
+	lda keys
+	ora #KEY_K
+	sta keys
+	lda #1
+	sta in_use
+.nok
 	; L PA5 $DF
 	lda #$df
 	sta $dc00
@@ -278,6 +288,10 @@ read_input
 	sta key_fire
 	lda #0
 	sta in_fire
+	lda in_use
+	sta key_use
+	lda #0
+	sta in_use
 	cli
 
 	lda #0

@@ -48,9 +48,12 @@ export function clampMdlScale(n) {
 }
 
 /** Default room viewport colours (C64 indices). */
-export const ROOM_SKY_DEFAULT = 9;
-export const ROOM_FLOOR_DEFAULT = 8;
+export const ROOM_BG_DEFAULT = 9;
 export const ROOM_LINE_DEFAULT = 7;
+/** @deprecated Use ROOM_BG_DEFAULT */
+export const ROOM_SKY_DEFAULT = ROOM_BG_DEFAULT;
+/** @deprecated */
+export const ROOM_FLOOR_DEFAULT = ROOM_BG_DEFAULT;
 
 /** Pepto Commodore 64 palette (indices 0–15). */
 export const C64_HEX = [
@@ -210,6 +213,14 @@ export const KINDS = {
     fixed: false,
     slope: false,
   },
+  backpack: {
+    id: "backpack",
+    label: "Backpack",
+    color: "#6ec4a8",
+    defaultSize: [1, 2, 1], // overwritten by applyBackpackProportions (1.5 tall, φ base)
+    fixed: true,
+    slope: false,
+  },
 };
 
 /** Editor-only dashed / ghost volumes (not solid world geometry). */
@@ -253,6 +264,7 @@ export const PALETTE_ORDER = [
   "teleporter",
   "teleporter_dest",
   "key",
+  "backpack",
 ];
 export const MAX_TRIGGER_TEXT = 80;
 export const MAX_NAME_LEN = 40;
@@ -263,6 +275,27 @@ export const ELEV_TYPES = ["descending", "automatic", "toggle"];
 
 export function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
+}
+
+/** Backpack contents (ammo or weapon pickup). */
+export const BACKPACK_TYPES = ["shells", "nailgun", "nails", "grenade launcher", "grenades"];
+
+/** Height / base-side = φ. Fixed backpack: 1.5 tall. */
+export const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
+export const BACKPACK_HEIGHT = 1.5;
+export const BACKPACK_SIDE = BACKPACK_HEIGHT / GOLDEN_RATIO;
+export const BACKPACK_DEPTH = (BACKPACK_SIDE * Math.sqrt(3)) / 2;
+
+export function clampBackpackType(s) {
+  return BACKPACK_TYPES.includes(s) ? s : "shells";
+}
+
+/** Fixed equilateral tetra: height 1.5, base side = height/φ. */
+export function applyBackpackProportions(obj) {
+  obj.sx = BACKPACK_SIDE;
+  obj.sy = BACKPACK_HEIGHT;
+  obj.sz = BACKPACK_DEPTH;
+  return obj;
 }
 
 export const LEVEL_NAMES = ["E1M1", "E1M2", "E1M3", "E1M4", "E1M5", "E1M6", "E1M7", "E1M8"];
@@ -471,6 +504,8 @@ export function clampObject(obj) {
   obj.z = clampByte(obj.z);
   if (obj.kind === "doorway" || obj.kind === "switch") {
     applyFaceSize(obj);
+  } else if (obj.kind === "backpack") {
+    applyBackpackProportions(obj);
   } else if (obj.kind === "slope") {
     obj.sx = clampSize(obj.x, obj.sx);
     obj.sy = clampSize(obj.y, obj.sy);
@@ -487,12 +522,14 @@ export function clampObject(obj) {
   if (obj.kind === "trigger") obj.text = clampTriggerText(obj.text);
   if (obj.kind === "room") {
     obj.name = clampName(obj.name);
-    obj.skyColor = normalizeColor(obj.skyColor, ROOM_SKY_DEFAULT);
-    obj.floorColor = normalizeColor(obj.floorColor, ROOM_FLOOR_DEFAULT);
+    obj.bgColor = normalizeColor(obj.bgColor ?? obj.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(obj.lineColor, ROOM_LINE_DEFAULT);
+    delete obj.skyColor;
+    delete obj.floorColor;
   }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
+  if (obj.kind === "backpack") obj.backpack = clampBackpackType(obj.backpack);
   if (obj.kind === "doorway") {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
@@ -535,12 +572,12 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (kind === "trigger") obj.text = clampTriggerText(extra.text);
   if (kind === "room") {
     obj.name = clampName(extra.name);
-    obj.skyColor = normalizeColor(extra.skyColor, ROOM_SKY_DEFAULT);
-    obj.floorColor = normalizeColor(extra.floorColor, ROOM_FLOOR_DEFAULT);
+    obj.bgColor = normalizeColor(extra.bgColor ?? extra.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(extra.lineColor, ROOM_LINE_DEFAULT);
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
+  if (kind === "backpack") obj.backpack = clampBackpackType(extra.backpack);
   if (kind === "doorway") {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
@@ -577,6 +614,7 @@ export function objectLabel(obj) {
     return obj.name ? `Room  ${obj.name}` : "Room";
   }
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
+  if (obj.kind === "backpack") return `Backpack (${clampBackpackType(obj.backpack)})`;
   return KINDS[obj.kind].label;
 }
 
@@ -625,6 +663,105 @@ export function emptyMap() {
 export function mapDisplayName(map, key) {
   const n = clampName(map?.name);
   return n || key;
+}
+
+/** Soft cap: 8-bit object indices / editor budget. */
+export const MAX_MAP_OBJECTS = 255;
+
+/**
+ * Bytes per instance in the cooked C64 SoA (tools/genmap.py).
+ * Trigger text blob is counted separately. Spawn is always 5 bytes in the map.
+ */
+export const C64_OBJECT_BYTES = {
+  room: 8,
+  doorway: 10,
+  crate: 7,
+  slope: 9,
+  platform: 7,
+  elevator: 10,
+  switch: 9,
+  enemy: 6,
+  trigger: 8,
+  spawn: 5,
+  backpack: 5,
+  // Editor-only / not yet cooked — treat like a typical AABB + room link
+  key: 7,
+  teleporter: 8,
+  teleporter_dest: 6,
+};
+
+/** Counts + estimated packed map RAM for the active level. */
+export function mapStats(doc) {
+  const map = activeMap(doc);
+  const byKind = {};
+  let total = 0;
+  let c64Bytes = 5; // spawn_x/y/z/rot/room always present once cooked
+  let hasSpawn = false;
+  for (const obj of map.objects) {
+    const kind = obj.kind;
+    if (!KINDS[kind]) continue;
+    total += 1;
+    byKind[kind] = (byKind[kind] || 0) + 1;
+    if (kind === "spawn") {
+      if (hasSpawn) continue; // engine keeps one spawn record
+      hasSpawn = true;
+      continue; // already counted in the fixed 5
+    }
+    c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
+    if (kind === "trigger") {
+      const text = String(obj.text || "")
+        .replace(/\r\n/g, "\n")
+        .split("\n", 1)[0]
+        .slice(0, 24);
+      c64Bytes += text.length + 1; // chars + NUL in map_text
+    }
+  }
+  return { total, byKind, c64Bytes, max: MAX_MAP_OBJECTS };
+}
+
+export function formatMapStats(stats) {
+  const parts = [`${stats.total}/${stats.max} objects`];
+  const order = [
+    "room",
+    "doorway",
+    "crate",
+    "slope",
+    "platform",
+    "elevator",
+    "switch",
+    "enemy",
+    "trigger",
+    "spawn",
+    "backpack",
+    "key",
+    "teleporter",
+    "teleporter_dest",
+  ];
+  const plurals = {
+    room: "rooms",
+    doorway: "doors",
+    crate: "crates",
+    slope: "ramps",
+    platform: "platforms",
+    elevator: "elevators",
+    switch: "switches",
+    enemy: "enemies",
+    trigger: "triggers",
+    spawn: "spawns",
+    backpack: "backpacks",
+    key: "keys",
+    teleporter: "teleporters",
+    teleporter_dest: "dests",
+  };
+  for (const kind of order) {
+    const n = stats.byKind[kind];
+    if (!n) continue;
+    const one = KINDS[kind]?.label?.toLowerCase() || kind;
+    parts.push(`${n} ${n === 1 ? one : plurals[kind] || `${one}s`}`);
+  }
+  const kb = stats.c64Bytes >= 1024 ? `${(stats.c64Bytes / 1024).toFixed(1)}K` : `${stats.c64Bytes} B`;
+  parts.push(`~${kb} C64`);
+  return parts.join(" · ");
 }
 
 export function activeMap(doc) {
@@ -864,9 +1001,10 @@ function parseObjects(list) {
       locked: o.locked,
       keyTag: o.keyTag,
       elevType: o.elevType,
+      backpack: o.backpack,
       collide: o.collide,
+      bgColor: o.bgColor ?? o.skyColor,
       skyColor: o.skyColor,
-      floorColor: o.floorColor,
       lineColor: o.lineColor,
     });
     if (!KINDS[o.kind].fixed) {
@@ -881,12 +1019,15 @@ function parseObjects(list) {
     if (o.kind === "trigger" && o.text != null) obj.text = clampTriggerText(o.text);
     if (o.kind === "room") {
       if (o.name != null) obj.name = clampName(o.name);
-      if (o.skyColor != null) obj.skyColor = normalizeColor(o.skyColor, ROOM_SKY_DEFAULT);
-      if (o.floorColor != null) obj.floorColor = normalizeColor(o.floorColor, ROOM_FLOOR_DEFAULT);
+      const bg = o.bgColor ?? o.skyColor;
+      if (bg != null) obj.bgColor = normalizeColor(bg, ROOM_BG_DEFAULT);
       if (o.lineColor != null) obj.lineColor = normalizeColor(o.lineColor, ROOM_LINE_DEFAULT);
+      delete obj.skyColor;
+      delete obj.floorColor;
     }
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
+    if (o.kind === "backpack" && o.backpack != null) obj.backpack = clampBackpackType(o.backpack);
     if (o.kind === "doorway") {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);

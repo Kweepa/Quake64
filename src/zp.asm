@@ -119,10 +119,10 @@ cam_zh		= $6f
 cam_yh		= $70
 mul_y		= $71			; smul16_7 saved |Y|
 mul_c		= $73			; 16×8 addend high
-anim_frame	= $74			; walk 0..3
-anim_acc_l	= $75			; ms accumulator toward ANIM_MS
-anim_acc_h	= $76
-gidx		= $77			; gx/gy/gz table index (frame*13+v)
+anim_acc_l	= $74			; ms accumulator toward ANIM_MS
+anim_acc_h	= $75
+gidx		= $76			; vert index within current pose (0..12)
+; $77 free (was anim_frame; per-type frames in anim_frames BSS)
 
 ; World / map (Step 2)
 room_idx	= $78
@@ -183,8 +183,7 @@ pv1		= $b2
 pv2		= $b3
 pv3		= $b4
 pv4		= $b5
-col_sky		= $b6			; active room sky → $d021 top half
-col_floor	= $b7			; active room floor → $d021 bot half
+col_bg		= $b6			; active room background → $d021 viewport
 col_line	= $b8			; active room lines → viewport colour RAM
 palette_room	= $b9			; last room_idx palette applied ($ff = none)
 far_scale	= $ba			; FOCAL/z integer, far enemy project

@@ -28,7 +28,7 @@ load_view_trig
 	!source "_rotate_body.asm"
 	rts
 
-; Load type pointers for ent_type
+; Load type base pointers for ent_type (frame 0 of gx/gy/gz).
 ent_set_ptrs
 	ldx ent_type
 	lda enemy_gx_lo,x
@@ -45,13 +45,45 @@ ent_set_ptrs
 	sta gz_ptr+1
 	rts
 
+; Point gx/gy/gz at the current walk pose for ent_type.
+; abs_frame = enemy_anim_start[type] + anim_frames[type]; offset via frame13_*.
+ent_set_pose
+	jsr ent_set_ptrs
+	ldx ent_type
+	clc
+	lda enemy_anim_start,x
+	adc anim_frames,x
+	tay				; absolute frame
+	clc
+	lda gx_ptr
+	adc frame13_lo,y
+	sta gx_ptr
+	lda gx_ptr+1
+	adc frame13_hi,y
+	sta gx_ptr+1
+	clc
+	lda gy_ptr
+	adc frame13_lo,y
+	sta gy_ptr
+	lda gy_ptr+1
+	adc frame13_hi,y
+	sta gy_ptr+1
+	clc
+	lda gz_ptr
+	adc frame13_lo,y
+	sta gz_ptr
+	lda gz_ptr+1
+	adc frame13_hi,y
+	sta gz_ptr+1
+	rts
+
 ; Rotate one enemy instance at ent_wx/wy/wz, ent_rot, ent_type.
 ; Caller already ran load_view_trig + xform_world_vert (CAM[0] = view origin).
 ; view(v) = R_yaw(world − cam) + R(yaw − facing)(local): the rotated origin
 ; is hoisted per enemy and facing (octants of 45° = 32 yaw ticks) folds into
 ; the trig angle — 8-bit local products replace 16-bit smul16_7s.
 ent_rotate
-	jsr ent_set_ptrs
+	jsr ent_set_pose
 	; combined angle a = yaw − ent_rot*32 → fast-mul sets (A=cos, B=sin)
 	lda ent_rot
 	asl
@@ -81,20 +113,8 @@ ent_rotate
 	sta org_zl
 	lda CAM_ZH
 	sta org_zh
-	; gidx = anim_frame*13, then +1 per vertex (hoisted multiply)
-	lda anim_frame
-	asl
-	asl
-	asl				; *8
-	sta gidx
-	lda anim_frame
-	asl
-	asl				; *4
-	clc
-	adc gidx			; *12
-	adc anim_frame			; *13
-	sta gidx
 	lda #0
+	sta gidx
 	sta vindex
 .rvert
 	ldy gidx

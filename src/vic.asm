@@ -91,26 +91,18 @@ fill_viewport_colour
 	bne .vrow
 	rts
 
-; room_idx → col_sky/floor/line, viewport colour RAM, live $d021 if safe
+; room_idx → col_bg/line, viewport colour RAM, live $d021 if safe
 apply_room_palette
 	ldx room_idx
-	lda room_sky,x
-	sta col_sky
-	lda room_floor,x
-	sta col_floor
+	lda room_bg,x
+	sta col_bg
 	lda room_line,x
 	sta col_line
 	jsr fill_viewport_colour
-	; irq_phase: 0=HUD (leave $d021), 1=top (sky), 2=bot (floor)
+	; irq_phase: 0=HUD (leave $d021), 1/2=viewport → background
 	lda irq_phase
 	beq .ardone
-	cmp #1
-	beq .arsky
-	lda col_floor
-	sta $d021
-	jmp .ardone
-.arsky
-	lda col_sky
+	lda col_bg
 	sta $d021
 .ardone
 	lda room_idx

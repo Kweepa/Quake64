@@ -7,7 +7,8 @@ import {
   WORLD_SIZE,
   isGhostKind,
   colorHex,
-  ROOM_FLOOR_DEFAULT,
+  ROOM_BG_DEFAULT,
+  ROOM_LINE_DEFAULT,
   ROOM_LINE_DEFAULT,
 } from "./model.js";
 import { lookVectors } from "./math3d.js";
@@ -129,13 +130,13 @@ export class OverheadView {
       const isCur = cur && obj.id === cur.id;
       const isN = neigh.some((n) => n.id === obj.id);
       const faded = vis && !vis.has(obj.id);
-      const floorHex = colorHex(obj.floorColor ?? ROOM_FLOOR_DEFAULT);
+      const bgHex = colorHex(obj.bgColor ?? ROOM_BG_DEFAULT);
       const lineHex = colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT);
       const fill = isCur
-        ? hexAlpha(floorHex, 0.28)
+        ? hexAlpha(bgHex, 0.28)
         : isN
-          ? hexAlpha(floorHex, 0.18)
-          : hexAlpha(floorHex, 0.08);
+          ? hexAlpha(bgHex, 0.18)
+          : hexAlpha(bgHex, 0.08);
       drawBox(obj, fill, faded ? "#333" : lineHex, isCur ? 2 : 1);
     }
 

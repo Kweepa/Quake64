@@ -12,6 +12,8 @@ quad_edges
 	!byte 0,1, 1,2, 2,3, 3,0
 tri_edges
 	!byte 0,1, 1,2, 2,0
+tetra_edges
+	!byte 0,1, 1,2, 2,0,  3,0, 3,1, 3,2
 ; Closed: BL-TL, TL-TR, TR-BL, TR-BR. Open: left 0-1-4, right 2-5 + 2-3.
 door_closed_edges
 	!byte 0,1, 1,2, 2,0,  2,3
@@ -29,6 +31,8 @@ quad_vert
 	!byte 0,0,0,0
 tri_vert
 	!byte 0,0,0
+tetra_vert
+	!byte 0,0,0, 0,0,0
 
 ; Per-vert XZ column ids for mesh_project (verts sharing x,z share a column).
 ; box_col doubles as identity for ≤4-vert meshes with distinct columns.
@@ -46,6 +50,12 @@ box_xid
 	!byte 0,1,1,0, 0,1,1,0
 box_zid
 	!byte 0,0,1,1, 0,0,1,1
+bp_xid
+	!byte 0,1,2,2			; b0 b1 b2 apex
+bp_zid
+	!byte 0,0,1,2
+bp_col
+	!byte 0,1,2,3
 door_closed_z_xid
 	!byte 0,0,1,1
 door_closed_z_zid
@@ -685,6 +695,71 @@ draw_plat_mesh
 	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
+; Level-base tetrahedron: base 0-1-2, apex 3
+draw_backpack_mesh
+	jsr load_view_trig
+	jsr fill_backpack_verts
+	lda #4
+	sta mesh_nv
+	lda #6
+	sta mesh_ne
+	lda #<tetra_edges
+	sta edge_ptr
+	lda #>tetra_edges
+	sta edge_ptr+1
+	lda #<tetra_vert
+	sta edge_vert_ptr
+	lda #>tetra_vert
+	sta edge_vert_ptr+1
+	jmp stroke_mesh
+
+fill_backpack_verts
+	; Level-base tetra: equilateral-ish triangle, apex above centroid
+	; b0 (x,z) b1 (x+2,z) b2 (x+1,z+2) apex (x+1,z+1,y+2)
+	lda box_x
+	sta UX				; 0
+	clc
+	adc #BP_FOOT_SX
+	sta UX+1			; 1 = x+2
+	lda box_x
+	clc
+	adc #1
+	sta UX+2			; 2 = x+1 (b2 + apex)
+	lda box_z
+	sta UZ				; 0
+	clc
+	adc #BP_FOOT_SZ
+	sta UZ+1			; 1 = z+2 (b2)
+	lda box_z
+	clc
+	adc #1
+	sta UZ+2			; 2 = z+1 (apex)
+	lda #3
+	sta mesh_nx
+	sta mesh_nz
+	lda box_y
+	sta VY
+	sta VY+1
+	sta VY+2
+	clc
+	adc #BP_FOOT_SY
+	sta VY+3
+	lda #<bp_col
+	sta col_ptr
+	lda #>bp_col
+	sta col_ptr+1
+	lda #<bp_xid
+	sta xid_ptr
+	lda #>bp_xid
+	sta xid_ptr+1
+	lda #<bp_zid
+	sta zid_ptr
+	lda #>bp_zid
+	sta zid_ptr+1
+	lda #4
+	sta mesh_nv
+	jmp xform_mesh_xz
+
 fill_plat_verts
 	jsr aabb_uxuz
 	lda box_y
@@ -1271,7 +1346,7 @@ draw_world
 	ldx #0
 .dw_plat
 	cpx #MAP_NPLATS
-	bcs .dw_rts
+	bcs .dw_bp
 	lda plat_room,x
 	cmp room_idx
 	bne .dw_pln
@@ -1296,5 +1371,37 @@ draw_world
 .dw_pln
 	inx
 	bne .dw_plat
+	; backpacks
+.dw_bp
+	ldx #0
+.dw_bpl
+	cpx #MAP_NBACKPACKS
+	bcs .dw_rts
+	lda bp_taken,x
+	bne .dw_bpn
+	lda bp_room,x
+	cmp room_idx
+	bne .dw_bpn
+	stx obj_i
+	lda bp_x,x
+	sta box_x
+	lda bp_y,x
+	sta box_y
+	lda bp_z,x
+	sta box_z
+	lda #BP_FOOT_SX
+	sta box_sx
+	lda #BP_FOOT_SY
+	sta box_sy
+	lda #BP_FOOT_SZ
+	sta box_sz
+	jsr frustum_hits
+	bcc .dw_bpr
+	jsr draw_backpack_mesh
+.dw_bpr
+	ldx obj_i
+.dw_bpn
+	inx
+	bne .dw_bpl
 .dw_rts
 	rts

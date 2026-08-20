@@ -252,8 +252,35 @@ h2 {
   overflow: hidden;
 }
 
-.center > h2 {
+.center-heading {
   flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.center-heading h2 {
+  flex: 0 1 auto;
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#map-stats {
+  flex: 1 1 auto;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
 }
 
 .map-stage {
@@ -768,7 +795,10 @@ button:disabled {
     </aside>
 
     <section class="center">
-      <h2 id="center-title">Map</h2>
+      <div class="center-heading">
+        <h2 id="center-title">Map</h2>
+        <p id="map-stats" class="map-stats" aria-live="polite"></p>
+      </div>
       <div class="map-stage" id="map-stage">
         <canvas id="view-canvas" tabindex="0"></canvas>
       </div>
@@ -850,9 +880,12 @@ function clampMdlScale(n) {
 }
 
 /** Default room viewport colours (C64 indices). */
-const ROOM_SKY_DEFAULT = 9;
-const ROOM_FLOOR_DEFAULT = 8;
+const ROOM_BG_DEFAULT = 9;
 const ROOM_LINE_DEFAULT = 7;
+/** @deprecated Use ROOM_BG_DEFAULT */
+const ROOM_SKY_DEFAULT = ROOM_BG_DEFAULT;
+/** @deprecated */
+const ROOM_FLOOR_DEFAULT = ROOM_BG_DEFAULT;
 
 /** Pepto Commodore 64 palette (indices 0–15). */
 const C64_HEX = [
@@ -1012,6 +1045,14 @@ const KINDS = {
     fixed: false,
     slope: false,
   },
+  backpack: {
+    id: "backpack",
+    label: "Backpack",
+    color: "#6ec4a8",
+    defaultSize: [1, 2, 1], // overwritten by applyBackpackProportions (1.5 tall, φ base)
+    fixed: true,
+    slope: false,
+  },
 };
 
 /** Editor-only dashed / ghost volumes (not solid world geometry). */
@@ -1055,6 +1096,7 @@ const PALETTE_ORDER = [
   "teleporter",
   "teleporter_dest",
   "key",
+  "backpack",
 ];
 const MAX_TRIGGER_TEXT = 80;
 const MAX_NAME_LEN = 40;
@@ -1065,6 +1107,27 @@ const ELEV_TYPES = ["descending", "automatic", "toggle"];
 
 function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
+}
+
+/** Backpack contents (ammo or weapon pickup). */
+const BACKPACK_TYPES = ["shells", "nailgun", "nails", "grenade launcher", "grenades"];
+
+/** Height / base-side = φ. Fixed backpack: 1.5 tall. */
+const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
+const BACKPACK_HEIGHT = 1.5;
+const BACKPACK_SIDE = BACKPACK_HEIGHT / GOLDEN_RATIO;
+const BACKPACK_DEPTH = (BACKPACK_SIDE * Math.sqrt(3)) / 2;
+
+function clampBackpackType(s) {
+  return BACKPACK_TYPES.includes(s) ? s : "shells";
+}
+
+/** Fixed equilateral tetra: height 1.5, base side = height/φ. */
+function applyBackpackProportions(obj) {
+  obj.sx = BACKPACK_SIDE;
+  obj.sy = BACKPACK_HEIGHT;
+  obj.sz = BACKPACK_DEPTH;
+  return obj;
 }
 
 const LEVEL_NAMES = ["E1M1", "E1M2", "E1M3", "E1M4", "E1M5", "E1M6", "E1M7", "E1M8"];
@@ -1273,6 +1336,8 @@ function clampObject(obj) {
   obj.z = clampByte(obj.z);
   if (obj.kind === "doorway" || obj.kind === "switch") {
     applyFaceSize(obj);
+  } else if (obj.kind === "backpack") {
+    applyBackpackProportions(obj);
   } else if (obj.kind === "slope") {
     obj.sx = clampSize(obj.x, obj.sx);
     obj.sy = clampSize(obj.y, obj.sy);
@@ -1289,12 +1354,14 @@ function clampObject(obj) {
   if (obj.kind === "trigger") obj.text = clampTriggerText(obj.text);
   if (obj.kind === "room") {
     obj.name = clampName(obj.name);
-    obj.skyColor = normalizeColor(obj.skyColor, ROOM_SKY_DEFAULT);
-    obj.floorColor = normalizeColor(obj.floorColor, ROOM_FLOOR_DEFAULT);
+    obj.bgColor = normalizeColor(obj.bgColor ?? obj.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(obj.lineColor, ROOM_LINE_DEFAULT);
+    delete obj.skyColor;
+    delete obj.floorColor;
   }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
+  if (obj.kind === "backpack") obj.backpack = clampBackpackType(obj.backpack);
   if (obj.kind === "doorway") {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
@@ -1337,12 +1404,12 @@ function createObject(kind, x, y, z, extra = {}) {
   if (kind === "trigger") obj.text = clampTriggerText(extra.text);
   if (kind === "room") {
     obj.name = clampName(extra.name);
-    obj.skyColor = normalizeColor(extra.skyColor, ROOM_SKY_DEFAULT);
-    obj.floorColor = normalizeColor(extra.floorColor, ROOM_FLOOR_DEFAULT);
+    obj.bgColor = normalizeColor(extra.bgColor ?? extra.skyColor, ROOM_BG_DEFAULT);
     obj.lineColor = normalizeColor(extra.lineColor, ROOM_LINE_DEFAULT);
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
+  if (kind === "backpack") obj.backpack = clampBackpackType(extra.backpack);
   if (kind === "doorway") {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
@@ -1379,6 +1446,7 @@ function objectLabel(obj) {
     return obj.name ? `Room  ${obj.name}` : "Room";
   }
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
+  if (obj.kind === "backpack") return `Backpack (${clampBackpackType(obj.backpack)})`;
   return KINDS[obj.kind].label;
 }
 
@@ -1427,6 +1495,105 @@ function emptyMap() {
 function mapDisplayName(map, key) {
   const n = clampName(map?.name);
   return n || key;
+}
+
+/** Soft cap: 8-bit object indices / editor budget. */
+const MAX_MAP_OBJECTS = 255;
+
+/**
+ * Bytes per instance in the cooked C64 SoA (tools/genmap.py).
+ * Trigger text blob is counted separately. Spawn is always 5 bytes in the map.
+ */
+const C64_OBJECT_BYTES = {
+  room: 8,
+  doorway: 10,
+  crate: 7,
+  slope: 9,
+  platform: 7,
+  elevator: 10,
+  switch: 9,
+  enemy: 6,
+  trigger: 8,
+  spawn: 5,
+  backpack: 5,
+  // Editor-only / not yet cooked — treat like a typical AABB + room link
+  key: 7,
+  teleporter: 8,
+  teleporter_dest: 6,
+};
+
+/** Counts + estimated packed map RAM for the active level. */
+function mapStats(doc) {
+  const map = activeMap(doc);
+  const byKind = {};
+  let total = 0;
+  let c64Bytes = 5; // spawn_x/y/z/rot/room always present once cooked
+  let hasSpawn = false;
+  for (const obj of map.objects) {
+    const kind = obj.kind;
+    if (!KINDS[kind]) continue;
+    total += 1;
+    byKind[kind] = (byKind[kind] || 0) + 1;
+    if (kind === "spawn") {
+      if (hasSpawn) continue; // engine keeps one spawn record
+      hasSpawn = true;
+      continue; // already counted in the fixed 5
+    }
+    c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
+    if (kind === "trigger") {
+      const text = String(obj.text || "")
+        .replace(/\r\n/g, "\n")
+        .split("\n", 1)[0]
+        .slice(0, 24);
+      c64Bytes += text.length + 1; // chars + NUL in map_text
+    }
+  }
+  return { total, byKind, c64Bytes, max: MAX_MAP_OBJECTS };
+}
+
+function formatMapStats(stats) {
+  const parts = [`${stats.total}/${stats.max} objects`];
+  const order = [
+    "room",
+    "doorway",
+    "crate",
+    "slope",
+    "platform",
+    "elevator",
+    "switch",
+    "enemy",
+    "trigger",
+    "spawn",
+    "backpack",
+    "key",
+    "teleporter",
+    "teleporter_dest",
+  ];
+  const plurals = {
+    room: "rooms",
+    doorway: "doors",
+    crate: "crates",
+    slope: "ramps",
+    platform: "platforms",
+    elevator: "elevators",
+    switch: "switches",
+    enemy: "enemies",
+    trigger: "triggers",
+    spawn: "spawns",
+    backpack: "backpacks",
+    key: "keys",
+    teleporter: "teleporters",
+    teleporter_dest: "dests",
+  };
+  for (const kind of order) {
+    const n = stats.byKind[kind];
+    if (!n) continue;
+    const one = KINDS[kind]?.label?.toLowerCase() || kind;
+    parts.push(`${n} ${n === 1 ? one : plurals[kind] || `${one}s`}`);
+  }
+  const kb = stats.c64Bytes >= 1024 ? `${(stats.c64Bytes / 1024).toFixed(1)}K` : `${stats.c64Bytes} B`;
+  parts.push(`~${kb} C64`);
+  return parts.join(" · ");
 }
 
 function activeMap(doc) {
@@ -1666,9 +1833,10 @@ function parseObjects(list) {
       locked: o.locked,
       keyTag: o.keyTag,
       elevType: o.elevType,
+      backpack: o.backpack,
       collide: o.collide,
+      bgColor: o.bgColor ?? o.skyColor,
       skyColor: o.skyColor,
-      floorColor: o.floorColor,
       lineColor: o.lineColor,
     });
     if (!KINDS[o.kind].fixed) {
@@ -1683,12 +1851,15 @@ function parseObjects(list) {
     if (o.kind === "trigger" && o.text != null) obj.text = clampTriggerText(o.text);
     if (o.kind === "room") {
       if (o.name != null) obj.name = clampName(o.name);
-      if (o.skyColor != null) obj.skyColor = normalizeColor(o.skyColor, ROOM_SKY_DEFAULT);
-      if (o.floorColor != null) obj.floorColor = normalizeColor(o.floorColor, ROOM_FLOOR_DEFAULT);
+      const bg = o.bgColor ?? o.skyColor;
+      if (bg != null) obj.bgColor = normalizeColor(bg, ROOM_BG_DEFAULT);
       if (o.lineColor != null) obj.lineColor = normalizeColor(o.lineColor, ROOM_LINE_DEFAULT);
+      delete obj.skyColor;
+      delete obj.floorColor;
     }
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
+    if (o.kind === "backpack" && o.backpack != null) obj.backpack = clampBackpackType(o.backpack);
     if (o.kind === "doorway") {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);
@@ -4091,11 +4262,35 @@ class LayoutView {
       );
       return segs;
     }
+    if (obj.kind === "backpack") {
+      for (const s of this.#backpackTetraSegs(obj)) segs.push(s);
+      return segs;
+    }
     for (const [i, j] of BOX_EDGES) {
       segs.push({ a: cornerWorld(obj, i), b: cornerWorld(obj, j) });
     }
     for (const s of this.#glyphSegments(obj)) segs.push(s);
     return segs;
+  }
+
+  /** Equilateral base (side = sx); height = sy ≈ φ·sx. */
+  #backpackTetraSegs(obj) {
+    const s = obj.sx;
+    const y0 = obj.y;
+    const y1 = obj.y + obj.sy;
+    const depth = (s * Math.sqrt(3)) / 2;
+    const b0 = { x: obj.x, y: y0, z: obj.z };
+    const b1 = { x: obj.x + s, y: y0, z: obj.z };
+    const b2 = { x: obj.x + s / 2, y: y0, z: obj.z + depth };
+    const apex = { x: obj.x + s / 2, y: y1, z: obj.z + depth / 3 };
+    return [
+      { a: b0, b: b1 },
+      { a: b1, b: b2 },
+      { a: b2, b: b0 },
+      { a: apex, b: b0 },
+      { a: apex, b: b1 },
+      { a: apex, b: b2 },
+    ];
   }
 
   #glyphSegments(obj) {
@@ -4283,7 +4478,7 @@ class LayoutView {
     return null;
   }
 
-  /** Drop position from screen coords: room floor under cursor, else y=0 plane. */
+  /** Drop position from screen coords: room floor under cursor, else current grid plane. */
   placeAtScreen(mx, my, kind) {
     const doc = this.opts.getDoc();
     const ray = screenRay(mx, my, this.camera, this.cssW, this.cssH);
@@ -4307,18 +4502,19 @@ class LayoutView {
         z: Math.round(pt.z - sz / 2),
       };
     }
-    const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 });
+    const gy = this.gridY;
+    const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: gy, z: 0 }, { x: 0, y: 1, z: 0 });
     if (floor) {
       return {
         x: Math.round(floor.point.x - sx / 2),
-        y: 0,
+        y: gy,
         z: Math.round(floor.point.z - sz / 2),
       };
     }
     const { forward } = lookVectors(this.camera.yaw, this.camera.pitch);
     return {
       x: Math.round(this.camera.x + forward.x * 12 - sx / 2),
-      y: 0,
+      y: gy,
       z: Math.round(this.camera.z + forward.z * 12 - sz / 2),
     };
   }
@@ -4504,6 +4700,10 @@ class LayoutView {
           if (verts[i] && verts[j]) this.#line3(ctx, verts[i], verts[j], cam, w, h);
         }
       }
+    } else if (obj.kind === "backpack") {
+      for (const seg of this.#backpackTetraSegs(obj)) {
+        this.#line3(ctx, seg.a, seg.b, cam, w, h);
+      }
     } else {
       if (isGhostKind(obj.kind)) ctx.setLineDash([5, 4]);
       for (const [i, j] of BOX_EDGES) {
@@ -4655,13 +4855,13 @@ class OverheadView {
       const isCur = cur && obj.id === cur.id;
       const isN = neigh.some((n) => n.id === obj.id);
       const faded = vis && !vis.has(obj.id);
-      const floorHex = colorHex(obj.floorColor ?? ROOM_FLOOR_DEFAULT);
+      const bgHex = colorHex(obj.bgColor ?? ROOM_BG_DEFAULT);
       const lineHex = colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT);
       const fill = isCur
-        ? hexAlpha(floorHex, 0.28)
+        ? hexAlpha(bgHex, 0.28)
         : isN
-          ? hexAlpha(floorHex, 0.18)
-          : hexAlpha(floorHex, 0.08);
+          ? hexAlpha(bgHex, 0.18)
+          : hexAlpha(bgHex, 0.08);
       drawBox(obj, fill, faded ? "#333" : lineHex, isCur ? 2 : 1);
     }
 
@@ -6058,15 +6258,7 @@ function setMode(mode) {
   document.getElementById("draw-mode-group").hidden = mode !== "layout";
   document.getElementById("overhead-panel").hidden = mode !== "layout";
   document.getElementById("weapon-preview-panel").hidden = mode !== "weapons";
-  const map = activeMap(doc);
-  document.getElementById("center-title").textContent =
-    mode === "layout"
-      ? map.name
-        ? `Map ${doc.activeLevel} — ${map.name}`
-        : `Map ${doc.activeLevel}`
-      : mode === "weapons"
-        ? WEAPON_LABELS[weaponKey] || "Weapons"
-        : "Enemy";
+  updateCenterChrome();
   document.getElementById("hint").textContent =
     mode === "layout"
       ? "Drag palette to place · LMB line/box-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+RMB zoom · MMB orbit · F focus · G drop · gizmo moves selection · Del"
@@ -6167,9 +6359,7 @@ function finishPaletteDrop(e) {
   selectedIds = [obj.id];
   markDirty();
   refreshAll();
-  setStatus(
-    place.enemy ? `Placed ${place.enemy}` : `Placed ${KINDS[kind].label}`
-  );
+  setStatus(place.enemy ? `Placed ${place.enemy}` : `Placed ${KINDS[kind].label}`);
 }
 
 function selectedObject() {
@@ -6241,14 +6431,30 @@ function switchLevel(name) {
   selectedIds = [];
   collapsedRooms.clear();
   markDirty();
-  if (editorMode === "layout") {
-    const map = activeMap(doc);
-    document.getElementById("center-title").textContent = map.name
-      ? `Map ${doc.activeLevel} — ${map.name}`
-      : `Map ${doc.activeLevel}`;
-  }
   refreshAll();
   setStatus(name);
+}
+
+function updateCenterChrome() {
+  const titleEl = document.getElementById("center-title");
+  const statsEl = document.getElementById("map-stats");
+  if (editorMode === "layout") {
+    const map = activeMap(doc);
+    titleEl.textContent = map.name
+      ? `Map ${doc.activeLevel} — ${map.name}`
+      : `Map ${doc.activeLevel}`;
+    if (statsEl) {
+      statsEl.hidden = false;
+      statsEl.textContent = formatMapStats(mapStats(doc));
+    }
+    return;
+  }
+  titleEl.textContent =
+    editorMode === "weapons" ? WEAPON_LABELS[weaponKey] || "Weapons" : "Enemy";
+  if (statsEl) {
+    statsEl.hidden = true;
+    statsEl.textContent = "";
+  }
 }
 
 function renderLevelList() {
@@ -6853,16 +7059,9 @@ function renderInspector() {
       nameInp.addEventListener("change", () => apply(() => (obj.name = clampName(nameInp.value))));
       root.appendChild(field("Name", nameInp));
       root.appendChild(
-        colorPicker("Sky", obj.skyColor ?? ROOM_SKY_DEFAULT, (v) =>
+        colorPicker("Background", obj.bgColor ?? ROOM_BG_DEFAULT, (v) =>
           apply(() => {
-            obj.skyColor = v;
-          })
-        )
-      );
-      root.appendChild(
-        colorPicker("Floor", obj.floorColor ?? ROOM_FLOOR_DEFAULT, (v) =>
-          apply(() => {
-            obj.floorColor = v;
+            obj.bgColor = v;
           })
         )
       );
@@ -6939,6 +7138,18 @@ function renderInspector() {
       }
       sel.addEventListener("change", () => apply(() => (obj.elevType = sel.value)));
       root.appendChild(field("Type", sel));
+    }
+    if (obj.kind === "backpack") {
+      const sel = document.createElement("select");
+      for (const t of BACKPACK_TYPES) {
+        const opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = t;
+        if (clampBackpackType(obj.backpack) === t) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () => apply(() => (obj.backpack = sel.value)));
+      root.appendChild(field("Contains", sel));
     }
     if (obj.kind === "platform") {
       const chk = document.createElement("input");
@@ -7588,6 +7799,7 @@ function refreshPanels() {
 }
 
 function refreshAll() {
+  updateCenterChrome();
   refreshPanels();
   if (editorMode === "layout") layoutView.draw();
   else if (editorMode === "weapons") weaponView.draw();

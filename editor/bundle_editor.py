@@ -118,7 +118,10 @@ def main() -> None:
     </aside>
 
     <section class="center">
-      <h2 id="center-title">Map</h2>
+      <div class="center-heading">
+        <h2 id="center-title">Map</h2>
+        <p id="map-stats" class="map-stats" aria-live="polite"></p>
+      </div>
       <div class="map-stage" id="map-stage">
         <canvas id="view-canvas" tabindex="0"></canvas>
       </div>

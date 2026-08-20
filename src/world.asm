@@ -35,11 +35,25 @@ world_init
 	asl
 	sta yaw
 	jsr proc_init
+	jsr init_backpacks
 	jsr update_floor
 	jsr sync_eye
 	lda #$ff
 	sta palette_room
 	jsr apply_room_palette
+	rts
+
+; Clear bp_taken[0..MAP_NBACKPACKS)
+init_backpacks
+	ldx #0
+.ib_lp
+	cpx #MAP_NBACKPACKS
+	bcs .ib_rts
+	lda #0
+	sta bp_taken,x
+	inx
+	bne .ib_lp
+.ib_rts
 	rts
 
 ; ------------------------------------------------------------------
@@ -99,6 +113,8 @@ player_overlaps_y
 
 ; ------------------------------------------------------------------
 update_floor
+	lda pl_on_elev
+	sta obj_i			; prior elev (rider), before clear
 	lda #$ff
 	sta pl_on_elev
 	ldx room_idx
@@ -207,9 +223,23 @@ update_floor
 	jsr point_in_box_xz
 	bcc .uf_en
 	; on elevator footprint — floor = elev_y + sy
+	; reject only if under the car (feet < elev_y); top is sy above elev_y
+	; so feet>=top would block boarding from a flush room floor
 	clc
 	lda elev_y,x
 	adc elev_sy,x
+	cmp floor_y
+	bcc .uf_en			; below current floor
+	sta col_y			; elev_top
+	cpx obj_i
+	beq .uf_e_on			; already riding — feet lag while elev moves
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	cmp elev_y,x
+	bcc .uf_en			; feet < elev_y — walking under
+.uf_e_on
+	lda col_y
 	sta floor_y
 	stx pl_on_elev
 .uf_en
@@ -682,10 +712,22 @@ neg_a
 	rts
 
 ; ------------------------------------------------------------------
-; Proximity: doors + switches + automatic elevators
+; Proximity: doors + switches (K) + automatic elevators
 ; ------------------------------------------------------------------
+SW_USE_RANGE	= 4			; max XZ distance to switch AABB
+
 try_proximity
 	jsr try_door_proximity
+	; K rising edge (SquareDoom try_use) — one fire per press
+	lda key_use
+	bne .tp_kd
+	sta key_use_was			; A = 0
+	jmp .tp_el
+.tp_kd
+	lda key_use_was
+	bne .tp_el			; still held
+	lda #1
+	sta key_use_was
 	ldx #0
 .tp_s
 	cpx #MAP_NSWITCHES
@@ -693,25 +735,17 @@ try_proximity
 	stx obj_i
 	lda sw_room,x
 	cmp room_idx
-	bne .tp_sleave
+	bne .tp_sn
 	jsr .prox_switch
-	bcc .tp_sleave
-	lda sw_latched,x
-	bne .tp_sn			; still held — one fire per press
-	lda #1
-	sta sw_latched,x
+	bcc .tp_sn
 	ldy sw_elev,x
 	tya
 	tax
 	jsr elev_activate
-	bcs .tp_sn
+	bcs .tp_el
 	lda #SOUND_SWITCH
 	jsr play_sound
-	jmp .tp_sn
-.tp_sleave
-	ldx obj_i
-	lda #0
-	sta sw_latched,x
+	jmp .tp_el			; one switch per press
 .tp_sn
 	ldx obj_i
 	inx
@@ -721,7 +755,7 @@ try_proximity
 	ldx #0
 .tp_e
 	cpx #MAP_NELEVS
-	bcs .tp_rts
+	bcs .tp_bp
 	lda elev_type,x
 	cmp #ELEV_TYPE_AUTO
 	bne .tp_en
@@ -734,10 +768,168 @@ try_proximity
 .tp_en
 	inx
 	bne .tp_e
+.tp_bp
+	jsr try_backpack_pickup
 .tp_rts
 	rts
 
-; X=switch; C=1 if in pad XZ, Y overlaps, facing the face, wish into it
+; Walk-over backpacks: grant if not full / not already owned
+try_backpack_pickup
+	ldx #0
+.tbp_lp
+	cpx #MAP_NBACKPACKS
+	bcs .tbp_rts
+	stx obj_i
+	lda bp_taken,x
+	bne .tbp_n
+	lda bp_room,x
+	cmp room_idx
+	bne .tbp_n
+	lda bp_x,x
+	sta box_x
+	lda bp_y,x
+	sta box_y
+	lda bp_z,x
+	sta box_z
+	lda #BP_FOOT_SX
+	sta box_sx
+	lda #BP_FOOT_SY
+	sta box_sy
+	lda #BP_FOOT_SZ
+	sta box_sz
+	lda cam_xh
+	sta col_x
+	lda cam_zh
+	sta col_z
+	jsr point_in_box_xz
+	bcc .tbp_n
+	jsr player_overlaps_y
+	bcc .tbp_n
+	ldx obj_i
+	jsr grant_backpack
+	bcc .tbp_n
+	ldx obj_i
+	lda #1
+	sta bp_taken,x
+	lda #SOUND_GETAMMO
+	jsr play_sound
+.tbp_n
+	ldx obj_i
+	inx
+	bne .tbp_lp
+.tbp_rts
+	rts
+
+; X = backpack index; C=1 granted
+grant_backpack
+	lda bp_type,x
+	cmp #BP_SHELLS
+	beq .gb_shells
+	cmp #BP_NAILGUN
+	beq .gb_nailgun
+	cmp #BP_NAILS
+	beq .gb_nails
+	cmp #BP_GRENLAUNCHER
+	beq .gb_grenlaunch
+	cmp #BP_GRENADES
+	beq .gb_grenades
+.gb_no
+	clc
+	rts
+.gb_shells
+	lda ammo_shells
+	cmp #AMMO_SHELLS_MAX
+	bcs .gb_no
+	clc
+	adc #AMMO_SHELLS_BOX
+	bcs .gb_shell_cap
+	cmp #AMMO_SHELLS_MAX
+	bcc .gb_shell_ok
+	beq .gb_shell_ok
+.gb_shell_cap
+	lda #AMMO_SHELLS_MAX
+.gb_shell_ok
+	sta ammo_shells
+	sec
+	rts
+.gb_nails
+	lda ammo_nails
+	cmp #AMMO_NAILS_MAX
+	bcs .gb_no
+	clc
+	adc #AMMO_NAILS_BOX
+	bcs .gb_nail_cap
+	cmp #AMMO_NAILS_MAX
+	bcc .gb_nail_ok
+	beq .gb_nail_ok
+.gb_nail_cap
+	lda #AMMO_NAILS_MAX
+.gb_nail_ok
+	sta ammo_nails
+	sec
+	rts
+.gb_grenades
+	lda ammo_grenades
+	cmp #AMMO_GRENADES_MAX
+	bcs .gb_no
+	clc
+	adc #AMMO_GRENADES_BOX
+	bcs .gb_gren_cap
+	cmp #AMMO_GRENADES_MAX
+	bcc .gb_gren_ok
+	beq .gb_gren_ok
+.gb_gren_cap
+	lda #AMMO_GRENADES_MAX
+.gb_gren_ok
+	sta ammo_grenades
+	sec
+	rts
+.gb_nailgun
+	lda have_wpn
+	and #HAVE_NAIL
+	bne .gb_no
+	lda have_wpn
+	ora #HAVE_NAIL
+	sta have_wpn
+	lda ammo_nails
+	clc
+	adc #AMMO_NAILS_GUN
+	bcs .gb_ng_cap
+	cmp #AMMO_NAILS_MAX
+	bcc .gb_ng_ok
+	beq .gb_ng_ok
+.gb_ng_cap
+	lda #AMMO_NAILS_MAX
+.gb_ng_ok
+	sta ammo_nails
+	ldx #WPN_NAIL
+	jsr switch_weapon
+	sec
+	rts
+.gb_grenlaunch
+	lda have_wpn
+	and #HAVE_GREN
+	bne .gb_no
+	lda have_wpn
+	ora #HAVE_GREN
+	sta have_wpn
+	lda ammo_grenades
+	clc
+	adc #AMMO_GRENADES_GUN
+	bcs .gb_gl_cap
+	cmp #AMMO_GRENADES_MAX
+	bcc .gb_gl_ok
+	beq .gb_gl_ok
+.gb_gl_cap
+	lda #AMMO_GRENADES_MAX
+.gb_gl_ok
+	sta ammo_grenades
+	ldx #WPN_GREN
+	jsr switch_weapon
+	sec
+	rts
+
+; X=switch; C=1 if within SW_USE_RANGE of pad XZ, Y overlaps, facing the face
 .prox_switch
 	stx obj_i
 	lda sw_x,x
@@ -752,7 +944,7 @@ try_proximity
 	sta col_x
 	lda cam_zh
 	sta col_z
-	jsr point_in_box_xz
+	jsr near_box_xz
 	bcc .ps_no
 	ldx obj_i
 	lda sw_y,x
@@ -763,8 +955,6 @@ try_proximity
 	bcc .ps_no
 	ldx obj_i
 	jsr .switch_facing
-	bcc .ps_no
-	jsr .switch_push
 	ldx obj_i
 	rts
 .ps_no
@@ -772,26 +962,83 @@ try_proximity
 	ldx obj_i
 	rts
 
-; X=switch; C=1 if yaw within ±45° of sw_face (0=+Z, 64=+X, 128=-Z, 192=-X)
+; col_x/col_z within SW_USE_RANGE of [box_x,box_x+sx) × [box_z,box_z+sz)
+; Chebyshev: each axis distance to AABB ≤ SW_USE_RANGE. C=1 near.
+near_box_xz
+	lda col_x
+	cmp box_x
+	bcc .nb_xlo
+	clc
+	lda box_x
+	adc box_sx
+	sta col_y
+	lda col_x
+	cmp col_y
+	bcs .nb_xhi
+	lda #0
+	beq .nb_xd
+.nb_xlo
+	lda box_x
+	sec
+	sbc col_x
+	jmp .nb_xd
+.nb_xhi
+	lda col_x
+	sec
+	sbc col_y
+.nb_xd
+	cmp #SW_USE_RANGE + 1
+	bcs .nb_no
+	lda col_z
+	cmp box_z
+	bcc .nb_zlo
+	clc
+	lda box_z
+	adc box_sz
+	sta col_y
+	lda col_z
+	cmp col_y
+	bcs .nb_zhi
+	lda #0
+	beq .nb_zd
+.nb_zlo
+	lda box_z
+	sec
+	sbc col_z
+	jmp .nb_zd
+.nb_zhi
+	lda col_z
+	sec
+	sbc col_y
+.nb_zd
+	cmp #SW_USE_RANGE + 1
+	bcs .nb_no
+	sec
+	rts
+.nb_no
+	clc
+	rts
+
+; X=switch; C=1 if yaw within ±90° of sw_face (0=+Z, 64=+X, 128=-Z, 192=-X)
 .switch_facing
 	lda sw_face,x
 	cmp #FACE_PX
 	bcs .sf_x
 	cmp #FACE_MZ
 	beq .sf_mz
-	; FACE_PZ: yaw < 32 or >= 224
+	; FACE_PZ: yaw < 64 or >= 192
 	lda yaw
-	cmp #32
+	cmp #64
 	bcc .sf_yes
-	cmp #224
+	cmp #192
 	bcs .sf_yes
 	clc
 	rts
 .sf_mz
 	lda yaw
-	cmp #96
+	cmp #64
 	bcc .sf_no
-	cmp #160
+	cmp #192
 	bcc .sf_yes
 .sf_no
 	clc
@@ -799,63 +1046,20 @@ try_proximity
 .sf_x
 	cmp #FACE_MX
 	beq .sf_mx
-	; FACE_PX: 32..95
+	; FACE_PX: 0..127
 	lda yaw
-	cmp #32
-	bcc .sf_no
-	cmp #96
+	cmp #128
 	bcc .sf_yes
 	clc
 	rts
 .sf_mx
 	lda yaw
-	cmp #160
-	bcc .sf_no
-	cmp #224
-	bcc .sf_yes
+	cmp #128
+	bcs .sf_yes
 	clc
 	rts
 .sf_yes
 	sec
-	rts
-
-; X=switch; C=1 if this frame's wish points into the switch face
-.switch_push
-	lda sw_face,x
-	cmp #FACE_PX
-	bcs .sp_x
-	cmp #FACE_MZ
-	beq .sp_mz
-	; FACE_PZ: +Z
-	lda wish_dzh
-	bmi .sp_no
-	ora wish_dz
-	beq .sp_no
-	sec
-	rts
-.sp_mz
-	lda wish_dzh
-	bmi .sp_yes
-.sp_no
-	clc
-	rts
-.sp_yes
-	sec
-	rts
-.sp_x
-	cmp #FACE_MX
-	beq .sp_mx
-	; FACE_PX: +X
-	lda wish_dxh
-	bmi .sp_no
-	ora wish_dx
-	beq .sp_no
-	sec
-	rts
-.sp_mx
-	lda wish_dxh
-	bmi .sp_yes
-	clc
 	rts
 
 ; ------------------------------------------------------------------

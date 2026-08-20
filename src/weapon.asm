@@ -1,11 +1,7 @@
 ; First-person view-model: 2×2 body (sprites 0–3) + 24×21 flash (4 / 5).
 ; Native size (no XY expand). Body light grey; flash yellow then red.
+; Weapon ids WPN_* live in mem.asm
 !zone weapon
-
-WPN_AXE = 0
-WPN_SHOT = 1
-WPN_NAIL = 2
-WPN_ROCK = 3
 
 POSE_IDLE = 0
 POSE_FIRE = 1
@@ -19,6 +15,10 @@ AXE_F_SPARK = $80
 
 RECOIL_NSTEPS = 3
 
+; have_wpn bit per weapon id
+wpn_have_bit
+	!byte HAVE_AXE, HAVE_SHOT, HAVE_NAIL, HAVE_GREN
+
 wpn_fire_ms_lo
 	!byte <0, <600, <100, <900
 wpn_fire_ms_hi
@@ -30,7 +30,7 @@ wpn_sound
 wpn_idle_x
 	!byte WPN_X0, WPN_X0, WPN_X0, WPN_X0
 wpn_idle_y
-	!byte WPN_Y_AXEIDLE, WPN_Y_FLUSH, WPN_Y_NAILIDLE, WPN_Y_FLUSH
+	!byte WPN_Y_AXEIDLE, WPN_Y_SHOTIDLE, WPN_Y_NAILIDLE, WPN_Y_FLUSH
 
 wpn_body_lo
 	!byte <spr_axe_0, <spr_shot2, <spr_nail_0, <spr_rock
@@ -69,8 +69,10 @@ axe_step_ms_hi
 axe_step_flags
 	!byte AXE_F_OOF, 0, AXE_F_SPARK | AXE_F_HIT, 0, 0
 
-; Shotgun / grenade: snap down, then recover over a couple of frames.
-recoil_step_y
+; Shotgun: snap up for shot, kick down, settle. Grenade: snap down, recover.
+recoil_shot_y
+	!byte 208, 232, 224
+recoil_gren_y
 	!byte 232, 224, 216
 recoil_step_ms_lo
 	!byte 16, 35, 35
@@ -126,15 +128,27 @@ init_weapon
 	ldy #>spr_nail_fr
 	jsr blit_flash2
 
+	lda #HAVE_START
+	sta have_wpn
+	lda #AMMO_SHELLS_START
+	sta ammo_shells
+	lda #0
+	sta ammo_nails
+	sta ammo_grenades
+
 	lda #$ff
 	sta cur_weapon
-	ldx #WPN_AXE
+	ldx #WPN_SHOT
 	jmp switch_weapon
 
-; X = weapon id
+; X = weapon id — refuse if not owned
 switch_weapon
+	lda wpn_have_bit,x
+	and have_wpn
+	beq .sw_rts
 	cpx cur_weapon
 	bne .sw_do
+.sw_rts
 	rts
 .sw_do
 	stx cur_weapon
@@ -359,6 +373,12 @@ update_weapon
 	lda wpn_pose
 	bne .uw_done
 .uw_shot
+	ldx cur_weapon
+	cpx #WPN_AXE
+	beq .uw_do_fire
+	jsr try_spend_ammo
+	bcc .uw_done
+.uw_do_fire
 	jsr fire_shot
 	ldx cur_weapon
 	lda wpn_fire_ms_lo,x
@@ -378,10 +398,13 @@ update_weapon
 .uw_up_rts
 	rts
 
+; Ammo already spent (or axe). X = cur_weapon on entry to fire_shot.
 fire_shot
 	ldx cur_weapon
 	cpx #WPN_AXE
-	beq start_axe
+	bne .fs_gun
+	jmp start_axe
+.fs_gun
 	lda wpn_sound,x
 	jsr play_sound
 	ldx cur_weapon
@@ -405,6 +428,45 @@ fire_shot
 	eor #1
 	sta mg_frame
 	jmp apply_xy
+
+; X = cur_weapon; C=1 spent, C=0 cannot fire
+try_spend_ammo
+	cpx #WPN_SHOT
+	beq .ts_shell
+	cpx #WPN_NAIL
+	beq .ts_nail
+	cpx #WPN_GREN
+	beq .ts_gren
+	sec
+	rts
+.ts_shell
+	lda ammo_shells
+	cmp #2
+	bcc .ts_no
+	sec
+	sbc #2
+	sta ammo_shells
+	sec
+	rts
+.ts_nail
+	lda ammo_nails
+	beq .ts_no
+	sec
+	sbc #1
+	sta ammo_nails
+	sec
+	rts
+.ts_gren
+	lda ammo_grenades
+	beq .ts_no
+	sec
+	sbc #1
+	sta ammo_grenades
+	sec
+	rts
+.ts_no
+	clc
+	rts
 
 nail_idle
 	lda #POSE_IDLE
@@ -503,7 +565,14 @@ recoil_apply_step
 	bcc .ras_ok
 	jmp wpn_to_idle
 .ras_ok
-	lda recoil_step_y,x
+	lda cur_weapon
+	cmp #WPN_SHOT
+	bne .ras_gren
+	lda recoil_shot_y,x
+	jmp .ras_y
+.ras_gren
+	lda recoil_gren_y,x
+.ras_y
 	sta wpn_y
 	lda recoil_step_ms_lo,x
 	sta anim_ms_l

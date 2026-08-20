@@ -13,13 +13,14 @@ import {
   clampVert,
   C64_HEX,
   C64_NAMES,
-  ROOM_SKY_DEFAULT,
-  ROOM_FLOOR_DEFAULT,
+  ROOM_BG_DEFAULT,
   ROOM_LINE_DEFAULT,
   MAX_TRIGGER_TEXT,
   MAX_NAME_LEN,
   MAX_TAG_LEN,
   ELEV_TYPES,
+  BACKPACK_TYPES,
+  clampBackpackType,
   createObject,
   createDefaultDocument,
   currentRoom,
@@ -28,6 +29,8 @@ import {
   uid,
   LEVEL_NAMES,
   activeMap,
+  mapStats,
+  formatMapStats,
   clipForFrame,
   dummyFrameFor,
   isFigureObject,
@@ -591,15 +594,7 @@ function setMode(mode) {
   document.getElementById("draw-mode-group").hidden = mode !== "layout";
   document.getElementById("overhead-panel").hidden = mode !== "layout";
   document.getElementById("weapon-preview-panel").hidden = mode !== "weapons";
-  const map = activeMap(doc);
-  document.getElementById("center-title").textContent =
-    mode === "layout"
-      ? map.name
-        ? `Map ${doc.activeLevel} — ${map.name}`
-        : `Map ${doc.activeLevel}`
-      : mode === "weapons"
-        ? WEAPON_LABELS[weaponKey] || "Weapons"
-        : "Enemy";
+  updateCenterChrome();
   document.getElementById("hint").textContent =
     mode === "layout"
       ? "Drag palette to place · LMB line/box-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+RMB zoom · MMB orbit · F focus · G drop · gizmo moves selection · Del"
@@ -700,9 +695,7 @@ function finishPaletteDrop(e) {
   selectedIds = [obj.id];
   markDirty();
   refreshAll();
-  setStatus(
-    place.enemy ? `Placed ${place.enemy}` : `Placed ${KINDS[kind].label}`
-  );
+  setStatus(place.enemy ? `Placed ${place.enemy}` : `Placed ${KINDS[kind].label}`);
 }
 
 function selectedObject() {
@@ -774,14 +767,30 @@ function switchLevel(name) {
   selectedIds = [];
   collapsedRooms.clear();
   markDirty();
-  if (editorMode === "layout") {
-    const map = activeMap(doc);
-    document.getElementById("center-title").textContent = map.name
-      ? `Map ${doc.activeLevel} — ${map.name}`
-      : `Map ${doc.activeLevel}`;
-  }
   refreshAll();
   setStatus(name);
+}
+
+function updateCenterChrome() {
+  const titleEl = document.getElementById("center-title");
+  const statsEl = document.getElementById("map-stats");
+  if (editorMode === "layout") {
+    const map = activeMap(doc);
+    titleEl.textContent = map.name
+      ? `Map ${doc.activeLevel} — ${map.name}`
+      : `Map ${doc.activeLevel}`;
+    if (statsEl) {
+      statsEl.hidden = false;
+      statsEl.textContent = formatMapStats(mapStats(doc));
+    }
+    return;
+  }
+  titleEl.textContent =
+    editorMode === "weapons" ? WEAPON_LABELS[weaponKey] || "Weapons" : "Enemy";
+  if (statsEl) {
+    statsEl.hidden = true;
+    statsEl.textContent = "";
+  }
 }
 
 function renderLevelList() {
@@ -1386,16 +1395,9 @@ function renderInspector() {
       nameInp.addEventListener("change", () => apply(() => (obj.name = clampName(nameInp.value))));
       root.appendChild(field("Name", nameInp));
       root.appendChild(
-        colorPicker("Sky", obj.skyColor ?? ROOM_SKY_DEFAULT, (v) =>
+        colorPicker("Background", obj.bgColor ?? ROOM_BG_DEFAULT, (v) =>
           apply(() => {
-            obj.skyColor = v;
-          })
-        )
-      );
-      root.appendChild(
-        colorPicker("Floor", obj.floorColor ?? ROOM_FLOOR_DEFAULT, (v) =>
-          apply(() => {
-            obj.floorColor = v;
+            obj.bgColor = v;
           })
         )
       );
@@ -1472,6 +1474,18 @@ function renderInspector() {
       }
       sel.addEventListener("change", () => apply(() => (obj.elevType = sel.value)));
       root.appendChild(field("Type", sel));
+    }
+    if (obj.kind === "backpack") {
+      const sel = document.createElement("select");
+      for (const t of BACKPACK_TYPES) {
+        const opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = t;
+        if (clampBackpackType(obj.backpack) === t) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () => apply(() => (obj.backpack = sel.value)));
+      root.appendChild(field("Contains", sel));
     }
     if (obj.kind === "platform") {
       const chk = document.createElement("input");
@@ -2121,6 +2135,7 @@ function refreshPanels() {
 }
 
 function refreshAll() {
+  updateCenterChrome();
   refreshPanels();
   if (editorMode === "layout") layoutView.draw();
   else if (editorMode === "weapons") weaponView.draw();

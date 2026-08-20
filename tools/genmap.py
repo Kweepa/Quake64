@@ -15,9 +15,9 @@ ELEV_DESCENDING = 0
 ELEV_AUTOMATIC = 1
 ELEV_TOGGLE = 2
 FACE = {"+z": 0, "-z": 1, "+x": 2, "-x": 3}
-ROOM_SKY_DEFAULT = 9
-ROOM_FLOOR_DEFAULT = 8
+ROOM_BG_DEFAULT = 9
 ROOM_LINE_DEFAULT = 7
+ROOM_SKY_DEFAULT = ROOM_BG_DEFAULT  # legacy alias
 
 
 def norm_color(val, default: int) -> int:
@@ -60,6 +60,48 @@ def rooms_for(rooms: list[dict], obj: dict) -> list[int]:
     return [i for i, r in enumerate(rooms) if aabb_overlap(obj, r)]
 
 
+def xz_aabb_gap(a: dict, b: dict) -> int:
+    """XZ separation between AABBs; 0 if footprints overlap or touch on an edge."""
+    ax0, ax1 = a["x"], a["x"] + a["sx"]
+    bx0, bx1 = b["x"], b["x"] + b["sx"]
+    if ax1 < bx0:
+        dx = bx0 - ax1
+    elif bx1 < ax0:
+        dx = ax0 - bx1
+    else:
+        dx = 0
+    az0, az1 = a["z"], a["z"] + a["sz"]
+    bz0, bz1 = b["z"], b["z"] + b["sz"]
+    if az1 < bz0:
+        dz = bz0 - az1
+    elif bz1 < az0:
+        dz = az0 - bz1
+    else:
+        dz = 0
+    return dx + dz
+
+
+def nearest_plat_home(
+    elev: dict, room_i: int, plats: list[dict], plat_rooms: list[int], floor_y: int
+) -> int | None:
+    """Upper stop so elev top meets nearest same-room platform top, or None."""
+    elev_sy = int(elev["sy"])
+    elev_top = int(elev["y"]) + elev_sy
+    best_key: tuple[int, int] | None = None
+    best_home: int | None = None
+    for pi, p in enumerate(plats):
+        if plat_rooms[pi] != room_i:
+            continue
+        home = int(p["y"]) - elev_sy
+        if home <= floor_y:
+            continue
+        key = (xz_aabb_gap(elev, p), abs(int(p["y"]) - elev_top))
+        if best_key is None or key < best_key:
+            best_key = key
+            best_home = home
+    return best_home
+
+
 def btable(name: str, vals: list[int]) -> str:
     if not vals:
         return f"{name}\n"
@@ -94,11 +136,20 @@ def main() -> None:
     elevs = [o for o in objs if o["kind"] == "elevator"]
     enemies = [o for o in objs if o["kind"] == "enemy"]
     triggers = [o for o in objs if o["kind"] == "trigger"]
+    backpacks = [o for o in objs if o["kind"] == "backpack"]
     spawns = [o for o in objs if o["kind"] == "spawn"]
 
     if not spawns:
         raise SystemExit("E1M1 needs a spawn")
     spawn = spawns[0]
+
+    BP_TYPE = {
+        "shells": 0,
+        "nailgun": 1,
+        "nails": 2,
+        "grenade launcher": 3,
+        "grenades": 4,
+    }
 
     # Tag → elevator index
     elev_by_tag: dict[str, int] = {}
@@ -114,8 +165,9 @@ def main() -> None:
     room_sx = [r["sx"] for r in rooms]
     room_sy = [r["sy"] for r in rooms]
     room_sz = [r["sz"] for r in rooms]
-    room_sky = [norm_color(r.get("skyColor"), ROOM_SKY_DEFAULT) for r in rooms]
-    room_floor = [norm_color(r.get("floorColor"), ROOM_FLOOR_DEFAULT) for r in rooms]
+    room_bg = [
+        norm_color(r.get("bgColor", r.get("skyColor")), ROOM_BG_DEFAULT) for r in rooms
+    ]
     room_line = [norm_color(r.get("lineColor"), ROOM_LINE_DEFAULT) for r in rooms]
 
     # Doors
@@ -192,6 +244,7 @@ def main() -> None:
         if ri is None:
             raise SystemExit("elevator has no room")
         et = e.get("elevType") or "descending"
+        floor_y = rooms[ri]["y"]
         elev_x.append(e["x"])
         elev_y.append(e["y"])
         elev_z.append(e["z"])
@@ -204,8 +257,13 @@ def main() -> None:
             elev_type.append(ELEV_TOGGLE)
         else:
             elev_type.append(ELEV_DESCENDING)
-        elev_home.append(e["y"])
-        elev_dest.append(rooms[ri]["y"])  # room floor
+        home = e["y"]
+        if et == "toggle" and e["y"] == floor_y:
+            raised = nearest_plat_home(e, ri, plats, plat_room, floor_y)
+            if raised is not None:
+                home = raised
+        elev_home.append(home)
+        elev_dest.append(floor_y)
         elev_room.append(ri)
 
     # Switches
@@ -270,6 +328,19 @@ def main() -> None:
         tr_room.append(ri)
         tr_text_off.append(off)
 
+    # Backpacks (pickup tetrahedrons)
+    bp_x, bp_y, bp_z, bp_type, bp_room = [], [], [], [], []
+    for b in backpacks:
+        ri = room_under(rooms, b)
+        if ri is None:
+            raise SystemExit(f"backpack at {b['x']},{b['y']},{b['z']} has no room")
+        bt = BP_TYPE.get((b.get("backpack") or "shells").strip(), 0)
+        bp_x.append(b["x"])
+        bp_y.append(b["y"])
+        bp_z.append(b["z"])
+        bp_type.append(bt)
+        bp_room.append(ri)
+
     spawn_room = room_under(rooms, spawn)
     if spawn_room is None:
         raise SystemExit("spawn has no room")
@@ -291,6 +362,7 @@ def main() -> None:
         f"MAP_NELEVS\t= {len(elevs)}",
         f"MAP_NENEMIES\t= {len(enemies)}",
         f"MAP_NTRIGS\t= {len(triggers)}",
+        f"MAP_NBACKPACKS\t= {len(backpacks)}",
         "ELEV_TYPE_DESCEND\t= 0",
         "ELEV_TYPE_AUTO\t= 1",
         "ELEV_TYPE_TOGGLE\t= 2",
@@ -298,6 +370,11 @@ def main() -> None:
         "FACE_MZ\t= 1",
         "FACE_PX\t= 2",
         "FACE_MX\t= 3",
+        "BP_SHELLS\t= 0",
+        "BP_NAILGUN\t= 1",
+        "BP_NAILS\t= 2",
+        "BP_GRENLAUNCHER\t= 3",
+        "BP_GRENADES\t= 4",
         f"MAP_FRUSTUM\t= {frustum}",
         f"MAP_FRUSTUM_HALF\t= {frustum_half}",
         "",
@@ -320,8 +397,7 @@ def main() -> None:
         btable("room_sx", room_sx).rstrip(),
         btable("room_sy", room_sy).rstrip(),
         btable("room_sz", room_sz).rstrip(),
-        btable("room_sky", room_sky).rstrip(),
-        btable("room_floor", room_floor).rstrip(),
+        btable("room_bg", room_bg).rstrip(),
         btable("room_line", room_line).rstrip(),
         "",
         btable("door_x", door_x).rstrip(),
@@ -398,6 +474,12 @@ def main() -> None:
         btable("tr_room", tr_room).rstrip(),
         btable("tr_text_off", tr_text_off).rstrip(),
         "",
+        btable("bp_x", bp_x).rstrip(),
+        btable("bp_y", bp_y).rstrip(),
+        btable("bp_z", bp_z).rstrip(),
+        btable("bp_type", bp_type).rstrip(),
+        btable("bp_room", bp_room).rstrip(),
+        "",
         "map_text",
         "\t!byte " + ",".join(str(b) for b in text_blob) if text_blob else "\t!byte 0",
         "",
@@ -406,7 +488,8 @@ def main() -> None:
     print(
         f"Wrote {OUT.relative_to(ROOT)} + map_counts.asm: "
         f"{len(rooms)} rooms, {len(doors)} doors, {len(crates)} crates, "
-        f"{len(plats)} plats, {len(elevs)} elevs, {len(enemies)} enemies"
+        f"{len(plats)} plats, {len(elevs)} elevs, {len(enemies)} enemies, "
+        f"{len(backpacks)} backpacks"
     )
 
 

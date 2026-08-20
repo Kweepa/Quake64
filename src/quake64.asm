@@ -23,7 +23,8 @@ start
 
 	lda #0
 	sta keys
-	sta anim_frame
+	sta anim_frames
+	sta anim_frames+1
 	sta anim_acc_l
 	sta anim_acc_h
 	lda #NVERTS
@@ -123,13 +124,18 @@ advance_walk
 	lda anim_acc_h
 	sbc #>ANIM_MS
 	sta anim_acc_h
-	ldx anim_frame
-	inx
-	cpx #WALK_FRAMES
-	bcc +
 	ldx #0
+.aw_type
+	inc anim_frames,x
+	lda anim_frames,x
+	cmp enemy_anim_len,x
+	bcc +
+	lda #0
+	sta anim_frames,x
 +
-	stx anim_frame
+	inx
+	cpx #ENEMY_NTYPES
+	bcc .aw_type
 	jmp .aw_try
 .done
 	rts

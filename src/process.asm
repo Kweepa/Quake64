@@ -27,14 +27,10 @@ proc_init
 	inx
 	bne .pe
 .psw0
-	ldx #0
 	lda #0
-.psw
-	cpx #MAP_NSWITCHES
-	beq .pdone
-	sta sw_latched,x
-	inx
-	bne .psw
+	sta in_use
+	sta key_use
+	sta key_use_was
 .pdone
 	rts
 
@@ -259,6 +255,27 @@ proc_try_step
 	sec
 	rts
 
+; Same as proc_try_step but ELEV_STEP_MS (slower elevators)
+proc_try_elev_step
+	lda PROC_D,x
+	bne .ees_hi
+	lda PROC_C,x
+	cmp #ELEV_STEP_MS
+	bcc .ees_no
+.ees_hi
+	sec
+	lda PROC_C,x
+	sbc #ELEV_STEP_MS
+	sta PROC_C,x
+	lda PROC_D,x
+	sbc #0
+	sta PROC_D,x
+	clc
+	rts
+.ees_no
+	sec
+	rts
+
 ; ------------------------------------------------------------------
 proc_update
 	ldx #0
@@ -389,7 +406,7 @@ proc_update
 .pu_le
 	jsr proc_add_dt
 .pu_le_lp
-	jsr proc_try_step
+	jsr proc_try_elev_step
 	bcc .pu_le_go
 	jmp .pu_next
 .pu_le_go
@@ -412,7 +429,7 @@ proc_update
 .pu_re
 	jsr proc_add_dt
 .pu_re_lp
-	jsr proc_try_step
+	jsr proc_try_elev_step
 	bcc .pu_re_go
 	jmp .pu_next
 .pu_re_go

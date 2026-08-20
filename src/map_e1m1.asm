@@ -8,44 +8,42 @@ spawn_rot	!byte 2
 spawn_room	!byte 0
 
 room_x
-	!byte 0,22,29
+	!byte 0,22,29,94,115,121,140
 room_y
-	!byte 104,64,65
+	!byte 104,64,65,65,65,78,55
 room_z
-	!byte 117,124,112
+	!byte 117,124,112,96,160,135,96
 room_sx
-	!byte 32,6,64
+	!byte 32,6,64,20,24,8,20
 room_sy
-	!byte 8,48,32
+	!byte 8,48,32,20,20,6,30
 room_sz
-	!byte 6,16,32
-room_sky
-	!byte 9,2,14
-room_floor
-	!byte 9,2,5
+	!byte 6,16,32,80,16,24,80
+room_bg
+	!byte 9,2,14,9,6,11,9
 room_line
-	!byte 7,7,1
+	!byte 7,7,1,7,7,7,7
 
 door_x
-	!byte 23,28,93
+	!byte 23,28,93,114,123,139
 door_y
-	!byte 104,65,65
+	!byte 104,65,65,65,78,65
 door_z
-	!byte 123,135,126
+	!byte 123,135,126,166,159,166
 door_sx
-	!byte 4,1,1
+	!byte 4,1,1,1,4,1
 door_sy
-	!byte 5,5,5
+	!byte 5,5,5,5,5,5
 door_sz
-	!byte 1,4,4
+	!byte 1,4,4,4,1,4
 door_ra
-	!byte 0,1,2
+	!byte 0,1,2,3,4,4
 door_rb
-	!byte 1,2,255
+	!byte 1,2,3,4,5,6
 door_home_y
-	!byte 104,65,65
+	!byte 104,65,65,65,78,65
 door_face
-	!byte 1,2,2
+	!byte 1,2,2,2,0,2
 
 crate_x
 	!byte 0,22,60
@@ -82,72 +80,72 @@ slope_room
 	!byte 0
 
 plat_x
-	!byte 22,22
+	!byte 22,22,123,140,140
 plat_y
-	!byte 77,92
+	!byte 77,92,78,65,65
 plat_z
-	!byte 134,134
+	!byte 134,134,160,136,96
 plat_sx
-	!byte 6,6
+	!byte 6,6,4,20,20
 plat_sz
-	!byte 6,6
+	!byte 6,6,12,40,20
 plat_room
-	!byte 1,1
+	!byte 1,1,4,6,6
 plat_solid
-	!byte 0,0
+	!byte 0,0,1,1,1
 
 elev_x
-	!byte 22
+	!byte 22,123,140
 elev_y0
-	!byte 103
+	!byte 103,77,55
 elev_z
-	!byte 134
+	!byte 134,172,116
 elev_sx
-	!byte 6
+	!byte 6,4,10
 elev_sy
-	!byte 1
+	!byte 1,1,1
 elev_sz
-	!byte 6
+	!byte 6,4,20
 elev_type
-	!byte 2
+	!byte 2,2,2
 elev_home
-	!byte 103
+	!byte 103,77,64
 elev_dest
-	!byte 64
+	!byte 64,65,55
 elev_room
-	!byte 1
+	!byte 1,4,6
 
 sw_x
-	!byte 24,22
+	!byte 24,22,121,140
 sw_y
-	!byte 105,66
+	!byte 105,66,67,66
 sw_z
-	!byte 139,136
+	!byte 139,136,175,145
 sw_sx
-	!byte 2,1
+	!byte 2,1,2,1
 sw_sy
-	!byte 3,3
+	!byte 3,3,3,3
 sw_sz
-	!byte 1,2
+	!byte 1,2,1,2
 sw_elev
-	!byte 0,0
+	!byte 0,0,1,2
 sw_room
-	!byte 1,1
+	!byte 1,1,4,6
 sw_face
-	!byte 0,2
+	!byte 0,3,0,3
 
 en_x
-	!byte 83,83
+	!byte 83,83,108,155,145
 en_y
-	!byte 65,65
+	!byte 65,65,65,65,65
 en_z
-	!byte 120,135
+	!byte 120,135,128,102,106
 en_type
-	!byte 0,1
+	!byte 0,1,0,0,0
 en_rot
-	!byte 6,6
+	!byte 6,6,6,0,0
 en_room
-	!byte 2,2
+	!byte 2,2,3,6,6
 
 tr_x
 	!byte 11
@@ -165,6 +163,17 @@ tr_room
 	!byte 0
 tr_text_off
 	!byte 0
+
+bp_x
+	!byte 124
+bp_y
+	!byte 78
+bp_z
+	!byte 136
+bp_type
+	!byte 1
+bp_room
+	!byte 5
 
 map_text
 	!byte 84,104,101,32,83,108,105,112,103,97,116,101,32,67,111,109,112,108,101,120,0

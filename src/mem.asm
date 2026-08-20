@@ -5,8 +5,7 @@
 ; $F800 log/alog/sin/cos (copied at init). Judd sqlo/sqhi live in the PRG.
 
 COL_BORDER	= 0
-COL_BG		= 9			; default sky (brown)
-COL_FLOOR	= 8			; default floor (orange)
+COL_BG		= 9			; default viewport background (brown)
 COL_HUD_BG	= 0
 COL_LINE	= 7			; default vectors (yellow)
 COL_OUTSIDE	= 0			; black frame (not $d021 brown)
@@ -99,8 +98,7 @@ FOCAL		= 100
 LOG_FOCAL	= 213			; round(32*log2(100))
 NVERTS		= 13
 NEDGES		= 13
-WALK_FRAMES	= 4
-ANIM_MS		= 200			; walk step interval (ms)
+ANIM_MS		= 100			; walk step interval (ms)
 ZCLIP		= $0100			; 1.0 near plane (8.8)
 YAW_STEP	= 3
 PITCH_STEP	= 2
@@ -160,6 +158,7 @@ proc_tmp3	= $CB63
 proc_tmp4	= $CB64
 proc_tmp5	= $CB65
 MOTION_STEP_MS	= 64
+ELEV_STEP_MS	= 128			; half elevator travel speed vs doors
 DOOR_RECLOSE_MS	= 5000
 ELEV_WAIT_MS	= 5000
 
@@ -183,7 +182,10 @@ hold_strafel	= $CB76
 hold_strafer	= $CB78
 hold_turn_l	= $CB7A
 hold_turn_r	= $CB7C
-sw_latched	= $CB7E			; MAP_NSWITCHES (≤8); 1 while held
+in_use		= $CB7E			; IRQ latch: K pressed
+key_use		= $CB7F			; frame snapshot
+key_use_was	= $CB80			; rising-edge debounce
+; $CB81–$CB85 free (was sw_latched)
 
 ; Unique world X/Z + 8.8 sin/cos products for xform_mesh_xz (cap 4+4, 8 verts)
 UX		= $CB86
@@ -208,6 +210,7 @@ COL_FLASH_Y	= 1			    ; yellow
 COL_FLASH_R	= 2			    ; red
 WPN_X0		= 160			; 2×2 top-left, visual centre 184
 WPN_Y_FLUSH	= 208			; 42px tall, viewport bottom ~250
+WPN_Y_SHOTIDLE	= 218		; shotgun: 10px below WPN_Y_FLUSH
 WPN_Y_AXEIDLE	= 229		; half off: top pair only
 WPN_Y_NAILIDLE	= 214
 WPN_COL		= 24			; native sprite width
@@ -223,15 +226,15 @@ FLASH_RED_MS	= 60
 
 ; Weapon BSS (after unique-XZ products)
 in_fire		= $CBB6
-in_wpn_axe	= $CBB7			; 4 bytes: axe shot nail rock
+in_wpn_axe	= $CBB7			; 4 bytes: axe shot nail gren
 in_wpn_shot	= $CBB8
 in_wpn_nail	= $CBB9
-in_wpn_rock	= $CBBA
+in_wpn_gren	= $CBBA
 key_fire	= $CBBB
 key_wpn_axe	= $CBBC			; 4 bytes
 key_wpn_shot	= $CBBD
 key_wpn_nail	= $CBBE
-key_wpn_rock	= $CBBF
+key_wpn_gren	= $CBBF
 cur_weapon	= $CBC0
 wpn_pose	= $CBC1			; POSE_*
 fire_rpt_l	= $CBC2
@@ -273,3 +276,36 @@ COL_INVH	= $CC60
 COL_INVK	= $CC70
 COL_PXL		= $CC80
 COL_PXH		= $CC90
+
+; Player inventory + backpack taken flags (after project cache)
+AMMO_SHELLS_MAX		= 100
+AMMO_NAILS_MAX		= 200
+AMMO_GRENADES_MAX	= 100
+AMMO_SHELLS_BOX		= 20
+AMMO_NAILS_BOX		= 25
+AMMO_GRENADES_BOX	= 5
+AMMO_NAILS_GUN		= 30
+AMMO_GRENADES_GUN	= 5
+AMMO_SHELLS_START	= 25
+BP_FOOT_SX		= 2			; AABB around equilateral-ish base
+BP_FOOT_SZ		= 2
+BP_FOOT_SY		= 2			; ≈ 1.5 tall (C64 int)
+BP_MAX			= 32		; MAP_NBACKPACKS ≤ this
+
+HAVE_AXE	= 1
+HAVE_SHOT	= 2
+HAVE_NAIL	= 4
+HAVE_GREN	= 8
+HAVE_START	= HAVE_AXE | HAVE_SHOT
+
+WPN_AXE		= 0
+WPN_SHOT	= 1
+WPN_NAIL	= 2
+WPN_GREN	= 3
+
+ammo_shells	= $CCA0
+ammo_nails	= $CCA1
+ammo_grenades	= $CCA2
+have_wpn	= $CCA3			; bitfield HAVE_*
+bp_taken	= $CCA4			; MAP_NBACKPACKS (≤ BP_MAX)
+anim_frames	= $CCC4			; ENEMY_NTYPES local walk frame indices

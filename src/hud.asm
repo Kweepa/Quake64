@@ -118,6 +118,12 @@ init_hud
 	inx
 	cpx #24
 	bne -
+	ldx #23
+-
+	lda #COL_HUD
+	sta $d800 + HUD_OFF3,x
+	dex
+	bpl -
 !if PROFILE = 1 {
 	lda #HUD_CH_R
 	sta SCR_A + HUD_OFF3
@@ -128,12 +134,6 @@ init_hud
 	lda #HUD_CH_K
 	sta SCR_A + HUD_OFF3 + 8
 	sta SCR_B + HUD_OFF3 + 8
-	ldx #23
--
-	lda #COL_HUD
-	sta $d800 + HUD_OFF3,x
-	dex
-	bpl -
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF3
 	sta $d800 + HUD_OFF3 + 4
@@ -209,7 +209,97 @@ hud_print
 	jsr .u8_3
 	ldx #20
 	lda pitch
-	jmp .s8_3
+	jsr .s8_3
+	jmp hud_ammo
+
+; Current weapon ammo at HUD_OFF3 (col 0, or 15 if PROFILE); axe → ---
+hud_ammo
+!if PROFILE = 1 {
+	ldx #15
+} else {
+	ldx #0
+}
+	stx pp_col
+	lda cur_weapon
+	cmp #WPN_AXE
+	beq .ha_dash
+	cmp #WPN_SHOT
+	beq .ha_shell
+	cmp #WPN_NAIL
+	beq .ha_nail
+	cmp #WPN_GREN
+	beq .ha_gren
+.ha_dash
+	ldx pp_col
+	lda #HUD_CH_MINUS
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	rts
+.ha_shell
+	lda ammo_shells
+	jmp .ha_u8
+.ha_nail
+	lda ammo_nails
+	jmp .ha_u8
+.ha_gren
+	lda ammo_grenades
+.ha_u8
+	ldx pp_col
+	jmp .u8_3h
+
+; A unsigned → 3 digits at HUD_OFF3+X (pp_col)
+.u8_3h
+	stx pp_col
+	sta pp_tmp_l
+	ldx #0
+.uh3h
+	lda pp_tmp_l
+	cmp #100
+	bcc .uh3t
+	sbc #100
+	sta pp_tmp_l
+	inx
+	bne .uh3h
+.uh3t
+	stx hud_n
+	ldy #0
+.uh3tl
+	lda pp_tmp_l
+	cmp #10
+	bcc .uh3o
+	sbc #10
+	sta pp_tmp_l
+	iny
+	bne .uh3tl
+.uh3o
+	lda hud_n
+	ora #$30
+	sta hud_n
+	tya
+	ora #$30
+	sta pp_tmp_h
+	lda pp_tmp_l
+	ora #$30
+	sta pp_tmp_l
+	ldx pp_col
+	lda hud_n
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	lda pp_tmp_h
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	lda pp_tmp_l
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	rts
 
 ; A signed → sign + 3 digits at HUD_OFF2+X (horizon pitch = 0)
 .s8_3

@@ -557,11 +557,35 @@ export class LayoutView {
       );
       return segs;
     }
+    if (obj.kind === "backpack") {
+      for (const s of this.#backpackTetraSegs(obj)) segs.push(s);
+      return segs;
+    }
     for (const [i, j] of BOX_EDGES) {
       segs.push({ a: cornerWorld(obj, i), b: cornerWorld(obj, j) });
     }
     for (const s of this.#glyphSegments(obj)) segs.push(s);
     return segs;
+  }
+
+  /** Equilateral base (side = sx); height = sy ≈ φ·sx. */
+  #backpackTetraSegs(obj) {
+    const s = obj.sx;
+    const y0 = obj.y;
+    const y1 = obj.y + obj.sy;
+    const depth = (s * Math.sqrt(3)) / 2;
+    const b0 = { x: obj.x, y: y0, z: obj.z };
+    const b1 = { x: obj.x + s, y: y0, z: obj.z };
+    const b2 = { x: obj.x + s / 2, y: y0, z: obj.z + depth };
+    const apex = { x: obj.x + s / 2, y: y1, z: obj.z + depth / 3 };
+    return [
+      { a: b0, b: b1 },
+      { a: b1, b: b2 },
+      { a: b2, b: b0 },
+      { a: apex, b: b0 },
+      { a: apex, b: b1 },
+      { a: apex, b: b2 },
+    ];
   }
 
   #glyphSegments(obj) {
@@ -749,7 +773,7 @@ export class LayoutView {
     return null;
   }
 
-  /** Drop position from screen coords: room floor under cursor, else y=0 plane. */
+  /** Drop position from screen coords: room floor under cursor, else current grid plane. */
   placeAtScreen(mx, my, kind) {
     const doc = this.opts.getDoc();
     const ray = screenRay(mx, my, this.camera, this.cssW, this.cssH);
@@ -773,18 +797,19 @@ export class LayoutView {
         z: Math.round(pt.z - sz / 2),
       };
     }
-    const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: 0, z: 0 }, { x: 0, y: 1, z: 0 });
+    const gy = this.gridY;
+    const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: gy, z: 0 }, { x: 0, y: 1, z: 0 });
     if (floor) {
       return {
         x: Math.round(floor.point.x - sx / 2),
-        y: 0,
+        y: gy,
         z: Math.round(floor.point.z - sz / 2),
       };
     }
     const { forward } = lookVectors(this.camera.yaw, this.camera.pitch);
     return {
       x: Math.round(this.camera.x + forward.x * 12 - sx / 2),
-      y: 0,
+      y: gy,
       z: Math.round(this.camera.z + forward.z * 12 - sz / 2),
     };
   }
@@ -969,6 +994,10 @@ export class LayoutView {
         for (const [i, j] of tmpl.lines) {
           if (verts[i] && verts[j]) this.#line3(ctx, verts[i], verts[j], cam, w, h);
         }
+      }
+    } else if (obj.kind === "backpack") {
+      for (const seg of this.#backpackTetraSegs(obj)) {
+        this.#line3(ctx, seg.a, seg.b, cam, w, h);
       }
     } else {
       if (isGhostKind(obj.kind)) ctx.setLineDash([5, 4]);

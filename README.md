@@ -1,8 +1,8 @@
 # Quake64
 
-A Commodore 64 *Quake* demake: a 3D line-drawn world in custom character graphics, with portal rooms, stick-figure monsters, and a hardware-sprite view-model.
+A Commodore 64 *Quake* demake: a 3D line-drawn world in custom character graphics, with portal rooms, stick-figure enemies, and sprite weapons.
 
-This is an early prototype. The running program is the **core line engine** — a double-buffered Bresenham Grunt walk cycle in VIC Bank 3 — plus a HUD font, frame profiler, and hardware-sprite view-models (axe, shotgun, nailgun, grenade launcher).
+This is an early prototype. The running program is the **core line engine** — a double-buffered Bresenham line drawn world in VIC Bank 3 — plus a HUD font, frame profiler, and sprite weapons (axe, super shotgun, nailgun, grenade launcher).
 
 ## Display
 
@@ -12,19 +12,21 @@ Each frame **wipes the live 24 charset columns** (~16.6k cycles). Dirty-tile tra
 
 ## World (design)
 
-The map is **rooms as axis-aligned boxes**, not a global mesh. Collision is 8-bit bounds against the active room. Closed doors are blocking planes; open doors are portals that reveal the next room index.
+The map is **rooms as axis-aligned boxes**, not a global mesh. Collision is 8-bit bounds against the active room. Closed doors are blocking planes; open doors are portals that reveal the next room index. I might extend the room boxes to arbitrary meshes, chosen to make collision easy and to give the levels maximum variety. For example, T junctions, L hallways.
 
 Elevation is locked to **1:2 ramps** (`height = local_x >> 1`) so slopes never need multiply or divide. Elevators, switches, and crates share the same box tests.
 
-Off-screen **items** (AABB meshes) and **enemies** skip rotate/project/draw. Horizontal and vertical tests use a fat 45° cone (`|axis| ≤ z` plus a size pad) so the miss is drawing something a bit off-screen, not dropping something that is still in the 192×128 view. The active room is not frustum-culled.
+Off-screen **items** (AABB meshes) and **enemies** skip rotate/project/draw. Horizontal and vertical tests use a fat 45° cone (`|axis| ≤ z` plus a size pad) so the miss is drawing something a bit off-screen, not dropping something that is still in the 192×128 view. The active room's bounding lines are not frustum-culled.
+
+There's an editor that can be used to put together levels. I also used it to export weapon sprites and enemy animations.
 
 ## Entities (design)
 
-Monsters are **12 vertices / 12 lines** on a shared skeleton (Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon — three types per level). Poses live in local space as signed offsets from the creature base: idle, alert, walk, three attacks, flinch, death (**24 frames**). About **2 KB** per enemy plus one line layout.
+Enemies are **13 vertices / 13 lines** on a shared skeleton (Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon - three types per level). Poses live in local space as signed offsets from the creature base. All animations are imported from the original data by retargeting the vertex animation to the skeleton. About **2 KB** per enemy plus one line layout.
 
-Yaw is cheap at runtime: a **45°** pose is **pre-rotated into tables**; the other six views are coord flips and sign changes. Perspective and remaining rotation use 8-bit **log / antilog LUTs** (`alog(log|x| + log|cos θ|)`). Nails are point traces clipped to the current room.
+Yaw is rolled(!) into the world rotation to avoid a double rotate. Perspective and rotation use 8-bit **log / antilog LUTs** (`alog(log|x| + log|cos θ|)`). Nails are raycasts whose results are delayed a frame or two.
 
-The view-model is **four hardware sprites** in a 2×2 grid. Unplotted sprite pixels stay transparent so world lines show through the gun; bob and recoil are sprite Y/X offsets.
+The view-model is **four hardware sprites** in a 2×2 grid. Unplotted sprite pixels stay transparent so world lines show through the gun; bob and recoil are sprite x,y offsets.
 
 ## Build
 
@@ -36,4 +38,4 @@ make.bat           :: build and autostart in VICE
 run-editor.bat     :: local map / skeleton editor
 ```
 
-Keys in the current E1M1 demo: **WASD** move / strafe, **J/L** turn, **SPACE** fire, **1–4** axe / shotgun / nailgun / grenade launcher. HUD row 2 shows camera **X Y Z** and heading **H**. Stick-figure Grunt / Rottweiler walk in room 2.
+Keys in the current E1M1 demo: **WASD** move / strafe, **J/L** turn, **K** use, **SPACE** fire, **1–4** axe / shotgun / nailgun / grenade launcher. HUD row 2 shows camera **X Y Z** and heading **H** when enabled. Stick-figure Grunt / Rottweiler are in room 2 and beyond.

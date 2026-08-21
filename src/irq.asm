@@ -193,8 +193,7 @@ irq_entry
 	pha
 	tya
 	pha
-	ldx show_buf
-	lda show_ui_tab,x
+	lda #D018_A_UI
 	sta $d018
 	lda #COL_HUD_BG
 	sta $d021

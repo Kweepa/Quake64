@@ -34,25 +34,25 @@ D018_A_TOP	= $04			; matrix $C000, charset $D000
 D018_A_BOT	= $06			; matrix $C000, charset $D800
 D018_B_TOP	= $18			; matrix $C400, charset $E000
 D018_B_BOT	= $1A			; matrix $C400, charset $E800
-D018_A_UI	= $0C			; matrix $C000, UI charset $F000
-D018_B_UI	= $1C			; matrix $C400, UI charset $F000
+D018_A_UI	= $0C			; matrix $C000, UI charset $F000 (HUD band always this)
+D018_B_UI	= $1C			; unused — HUD is not flipped with the viewport
 
 UI_CHARSET	= $F000
 UI_FONT_PAGES	= 8			; 256 glyphs, ASCII-indexed from quakefont.png
 ; 40-col HUD (rows 0–8 above VIEW_ROW):
-;  0 FFF                  1                Quake64
-;  2          The Slipgate Complex
-;  4       S000     Health   Armour
-;  5       N000
-;  6       G000      100      000
+;  0FFF              Quake64
+;  1          The Slipgate Complex
+;  3        S000     Health   Armour
+;  4        N000
+;  5        G000      100      000
 HUD_ROW		= 0			; frame ms FFF
-HUD_ROW_TITLE	= 1			; "Quake64"
-HUD_ROW_MAP	= 2			; map display name
-HUD_ROW2	= 3			; HUD_POS / PROFILE verts
-HUD_ROW_SHELL	= 4
-HUD_ROW_NAIL	= 5
-HUD_ROW_GREN	= 6			; grenades + health / armour values
-HUD_ROW4	= 7			; trigger message
+HUD_ROW_TITLE	= 0			; "Quake64" (same row as FFF)
+HUD_ROW_MAP	= 1			; map display name
+HUD_ROW2	= 2			; HUD_POS / PROFILE verts
+HUD_ROW_SHELL	= 3
+HUD_ROW_NAIL	= 4
+HUD_ROW_GREN	= 5			; grenades + health / armour values
+HUD_ROW4	= 6			; trigger message
 HUD_COL		= 0
 HUD_OFF		= HUD_ROW * 40 + HUD_COL
 HUD_OFF_TITLE	= HUD_ROW_TITLE * 40 + HUD_COL
@@ -64,12 +64,12 @@ HUD_OFF_GREN	= HUD_ROW_GREN * 40 + HUD_COL
 HUD_OFF3	= HUD_OFF2		; PROFILE vertex counts
 HUD_OFF4	= HUD_ROW4 * 40 + HUD_COL
 HUD_TITLE_COL	= 16
-HUD_AMMO_ICON	= 7
-HUD_AMMO_NUM	= 8
-HUD_HP_LABEL	= 16
-HUD_AR_LABEL	= 25
-HUD_HP_NUM	= 17
-HUD_AR_NUM	= 26
+HUD_AMMO_ICON	= 8
+HUD_AMMO_NUM	= 9
+HUD_HP_LABEL	= 17
+HUD_AR_LABEL	= 26
+HUD_HP_NUM	= 18
+HUD_AR_NUM	= 27
 HUD_CH_SP	= $20			; ASCII space / digits / letters in UI charset
 HUD_CH_PLUS	= $2b
 HUD_CH_MINUS	= $2d

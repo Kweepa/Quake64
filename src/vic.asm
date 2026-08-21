@@ -386,7 +386,7 @@ apply_show
 	sta $d018
 	rts
 .ui
-	lda show_ui_tab,x
+	lda #D018_A_UI			; HUD always matrix A (viewport still flips)
 	sta $d018
 	rts
 
@@ -409,5 +409,3 @@ show_top_tab
 	!byte D018_A_TOP, D018_B_TOP
 show_bot_tab
 	!byte D018_A_BOT, D018_B_BOT
-show_ui_tab
-	!byte D018_A_UI, D018_B_UI

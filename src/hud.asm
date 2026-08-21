@@ -1,4 +1,6 @@
 ; 40-col HUD — Quake 8×8 font in UI charset $F000 (ASCII screen codes)
+; Single-buffered in matrix A. Raster HUD / flyback always D018_A_UI; the
+; viewport still flips A/B. Colour RAM is shared.
 !zone hud
 
 init_hud
@@ -24,16 +26,14 @@ init_hud
 	dex
 	bne .copy
 
-	; rows 0–8 (360 bytes): spaces on both matrices, orange colour
+	; rows 0–8 (360 bytes): spaces + orange colour (matrix A only)
 	ldx #0
 	lda #HUD_CH_SP
 -	sta SCR_A,x
-	sta SCR_B,x
 	inx
 	bne -
 	ldx #0
 -	sta SCR_A + 256,x
-	sta SCR_B + 256,x
 	inx
 	cpx #104
 	bne -
@@ -52,7 +52,6 @@ init_hud
 -	lda hud_str_title,x
 	beq +
 	sta SCR_A + HUD_OFF_TITLE + HUD_TITLE_COL,x
-	sta SCR_B + HUD_OFF_TITLE + HUD_TITLE_COL,x
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF_TITLE + HUD_TITLE_COL,x
 	inx
@@ -75,7 +74,6 @@ init_hud
 	lda map_name,y
 	beq .imap_done
 	sta SCR_A + HUD_OFF_MAP,x
-	sta SCR_B + HUD_OFF_MAP,x
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF_MAP,x
 	inx
@@ -86,13 +84,10 @@ init_hud
 
 	lda #HUD_CH_SHELL
 	sta SCR_A + HUD_OFF_SHELL + HUD_AMMO_ICON
-	sta SCR_B + HUD_OFF_SHELL + HUD_AMMO_ICON
 	lda #HUD_CH_NAIL
 	sta SCR_A + HUD_OFF_NAIL + HUD_AMMO_ICON
-	sta SCR_B + HUD_OFF_NAIL + HUD_AMMO_ICON
 	lda #HUD_CH_GREN
 	sta SCR_A + HUD_OFF_GREN + HUD_AMMO_ICON
-	sta SCR_B + HUD_OFF_GREN + HUD_AMMO_ICON
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF_SHELL + HUD_AMMO_ICON
 	sta $d800 + HUD_OFF_NAIL + HUD_AMMO_ICON
@@ -102,7 +97,6 @@ init_hud
 -	lda hud_str_health,x
 	beq +
 	sta SCR_A + HUD_OFF_SHELL + HUD_HP_LABEL,x
-	sta SCR_B + HUD_OFF_SHELL + HUD_HP_LABEL,x
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF_SHELL + HUD_HP_LABEL,x
 	inx
@@ -112,7 +106,6 @@ init_hud
 -	lda hud_str_armour,x
 	beq +
 	sta SCR_A + HUD_OFF_SHELL + HUD_AR_LABEL,x
-	sta SCR_B + HUD_OFF_SHELL + HUD_AR_LABEL,x
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF_SHELL + HUD_AR_LABEL,x
 	inx
@@ -122,16 +115,12 @@ init_hud
 !if PROFILE = 1 {
 	lda #HUD_CH_R
 	sta SCR_A + HUD_OFF + 4
-	sta SCR_B + HUD_OFF + 4
 	lda #HUD_CH_P
 	sta SCR_A + HUD_OFF + 9
-	sta SCR_B + HUD_OFF + 9
 	lda #HUD_CH_K
 	sta SCR_A + HUD_OFF + 14
-	sta SCR_B + HUD_OFF + 14
 	lda #HUD_CH_D
 	sta SCR_A + HUD_OFF + 19
-	sta SCR_B + HUD_OFF + 19
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF + 4
 	sta $d800 + HUD_OFF + 9
@@ -139,13 +128,10 @@ init_hud
 	sta $d800 + HUD_OFF + 19
 	lda #HUD_CH_R
 	sta SCR_A + HUD_OFF2
-	sta SCR_B + HUD_OFF2
 	lda #HUD_CH_P
 	sta SCR_A + HUD_OFF2 + 4
-	sta SCR_B + HUD_OFF2 + 4
 	lda #HUD_CH_K
 	sta SCR_A + HUD_OFF2 + 8
-	sta SCR_B + HUD_OFF2 + 8
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF2
 	sta $d800 + HUD_OFF2 + 4
@@ -155,19 +141,14 @@ init_hud
 !if HUD_POS = 1 {
 	lda #HUD_CH_X
 	sta SCR_A + HUD_OFF2
-	sta SCR_B + HUD_OFF2
 	lda #HUD_CH_Y
 	sta SCR_A + HUD_OFF2 + 5
-	sta SCR_B + HUD_OFF2 + 5
 	lda #HUD_CH_Z
 	sta SCR_A + HUD_OFF2 + 10
-	sta SCR_B + HUD_OFF2 + 10
 	lda #HUD_CH_H
 	sta SCR_A + HUD_OFF2 + 15
-	sta SCR_B + HUD_OFF2 + 15
 	lda #HUD_CH_P
 	sta SCR_A + HUD_OFF2 + 19
-	sta SCR_B + HUD_OFF2 + 19
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF2
 	sta $d800 + HUD_OFF2 + 5
@@ -266,7 +247,7 @@ hud_ammo
 	lda player_armour
 	; fall through
 
-; A unsigned → 3 digits at (dst_ptr)+X on both screens (pp_col)
+; A unsigned -> 3 digits at (dst_ptr)+X, matrix A
 .u8_3at
 	stx pp_col
 	sta pp_tmp_l
@@ -291,38 +272,20 @@ hud_ammo
 	iny
 	bne .uh3tl
 .uh3o
-	lda hud_n
-	ora #$30
-	sta hud_n
 	tya
 	ora #$30
 	sta pp_tmp_h
+	lda hud_n
+	ora #$30
+	ldy pp_col
+	sta (dst_ptr),y
+	iny
+	lda pp_tmp_h
+	sta (dst_ptr),y
+	iny
 	lda pp_tmp_l
 	ora #$30
-	sta pp_tmp_l
-	ldx pp_col
-	lda hud_n
-	jsr .sta2
-	inx
-	lda pp_tmp_h
-	jsr .sta2
-	inx
-	lda pp_tmp_l
-.sta2
-	pha
-	txa
-	tay
-	pla
 	sta (dst_ptr),y
-	pha
-	lda dst_ptr+1
-	eor #>(SCR_A ^ SCR_B)
-	sta dst_ptr+1
-	pla
-	sta (dst_ptr),y
-	lda dst_ptr+1
-	eor #>(SCR_A ^ SCR_B)
-	sta dst_ptr+1
 	rts
 
 !if HUD_POS = 1 {
@@ -335,7 +298,6 @@ hud_ammo
 	pha
 	lda #HUD_CH_MINUS
 	sta SCR_A + HUD_OFF2,x
-	sta SCR_B + HUD_OFF2,x
 	pla
 	eor #$ff
 	clc
@@ -348,7 +310,6 @@ hud_ammo
 	pha
 	lda #HUD_CH_PLUS
 	sta SCR_A + HUD_OFF2,x
-	sta SCR_B + HUD_OFF2,x
 	pla
 	inx
 	stx pp_col
@@ -382,17 +343,14 @@ hud_ammo
 	ora #$30
 	ldx pp_col
 	sta SCR_A + HUD_OFF2,x
-	sta SCR_B + HUD_OFF2,x
 	inx
 	tya
 	ora #$30
 	sta SCR_A + HUD_OFF2,x
-	sta SCR_B + HUD_OFF2,x
 	inx
 	lda pp_tmp_l
 	ora #$30
 	sta SCR_A + HUD_OFF2,x
-	sta SCR_B + HUD_OFF2,x
 	rts
 }
 
@@ -492,19 +450,15 @@ hud_ammo
 	ldx pp_col
 	lda hud_n
 	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
 	inx
 	lda pp_tmp_h
 	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
 	inx
 	tya
 	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
 	inx
 	lda pp_tmp_l
 	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
 	rts
 }
 
@@ -516,15 +470,12 @@ hud_ammo
 	ldx pp_col
 	lda hud_n
 	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
 	inx
 	lda pp_tmp_h
 	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
 	inx
 	lda pp_tmp_l
 	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
 	rts
 }
 !if PROFILE = 1 {
@@ -534,15 +485,12 @@ hud_ammo
 	ldx pp_col
 	lda hud_n
 	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
 	inx
 	lda pp_tmp_h
 	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
 	inx
 	lda pp_tmp_l
 	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
 	rts
 }
 !if HUD_FRAME_MS + PROFILE > 0 {
@@ -610,7 +558,6 @@ hud_message
 	lda #HUD_CH_SP
 .hm_blank
 	sta SCR_A + HUD_OFF4,x
-	sta SCR_B + HUD_OFF4,x
 	inx
 	cpx #HUD_MSG_W
 	bne .hm_blank
@@ -620,7 +567,6 @@ hud_message
 	lda #HUD_CH_SP
 .hm_clr
 	sta SCR_A + HUD_OFF4,x
-	sta SCR_B + HUD_OFF4,x
 	inx
 	cpx #HUD_MSG_W
 	bne .hm_clr
@@ -650,7 +596,6 @@ hud_message
 	lda (src_ptr),y
 	beq .hm_done
 	sta SCR_A + HUD_OFF4,x
-	sta SCR_B + HUD_OFF4,x
 	inx
 	iny
 	cpy #HUD_MSG_W

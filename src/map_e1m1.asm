@@ -2,7 +2,7 @@
 ; E1M1 'The Slipgate Complex'
 
 spawn_x	!byte 3
-spawn_y	!byte 106
+spawn_y	!byte 105
 spawn_z	!byte 119
 spawn_rot	!byte 2
 spawn_room	!byte 0

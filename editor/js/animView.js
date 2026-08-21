@@ -21,7 +21,7 @@ export class AnimView {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.opts = opts;
-    this.orbit = { yaw: 0.5, pitch: 0.15, dist: 48 };
+    this.orbit = { yaw: 0.5, pitch: 0.15, dist: 48, target: { x: 0, y: 10, z: 0 } };
     this.drag = null;
     this.hover = -1;
     this.hoverAxis = null;
@@ -36,6 +36,12 @@ export class AnimView {
     canvas.addEventListener("pointerleave", (e) => this.#onUp(e));
     canvas.addEventListener("wheel", (e) => this.#onWheel(e), { passive: false });
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+    canvas.addEventListener("auxclick", (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
   }
 
   resize() {
@@ -64,12 +70,12 @@ export class AnimView {
   }
 
   #cam() {
-    const { yaw, pitch, dist } = this.orbit;
+    const { yaw, pitch, dist, target } = this.orbit;
     const { forward } = lookVectors(yaw, pitch);
     return {
-      x: -forward.x * dist,
-      y: 10 - forward.y * dist,
-      z: -forward.z * dist,
+      x: target.x - forward.x * dist,
+      y: target.y - forward.y * dist,
+      z: target.z - forward.z * dist,
       yaw,
       pitch,
     };
@@ -184,7 +190,12 @@ export class AnimView {
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }
-    if (e.button === 2 || e.button === 1) {
+    if (e.button === 1) {
+      this.drag = { kind: "pan", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button === 2) {
       this.drag = { kind: "orbit", last: p };
       this.canvas.setPointerCapture(e.pointerId);
       return;
@@ -259,6 +270,22 @@ export class AnimView {
       this.drag.last = p;
       this.orbit.yaw += dx * 0.01;
       this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch - dy * 0.01));
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "pan") {
+      const dx = p.x - this.drag.last.x;
+      const dy = p.y - this.drag.last.y;
+      this.drag.last = p;
+      if (dx || dy) {
+        const focal = Math.min(this.cssW, this.cssH) * 0.9;
+        const scale = this.orbit.dist / focal;
+        const { right, up } = lookVectors(this.orbit.yaw, this.orbit.pitch);
+        const t = this.orbit.target;
+        t.x += (-right.x * dx + up.x * dy) * scale;
+        t.y += (-right.y * dx + up.y * dy) * scale;
+        t.z += (-right.z * dx + up.z * dy) * scale;
+      }
       this.draw();
       return;
     }
@@ -384,7 +411,8 @@ export class AnimView {
 
   #onUp(e) {
     if (!this.enabled) return;
-    const orbitEnded = this.drag?.kind === "orbit" || this.drag?.kind === "zoom";
+    const orbitEnded =
+      this.drag?.kind === "orbit" || this.drag?.kind === "zoom" || this.drag?.kind === "pan";
     if (this.drag?.kind === "box") this.#finishBox();
     if (this.drag?.kind === "axis" || this.drag?.undoStarted) this.opts.endUndo?.();
     this.drag = null;

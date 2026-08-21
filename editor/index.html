@@ -3827,6 +3827,7 @@ class LayoutView {
     this.keys = new Set();
     this.look = false;
     this.orbit = null;
+    this.pan = null;
     this.zoom = null;
     this.lastT = 0;
     this.hoverId = null;
@@ -3976,7 +3977,11 @@ class LayoutView {
     this.canvas.focus();
     const p = this.#eventPos(e);
     if (e.button === 1) {
-      this.orbit = this.#beginOrbit(p);
+      if (e.altKey) {
+        this.orbit = this.#beginOrbit(p);
+      } else {
+        this.pan = this.#beginOrbit(p);
+      }
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }
@@ -4000,30 +4005,6 @@ class LayoutView {
       this.opts.beginUndo?.();
       const ids = this.#selectedIds().length ? this.#selectedIds() : [primary];
       this.drag = this.#makeTransformDrag(doc, ids, hitHandle, p);
-      this.canvas.setPointerCapture(e.pointerId);
-      return;
-    }
-
-    const hit = this.#pick(doc, p.x, p.y);
-    if (hit) {
-      const ids = this.#selectedIds();
-      if (e.shiftKey) {
-        this.opts.onToggleSelect?.(hit.id);
-        this.canvas.setPointerCapture(e.pointerId);
-        this.drag = { kind: "select" };
-        return;
-      }
-      if (!ids.includes(hit.id)) {
-        this.opts.onSelectIds?.([hit.id]);
-      }
-      const moveIds = ids.includes(hit.id) ? ids : [hit.id];
-      this.opts.beginUndo?.();
-      this.drag = this.#makeTransformDrag(
-        doc,
-        moveIds,
-        { kind: "move", world: hit.point },
-        p
-      );
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }
@@ -4067,11 +4048,15 @@ class LayoutView {
     const doc = this.opts.getDoc();
     const id = this.#primaryId();
     const obj = id ? activeMap(doc).objects.find((o) => o.id === id) : null;
-    let dist = 16;
+    let dist = Math.max(48, cam.speed * 2.5);
     if (obj) {
       const c = aabbCenter(obj);
       dist = Math.hypot(c.x - cam.x, c.y - cam.y, c.z - cam.z);
       if (dist < 1) dist = 1;
+    } else {
+      const ray = screenRay(p.x, p.y, cam, this.cssW, this.cssH);
+      const hit = intersectPlane(ray.origin, ray.dir, { x: 0, y: this.gridY, z: 0 }, { x: 0, y: 1, z: 0 });
+      if (hit && hit.t >= 1) dist = Math.min(400, Math.max(24, hit.t));
     }
     return { last: p, dist };
   }
@@ -4095,6 +4080,22 @@ class LayoutView {
     cam.x = px - f2.x * dist;
     cam.y = py - f2.y * dist;
     cam.z = pz - f2.z * dist;
+  }
+
+  #applyPan(p) {
+    const pan = this.pan;
+    const cam = this.camera;
+    const dx = p.x - pan.last.x;
+    const dy = p.y - pan.last.y;
+    pan.last = p;
+    if (!dx && !dy) return;
+
+    const focal = Math.min(this.cssW, this.cssH) * 0.9;
+    const scale = pan.dist / focal;
+    const { right, up } = lookVectors(cam.yaw, cam.pitch);
+    cam.x += (-right.x * dx + up.x * dy) * scale;
+    cam.y += (-right.y * dx + up.y * dy) * scale;
+    cam.z += (-right.z * dx + up.z * dy) * scale;
   }
 
   #applyZoom(p) {
@@ -4121,6 +4122,10 @@ class LayoutView {
     const p = this.#eventPos(e);
     if (this.orbit) {
       this.#applyOrbit(p);
+      return;
+    }
+    if (this.pan) {
+      this.#applyPan(p);
       return;
     }
     if (this.zoom) {
@@ -4151,9 +4156,10 @@ class LayoutView {
 
   #onUp(e) {
     if (!this.enabled) return;
-    const viewEnded = this.look || this.orbit || this.zoom;
+    const viewEnded = this.look || this.orbit || this.pan || this.zoom;
     if (this.look) this.look = false;
     if (this.orbit) this.orbit = null;
+    if (this.pan) this.pan = null;
     if (this.zoom) this.zoom = null;
     if (this.drag?.kind === "box") this.#finishBox();
     else if (this.drag && this.drag.kind !== "select") this.opts.endUndo?.();
@@ -4181,7 +4187,13 @@ class LayoutView {
     const rect = this.#boxRect();
     const additive = this.drag.additive;
     if (rect.w < LAYOUT_BOX_CLICK && rect.h < LAYOUT_BOX_CLICK) {
-      if (!additive) this.opts.onSelectIds?.([]);
+      const hit = this.#pick(this.opts.getDoc(), this.drag.start.x, this.drag.start.y);
+      if (hit) {
+        if (additive) this.opts.onToggleSelect?.(hit.id);
+        else this.opts.onSelectIds?.([hit.id]);
+      } else if (!additive) {
+        this.opts.onSelectIds?.([]);
+      }
       return;
     }
     const doc = this.opts.getDoc();
@@ -4979,7 +4991,7 @@ class AnimView {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
     this.opts = opts;
-    this.orbit = { yaw: 0.5, pitch: 0.15, dist: 48 };
+    this.orbit = { yaw: 0.5, pitch: 0.15, dist: 48, target: { x: 0, y: 10, z: 0 } };
     this.drag = null;
     this.hover = -1;
     this.hoverAxis = null;
@@ -4994,6 +5006,12 @@ class AnimView {
     canvas.addEventListener("pointerleave", (e) => this.#onUp(e));
     canvas.addEventListener("wheel", (e) => this.#onWheel(e), { passive: false });
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+    canvas.addEventListener("auxclick", (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
   }
 
   resize() {
@@ -5022,12 +5040,12 @@ class AnimView {
   }
 
   #cam() {
-    const { yaw, pitch, dist } = this.orbit;
+    const { yaw, pitch, dist, target } = this.orbit;
     const { forward } = lookVectors(yaw, pitch);
     return {
-      x: -forward.x * dist,
-      y: 10 - forward.y * dist,
-      z: -forward.z * dist,
+      x: target.x - forward.x * dist,
+      y: target.y - forward.y * dist,
+      z: target.z - forward.z * dist,
       yaw,
       pitch,
     };
@@ -5142,7 +5160,12 @@ class AnimView {
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }
-    if (e.button === 2 || e.button === 1) {
+    if (e.button === 1) {
+      this.drag = { kind: "pan", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button === 2) {
       this.drag = { kind: "orbit", last: p };
       this.canvas.setPointerCapture(e.pointerId);
       return;
@@ -5217,6 +5240,22 @@ class AnimView {
       this.drag.last = p;
       this.orbit.yaw += dx * 0.01;
       this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch - dy * 0.01));
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "pan") {
+      const dx = p.x - this.drag.last.x;
+      const dy = p.y - this.drag.last.y;
+      this.drag.last = p;
+      if (dx || dy) {
+        const focal = Math.min(this.cssW, this.cssH) * 0.9;
+        const scale = this.orbit.dist / focal;
+        const { right, up } = lookVectors(this.orbit.yaw, this.orbit.pitch);
+        const t = this.orbit.target;
+        t.x += (-right.x * dx + up.x * dy) * scale;
+        t.y += (-right.y * dx + up.y * dy) * scale;
+        t.z += (-right.z * dx + up.z * dy) * scale;
+      }
       this.draw();
       return;
     }
@@ -5342,7 +5381,8 @@ class AnimView {
 
   #onUp(e) {
     if (!this.enabled) return;
-    const orbitEnded = this.drag?.kind === "orbit" || this.drag?.kind === "zoom";
+    const orbitEnded =
+      this.drag?.kind === "orbit" || this.drag?.kind === "zoom" || this.drag?.kind === "pan";
     if (this.drag?.kind === "box") this.#finishBox();
     if (this.drag?.kind === "axis" || this.drag?.undoStarted) this.opts.endUndo?.();
     this.drag = null;
@@ -6338,12 +6378,12 @@ function setMode(mode) {
   updateCenterChrome();
   document.getElementById("hint").textContent =
     mode === "layout"
-      ? "Drag palette to place · LMB line/box-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+RMB zoom · MMB orbit · F focus · G drop · gizmo moves selection · Del"
+      ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+RMB zoom · MMB pan · Alt+MMB orbit · F focus · G drop · gizmo moves selection · Del"
       : mode === "weapons"
         ? "LMB vertex to inspect · Shift add · click empty clears · drag empty pans · wheel scale"
         : bindJoint >= 0
           ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-          : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit · Alt+RMB zoom";
+          : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
@@ -7488,7 +7528,7 @@ function updateAnimHint() {
   hint.textContent =
     bindJoint >= 0
       ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · RMB orbit · Alt+RMB zoom";
+      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · RMB orbit · Alt+RMB zoom";
 }
 
 function assignMeshVerts(indices, additive) {

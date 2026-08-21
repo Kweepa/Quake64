@@ -56,6 +56,7 @@ export class LayoutView {
     this.keys = new Set();
     this.look = false;
     this.orbit = null;
+    this.pan = null;
     this.zoom = null;
     this.lastT = 0;
     this.hoverId = null;
@@ -205,7 +206,11 @@ export class LayoutView {
     this.canvas.focus();
     const p = this.#eventPos(e);
     if (e.button === 1) {
-      this.orbit = this.#beginOrbit(p);
+      if (e.altKey) {
+        this.orbit = this.#beginOrbit(p);
+      } else {
+        this.pan = this.#beginOrbit(p);
+      }
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }
@@ -229,30 +234,6 @@ export class LayoutView {
       this.opts.beginUndo?.();
       const ids = this.#selectedIds().length ? this.#selectedIds() : [primary];
       this.drag = this.#makeTransformDrag(doc, ids, hitHandle, p);
-      this.canvas.setPointerCapture(e.pointerId);
-      return;
-    }
-
-    const hit = this.#pick(doc, p.x, p.y);
-    if (hit) {
-      const ids = this.#selectedIds();
-      if (e.shiftKey) {
-        this.opts.onToggleSelect?.(hit.id);
-        this.canvas.setPointerCapture(e.pointerId);
-        this.drag = { kind: "select" };
-        return;
-      }
-      if (!ids.includes(hit.id)) {
-        this.opts.onSelectIds?.([hit.id]);
-      }
-      const moveIds = ids.includes(hit.id) ? ids : [hit.id];
-      this.opts.beginUndo?.();
-      this.drag = this.#makeTransformDrag(
-        doc,
-        moveIds,
-        { kind: "move", world: hit.point },
-        p
-      );
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }
@@ -296,11 +277,15 @@ export class LayoutView {
     const doc = this.opts.getDoc();
     const id = this.#primaryId();
     const obj = id ? activeMap(doc).objects.find((o) => o.id === id) : null;
-    let dist = 16;
+    let dist = Math.max(48, cam.speed * 2.5);
     if (obj) {
       const c = aabbCenter(obj);
       dist = Math.hypot(c.x - cam.x, c.y - cam.y, c.z - cam.z);
       if (dist < 1) dist = 1;
+    } else {
+      const ray = screenRay(p.x, p.y, cam, this.cssW, this.cssH);
+      const hit = intersectPlane(ray.origin, ray.dir, { x: 0, y: this.gridY, z: 0 }, { x: 0, y: 1, z: 0 });
+      if (hit && hit.t >= 1) dist = Math.min(400, Math.max(24, hit.t));
     }
     return { last: p, dist };
   }
@@ -324,6 +309,22 @@ export class LayoutView {
     cam.x = px - f2.x * dist;
     cam.y = py - f2.y * dist;
     cam.z = pz - f2.z * dist;
+  }
+
+  #applyPan(p) {
+    const pan = this.pan;
+    const cam = this.camera;
+    const dx = p.x - pan.last.x;
+    const dy = p.y - pan.last.y;
+    pan.last = p;
+    if (!dx && !dy) return;
+
+    const focal = Math.min(this.cssW, this.cssH) * 0.9;
+    const scale = pan.dist / focal;
+    const { right, up } = lookVectors(cam.yaw, cam.pitch);
+    cam.x += (-right.x * dx + up.x * dy) * scale;
+    cam.y += (-right.y * dx + up.y * dy) * scale;
+    cam.z += (-right.z * dx + up.z * dy) * scale;
   }
 
   #applyZoom(p) {
@@ -350,6 +351,10 @@ export class LayoutView {
     const p = this.#eventPos(e);
     if (this.orbit) {
       this.#applyOrbit(p);
+      return;
+    }
+    if (this.pan) {
+      this.#applyPan(p);
       return;
     }
     if (this.zoom) {
@@ -380,9 +385,10 @@ export class LayoutView {
 
   #onUp(e) {
     if (!this.enabled) return;
-    const viewEnded = this.look || this.orbit || this.zoom;
+    const viewEnded = this.look || this.orbit || this.pan || this.zoom;
     if (this.look) this.look = false;
     if (this.orbit) this.orbit = null;
+    if (this.pan) this.pan = null;
     if (this.zoom) this.zoom = null;
     if (this.drag?.kind === "box") this.#finishBox();
     else if (this.drag && this.drag.kind !== "select") this.opts.endUndo?.();
@@ -410,7 +416,13 @@ export class LayoutView {
     const rect = this.#boxRect();
     const additive = this.drag.additive;
     if (rect.w < LAYOUT_BOX_CLICK && rect.h < LAYOUT_BOX_CLICK) {
-      if (!additive) this.opts.onSelectIds?.([]);
+      const hit = this.#pick(this.opts.getDoc(), this.drag.start.x, this.drag.start.y);
+      if (hit) {
+        if (additive) this.opts.onToggleSelect?.(hit.id);
+        else this.opts.onSelectIds?.([hit.id]);
+      } else if (!additive) {
+        this.opts.onSelectIds?.([]);
+      }
       return;
     }
     const doc = this.opts.getDoc();

@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parent
 OUT = ROOT / "index.html"
 
 JS_ORDER = [
+    "js/roomGeom.js",
     "js/model.js",
     "js/math3d.js",
     "js/io.js",
@@ -25,13 +26,11 @@ JS_ORDER = [
 
 
 def strip_module(src: str) -> str:
-    src = re.sub(r"^import\s[\s\S]*?;\s*\n", "", src, flags=re.M)
-    lines = []
-    for line in src.splitlines():
-        line = re.sub(r"^export\s+default\s+", "", line)
-        line = re.sub(r"^export\s+", "", line)
-        lines.append(line)
-    return "\n".join(lines)
+    src = re.sub(r"^import\s+[\s\S]*?;\s*\n", "", src, flags=re.M)
+    src = re.sub(r"^export\s*\{[\s\S]*?\};\s*\n", "", src, flags=re.M)
+    src = re.sub(r"^export\s+default\s+", "", src, flags=re.M)
+    src = re.sub(r"^export\s+", "", src, flags=re.M)
+    return src
 
 
 def main() -> None:

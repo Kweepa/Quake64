@@ -735,6 +735,8 @@ take_damage
 	lda #0
 +
 	sta player_hp
+	jsr hud_ammo
+	lda player_hp
 	beq .td_death
 	lda #SOUND_TAKEDAMAGE
 	jmp play_sound
@@ -783,28 +785,38 @@ enemy_try_step
 .ets_rts
 	rts
 
-; Clamp en_x/z to room inset 1 for en_room
+; Clamp en_x/z to room collider union inset 1 for en_room
 enemy_clamp_room
 	ldx enemy_idx
+	lda en_x,x
+	sta col_x
+	lda en_z,x
+	sta col_z
 	ldy en_room,x
-	; x lo = room_x+1
+	jsr room_cols_inset1
+	bcs .ecr_rts
+	ldx enemy_idx
+	ldy en_room,x
+	tya
+	asl
+	tay				; Y = rc 0
 	clc
-	lda room_x,y
+	lda rc_x,y
 	adc #1
 	sta rot0
+	ldx enemy_idx
 	lda en_x,x
 	cmp rot0
 	bcs +
 	lda rot0
 	sta en_x,x
 +
-	; x hi exclusive = room_x+sx-1 → last = room_x+sx-2
 	clc
-	lda room_x,y
-	adc room_sx,y
+	lda rc_x,y
+	adc rc_sx,y
 	sec
 	sbc #1
-	sta rot1				; exclusive max of inset
+	sta rot1
 	lda en_x,x
 	cmp rot1
 	bcc +
@@ -814,7 +826,7 @@ enemy_clamp_room
 	sta en_x,x
 +
 	clc
-	lda room_z,y
+	lda rc_z,y
 	adc #1
 	sta rot0
 	lda en_z,x
@@ -824,57 +836,27 @@ enemy_clamp_room
 	sta en_z,x
 +
 	clc
-	lda room_z,y
-	adc room_sz,y
+	lda rc_z,y
+	adc rc_sz,y
 	sec
 	sbc #1
 	sta rot1
 	lda en_z,x
 	cmp rot1
-	bcc +
+	bcc .ecr_rts
 	lda rot1
 	sec
 	sbc #1
 	sta en_z,x
-+
+.ecr_rts
 	rts
 
 ; col_x/col_z proposed. C=1 ok (inset + solid). Uses enemy Y via cam hack.
 enemy_pos_ok
 	ldx enemy_idx
 	ldy en_room,x
-	clc
-	lda room_x,y
-	adc #1
-	sta rot0
-	lda col_x
-	cmp rot0
+	jsr room_cols_inset1
 	bcc .epo_no
-	clc
-	lda room_x,y
-	adc room_sx,y
-	sec
-	sbc #1
-	sta rot0
-	lda col_x
-	cmp rot0
-	bcs .epo_no
-	clc
-	lda room_z,y
-	adc #1
-	sta rot0
-	lda col_z
-	cmp rot0
-	bcc .epo_no
-	clc
-	lda room_z,y
-	adc room_sz,y
-	sec
-	sbc #1
-	sta rot0
-	lda col_z
-	cmp rot0
-	bcs .epo_no
 	lda cam_yh
 	pha
 	lda en_y,x

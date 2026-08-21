@@ -1,8 +1,9 @@
-; VIC Bank 3 layout (c64_quake_architecture.md)
-; $C000 screen A  $C400 screen B
-; $CA00 projected verts / CIA2 profiler (not displayed)
+; VIC Bank 3 layout — see memorymap.md
+; $C000 screen A  $C400 screen B  $C800 weapon sprites
+; $CA00 projected verts / clip / game scratch (not displayed)
 ; $D000/$D800 charset A top/bot  $E000/$E800 charset B top/bot
-; $F800 log/alog/sin/cos (copied at init). Judd sqlo/sqhi live in the PRG.
+; $F000 UI charset  $F800 log/alog/sin/cos (copied at init).
+; Judd sqlo/sqhi live in the PRG.
 
 COL_BORDER	= 0
 COL_BG		= 9			; default viewport background (brown)
@@ -38,15 +39,37 @@ D018_B_UI	= $1C			; matrix $C400, UI charset $F000
 
 UI_CHARSET	= $F000
 UI_FONT_PAGES	= 8			; 256 glyphs, ASCII-indexed from quakefont.png
-HUD_ROW		= 2
-HUD_ROW2	= 3
-HUD_ROW3	= 4			; vertex counts R/P/K
-HUD_ROW4	= 5			; trigger message
-HUD_COL		= 8
+; 40-col HUD (rows 0–8 above VIEW_ROW):
+;  0 FFF                  1                Quake64
+;  2          The Slipgate Complex
+;  4       S000     Health   Armour
+;  5       N000
+;  6       G000      100      000
+HUD_ROW		= 0			; frame ms FFF
+HUD_ROW_TITLE	= 1			; "Quake64"
+HUD_ROW_MAP	= 2			; map display name
+HUD_ROW2	= 3			; HUD_POS / PROFILE verts
+HUD_ROW_SHELL	= 4
+HUD_ROW_NAIL	= 5
+HUD_ROW_GREN	= 6			; grenades + health / armour values
+HUD_ROW4	= 7			; trigger message
+HUD_COL		= 0
 HUD_OFF		= HUD_ROW * 40 + HUD_COL
+HUD_OFF_TITLE	= HUD_ROW_TITLE * 40 + HUD_COL
+HUD_OFF_MAP	= HUD_ROW_MAP * 40 + HUD_COL
 HUD_OFF2	= HUD_ROW2 * 40 + HUD_COL
-HUD_OFF3	= HUD_ROW3 * 40 + HUD_COL
+HUD_OFF_SHELL	= HUD_ROW_SHELL * 40 + HUD_COL
+HUD_OFF_NAIL	= HUD_ROW_NAIL * 40 + HUD_COL
+HUD_OFF_GREN	= HUD_ROW_GREN * 40 + HUD_COL
+HUD_OFF3	= HUD_OFF2		; PROFILE vertex counts
 HUD_OFF4	= HUD_ROW4 * 40 + HUD_COL
+HUD_TITLE_COL	= 16
+HUD_AMMO_ICON	= 7
+HUD_AMMO_NUM	= 8
+HUD_HP_LABEL	= 16
+HUD_AR_LABEL	= 25
+HUD_HP_NUM	= 17
+HUD_AR_NUM	= 26
 HUD_CH_SP	= $20			; ASCII space / digits / letters in UI charset
 HUD_CH_PLUS	= $2b
 HUD_CH_MINUS	= $2d
@@ -90,19 +113,21 @@ CAM_XH		= $CA80
 CAM_YH		= $CA90
 CAM_ZH		= $CAA0
 PROJ_ZH		= $CAB0
-EDGE_VIS	= $CAC0			; 16 edge flags
-CLIP_X0		= $CAD0
-CLIP_Y0		= $CAE0
-CLIP_X1		= $CAF0
-CLIP_Y1		= $CB00
-frame_t0	= $CB10			; 4-byte CIA2 cascade snapshot
-frame_cy	= $CB14
-casc_now	= $CB18
+EDGE_VIS	= $CAC0			; 32 edge flags (tetromino rooms ≤28)
+CLIP_X0		= $CAE0
+CLIP_Y0		= $CB00
+CLIP_X1		= $CB20
+CLIP_Y1		= $CB40
+frame_t0	= $CB60			; 4-byte CIA2 cascade snapshot
+frame_cy	= $CB64
+casc_now	= $CB68
 
 FOCAL		= 100
 LOG_FOCAL	= 213			; round(32*log2(100))
 NVERTS		= 13
 NEDGES		= 13
+MESH_MAX_VERTS	= 16			; CAM/PROJ / VOC / COL_* slot count
+MESH_MAX_EDGES	= 32			; EDGE_VIS / CLIP_* slot count
 ANIM_MS		= 100			; walk step interval (ms)
 ZCLIP		= $0100			; 1.0 near plane (8.8)
 YAW_STEP	= 3
@@ -170,23 +195,23 @@ PROC_LOWER_DOOR	= 3
 PROC_LOWER_ELEV	= 4
 PROC_RAISE_ELEV	= 5
 
-PROC_KIND	= $CB20
-PROC_A		= $CB28			; world object id (door_id / elev_id)
-PROC_B		= $CB30			; dest / next kind
-PROC_C		= $CB38			; timer/accum lo
-PROC_D		= $CB40			; timer/accum hi
-PROC_E		= $CB48			; elev home return Y
-PROC_L		= $CB50			; local door/elev SoA index
+PROC_KIND	= $CB70
+PROC_A		= $CB78			; world object id (door_id / elev_id)
+PROC_B		= $CB80			; dest / next kind
+PROC_C		= $CB88			; timer/accum lo
+PROC_D		= $CB90			; timer/accum hi
+PROC_E		= $CB98			; elev home return Y
+PROC_L		= $CBA0			; local door/elev SoA index
 
-door_open	= $CB58			; MAP_NDOORS (≤8)
-elev_y		= $CB60			; MAP_NELEVS (≤4)
-elev_noise_n	= $CB64			; refcount: SID V3 rumble while elevs move
-proc_tmp0	= $CB68
-proc_tmp1	= $CB69
-proc_tmp2	= $CB6A
-proc_tmp3	= $CB6B
-proc_tmp4	= $CB6C
-proc_tmp5	= $CB6D
+door_open	= $CBA8			; MAP_NDOORS (≤8)
+elev_y		= $CBB0			; MAP_NELEVS (≤4)
+elev_noise_n	= $CBB4			; refcount: SID V3 rumble while elevs move
+proc_tmp0	= $CBB8
+proc_tmp1	= $CBB9
+proc_tmp2	= $CBBA
+proc_tmp3	= $CBBB
+proc_tmp4	= $CBBC
+proc_tmp5	= $CBBD
 MOTION_STEP_MS	= 64
 ELEV_STEP_MS	= 128			; half elevator travel speed vs doors
 DOOR_RECLOSE_MS	= 5000
@@ -195,39 +220,39 @@ ELEV_WAIT_MS	= 5000
 ; Box / mesh draw
 BOX_NVERTS	= 8
 BOX_NEDGES	= 12
-HUD_MSG_COL	= 8
-HUD_MSG_W	= 24
+HUD_MSG_COL	= 0
+HUD_MSG_W	= 40
 SAMPLE_MS_PAL	= 20			; ms per mid-split tick (50 Hz)
 SAMPLE_MS_NTSC	= 17			; ≈1000/60
-in_fwd		= $CB6E			; 16-bit hold ms (IRQ accum)
-in_back		= $CB70
-in_strafel	= $CB72
-in_strafer	= $CB74
-in_turn_l	= $CB76
-in_turn_r	= $CB78
-hold_fwd	= $CB7A			; 16-bit snapshots (read_input)
-hold_back	= $CB7C
-hold_strafel	= $CB7E
-hold_strafer	= $CB80
-hold_turn_l	= $CB82
-hold_turn_r	= $CB84
-in_use		= $CB86			; IRQ latch: K pressed
-key_use		= $CB87			; frame snapshot
-key_use_was	= $CB88			; rising-edge debounce
-; $CB89–$CB8D free (was sw_latched)
+in_fwd		= $CBBE			; 16-bit hold ms (IRQ accum)
+in_back		= $CBC0
+in_strafel	= $CBC2
+in_strafer	= $CBC4
+in_turn_l	= $CBC6
+in_turn_r	= $CBC8
+hold_fwd	= $CBCA			; 16-bit snapshots (read_input)
+hold_back	= $CBCC
+hold_strafel	= $CBCE
+hold_strafer	= $CBD0
+hold_turn_l	= $CBD2
+hold_turn_r	= $CBD4
+in_use		= $CBD6			; IRQ latch: K pressed
+key_use		= $CBD7			; frame snapshot
+key_use_was	= $CBD8			; rising-edge debounce
+; $CBD9–$CBDD free (was sw_latched)
 
-; Unique world X/Z + 8.8 sin/cos products for xform_mesh_xz (cap 4+4, 8 verts)
-UX		= $CB8E
-UZ		= $CB92
-VY		= $CB96
-XC_L		= $CB9E
-XC_H		= $CBA2
-XS_L		= $CBA6
-XS_H		= $CBAA
-ZC_L		= $CBAE
-ZC_H		= $CBB2
-ZS_L		= $CBB6
-ZS_H		= $CBBA			; 4 bytes → $CBBA–$CBBD
+; Unique world X/Z + 8.8 sin/cos products for xform_mesh_xz (4+4 unique, 16 verts)
+UX		= $CBDE
+UZ		= $CBE2
+VY		= $CBE6			; 16 bytes (vert Y)
+XC_L		= $CBF6
+XC_H		= $CBFA
+XS_L		= $CBFE
+XS_H		= $CC02
+ZC_L		= $CC06
+ZC_H		= $CC0A
+ZS_L		= $CC0E
+ZS_H		= $CC12			; 4 bytes → $CC12–$CC15
 
 ; Hardware sprite view-model (VIC bank 3)
 WPN_RAM		= $C800			; 4 body sprites (256 bytes)
@@ -269,61 +294,61 @@ EMUZ_Z0		= 8			; tip CAM_ZH LOD bands → spr 0..2
 EMUZ_Z1		= 16
 
 ; Weapon BSS (after unique-XZ products)
-in_fire		= $CBBE
-in_wpn_axe	= $CBBF			; 4 bytes: axe shot nail gren
-in_wpn_shot	= $CBC0
-in_wpn_nail	= $CBC1
-in_wpn_gren	= $CBC2
-key_fire	= $CBC3
-key_wpn_axe	= $CBC4			; 4 bytes
-key_wpn_shot	= $CBC5
-key_wpn_nail	= $CBC6
-key_wpn_gren	= $CBC7
-cur_weapon	= $CBC8
-wpn_pose	= $CBC9			; POSE_*
-fire_rpt_l	= $CBCA
-fire_rpt_h	= $CBCB
-flash_ms_l	= $CBCC
-flash_ms_h	= $CBCD
-flash_phase	= $CBCE			; sprite 4: 0 off, 1 yellow, 2 red
-mg_frame	= $CBCF
-wpn_x		= $CBD0
-wpn_y		= $CBD1
-spr_en		= $CBD2
-anim_step	= $CBD3
-anim_ms_l	= $CBD4
-anim_ms_h	= $CBD5
-wpn_flash_en	= $CBD6
-wpn_flash_dy	= $CBD7
-wpn_tmp0	= $CBD8
-flash5_ms_l	= $CBD9
-flash5_ms_h	= $CBDA
-flash5_phase	= $CBDB			; sprite 5 (nail right)
-emuz_ms_l	= $CBDC			; enemy muzzle remaining ms
-emuz_ms_h	= $CBDD
-emuz_on		= $CBDE			; 1 = sprite 6 enabled
-emuz_xmsb	= $CBDF			; $d010 bit6 when X>=256
+in_fire		= $CC16
+in_wpn_axe	= $CC17			; 4 bytes: axe shot nail gren
+in_wpn_shot	= $CC18
+in_wpn_nail	= $CC19
+in_wpn_gren	= $CC1A
+key_fire	= $CC1B
+key_wpn_axe	= $CC1C			; 4 bytes
+key_wpn_shot	= $CC1D
+key_wpn_nail	= $CC1E
+key_wpn_gren	= $CC1F
+cur_weapon	= $CC20
+wpn_pose	= $CC21			; POSE_*
+fire_rpt_l	= $CC22
+fire_rpt_h	= $CC23
+flash_ms_l	= $CC24
+flash_ms_h	= $CC25
+flash_phase	= $CC26			; sprite 4: 0 off, 1 yellow, 2 red
+mg_frame	= $CC27
+wpn_x		= $CC28
+wpn_y		= $CC29
+spr_en		= $CC2A
+anim_step	= $CC2B
+anim_ms_l	= $CC2C
+anim_ms_h	= $CC2D
+wpn_flash_en	= $CC2E
+wpn_flash_dy	= $CC2F
+wpn_tmp0	= $CC30
+flash5_ms_l	= $CC31
+flash5_ms_h	= $CC32
+flash5_phase	= $CC33			; sprite 5 (nail right)
+emuz_ms_l	= $CC34			; enemy muzzle remaining ms
+emuz_ms_h	= $CC35
+emuz_on		= $CC36			; 1 = sprite 6 enabled
+emuz_xmsb	= $CC37			; $d010 bit6 when X>=256
 
 ; Per-room door view (canonical door_* in map; game uses these at runtime)
-door_vx		= $CBE0			; MAP_NDOORS (≤8)
-door_vz		= $CBE8
-door_vsx	= $CBF0
-door_vsz	= $CBF8
-door_vface	= $CC00
+door_vx		= $CC38			; MAP_NDOORS (≤8)
+door_vz		= $CC40
+door_vsx	= $CC48
+door_vsz	= $CC50
+door_vface	= $CC58
 
 ; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
-VOC		= $CC08			; Cohen–Sutherland outcode (front verts)
-VBEHIND		= $CC18			; 1 = z < ZCLIP
-VSX		= $CC28			; screen X/Y (front verts with outcode 0)
-VSY		= $CC38
+VOC		= $CC60			; Cohen–Sutherland outcode (front verts)
+VBEHIND		= $CC70			; 1 = z < ZCLIP
+VSX		= $CC80			; screen X/Y (front verts with outcode 0)
+VSY		= $CC90
 
 ; Per-XZ-column project cache (verts sharing x,z share z_eye/inv/PROJ_X)
-COL_DONE	= $CC48			; 0 = new, 1 = front cached, 2 = behind
-COL_INVL	= $CC58
-COL_INVH	= $CC68
-COL_INVK	= $CC78
-COL_PXL		= $CC88
-COL_PXH		= $CC98
+COL_DONE	= $CCA0			; 0 = new, 1 = front cached, 2 = behind
+COL_INVL	= $CCB0
+COL_INVH	= $CCC0
+COL_INVK	= $CCD0
+COL_PXL		= $CCE0
+COL_PXH		= $CCF0
 
 ; Player inventory + backpack taken flags (after project cache)
 AMMO_SHELLS_MAX		= 100
@@ -338,6 +363,7 @@ AMMO_GRENADES_GUN	= 5
 AMMO_SHELLS_START	= 25
 PLAYER_HP_MAX		= 100
 PLAYER_HP_START		= 100
+PLAYER_ARMOUR_START	= 0
 HP_PACK_25		= 25
 HP_PACK_50		= 50
 BP_FOOT_SX		= 2			; AABB around equilateral-ish base
@@ -356,43 +382,45 @@ WPN_SHOT	= 1
 WPN_NAIL	= 2
 WPN_GREN	= 3
 
-ammo_shells	= $CCA8
-ammo_nails	= $CCA9
-ammo_grenades	= $CCAA
-have_wpn	= $CCAB			; bitfield HAVE_*
-bp_taken	= $CCAC			; MAP_NBACKPACKS (≤ BP_MAX)
-player_hp	= $CCCC			; 0..PLAYER_HP_MAX
-en_state	= $CCCE			; ENEMY_MAX: EN_* 
-en_frame	= $CCDE			; ENEMY_MAX: local frame in current clip
-drop_taken	= $CCEE			; ENEMY_MAX: 1=inactive/taken, 0=active
-drop_x		= $CCFE
-drop_y		= $CD0E
-drop_z		= $CD1E
-drop_room	= $CD2E
-drop_type	= $CD3E			; BP_* when active
-en_hp		= $CD4E			; ENEMY_MAX
-en_timer	= $CD5E			; ENEMY_MAX: approach min / dog repath / death hold ms lo
-en_timer_h	= $CD6E			; ENEMY_MAX: approach min / dog repath / death hold ms hi
-en_step		= $CD7E			; ENEMY_MAX: walk acc lo
-en_step_h	= $CD8E			; ENEMY_MAX: walk acc hi
-en_dir		= $CD9E			; ENEMY_MAX: 0..7 dodge facing
-gunshot_wake	= $CDAE			; 1 = gun fired this frame (room wake)
-ai_dirtry	= $CDAF			; 5 bytes dodge dir candidates
-ai_turn		= $CDB4			; turnaround dir or $ff
-ai_probe	= $CDB5			; dir under test (probe must not clobber)
-emuz_vx		= $CDB6			; VIC X lo staged (poke in apply_en; draw is $01=$34)
-emuz_vy		= $CDB7			; VIC Y staged
-emuz_col		= $CDB8			; sprite colour staged from col_fx
-emuz_pending	= $CDB9			; enemy idx waiting to muzzle, $ff = none
-emuz_skip	= $CDBA			; 1 = skip next tick (spawn frame; dt ~150ms > 100ms)
-splat_ms_l	= $CDBB			; impact splat remaining ms
-splat_ms_h	= $CDBC
-splat_on		= $CDBD			; 1 = sprite 7 enabled
-splat_xmsb	= $CDBE			; $d010 bit7 when X>=256
-splat_vx		= $CDBF
-splat_vy		= $CDC0
-splat_col	= $CDC1			; COL_SPLAT_HIT or col_line (miss)
-splat_skip	= $CDC2			; 1 = skip next tick (spawn frame)
-shot_hit_i	= $CDC3			; closest SSG hit enemy, $ff = miss
-shot_hit_z	= $CDC4			; CAM_ZH of that hit
-bite_splat_i	= $CDC7			; dog idx pending blood splat, $ff = none
+ammo_shells	= $CD00
+ammo_nails	= $CD01
+ammo_grenades	= $CD02
+have_wpn	= $CD03			; bitfield HAVE_*
+bp_taken	= $CD04			; MAP_NBACKPACKS (≤ BP_MAX)
+player_hp	= $CD24			; 0..PLAYER_HP_MAX
+player_armour	= $CD25			; 0..255 (no pickups yet)
+en_state	= $CD26			; ENEMY_MAX: EN_* 
+en_frame	= $CD36			; ENEMY_MAX: local frame in current clip
+drop_taken	= $CD46			; ENEMY_MAX: 1=inactive/taken, 0=active
+drop_x		= $CD56
+drop_y		= $CD66
+drop_z		= $CD76
+drop_room	= $CD86
+drop_type	= $CD96			; BP_* when active
+en_hp		= $CDA6			; ENEMY_MAX
+en_timer	= $CDB6			; ENEMY_MAX: approach min / dog repath / death hold ms lo
+en_timer_h	= $CDC6			; ENEMY_MAX: approach min / dog repath / death hold ms hi
+en_step		= $CDD6			; ENEMY_MAX: walk acc lo
+en_step_h	= $CDE6			; ENEMY_MAX: walk acc hi
+en_dir		= $CDF6			; ENEMY_MAX: 0..7 dodge facing
+gunshot_wake	= $CE06			; 1 = gun fired this frame (room wake)
+ai_dirtry	= $CE07			; 5 bytes dodge dir candidates
+ai_turn		= $CE0C			; turnaround dir or $ff
+ai_probe	= $CE0D			; dir under test (probe must not clobber)
+emuz_vx		= $CE0E			; VIC X lo staged (poke in apply_en; draw is $01=$34)
+emuz_vy		= $CE0F			; VIC Y staged
+emuz_col		= $CE10			; sprite colour staged from col_fx
+emuz_pending	= $CE11			; enemy idx waiting to muzzle, $ff = none
+emuz_skip	= $CE12			; 1 = skip next tick (spawn frame; dt ~150ms > 100ms)
+splat_ms_l	= $CE13			; impact splat remaining ms
+splat_ms_h	= $CE14
+splat_on		= $CE15			; 1 = sprite 7 enabled
+splat_xmsb	= $CE16			; $d010 bit7 when X>=256
+splat_vx		= $CE17
+splat_vy		= $CE18
+splat_col	= $CE19			; COL_SPLAT_HIT or col_line (miss)
+splat_skip	= $CE1A			; 1 = skip next tick (spawn frame)
+shot_hit_i	= $CE1B			; closest SSG hit enemy, $ff = miss
+shot_hit_z	= $CE1C			; CAM_ZH of that hit
+; $CE1D–$CE1E unused
+bite_splat_i	= $CE1F			; dog idx pending blood splat, $ff = none

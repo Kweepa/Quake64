@@ -160,15 +160,49 @@ player_overlaps_y
 	clc
 	rts
 
+; If col_x/z in collider X, set floor_y to rc_y (proc_tmp0 = found).
+; Several colliders may overlap in XZ when an L/T/S is rotated so one
+; arm is vertical (lid over a shaft). The union hull leaves a hole;
+; use the lowest floor so you drop, not the lid.
+uf_rc_floor
+	lda rc_sx,x
+	beq .urf_rts
+	jsr point_in_rc_xz
+	bcc .urf_rts
+	lda proc_tmp0
+	bne .urf_min
+	lda rc_y,x
+	sta floor_y
+	lda #1
+	sta proc_tmp0
+	rts
+.urf_min
+	lda rc_y,x
+	cmp floor_y
+	bcs .urf_rts
+	sta floor_y
+.urf_rts
+	rts
+
 ; ------------------------------------------------------------------
 update_floor
 	lda pl_on_elev
 	sta obj_i			; prior elev (rider), before clear
 	lda #$ff
 	sta pl_on_elev
+	lda #0
+	sta proc_tmp0			; in a room collider?
 	ldx room_idx
-	lda room_y,x
-	sta floor_y
+	lda cam_xh
+	sta col_x
+	lda cam_zh
+	sta col_z
+	txa
+	asl
+	tax
+	jsr uf_rc_floor
+	inx
+	jsr uf_rc_floor
 	; crate tops (walkable)
 	ldx #0
 .uf_c
@@ -408,74 +442,276 @@ solid_at
 	rts
 
 ; ------------------------------------------------------------------
-; col_in_room_y — col_x/col_z inside room Y (exclusive max). C=1 inside
+; point_in_rc_xz — col_x/col_z vs collider X (exclusive max). C=1 inside
+; ------------------------------------------------------------------
+point_in_rc_xz
+	lda rc_sx,x
+	beq .prc_no
+	lda col_x
+	cmp rc_x,x
+	bcc .prc_no
+	clc
+	lda rc_x,x
+	adc rc_sx,x
+	cmp col_x
+	bcc .prc_no
+	beq .prc_no
+	lda col_z
+	cmp rc_z,x
+	bcc .prc_no
+	clc
+	lda rc_z,x
+	adc rc_sz,x
+	cmp col_z
+	bcc .prc_no
+	beq .prc_no
+	sec
+	rts
+.prc_no
+	clc
+	rts
+
+; X = collider index. C=1 inside inset by PLAYER_R.
+; Faces shared with the sibling collider are not inset, so L/T/S joins stay walkable.
+rc_inset_ok
+	lda rc_sx,x
+	bne .rio_go
+	jmp .rio_no
+.rio_go
+	txa
+	eor #1
+	tay				; Y = sibling (sx=0 → no join)
+	lda col_x
+	jsr .rio_join_xmin
+	bcs .rio_x0
+	sec
+	sbc #PLAYER_R
+	bcc .rio_no
+.rio_x0
+	cmp rc_x,x
+	bcc .rio_no
+	clc
+	lda rc_x,x
+	adc rc_sx,x
+	jsr .rio_join_xmax
+	bcs .rio_x1
+	sec
+	sbc #PLAYER_R
+.rio_x1
+	cmp col_x
+	bcc .rio_no
+	beq .rio_no
+	lda col_z
+	jsr .rio_join_zmin
+	bcs .rio_z0
+	sec
+	sbc #PLAYER_R
+	bcc .rio_no
+.rio_z0
+	cmp rc_z,x
+	bcc .rio_no
+	clc
+	lda rc_z,x
+	adc rc_sz,x
+	jsr .rio_join_zmax
+	bcs .rio_z1
+	sec
+	sbc #PLAYER_R
+.rio_z1
+	cmp col_z
+	bcc .rio_no
+	beq .rio_no
+	sec
+	rts
+.rio_no
+	clc
+	rts
+
+; C=1 skip inset (shared face). A preserved.
+.rio_join_xmin
+	pha
+	lda rc_sx,y
+	beq .rj_no
+	clc
+	lda rc_x,y
+	adc rc_sx,y
+	cmp rc_x,x
+	bne .rj_no
+	jsr .rio_ovz
+	bcc .rj_no
+	pla
+	sec
+	rts
+.rio_join_xmax
+	pha
+	lda rc_sx,y
+	beq .rj_no
+	clc
+	lda rc_x,x
+	adc rc_sx,x
+	cmp rc_x,y
+	bne .rj_no
+	jsr .rio_ovz
+	bcc .rj_no
+	pla
+	sec
+	rts
+.rio_join_zmin
+	pha
+	lda rc_sx,y
+	beq .rj_no
+	clc
+	lda rc_z,y
+	adc rc_sz,y
+	cmp rc_z,x
+	bne .rj_no
+	jsr .rio_ovx
+	bcc .rj_no
+	pla
+	sec
+	rts
+.rio_join_zmax
+	pha
+	lda rc_sx,y
+	beq .rj_no
+	clc
+	lda rc_z,x
+	adc rc_sz,x
+	cmp rc_z,y
+	bne .rj_no
+	jsr .rio_ovx
+	bcc .rj_no
+	pla
+	sec
+	rts
+.rj_no
+	pla
+	clc
+	rts
+
+.rio_ovx
+	clc
+	lda rc_x,y
+	adc rc_sx,y
+	cmp rc_x,x
+	beq .rov_no
+	bcc .rov_no
+	clc
+	lda rc_x,x
+	adc rc_sx,x
+	cmp rc_x,y
+	beq .rov_no
+	bcc .rov_no
+	sec
+	rts
+.rio_ovz
+	clc
+	lda rc_z,y
+	adc rc_sz,y
+	cmp rc_z,x
+	beq .rov_no
+	bcc .rov_no
+	clc
+	lda rc_z,x
+	adc rc_sz,x
+	cmp rc_z,y
+	beq .rov_no
+	bcc .rov_no
+	sec
+	rts
+.rov_no
+	clc
+	rts
+
+; ------------------------------------------------------------------
+; col_in_room_y — col_x/col_z inside room Y colliders. C=1 inside
 ; ------------------------------------------------------------------
 col_in_room_y
 	cpy #$ff
 	beq .cir_no
-	lda col_x
-	cmp room_x,y
-	bcc .cir_no
-	clc
-	lda room_x,y
-	adc room_sx,y
-	cmp col_x
-	bcc .cir_no
-	beq .cir_no
-	lda col_z
-	cmp room_z,y
-	bcc .cir_no
-	clc
-	lda room_z,y
-	adc room_sz,y
-	cmp col_z
-	bcc .cir_no
-	beq .cir_no
-	sec
+	stx pv4
+	tya
+	asl
+	tax
+	jsr point_in_rc_xz
+	bcs .cir_yes
+	inx
+	jsr point_in_rc_xz
+.cir_yes
+	php
+	ldx pv4
+	plp
 	rts
 .cir_no
 	clc
 	rts
 
+; Y = room. C=1 if col_x/z in either collider inset by 1 (enemy)
+room_cols_inset1
+	stx pv4
+	tya
+	asl
+	tax
+	jsr .rci1
+	bcs .rci_yes
+	inx
+	jsr .rci1
+.rci_yes
+	php
+	ldx pv4
+	plp
+	rts
+.rci1
+	lda rc_sx,x
+	beq .rci_no
+	lda col_x
+	cmp rc_x,x
+	bcc .rci_no
+	beq .rci_no			; inset lo: >
+	clc
+	lda rc_x,x
+	adc rc_sx,x
+	sec
+	sbc #1
+	cmp col_x
+	bcc .rci_no
+	beq .rci_no
+	lda col_z
+	cmp rc_z,x
+	bcc .rci_no
+	beq .rci_no
+	clc
+	lda rc_z,x
+	adc rc_sz,x
+	sec
+	sbc #1
+	cmp col_z
+	bcc .rci_no
+	beq .rci_no
+	sec
+	rts
+.rci_no
+	clc
+	rts
+
 ; ------------------------------------------------------------------
 ; in_room_or_portal — col_x/col_z allowed for room_idx?
-; Inside room AABB inset by PLAYER_R, or open door wall-hole (thin ±1).
+; Inside either collider inset by PLAYER_R (shared faces not inset), or open door hole.
 ; C=1 allowed
 ; ------------------------------------------------------------------
 in_room_or_portal
-	ldx room_idx
-	lda col_x
-	sec
-	sbc #PLAYER_R
-	bcc .irp_door
-	cmp room_x,x
-	bcc .irp_door
-	clc
-	lda room_x,x
-	adc room_sx,x
-	sec
-	sbc #PLAYER_R
-	cmp col_x
-	bcc .irp_door
-	beq .irp_door
-	lda col_z
-	sec
-	sbc #PLAYER_R
-	bcc .irp_door
-	cmp room_z,x
-	bcc .irp_door
-	clc
-	lda room_z,x
-	adc room_sz,x
-	sec
-	sbc #PLAYER_R
-	cmp col_z
-	bcc .irp_door
-	beq .irp_door
+	lda room_idx
+	asl
+	tax
+	jsr rc_inset_ok
+	bcs .irp_yes
+	inx
+	jsr rc_inset_ok
+	bcs .irp_yes
+	jmp door_portal_ok
+.irp_yes
 	sec
 	rts
-.irp_door
-	jmp door_portal_ok
 
 ; ------------------------------------------------------------------
 ; pos_ok — cam would be ok at col_x/col_z
@@ -806,13 +1042,13 @@ try_backpack_pickup
 	ldx obj_i
 	jsr grant_backpack
 	bcc .tbp_n
+	jsr hud_ammo
 	ldx obj_i
 	lda bp_type,x
 	cmp #BP_HEALTH25
 	beq .tbp_hp
 	cmp #BP_HEALTH50
 	beq .tbp_hp
-	jsr hud_ammo
 	lda #SOUND_GETAMMO
 	bne .tbp_snd
 .tbp_hp

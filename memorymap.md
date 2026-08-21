@@ -1,0 +1,181 @@
+# VIC Bank 3 memory map
+
+Source of truth for addresses is [`src/mem.asm`](src/mem.asm). Engine code lives in the PRG (loaded at `$0801`); this bank is screens, charsets, sprites, LUTs, and game scratch. Accessing `$D000–$FFFF` as RAM requires `$01` to unmap I/O and the KERNAL. Colour RAM (`$D800`) is the I/O overlay of charset A bottom.
+
+Caps used by the mesh path: **16 verts**, **32 edges**, **4 unique world X** and **4 unique world Z**.
+
+## Bank overview
+
+| Address | Size | Use |
+| :--- | ---: | :--- |
+| `$C000`–`$C3E7` | 1000 | Screen matrix A (HUD + 24×16 viewport tiles) |
+| `$C3E8`–`$C3F7` | 16 | Unused (past 40×25 matrix) |
+| `$C3F8`–`$C3FF` | 8 | VIC sprite pointers for matrix A |
+| `$C400`–`$C7E7` | 1000 | Screen matrix B |
+| `$C7E8`–`$C7F7` | 16 | Unused |
+| `$C7F8`–`$C7FF` | 8 | VIC sprite pointers for matrix B |
+| `$C800`–`$C8FF` | 256 | Weapon body sprites 0–3 (`WPN_RAM`, 4×64) |
+| `$C900`–`$C93F` | 64 | Sprite 4 muzzle / spark / nail L (`WPN_FLASH`) |
+| `$C940`–`$C97F` | 64 | Sprite 5 nail R (`WPN_FLASH2`) |
+| `$C980`–`$C9BF` | 64 | Sprite 6 enemy muzzle (`WPN_EMUZ`) |
+| `$C9C0`–`$C9FF` | 64 | Sprite 7 impact splat (`WPN_SPLAT`) |
+| `$CA00`–`$CE1F` | 544 | Project / clip / game scratch (table below) |
+| `$CE20`–`$CFFF` | 480 | Unused (before charset A) |
+| `$D000`–`$D7FF` | 2048 | Charset A top (`CH_A_TOP`) |
+| `$D800`–`$DFFF` | 2048 | Charset A bottom (`CH_A_BOT`) |
+| `$E000`–`$E7FF` | 2048 | Charset B top (`CH_B_TOP`) |
+| `$E800`–`$EFFF` | 2048 | Charset B bottom (`CH_B_BOT`) |
+| `$F000`–`$F7FF` | 2048 | UI charset (`UI_CHARSET`, ASCII-indexed) |
+| `$F800`–`$F8FF` | 256 | `LOGTAB` |
+| `$F900`–`$FAFF` | 512 | `ALOGTAB` |
+| `$FB00`–`$FBFF` | 256 | `SINTAB` |
+| `$FC00`–`$FCFF` | 256 | `COSTAB` |
+| `$FD00`–`$FFFF` | 768 | Unused |
+
+`$D018` pointers: matrix A `$C000` / B `$C400`; viewport charsets `$D000`/`$D800` vs `$E000`/`$E800` (mid-screen split); HUD uses `$F000`. Quarter-square multiply tables (`sqlo` / `sqhi`) stay in the PRG.
+
+## `$CA00+` scratch
+
+Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product tables are 4 slots.
+
+| Address | Size | Label | Notes |
+| :--- | ---: | :--- | :--- |
+| `$CA00` | 16 | `PROJ_X` | Screen X (lo) |
+| `$CA10` | 16 | `PROJ_Y` | Screen Y (lo) |
+| `$CA20` | 16 | `PROJ_Z` | View Z (lo) |
+| `$CA30` | 16 | `CAM_X` | View X (lo) |
+| `$CA40` | 16 | `CAM_Y` | View Y (lo) |
+| `$CA50` | 16 | `CAM_Z` | View Z (lo) |
+| `$CA60` | 16 | `PROJ_XH` | Screen X (hi) |
+| `$CA70` | 16 | `PROJ_YH` | Screen Y (hi) |
+| `$CA80` | 16 | `CAM_XH` | View X (hi) |
+| `$CA90` | 16 | `CAM_YH` | View Y (hi) |
+| `$CAA0` | 16 | `CAM_ZH` | View Z (hi) |
+| `$CAB0` | 16 | `PROJ_ZH` | View Z projected (hi) |
+| `$CAC0` | 32 | `EDGE_VIS` | 1 = stroke this packed edge |
+| `$CAE0` | 32 | `CLIP_X0` | Clipped endpoint X0 |
+| `$CB00` | 32 | `CLIP_Y0` | Clipped endpoint Y0 |
+| `$CB20` | 32 | `CLIP_X1` | Clipped endpoint X1 |
+| `$CB40` | 32 | `CLIP_Y1` | Clipped endpoint Y1 |
+| `$CB60` | 4 | `frame_t0` | CIA2 cascade snapshot |
+| `$CB64` | 4 | `frame_cy` | Frame period (cascade delta) |
+| `$CB68` | 4 | `casc_now` | Last CIA2 read |
+| `$CB6C` | 4 | — | Unused |
+| `$CB70` | 8 | `PROC_KIND` | Process SoA (`PROC_NUM`=8) |
+| `$CB78` | 8 | `PROC_A` | Door / elev id |
+| `$CB80` | 8 | `PROC_B` | Dest / next kind |
+| `$CB88` | 8 | `PROC_C` | Timer lo |
+| `$CB90` | 8 | `PROC_D` | Timer hi |
+| `$CB98` | 8 | `PROC_E` | Elev home Y |
+| `$CBA0` | 8 | `PROC_L` | Local SoA index |
+| `$CBA8` | 8 | `door_open` | `MAP_NDOORS` ≤ 8 |
+| `$CBB0` | 4 | `elev_y` | `MAP_NELEVS` ≤ 4 |
+| `$CBB4` | 1 | `elev_noise_n` | SID V3 rumble refcount |
+| `$CBB5` | 3 | — | Unused |
+| `$CBB8` | 6 | `proc_tmp0`…`proc_tmp5` | Process scratch |
+| `$CBBE` | 2 | `in_fwd` | Hold ms (IRQ) |
+| `$CBC0` | 2 | `in_back` | |
+| `$CBC2` | 2 | `in_strafel` | |
+| `$CBC4` | 2 | `in_strafer` | |
+| `$CBC6` | 2 | `in_turn_l` | |
+| `$CBC8` | 2 | `in_turn_r` | |
+| `$CBCA` | 2 | `hold_fwd` | Frame snapshot |
+| `$CBCC` | 2 | `hold_back` | |
+| `$CBCE` | 2 | `hold_strafel` | |
+| `$CBD0` | 2 | `hold_strafer` | |
+| `$CBD2` | 2 | `hold_turn_l` | |
+| `$CBD4` | 2 | `hold_turn_r` | |
+| `$CBD6` | 1 | `in_use` | K latch |
+| `$CBD7` | 1 | `key_use` | |
+| `$CBD8` | 1 | `key_use_was` | Rising-edge debounce |
+| `$CBD9` | 5 | — | Unused (was `sw_latched`) |
+| `$CBDE` | 4 | `UX` | Unique world X |
+| `$CBE2` | 4 | `UZ` | Unique world Z |
+| `$CBE6` | 16 | `VY` | Per-vert world Y |
+| `$CBF6` | 4 | `XC_L` | UX × cos (lo) |
+| `$CBFA` | 4 | `XC_H` | UX × cos (hi) |
+| `$CBFE` | 4 | `XS_L` | UX × sin (lo) |
+| `$CC02` | 4 | `XS_H` | UX × sin (hi) |
+| `$CC06` | 4 | `ZC_L` | UZ × cos (lo) |
+| `$CC0A` | 4 | `ZC_H` | UZ × cos (hi) |
+| `$CC0E` | 4 | `ZS_L` | UZ × sin (lo) |
+| `$CC12` | 4 | `ZS_H` | UZ × sin (hi) |
+| `$CC16` | 1 | `in_fire` | Weapon BSS |
+| `$CC17` | 4 | `in_wpn_axe`…`in_wpn_gren` | |
+| `$CC1B` | 1 | `key_fire` | |
+| `$CC1C` | 4 | `key_wpn_axe`…`key_wpn_gren` | |
+| `$CC20` | 1 | `cur_weapon` | |
+| `$CC21` | 1 | `wpn_pose` | |
+| `$CC22` | 2 | `fire_rpt_l/h` | |
+| `$CC24` | 2 | `flash_ms_l/h` | |
+| `$CC26` | 1 | `flash_phase` | Sprite 4 |
+| `$CC27` | 1 | `mg_frame` | |
+| `$CC28` | 1 | `wpn_x` | |
+| `$CC29` | 1 | `wpn_y` | |
+| `$CC2A` | 1 | `spr_en` | |
+| `$CC2B` | 1 | `anim_step` | |
+| `$CC2C` | 2 | `anim_ms_l/h` | |
+| `$CC2E` | 1 | `wpn_flash_en` | |
+| `$CC2F` | 1 | `wpn_flash_dy` | |
+| `$CC30` | 1 | `wpn_tmp0` | |
+| `$CC31` | 2 | `flash5_ms_l/h` | |
+| `$CC33` | 1 | `flash5_phase` | Sprite 5 |
+| `$CC34` | 2 | `emuz_ms_l/h` | |
+| `$CC36` | 1 | `emuz_on` | |
+| `$CC37` | 1 | `emuz_xmsb` | |
+| `$CC38` | 8 | `door_vx` | Oriented door SoA |
+| `$CC40` | 8 | `door_vz` | |
+| `$CC48` | 8 | `door_vsx` | |
+| `$CC50` | 8 | `door_vsz` | |
+| `$CC58` | 8 | `door_vface` | |
+| `$CC60` | 16 | `VOC` | Cohen–Sutherland outcode |
+| `$CC70` | 16 | `VBEHIND` | 1 = z < ZCLIP |
+| `$CC80` | 16 | `VSX` | Front-vert screen X |
+| `$CC90` | 16 | `VSY` | Front-vert screen Y |
+| `$CCA0` | 16 | `COL_DONE` | XZ-column project cache |
+| `$CCB0` | 16 | `COL_INVL` | |
+| `$CCC0` | 16 | `COL_INVH` | |
+| `$CCD0` | 16 | `COL_INVK` | |
+| `$CCE0` | 16 | `COL_PXL` | |
+| `$CCF0` | 16 | `COL_PXH` | |
+| `$CD00` | 1 | `ammo_shells` | |
+| `$CD01` | 1 | `ammo_nails` | |
+| `$CD02` | 1 | `ammo_grenades` | |
+| `$CD03` | 1 | `have_wpn` | `HAVE_*` bitfield |
+| `$CD04` | 32 | `bp_taken` | `BP_MAX` |
+| `$CD24` | 1 | `player_hp` | 0..`PLAYER_HP_MAX` |
+| `$CD25` | 1 | `player_armour` | starts 0; no pickups yet |
+| `$CD26` | 16 | `en_state` | `ENEMY_MAX` |
+| `$CD36` | 16 | `en_frame` | |
+| `$CD46` | 16 | `drop_taken` | |
+| `$CD56` | 16 | `drop_x` | |
+| `$CD66` | 16 | `drop_y` | |
+| `$CD76` | 16 | `drop_z` | |
+| `$CD86` | 16 | `drop_room` | |
+| `$CD96` | 16 | `drop_type` | |
+| `$CDA6` | 16 | `en_hp` | |
+| `$CDB6` | 16 | `en_timer` | |
+| `$CDC6` | 16 | `en_timer_h` | |
+| `$CDD6` | 16 | `en_step` | |
+| `$CDE6` | 16 | `en_step_h` | |
+| `$CDF6` | 16 | `en_dir` | |
+| `$CE06` | 1 | `gunshot_wake` | |
+| `$CE07` | 5 | `ai_dirtry` | Dodge candidates |
+| `$CE0C` | 1 | `ai_turn` | |
+| `$CE0D` | 1 | `ai_probe` | |
+| `$CE0E` | 1 | `emuz_vx` | Staged sprite 6 |
+| `$CE0F` | 1 | `emuz_vy` | |
+| `$CE10` | 1 | `emuz_col` | |
+| `$CE11` | 1 | `emuz_pending` | |
+| `$CE12` | 1 | `emuz_skip` | |
+| `$CE13` | 2 | `splat_ms_l/h` | |
+| `$CE15` | 1 | `splat_on` | |
+| `$CE16` | 1 | `splat_xmsb` | |
+| `$CE17` | 1 | `splat_vx` | |
+| `$CE18` | 1 | `splat_vy` | |
+| `$CE19` | 1 | `splat_col` | |
+| `$CE1A` | 1 | `splat_skip` | |
+| `$CE1B` | 1 | `shot_hit_i` | |
+| `$CE1C` | 1 | `shot_hit_z` | |
+| `$CE1D` | 2 | — | Unused |
+| `$CE1F` | 1 | `bite_splat_i` | Last used scratch byte |

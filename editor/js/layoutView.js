@@ -1,7 +1,6 @@
 import {
   KINDS,
   aabbCenter,
-  aabbOverlap,
   clampObject,
   objectVisible,
   activeMap,
@@ -15,6 +14,12 @@ import {
   clampEnemyRot,
   colorHex,
   ROOM_LINE_DEFAULT,
+  roomGeometry,
+  preserveRoomSplits,
+  inferDoorOtherRoom,
+  roomFloorY,
+  roomById,
+  doorNearFaceId,
 } from "./model.js";
 import {
   BOX_CORNERS,
@@ -226,6 +231,13 @@ export class LayoutView {
       return;
     }
     if (e.button !== 0) return;
+    if (e.altKey) {
+      e.preventDefault();
+      this.look = true;
+      this.lookLast = p;
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
 
     const doc = this.opts.getDoc();
     const primary = this.#primaryId();
@@ -253,8 +265,8 @@ export class LayoutView {
     for (const o of origs) {
       if (o.kind !== "room") continue;
       for (const other of objs) {
-        if (other.kind === "room" || claimed.has(other.id)) continue;
-        if (!aabbOverlap(o, other)) continue;
+        if (other.kind === "room" || other.kind === "doorway" || claimed.has(other.id)) continue;
+        if (other.roomId !== o.id) continue;
         claimed.add(other.id);
         contents.push({ ...other });
       }
@@ -263,6 +275,9 @@ export class LayoutView {
       kind: handle.kind,
       axis: handle.axis,
       corner: handle.corner,
+      key: handle.key,
+      side: handle.side,
+      scale: handle.scale,
       start: p,
       origs,
       contents,
@@ -391,7 +406,10 @@ export class LayoutView {
     if (this.pan) this.pan = null;
     if (this.zoom) this.zoom = null;
     if (this.drag?.kind === "box") this.#finishBox();
-    else if (this.drag && this.drag.kind !== "select") this.opts.endUndo?.();
+    else if (this.drag && this.drag.kind !== "select") {
+      this.#finishTransform();
+      this.opts.endUndo?.();
+    }
     this.drag = null;
     if (viewEnded) this.opts.onViewChanged?.();
     try {
@@ -400,6 +418,59 @@ export class LayoutView {
       /* ignore */
     }
     this.draw();
+  }
+
+  #finishTransform() {
+    const d = this.drag;
+    if (!d || (d.kind !== "move" && d.kind !== "axis")) return;
+    const doc = this.opts.getDoc();
+    const objs = activeMap(doc).objects;
+    for (const orig of d.origs) {
+      const obj = objs.find((o) => o.id === orig.id);
+      if (!obj || obj.kind !== "doorway") continue;
+      const other = inferDoorOtherRoom(doc, obj);
+      if (other) obj.otherRoomId = other.id;
+    }
+  }
+
+  #axisDelta(p, grab, axis, start) {
+    const along = { x: grab.x, y: grab.y, z: grab.z };
+    along[axis] += 8;
+    const pa = projectPoint(grab, this.camera, this.cssW, this.cssH);
+    const pb = projectPoint(along, this.camera, this.cssW, this.cssH);
+    if (!pa.ok || !pb.ok) return null;
+    const ax = pb.sx - pa.sx;
+    const ay = pb.sy - pa.sy;
+    const alen2 = ax * ax + ay * ay;
+    if (alen2 < 16) return null;
+    const t = ((p.x - start.x) * ax + (p.y - start.y) * ay) / alen2;
+    return Math.round(t * 8);
+  }
+
+  #applyFaceDelta(obj, orig, side, delta) {
+    const min = 1;
+    obj.x = orig.x;
+    obj.y = orig.y;
+    obj.z = orig.z;
+    obj.sx = orig.sx;
+    obj.sy = orig.sy;
+    obj.sz = orig.sz;
+    if (side === "x1") obj.sx = Math.max(min, orig.sx + delta);
+    else if (side === "x0") {
+      const x1 = orig.x + orig.sx;
+      obj.x = Math.min(x1 - min, orig.x + delta);
+      obj.sx = x1 - obj.x;
+    } else if (side === "y1") obj.sy = Math.max(min, orig.sy + delta);
+    else if (side === "y0") {
+      const y1 = orig.y + orig.sy;
+      obj.y = Math.min(y1 - min, orig.y + delta);
+      obj.sy = y1 - obj.y;
+    } else if (side === "z1") obj.sz = Math.max(min, orig.sz + delta);
+    else if (side === "z0") {
+      const z1 = orig.z + orig.sz;
+      obj.z = Math.min(z1 - min, orig.z + delta);
+      obj.sz = z1 - obj.z;
+    }
   }
 
   #boxRect() {
@@ -483,30 +554,18 @@ export class LayoutView {
     }
 
     if (d.kind === "axis") {
-      const axis = d.axis;
-      const cam = this.camera;
-      const grab = d.grab;
-      const along = { x: grab.x, y: grab.y, z: grab.z };
-      along[axis] += 8;
-      const pa = projectPoint(grab, cam, this.cssW, this.cssH);
-      const pb = projectPoint(along, cam, this.cssW, this.cssH);
-      if (!pa.ok || !pb.ok) return;
-      const ax = pb.sx - pa.sx;
-      const ay = pb.sy - pa.sy;
-      const alen2 = ax * ax + ay * ay;
-      if (alen2 < 16) return;
-      const t = ((p.x - d.start.x) * ax + (p.y - d.start.y) * ay) / alen2;
-      const delta = Math.round(t * 8);
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      if (delta == null) return;
       for (const orig of d.origs) {
         const obj = objs.find((o) => o.id === orig.id);
         if (!obj) continue;
-        obj[axis] = orig[axis] + delta;
+        obj[d.axis] = orig[d.axis] + delta;
         clampObject(obj);
       }
       for (const orig of d.contents) {
         const obj = objs.find((o) => o.id === orig.id);
         if (!obj) continue;
-        obj[axis] = orig[axis] + delta;
+        obj[d.axis] = orig[d.axis] + delta;
         clampObject(obj);
       }
       return;
@@ -534,6 +593,30 @@ export class LayoutView {
       obj.sx = Math.max(1, Math.max(opp.x, px) - obj.x);
       obj.sy = Math.max(1, Math.max(opp.y, py) - obj.y);
       obj.sz = Math.max(1, Math.max(opp.z, pz) - obj.z);
+      if (obj.kind === "room") preserveRoomSplits(obj, primary);
+      clampObject(obj);
+      return;
+    }
+
+    if (d.kind === "split") {
+      const orig = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
+      const obj = objs.find((o) => o.id === orig.id);
+      if (!obj || obj.kind !== "room") return;
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      if (delta == null) return;
+      obj[d.key] = (orig[d.key] | 0) + delta * (d.scale || 1);
+      clampObject(obj);
+      return;
+    }
+
+    if (d.kind === "face") {
+      const orig = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
+      const obj = objs.find((o) => o.id === orig.id);
+      if (!obj || KINDS[obj.kind].fixed) return;
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      if (delta == null) return;
+      this.#applyFaceDelta(obj, orig, d.side, delta);
+      if (obj.kind === "room") preserveRoomSplits(obj, orig);
       clampObject(obj);
     }
   }
@@ -546,6 +629,13 @@ export class LayoutView {
   #objectSegments(doc, obj) {
     /** @type {{a:{x:number,y:number,z:number},b:{x:number,y:number,z:number}}[]} */
     const segs = [];
+    if (obj.kind === "room") {
+      const g = roomGeometry(obj);
+      for (const e of g.edges) {
+        segs.push({ a: g.verts[e.a], b: g.verts[e.b] });
+      }
+      return segs;
+    }
     if (isFigureObject(obj)) {
       const tmpl = findEnemyTemplate(doc, figureTemplateName(obj));
       const verts = enemyPlacementWorldVerts(obj, tmpl);
@@ -608,7 +698,11 @@ export class LayoutView {
       segs.push({ a: cornerWorld(obj, f[1]), b: cornerWorld(obj, f[3]) });
     }
     if (obj.kind === "doorway") {
-      const f = faceCorners(obj.face);
+      const doc = this.opts.getDoc();
+      const place = this.opts.getPlaceRoom?.();
+      let room = roomById(doc, obj.roomId);
+      if (place && (place.id === obj.roomId || place.id === obj.otherRoomId)) room = place;
+      const f = faceCorners(doorNearFaceId(obj, room));
       const c0 = cornerWorld(obj, f[0]);
       const c1 = cornerWorld(obj, f[1]);
       const c2 = cornerWorld(obj, f[2]);
@@ -747,6 +841,14 @@ export class LayoutView {
     const ray = screenRay(mx, my, cam, w, h);
     let best = null;
     for (const obj of this.#visibleObjects(doc)) {
+      if (obj.kind === "room") {
+        const g = roomGeometry(obj);
+        for (const c of g.colliders) {
+          const hit = rayAabb(ray.origin, ray.dir, c);
+          if (hit && (!best || hit.t < best.t)) best = { id: obj.id, t: hit.t, point: hit.point };
+        }
+        continue;
+      }
       const hit = rayAabb(ray.origin, ray.dir, obj);
       if (!hit) continue;
       if (!best || hit.t < best.t) best = { id: obj.id, t: hit.t, point: hit.point };
@@ -760,6 +862,27 @@ export class LayoutView {
     const cam = this.camera;
     const w = this.cssW;
     const h = this.cssH;
+    if (obj.kind === "room") {
+      const g = roomGeometry(obj);
+      for (const handle of g.handles) {
+        const pr = projectPoint(handle.world, cam, w, h);
+        if (!pr.ok) continue;
+        if (Math.hypot(mx - pr.sx, my - pr.sy) < HANDLE + 2) {
+          if (handle.kind === "face") {
+            return { kind: "face", side: handle.side, axis: handle.axis, world: handle.world };
+          }
+          return { kind: "split", key: handle.key, axis: handle.axis, scale: handle.scale, world: handle.world };
+        }
+      }
+    } else if (!KINDS[obj.kind].fixed) {
+      for (const handle of this.#aabbFaceHandles(obj)) {
+        const pr = projectPoint(handle.world, cam, w, h);
+        if (!pr.ok) continue;
+        if (Math.hypot(mx - pr.sx, my - pr.sy) < HANDLE + 2) {
+          return { kind: "face", side: handle.side, axis: handle.axis, world: handle.world };
+        }
+      }
+    }
     const c = aabbCenter(obj);
     const axes = [
       { axis: "x", p: { x: c.x + 8, y: c.y, z: c.z } },
@@ -796,29 +919,52 @@ export class LayoutView {
     return null;
   }
 
-  /** Drop position from screen coords: room floor under cursor, else current grid plane. */
+  /** Drop position from screen coords: selected room floor, else grid plane. */
   placeAtScreen(mx, my, kind) {
     const doc = this.opts.getDoc();
     const ray = screenRay(mx, my, this.camera, this.cssW, this.cssH);
     const def = KINDS[kind] || KINDS.crate;
     const sx = def.defaultSize[0];
     const sz = def.defaultSize[2];
-    let bestRoom = null;
-    let bestT = Infinity;
-    for (const room of roomsOf(doc)) {
-      const hit = rayAabb(ray.origin, ray.dir, room);
-      if (!hit || hit.t < 0 || hit.t >= bestT) continue;
-      bestT = hit.t;
-      bestRoom = { room, point: hit.point };
-    }
-    if (bestRoom) {
-      const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: bestRoom.room.y, z: 0 }, { x: 0, y: 1, z: 0 });
-      const pt = floor?.point || bestRoom.point;
+    const placeRoom = kind === "room" || kind === "doorway" ? null : this.opts.getPlaceRoom?.() || null;
+    if (placeRoom) {
+      const g = roomGeometry(placeRoom);
+      let bestHit = null;
+      for (const c of g.colliders) {
+        const hit = rayAabb(ray.origin, ray.dir, c);
+        if (hit && hit.t >= 0 && (!bestHit || hit.t < bestHit.t)) bestHit = hit;
+      }
+      const fy = roomFloorY(placeRoom, placeRoom.x + placeRoom.sx / 2, placeRoom.z + placeRoom.sz / 2);
+      const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: fy, z: 0 }, { x: 0, y: 1, z: 0 });
+      const pt = floor?.point || bestHit?.point || aabbCenter(placeRoom);
       return {
         x: Math.round(pt.x - sx / 2),
-        y: bestRoom.room.y,
+        y: fy,
         z: Math.round(pt.z - sz / 2),
       };
+    }
+    if (kind !== "doorway") {
+      let bestRoom = null;
+      let bestT = Infinity;
+      for (const room of roomsOf(doc)) {
+        const g = roomGeometry(room);
+        for (const c of g.colliders) {
+          const hit = rayAabb(ray.origin, ray.dir, c);
+          if (!hit || hit.t < 0 || hit.t >= bestT) continue;
+          bestT = hit.t;
+          bestRoom = { room, point: hit.point };
+        }
+      }
+      if (bestRoom) {
+        const fy = roomFloorY(bestRoom.room, bestRoom.point.x, bestRoom.point.z);
+        const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: fy, z: 0 }, { x: 0, y: 1, z: 0 });
+        const pt = floor?.point || bestRoom.point;
+        return {
+          x: Math.round(pt.x - sx / 2),
+          y: fy,
+          z: Math.round(pt.z - sz / 2),
+        };
+      }
     }
     const gy = this.gridY;
     const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: gy, z: 0 }, { x: 0, y: 1, z: 0 });
@@ -1022,6 +1168,11 @@ export class LayoutView {
       for (const seg of this.#backpackTetraSegs(obj)) {
         this.#line3(ctx, seg.a, seg.b, cam, w, h);
       }
+    } else if (obj.kind === "room") {
+      const g = roomGeometry(obj);
+      for (const e of g.edges) {
+        this.#line3(ctx, g.verts[e.a], g.verts[e.b], cam, w, h);
+      }
     } else {
       if (isGhostKind(obj.kind)) ctx.setLineDash([5, 4]);
       for (const [i, j] of BOX_EDGES) {
@@ -1052,5 +1203,37 @@ export class LayoutView {
       if (!pr.ok) continue;
       ctx.fillRect(pr.sx - 3, pr.sy - 3, 6, 6);
     }
+    ctx.fillStyle = "#7ec8e8";
+    const handles = obj.kind === "room" ? roomGeometry(obj).handles : this.#aabbFaceHandles(obj);
+    for (const handle of handles) {
+      const pr = projectPoint(handle.world, cam, w, h);
+      if (!pr.ok) continue;
+      ctx.fillRect(pr.sx - 4, pr.sy - 4, 8, 8);
+    }
+  }
+
+  #aabbFaceHandles(obj) {
+    const x0 = obj.x | 0;
+    const y0 = obj.y | 0;
+    const z0 = obj.z | 0;
+    const sx = obj.sx | 0;
+    const sy = obj.sy | 0;
+    const sz = obj.sz | 0;
+    const cx = x0 + sx / 2;
+    const cy = y0 + sy / 2;
+    const cz = z0 + sz / 2;
+    const handles = [
+      { kind: "face", side: "x0", axis: "x", world: { x: x0, y: cy, z: cz } },
+      { kind: "face", side: "x1", axis: "x", world: { x: x0 + sx, y: cy, z: cz } },
+      { kind: "face", side: "z0", axis: "z", world: { x: cx, y: cy, z: z0 } },
+      { kind: "face", side: "z1", axis: "z", world: { x: cx, y: cy, z: z0 + sz } },
+    ];
+    if (obj.kind !== "platform") {
+      handles.push(
+        { kind: "face", side: "y0", axis: "y", world: { x: cx, y: y0, z: cz } },
+        { kind: "face", side: "y1", axis: "y", world: { x: cx, y: y0 + sy, z: cz } }
+      );
+    }
+    return handles;
   }
 }

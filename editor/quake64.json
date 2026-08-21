@@ -1,5 +1,5 @@
 {
-  "version": 6,
+  "version": 7,
   "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
@@ -8,12 +8,12 @@
         {
           "id": "acd16743-53cd-4404-bf31-cc8dc48e1434",
           "kind": "room",
-          "x": 0,
+          "x": 2,
           "y": 104,
-          "z": 117,
+          "z": 105,
           "sx": 32,
           "sy": 8,
-          "sz": 6,
+          "sz": 18,
           "face": "+z",
           "axis": "z",
           "dir": 1,
@@ -21,16 +21,28 @@
           "bgColor": 9,
           "lineColor": 7,
           "fxColor": 1,
-          "weaponColor": 0
+          "weaponColor": 0,
+          "shape": "L",
+          "flip": false,
+          "rx": 0,
+          "ry": 2,
+          "rz": 0,
+          "cutU": 26,
+          "cutV": 12,
+          "stemW": 0,
+          "stemPos": 0,
+          "barD": 0,
+          "shift": 0,
+          "mid": 0
         },
         {
           "id": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "kind": "room",
-          "x": 22,
-          "y": 64,
+          "x": 19,
+          "y": 65,
           "z": 124,
-          "sx": 6,
-          "sy": 48,
+          "sx": 12,
+          "sy": 47,
           "sz": 16,
           "face": "+z",
           "axis": "z",
@@ -39,7 +51,19 @@
           "bgColor": 2,
           "lineColor": 7,
           "fxColor": 1,
-          "weaponColor": 0
+          "weaponColor": 0,
+          "shape": "L",
+          "flip": false,
+          "rx": 1,
+          "ry": 1,
+          "rz": 0,
+          "cutU": 10,
+          "cutV": 39,
+          "stemW": 0,
+          "stemPos": 0,
+          "barD": 0,
+          "shift": 0,
+          "mid": 0
         },
         {
           "id": "7f98a06a-3a51-401a-b1d4-40b9ebad9a87",
@@ -50,30 +74,33 @@
           "sx": 4,
           "sy": 5,
           "sz": 1,
-          "face": "-z",
+          "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434",
           "locked": false,
-          "keyTag": ""
+          "keyTag": "",
+          "otherRoomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e"
         },
         {
           "id": "6d6a02fe-9b13-47b0-9116-faa7f845ad9c",
           "kind": "crate",
-          "x": 0,
+          "x": 2,
           "y": 104,
           "z": 118,
           "sx": 4,
-          "sy": 2,
+          "sy": 1,
           "sz": 4,
           "face": "+z",
           "axis": "z",
-          "dir": 1
+          "dir": 1,
+          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434"
         },
         {
           "id": "37b37500-dc51-450d-a81c-57b4ca92e61b",
           "kind": "enemy",
           "x": 82,
-          "y": 65,
+          "y": 64,
           "z": 119,
           "sx": 2,
           "sy": 4,
@@ -83,25 +110,13 @@
           "dir": 1,
           "rot": 6,
           "enemy": "Grunt",
+          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
           "tag": ""
-        },
-        {
-          "id": "62c4f964-bfa2-4ebd-ada1-14b0cf62882e",
-          "kind": "crate",
-          "x": 22,
-          "y": 64,
-          "z": 124,
-          "sx": 6,
-          "sy": 40,
-          "sz": 10,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1
         },
         {
           "id": "ff17085e-f2eb-4bfd-b862-549c30420579",
           "kind": "doorway",
-          "x": 28,
+          "x": 31,
           "y": 65,
           "z": 135,
           "sx": 1,
@@ -110,13 +125,15 @@
           "face": "+x",
           "axis": "z",
           "dir": 1,
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "locked": false,
-          "keyTag": ""
+          "keyTag": "",
+          "otherRoomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
         },
         {
           "id": "ff80f0a1-d4e1-47bb-98eb-e9dfdfc4b438",
           "kind": "switch",
-          "x": 24,
+          "x": 21,
           "y": 105,
           "z": 139,
           "sx": 2,
@@ -125,12 +142,13 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "tag": "firstelevator"
         },
         {
           "id": "d02a651b-f650-42c8-9847-5e2c033e828f",
           "kind": "elevator",
-          "x": 22,
+          "x": 19,
           "y": 103,
           "z": 134,
           "sx": 6,
@@ -139,16 +157,17 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "tag": "firstelevator",
           "elevType": "toggle"
         },
         {
           "id": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
           "kind": "room",
-          "x": 29,
-          "y": 65,
+          "x": 32,
+          "y": 53,
           "z": 112,
-          "sx": 64,
+          "sx": 61,
           "sy": 32,
           "sz": 32,
           "face": "+z",
@@ -158,26 +177,25 @@
           "bgColor": 5,
           "lineColor": 7,
           "fxColor": 1,
-          "weaponColor": 0
-        },
-        {
-          "id": "a0e70a0f-f008-4048-8885-8e78c5026f4c",
-          "kind": "slope",
-          "x": 4,
-          "y": 104,
-          "z": 118,
-          "sx": 4,
-          "sy": 2,
-          "sz": 4,
-          "face": "+z",
-          "axis": "x",
-          "dir": -1
+          "weaponColor": 0,
+          "shape": "T",
+          "flip": false,
+          "rx": 3,
+          "ry": 0,
+          "rz": 0,
+          "cutU": 0,
+          "cutV": 0,
+          "stemW": 8,
+          "stemPos": 32,
+          "barD": 20,
+          "shift": 0,
+          "mid": 0
         },
         {
           "id": "cba58a11-acb7-4f28-9eba-39a459657721",
           "kind": "spawn",
-          "x": 1,
-          "y": 106,
+          "x": 3,
+          "y": 105,
           "z": 119,
           "sx": 2,
           "sy": 4,
@@ -185,13 +203,14 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "rot": 2
+          "rot": 2,
+          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434"
         },
         {
           "id": "7512297f-f012-47f8-b276-c7258bd560c0",
           "kind": "enemy",
           "x": 82,
-          "y": 65,
+          "y": 64,
           "z": 134,
           "sx": 2,
           "sy": 4,
@@ -201,6 +220,7 @@
           "dir": 1,
           "rot": 6,
           "enemy": "Rottweiler",
+          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
           "tag": ""
         },
         {
@@ -212,29 +232,18 @@
           "sx": 1,
           "sy": 5,
           "sz": 4,
-          "face": "+x",
+          "face": "-x",
           "axis": "z",
           "dir": 1,
+          "roomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
           "locked": false,
-          "keyTag": ""
-        },
-        {
-          "id": "fb04b015-554f-4c19-9ac4-092ed3c7a43a",
-          "kind": "crate",
-          "x": 60,
-          "y": 84,
-          "z": 112,
-          "sx": 6,
-          "sy": 4,
-          "sz": 32,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1
+          "keyTag": "",
+          "otherRoomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
         },
         {
           "id": "b3910ac1-09cd-4fa2-9667-bca75256dbc4",
           "kind": "trigger",
-          "x": 0,
+          "x": 2,
           "y": 104,
           "z": 117,
           "sx": 18,
@@ -243,48 +252,52 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "text": "The Slipgate Complex"
+          "text": "The Slipgate Complex",
+          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434"
         },
         {
           "id": "02b5749a-932e-491e-a356-e7c36dd426c4",
           "kind": "platform",
-          "x": 22,
+          "x": 19,
           "y": 77,
           "z": 134,
-          "sx": 6,
+          "sx": 12,
           "sy": 1,
           "sz": 6,
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "collide": false
         },
         {
           "id": "55277dde-01a5-4051-9930-cf54b9ba163c",
           "kind": "platform",
-          "x": 22,
+          "x": 19,
           "y": 92,
           "z": 134,
-          "sx": 6,
+          "sx": 12,
           "sy": 1,
           "sz": 6,
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "collide": false
         },
         {
           "id": "6775dd62-2420-42eb-9331-05501c7cdb39",
           "kind": "switch",
-          "x": 22,
+          "x": 21,
           "y": 66,
-          "z": 136,
-          "sx": 1,
+          "z": 139,
+          "sx": 2,
           "sy": 3,
-          "sz": 2,
-          "face": "-x",
+          "sz": 1,
+          "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "tag": "firstelevator"
         },
         {
@@ -303,7 +316,19 @@
           "bgColor": 9,
           "lineColor": 7,
           "fxColor": 1,
-          "weaponColor": 0
+          "weaponColor": 0,
+          "shape": "box",
+          "flip": false,
+          "rx": 0,
+          "ry": 0,
+          "rz": 0,
+          "cutU": 0,
+          "cutV": 0,
+          "stemW": 0,
+          "stemPos": 0,
+          "barD": 0,
+          "shift": 0,
+          "mid": 0
         },
         {
           "id": "8fff08eb-f3f6-4448-8608-54c3449f4486",
@@ -317,11 +342,23 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "",
+          "name": "Foyer",
           "bgColor": 6,
           "lineColor": 7,
           "fxColor": 1,
-          "weaponColor": 0
+          "weaponColor": 0,
+          "shape": "box",
+          "flip": false,
+          "rx": 0,
+          "ry": 0,
+          "rz": 0,
+          "cutU": 0,
+          "cutV": 0,
+          "stemW": 0,
+          "stemPos": 0,
+          "barD": 0,
+          "shift": 0,
+          "mid": 0
         },
         {
           "id": "54e070d8-96e5-45df-a8a6-c4d0981579aa",
@@ -335,8 +372,10 @@
           "face": "+x",
           "axis": "z",
           "dir": 1,
+          "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "locked": false,
-          "keyTag": ""
+          "keyTag": "",
+          "otherRoomId": "a537a113-f506-4ee9-bb08-41449d638e8e"
         },
         {
           "id": "7517ee0b-7809-41eb-9bcd-aa2ad6ee07d7",
@@ -352,6 +391,7 @@
           "dir": 1,
           "rot": 6,
           "enemy": "Grunt",
+          "roomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
           "tag": ""
         },
         {
@@ -366,8 +406,10 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "d3c3453f-ac80-4092-a737-d02046fc3ceb",
           "locked": false,
-          "keyTag": ""
+          "keyTag": "",
+          "otherRoomId": "8fff08eb-f3f6-4448-8608-54c3449f4486"
         },
         {
           "id": "96b8e2c2-ba44-4235-b044-524ebad77149",
@@ -381,6 +423,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "collide": true
         },
         {
@@ -395,6 +438,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "tag": "hidden",
           "elevType": "toggle"
         },
@@ -410,6 +454,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "tag": "hidden"
         },
         {
@@ -424,8 +469,10 @@
           "face": "+x",
           "axis": "z",
           "dir": 1,
+          "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "locked": false,
-          "keyTag": ""
+          "keyTag": "",
+          "otherRoomId": "5815d324-6a01-4d2c-9502-3f3a421cee04"
         },
         {
           "id": "d3c3453f-ac80-4092-a737-d02046fc3ceb",
@@ -439,11 +486,23 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "",
+          "name": "Attic",
           "bgColor": 0,
           "lineColor": 7,
           "fxColor": 1,
-          "weaponColor": 12
+          "weaponColor": 12,
+          "shape": "box",
+          "flip": false,
+          "rx": 0,
+          "ry": 0,
+          "rz": 0,
+          "cutU": 0,
+          "cutV": 0,
+          "stemW": 0,
+          "stemPos": 0,
+          "barD": 0,
+          "shift": 0,
+          "mid": 0
         },
         {
           "id": "5815d324-6a01-4d2c-9502-3f3a421cee04",
@@ -457,39 +516,23 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "",
+          "name": "Bridge",
           "bgColor": 9,
           "lineColor": 7,
           "fxColor": 1,
-          "weaponColor": 0
-        },
-        {
-          "id": "b58c5ce8-c742-485a-ba52-319354536a0e",
-          "kind": "platform",
-          "x": 140,
-          "y": 65,
-          "z": 136,
-          "sx": 20,
-          "sy": 1,
-          "sz": 40,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "collide": true
-        },
-        {
-          "id": "de4e75c2-9eca-4ce8-a69a-3ef7bad47b6d",
-          "kind": "platform",
-          "x": 140,
-          "y": 65,
-          "z": 96,
-          "sx": 20,
-          "sy": 1,
-          "sz": 20,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "collide": true
+          "weaponColor": 0,
+          "shape": "T",
+          "flip": false,
+          "rx": 3,
+          "ry": 3,
+          "rz": 0,
+          "cutU": 0,
+          "cutV": 0,
+          "stemW": 20,
+          "stemPos": 20,
+          "barD": 20,
+          "shift": 0,
+          "mid": 0
         },
         {
           "id": "bcc49cd0-7f52-4aff-b5b0-06934f74d4d6",
@@ -503,6 +546,7 @@
           "face": "-x",
           "axis": "z",
           "dir": 1,
+          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "tag": "bridge"
         },
         {
@@ -517,6 +561,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "tag": "bridge",
           "elevType": "toggle"
         },
@@ -532,6 +577,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "d3c3453f-ac80-4092-a737-d02046fc3ceb",
           "backpack": "nailgun"
         },
         {
@@ -548,6 +594,7 @@
           "dir": 1,
           "rot": 0,
           "enemy": "Grunt",
+          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "tag": ""
         },
         {
@@ -564,6 +611,7 @@
           "dir": 1,
           "rot": 0,
           "enemy": "Grunt",
+          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "tag": ""
         },
         {
@@ -578,6 +626,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "tag": "hidden"
         },
         {
@@ -592,8 +641,24 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "roomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
           "tag": "",
           "order": 0
+        },
+        {
+          "id": "287f41c8-d4c9-4300-91c9-4536ce3b15b6",
+          "kind": "platform",
+          "x": 64,
+          "y": 65,
+          "z": 125,
+          "sx": 8,
+          "sy": 1,
+          "sz": 4,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
+          "collide": true
         }
       ]
     },
@@ -39578,31 +39643,5 @@
         ]
       }
     }
-  },
-  "editor": {
-    "mode": "layout",
-    "localDraw": false,
-    "selectedIds": [
-      "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
-    ],
-    "enemy": "Grunt",
-    "frameIndex": 47,
-    "selectedVerts": [],
-    "layoutCamera": {
-      "x": 280.09360985775686,
-      "y": 139.92068150761114,
-      "z": 123.10286211527736,
-      "yaw": 23.363332031249648,
-      "pitch": -0.5146665039062459,
-      "speed": 16
-    },
-    "animOrbit": {
-      "yaw": -1.966674194335918,
-      "pitch": -1.2,
-      "dist": 65.4031963306232
-    },
-    "mdlScale": 0.7,
-    "weapon": "nail",
-    "weaponFrame": 0
   }
 }

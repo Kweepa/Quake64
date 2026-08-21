@@ -8,7 +8,7 @@ This is an early prototype. The running program is the **core line engine** — 
 
 The 3D view is a **192×128** custom-charset window (24×16 tiles), double-buffered in VIC Bank 3 (`$C000–$FFFF`). A raster IRQ at the mid-window split (`$D018`) switches between two 256-tile charsets so the viewport can use **512 unique glyphs**. Buffer flips only retarget screen and charset pointers, so the visible frame never gets drawn into.
 
-Each frame **wipes the live 24 charset columns** (~16.6k cycles). Dirty-tile tracking was dropped: the bookkeeping slowed the line plotter, and the savings only showed up in sparse frames. The HUD occupies the rows above the 3D viewport (black, dark-red / orange Quake-style type); the viewport sits at the bottom (brown sky, orange world lines).
+Each frame **wipes the live 24 charset columns** (~16.6k cycles). Dirty-tile tracking was dropped: the bookkeeping slowed the line plotter, and the savings only showed up in sparse frames. The HUD occupies the full-width rows above the 3D viewport (black, dark-red labels / orange digits): title, map name, ammo, health, and armour. The viewport sits at the bottom (brown sky, orange world lines).
 
 ## World (design)
 
@@ -38,4 +38,4 @@ make.bat           :: build and autostart in VICE
 run-editor.bat     :: local map / skeleton editor
 ```
 
-Keys in the current E1M1 demo: **WASD** move / strafe, **J/L** turn, **K** use, **SPACE** fire, **1–4** axe / shotgun / nailgun / grenade launcher. HUD row 2 shows camera **X Y Z** and heading **H** when enabled. Stick-figure Grunt / Rottweiler are in room 2 and beyond.
+Keys in the current E1M1 demo: **WASD** move / strafe, **J/L** turn, **K** use, **SPACE** fire, **1–4** axe / shotgun / nailgun / grenade launcher. Stick-figure Grunt / Rottweiler are in room 2 and beyond.

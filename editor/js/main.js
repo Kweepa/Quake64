@@ -40,6 +40,9 @@ import {
   objectLabel,
   objectTree,
   roomUnderObject,
+  roomById,
+  roomsOf,
+  inferDoorOtherRoom,
   usesLinkTag,
   emptyMdlRig,
   DEFAULT_MDL_SCALE,
@@ -48,6 +51,13 @@ import {
   WEAPON_LABELS,
   clampWeaponScale,
   DEFAULT_WEAPON_SCALE,
+  ROOM_SHAPES,
+  applyRoomShape,
+  rotateRoom,
+  roomFloorY,
+  clampRoomShape,
+  parseEditorState,
+  gameDocument,
 } from "./model.js";
 import {
   autosaveDocJSON,
@@ -57,6 +67,8 @@ import {
   hasDocFileHandle,
   loadDocJSON,
   saveDocJSON,
+  loadEditorSettings,
+  saveEditorSettings,
   tryRestoreDocFile,
   allowStoredDocFile,
   pickSharewareDirectory,
@@ -114,6 +126,8 @@ let selectedVerts = [];
 let dirty = false;
 let saving = false;
 let autosaveTimer = null;
+let editorSaveTimer = null;
+let applyingEditor = false;
 let undoStack = [];
 let redoStack = [];
 let undoGesture = false;
@@ -136,6 +150,8 @@ let weaponClipWarn = false;
 let weaponSelectedVerts = [];
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
+/** Last room used for placement / parenting. */
+let lastRoomId = null;
 
 const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   stage: document.getElementById("map-stage"),
@@ -148,14 +164,16 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
         if (!selectedIds.includes(id)) selectedIds.push(id);
       }
     } else selectedIds = [...ids];
-    markDirty();
+    rememberSelectedRoom();
+    markUi();
     refreshPanels();
   },
   onToggleSelect: (id) => {
     const i = selectedIds.indexOf(id);
     if (i >= 0) selectedIds.splice(i, 1);
     else selectedIds.push(id);
-    markDirty();
+    rememberSelectedRoom();
+    markUi();
     refreshPanels();
   },
   onChange: () => {
@@ -163,12 +181,12 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
     refreshPanels();
   },
   onViewChanged: () => {
-    syncEditorToDoc();
-    markDirty();
+    markUi();
   },
   onStatus: setStatus,
   beginUndo,
   endUndo,
+  getPlaceRoom: () => placementRoom(),
 });
 
 const overheadView = new OverheadView(document.getElementById("overhead-canvas"), {
@@ -193,7 +211,7 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     else if (additive) {
       if (!selectedVerts.includes(i)) selectedVerts.push(i);
     } else selectedVerts = [i];
-    markDirty();
+    markUi();
     refreshPanels();
   },
   onSelectVerts: (indices, additive) => {
@@ -202,7 +220,7 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
         if (!selectedVerts.includes(i)) selectedVerts.push(i);
       }
     } else selectedVerts = [...indices];
-    markDirty();
+    markUi();
     refreshPanels();
   },
   onChange: () => {
@@ -210,8 +228,7 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     refreshPanels();
   },
   onViewChanged: () => {
-    syncEditorToDoc();
-    markDirty();
+    markUi();
   },
   beginUndo,
   endUndo,
@@ -362,16 +379,23 @@ document.addEventListener("focusout", () => {
   });
 });
 
-function syncEditorToDoc() {
+function markUi() {
+  if (applyingEditor) return;
+  schedulePersistEditor();
+}
+
+function collectEditorState() {
   const cam = layoutView.camera;
   const orb = animView.orbit;
   const enemy = doc.enemies[enemyIndex];
-  doc.editor = {
+  return parseEditorState({
     mode: editorMode,
     localDraw,
     selectedIds: [...selectedIds],
     enemy: enemy?.name || "Grunt",
     frameIndex,
+    clipIndex,
+    frameLocal,
     selectedVerts: [...selectedVerts],
     layoutCamera: {
       x: cam.x,
@@ -385,46 +409,73 @@ function syncEditorToDoc() {
     mdlScale,
     weapon: weaponKey,
     weaponFrame,
-  };
+    overlayOn,
+    orthoMode: overheadView.mode,
+    collapsedRooms: [...collapsedRooms],
+    activeLevel: doc.activeLevel,
+  });
 }
 
-function applyEditorState(d) {
-  const ed = d.editor;
-  const cam = layoutView.camera;
-  const lc = ed.layoutCamera;
-  cam.x = lc.x;
-  cam.y = lc.y;
-  cam.z = lc.z;
-  cam.yaw = lc.yaw;
-  cam.pitch = lc.pitch;
-  cam.speed = lc.speed;
-  const orb = animView.orbit;
-  orb.yaw = ed.animOrbit.yaw;
-  orb.pitch = ed.animOrbit.pitch;
-  orb.dist = ed.animOrbit.dist;
-  const ei = d.enemies.findIndex((e) => e.name === ed.enemy);
-  enemyIndex = ei >= 0 ? ei : 0;
-  frameIndex = ed.frameIndex;
-  clampFrameIndex(activeEnemy());
-  syncClipFromFrameIndex(activeEnemy());
-  const have = new Set(activeMap(d).objects.map((o) => o.id));
-  selectedIds = ed.selectedIds.filter((id) => have.has(id));
-  selectedVerts = [...ed.selectedVerts];
-  setMdlScale(ed.mdlScale, false);
-  weaponKey = WEAPON_KEYS.includes(ed.weapon) ? ed.weapon : "axe";
-  weaponFrame = Math.max(0, ed.weaponFrame | 0);
-  setDrawMode(ed.localDraw);
-  setMode(ed.mode);
+function persistEditorSettings() {
+  saveEditorSettings(docFileName(), collectEditorState());
+}
+
+function schedulePersistEditor() {
+  if (editorSaveTimer) clearTimeout(editorSaveTimer);
+  editorSaveTimer = setTimeout(() => {
+    editorSaveTimer = null;
+    persistEditorSettings();
+  }, 250);
+}
+
+function applyEditorState(ed) {
+  ed = parseEditorState(ed);
+  applyingEditor = true;
+  try {
+    const cam = layoutView.camera;
+    const lc = ed.layoutCamera;
+    cam.x = lc.x;
+    cam.y = lc.y;
+    cam.z = lc.z;
+    cam.yaw = lc.yaw;
+    cam.pitch = lc.pitch;
+    cam.speed = lc.speed;
+    const orb = animView.orbit;
+    orb.yaw = ed.animOrbit.yaw;
+    orb.pitch = ed.animOrbit.pitch;
+    orb.dist = ed.animOrbit.dist;
+    const ei = doc.enemies.findIndex((e) => e.name === ed.enemy);
+    enemyIndex = ei >= 0 ? ei : 0;
+    frameIndex = ed.frameIndex;
+    clampFrameIndex(activeEnemy());
+    syncClipFromFrameIndex(activeEnemy());
+    const have = new Set(activeMap(doc).objects.map((o) => o.id));
+    selectedIds = ed.selectedIds.filter((id) => have.has(id));
+    selectedVerts = [...ed.selectedVerts];
+    setMdlScale(ed.mdlScale);
+    weaponKey = WEAPON_KEYS.includes(ed.weapon) ? ed.weapon : "axe";
+    weaponFrame = Math.max(0, ed.weaponFrame | 0);
+    setOverlayOn(ed.overlayOn);
+    setOrthoMode(ed.orthoMode);
+    collapsedRooms.clear();
+    for (const id of ed.collapsedRooms) collapsedRooms.add(id);
+    if (ed.activeLevel && LEVEL_NAMES.includes(ed.activeLevel)) doc.activeLevel = ed.activeLevel;
+    setDrawMode(ed.localDraw);
+    setMode(ed.mode);
+  } finally {
+    applyingEditor = false;
+  }
 }
 
 async function saveNow(okMsg = "Saved") {
   if (saving) return;
   saving = true;
   try {
-    syncEditorToDoc();
+    persistEditorSettings();
+    const payload = gameDocument(doc);
     const how = hasDocFileHandle()
-      ? await autosaveDocJSON(doc)
-      : await saveDocJSON(doc, DEFAULT_DOC_PATH);
+      ? await autosaveDocJSON(payload)
+      : await saveDocJSON(payload, DEFAULT_DOC_PATH);
     if (!how) {
       setStatus("Save cancelled", true);
       return;
@@ -476,7 +527,6 @@ function restore(json) {
   clampFrameIndex(activeEnemy());
   syncClipFromFrameIndex(activeEnemy());
   clampWeaponPreviewFrame();
-  syncEditorToDoc();
   markDirty();
   refreshAll();
 }
@@ -600,7 +650,7 @@ function setMode(mode) {
   updateCenterChrome();
   document.getElementById("hint").textContent =
     mode === "layout"
-      ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+RMB zoom · MMB pan · Alt+MMB orbit · F focus · G drop · gizmo moves selection · Del"
+      ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB / Alt+LMB look · Alt+RMB zoom · MMB pan · Alt+MMB orbit · F focus · G drop · gizmo moves selection · Del"
       : mode === "weapons"
         ? "LMB vertex to inspect · Shift add · click empty clears · drag empty pans · wheel scale"
         : bindJoint >= 0
@@ -611,6 +661,7 @@ function setMode(mode) {
   weaponView.enabled = mode === "weapons";
   if (mode !== "anim") stopAnimPlay();
   refreshAll();
+  markUi();
 }
 
 function setOrthoMode(mode) {
@@ -620,6 +671,7 @@ function setOrthoMode(mode) {
   document.getElementById("btn-ortho-forward").classList.toggle("active", mode === "forward");
   const hint = document.getElementById("ortho-hint");
   if (hint) hint.textContent = overheadView.hint();
+  markUi();
 }
 
 function setDrawMode(local) {
@@ -631,6 +683,7 @@ function setDrawMode(local) {
   if (local && !room) setStatus("Local: camera is not inside a room", true);
   else setStatus(local ? "Local draw" : "All rooms");
   refreshAll();
+  markUi();
 }
 
 function buildPalette() {
@@ -692,10 +745,19 @@ function finishPaletteDrop(e) {
   const kind = place.kind;
   const p = layoutView.placeAtScreen(mx, my, kind);
   pushUndo();
-  const obj = createObject(kind, p.x, p.y, p.z, place.enemy ? { enemy: place.enemy } : {});
+  const owner = kind === "room" ? null : placementRoom();
+  const extra = place.enemy ? { enemy: place.enemy } : {};
+  if (owner) extra.roomId = owner.id;
+  const obj = createObject(kind, p.x, p.y, p.z, extra);
+  if (owner && kind !== "room" && kind !== "doorway") {
+    obj.y = roomFloorY(owner, obj.x + obj.sx / 2, obj.z + obj.sz / 2);
+  }
   clampObject(obj);
   activeMap(doc).objects.push(obj);
+  if (kind === "doorway") assignDoorRooms(obj, owner);
+  if (kind === "room") lastRoomId = obj.id;
   selectedIds = [obj.id];
+  rememberSelectedRoom();
   markDirty();
   refreshAll();
   setStatus(place.enemy ? `Placed ${place.enemy}` : `Placed ${KINDS[kind].label}`);
@@ -706,11 +768,49 @@ function selectedObject() {
   return activeMap(doc).objects.find((o) => o.id === selectedIds[0]) || null;
 }
 
+function rememberSelectedRoom() {
+  for (let i = selectedIds.length - 1; i >= 0; i--) {
+    const obj = activeMap(doc).objects.find((o) => o.id === selectedIds[i]);
+    if (!obj) continue;
+    if (obj.kind === "room") {
+      lastRoomId = obj.id;
+      return;
+    }
+    if (obj.roomId) {
+      lastRoomId = obj.roomId;
+      return;
+    }
+  }
+}
+
+function placementRoom() {
+  const obj = selectedObject();
+  if (obj?.kind === "room") return obj;
+  if (obj?.roomId) {
+    const r = roomById(doc, obj.roomId);
+    if (r) return r;
+  }
+  return roomById(doc, lastRoomId);
+}
+
+function assignDoorRooms(door, owner) {
+  if (!door || door.kind !== "doorway") return;
+  if (owner) door.roomId = owner.id;
+  const other = inferDoorOtherRoom(doc, door);
+  door.otherRoomId = other && other.id !== door.roomId ? other.id : door.otherRoomId || null;
+  if (door.otherRoomId === door.roomId) door.otherRoomId = null;
+}
+
 function deleteSelected() {
   if (editorMode === "layout") {
     if (!selectedIds.length) return;
     pushUndo();
     const drop = new Set(selectedIds);
+    for (const o of activeMap(doc).objects) {
+      if (o.kind === "room") continue;
+      if (o.roomId && drop.has(o.roomId)) o.roomId = null;
+      if (o.otherRoomId && drop.has(o.otherRoomId)) o.otherRoomId = null;
+    }
     activeMap(doc).objects = activeMap(doc).objects.filter((o) => !drop.has(o.id));
     selectedIds = [];
     markDirty();
@@ -746,9 +846,9 @@ function dropSelectedToFloor() {
   let n = 0;
   for (const id of selectedIds) {
     const obj = activeMap(doc).objects.find((o) => o.id === id);
-    if (!obj || obj.kind === "room") continue;
+    if (!obj || obj.kind === "room" || obj.kind === "doorway") continue;
     const room = roomUnderObject(doc, obj);
-    obj.y = room ? room.y : 0;
+    obj.y = room ? roomFloorY(room, obj.x + obj.sx / 2, obj.z + obj.sz / 2) : 0;
     clampObject(obj);
     n++;
   }
@@ -768,8 +868,10 @@ function switchLevel(name) {
   if (!LEVEL_NAMES.includes(name) || name === doc.activeLevel) return;
   doc.activeLevel = name;
   selectedIds = [];
+  lastRoomId = null;
   collapsedRooms.clear();
   markDirty();
+  markUi();
   refreshAll();
   setStatus(name);
 }
@@ -829,6 +931,7 @@ function selectObjectIds(ids, additive) {
       else selectedIds.push(id);
     }
   } else selectedIds = [...ids];
+  rememberSelectedRoom();
   markDirty();
   refreshPanels();
 }
@@ -866,6 +969,7 @@ function renderObjectList() {
       e.stopPropagation();
       if (collapsedRooms.has(room.id)) collapsedRooms.delete(room.id);
       else collapsedRooms.add(room.id);
+      markUi();
       renderObjectList();
     });
     const roomBtn = makeObjectListButton(room);
@@ -933,7 +1037,7 @@ function renderEnemyList() {
       } else clipIndex = 0;
       frameLocal = 0;
       syncClipFromFrameIndex(activeEnemy());
-      markDirty();
+      markUi();
       refreshAll();
     });
     li.appendChild(btn);
@@ -1054,7 +1158,7 @@ function renderWeaponList() {
       weaponKey = key;
       weaponSelectedVerts = [];
       clampWeaponPreviewFrame();
-      markDirty();
+      markUi();
       refreshAll();
     });
     li.appendChild(btn);
@@ -1424,6 +1528,34 @@ function renderInspector() {
       nameInp.addEventListener("change", () => apply(() => (obj.name = clampName(nameInp.value))));
       root.appendChild(field("Name", nameInp));
       root.appendChild(roomPaletteEditor(obj, apply));
+
+      const shapeSel = document.createElement("select");
+      for (const s of ROOM_SHAPES) {
+        const opt = document.createElement("option");
+        opt.value = s;
+        opt.textContent = s === "box" ? "Box" : s;
+        if (clampRoomShape(obj.shape) === s) opt.selected = true;
+        shapeSel.appendChild(opt);
+      }
+      shapeSel.addEventListener("change", () => apply(() => applyRoomShape(obj, shapeSel.value)));
+      root.appendChild(field("Shape", shapeSel));
+
+      if (clampRoomShape(obj.shape) !== "box") {
+        const rotRow = document.createElement("div");
+        rotRow.className = "btn-row rot-axes";
+        for (const axis of ["x", "y", "z"]) {
+          const minus = document.createElement("button");
+          minus.type = "button";
+          minus.textContent = `−${axis}`;
+          minus.addEventListener("click", () => apply(() => rotateRoom(obj, axis, -1)));
+          const plus = document.createElement("button");
+          plus.type = "button";
+          plus.textContent = `+${axis}`;
+          plus.addEventListener("click", () => apply(() => rotateRoom(obj, axis, 1)));
+          rotRow.append(minus, plus);
+        }
+        root.appendChild(field("Rot", rotRow));
+      }
     }
     if (obj.kind === "enemy") {
       const sel = document.createElement("select");
@@ -1447,13 +1579,6 @@ function renderInspector() {
       rotWrap.append(rotInp, rotLbl);
       root.appendChild(field("Rot", rotWrap));
     }
-    root.appendChild(
-      vec3Field("XYZ", [
-        { value: obj.x, onChange: (v) => apply(() => (obj.x = v)), min: 0, max: 255 },
-        { value: obj.y, onChange: (v) => apply(() => (obj.y = v)), min: 0, max: 255 },
-        { value: obj.z, onChange: (v) => apply(() => (obj.z = v)), min: 0, max: 255 },
-      ])
-    );
     if (obj.kind === "trigger") {
       const ta = document.createElement("textarea");
       ta.rows = 3;
@@ -1516,7 +1641,42 @@ function renderInspector() {
       chk.addEventListener("change", () => apply(() => (obj.collide = chk.checked)));
       root.appendChild(field("Collide", chk));
     }
+    if (obj.kind !== "room") {
+      const sel = document.createElement("select");
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "(none)";
+      sel.appendChild(none);
+      for (const r of roomsOf(doc)) {
+        const opt = document.createElement("option");
+        opt.value = r.id;
+        opt.textContent = r.name ? `Room  ${r.name}` : "Room";
+        if (r.id === obj.roomId) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () =>
+        apply(() => {
+          obj.roomId = sel.value || null;
+          if (obj.kind === "doorway") assignDoorRooms(obj, roomById(doc, obj.roomId));
+        })
+      );
+      root.appendChild(field("Room", sel));
+    }
     if (obj.kind === "doorway") {
+      const sel = document.createElement("select");
+      const none = document.createElement("option");
+      none.value = "";
+      none.textContent = "(none)";
+      sel.appendChild(none);
+      for (const r of roomsOf(doc)) {
+        const opt = document.createElement("option");
+        opt.value = r.id;
+        opt.textContent = r.name ? `Room  ${r.name}` : "Room";
+        if (r.id === obj.otherRoomId) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () => apply(() => (obj.otherRoomId = sel.value || null)));
+      root.appendChild(field("Other room", sel));
       const lock = document.createElement("input");
       lock.type = "checkbox";
       lock.checked = !!obj.locked;
@@ -1531,27 +1691,12 @@ function renderInspector() {
       keyInp.addEventListener("change", () => apply(() => (obj.keyTag = clampTag(keyInp.value))));
       root.appendChild(field("Key", keyInp));
     }
-    if (obj.kind === "platform") {
-      root.appendChild(
-        vec3Field("Size", [
-          { value: obj.sx, onChange: (v) => apply(() => (obj.sx = v)), min: 1, max: 256 },
-          { value: obj.sz, onChange: (v) => apply(() => (obj.sz = v)), min: 1, max: 256 },
-        ])
-      );
-    } else if (!KINDS[obj.kind].fixed) {
-      root.appendChild(
-        vec3Field("Size", [
-          { value: obj.sx, onChange: (v) => apply(() => (obj.sx = v)), min: 1, max: 256 },
-          { value: obj.sy, onChange: (v) => apply(() => (obj.sy = v)), min: 1, max: 256 },
-          { value: obj.sz, onChange: (v) => apply(() => (obj.sz = v)), min: 1, max: 256 },
-        ])
-      );
-    } else {
-      const p = document.createElement("p");
-      p.className = "muted";
-      p.textContent = `Fixed size ${obj.sx}×${obj.sy}×${obj.sz}`;
-      root.appendChild(p);
-    }
+    const sizeP = document.createElement("p");
+    sizeP.className = "muted";
+    sizeP.textContent = KINDS[obj.kind].fixed
+      ? `Fixed size ${obj.sx}×${obj.sy}×${obj.sz}`
+      : `Size ${obj.sx}×${obj.sy}×${obj.sz}`;
+    root.appendChild(sizeP);
     if (obj.kind === "doorway" || obj.kind === "switch" || obj.kind === "crate") {
       const sel = document.createElement("select");
       for (const f of ["+z", "-z", "+x", "-x"]) {
@@ -1637,7 +1782,7 @@ function renderInspector() {
       if (e.clips?.length) {
         frameIndex = e.clips[clipIndex].start;
       }
-      markDirty();
+      markUi();
       refreshAll();
     });
     root.appendChild(field("Clip", clipSel));
@@ -1660,6 +1805,7 @@ function renderInspector() {
       if (e.clips?.length) {
         frameIndex = e.clips[clipIndex].start + frameLocal;
       }
+      markUi();
       animView.draw();
     });
     sliderRow.append(sliderLbl, slider);
@@ -1992,7 +2138,7 @@ function syncPlayUi() {
 
 function stepFrame(d) {
   if (!advanceFrame(d)) return;
-  markDirty();
+  markUi();
   refreshAll();
 }
 
@@ -2002,7 +2148,7 @@ function stepWeaponFrame(d) {
   let i = frames.indexOf(weaponFrame);
   if (i < 0) i = 0;
   weaponFrame = frames[(i + d + frames.length) % frames.length];
-  markDirty();
+  markUi();
   refreshAll();
 }
 
@@ -2108,19 +2254,18 @@ function setOverlayOn(on) {
   overlayOn = !!on;
   document.getElementById("btn-mdl-overlay")?.classList.toggle("active", overlayOn);
   if (editorMode === "anim") animView.draw();
+  markUi();
 }
 
-function setMdlScale(value, dirty = true) {
+function setMdlScale(value) {
   mdlScale = clampMdlScale(value);
   const range = document.getElementById("mdl-scale");
   const numInp = document.getElementById("mdl-scale-num");
   const shown = String(mdlScale);
   if (range && range.value !== shown) range.value = shown;
   if (numInp && numInp.value !== shown) numInp.value = shown;
-  if (dirty) {
-    markDirty();
-    if (editorMode === "anim") animView.draw();
-  }
+  if (editorMode === "anim") animView.draw();
+  markUi();
 }
 
 function nudgeVert(axis, delta) {
@@ -2166,15 +2311,12 @@ function refreshAll() {
 
 document.getElementById("btn-mode-layout").addEventListener("click", () => {
   setMode("layout");
-  markDirty();
 });
 document.getElementById("btn-mode-anim").addEventListener("click", () => {
   setMode("anim");
-  markDirty();
 });
 document.getElementById("btn-mode-weapons").addEventListener("click", () => {
   setMode("weapons");
-  markDirty();
 });
 document.getElementById("mdl-scale").addEventListener("input", (e) => {
   setMdlScale(e.target.value);
@@ -2210,11 +2352,9 @@ document.getElementById("btn-weapon-export")?.addEventListener("click", () => {
 });
 document.getElementById("btn-draw-all").addEventListener("click", () => {
   setDrawMode(false);
-  markDirty();
 });
 document.getElementById("btn-draw-local").addEventListener("click", () => {
   setDrawMode(true);
-  markDirty();
 });
 document.getElementById("btn-ortho-top").addEventListener("click", () => setOrthoMode("top"));
 document.getElementById("btn-ortho-left").addEventListener("click", () => setOrthoMode("left"));
@@ -2225,9 +2365,17 @@ document.getElementById("btn-save").addEventListener("click", async () => {
   await saveNow("Saved");
 });
 
+window.addEventListener("pagehide", () => persistEditorSettings());
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") persistEditorSettings();
+});
+
 function applyLoadedDoc(loaded) {
   doc = normalizeDocument(loaded);
-  applyEditorState(doc);
+  const stored = loadEditorSettings(docFileName());
+  applyEditorState(stored || loaded.editor || doc.editor);
+  if (doc.editor) delete doc.editor;
+  persistEditorSettings();
   clearUndoHistory();
   markClean();
   refreshAll();

@@ -2,7 +2,7 @@
 !zone door
 
 ; ------------------------------------------------------------------
-; set_room_idx — A = room; orients connected doors inward, flush to wall
+; set_room_idx — A = room; orients connected doors toward this room
 ; ------------------------------------------------------------------
 set_room_idx
 	sta room_idx
@@ -17,7 +17,7 @@ orient_doors_for_room
 .odf_rts
 	rts
 
-; X = door index; copy canonical, then snap to active room wall if linked
+; X = door index; copy canonical AABB, face = nearer plane to room_idx
 orient_one_door
 	lda door_x,x
 	sta door_vx,x
@@ -34,56 +34,160 @@ orient_one_door
 	beq .oo_go
 	lda door_rb,x
 	cmp room_idx
-	bne .oo_rts
+	beq .oo_go
+	rts
 .oo_go
-	ldy room_idx
-	; +Z wall: door flush on room max Z → face inward (-Z)
-	lda room_z,y
+	lda door_sz,x
+	cmp door_sx,x
+	bcc .oo_z			; sz < sx → Z slab
+	beq .oo_z
+	jmp .oo_x
+.oo_z
+	lda room_idx
+	asl
+	tay
+	jsr .oo_pickz
+	lda rc_sz,y
+	lsr
 	clc
-	adc room_sz,y
-	cmp door_z,x
-	bne .oo_mz
+	adc rc_z,y
+	sta pv0				; collider Z centre
+	lda pv0
+	sec
+	sbc door_z,x
+	jsr .oo_abs
+	sta pv1				; dist to z0
+	clc
+	lda door_z,x
+	adc door_sz,x
+	sta pv2				; z1
+	lda pv0
+	sec
+	sbc pv2
+	jsr .oo_abs
+	cmp pv1
+	bcc .oo_pz			; dist1 < dist0
 	lda #FACE_MZ
 	sta door_vface,x
-	jmp .oo_rts
-.oo_mz
-	; -Z wall: door flush before room min Z → face inward (+Z)
-	lda door_z,x
-	clc
-	adc door_sz,x
-	cmp room_z,y
-	bne .oo_px
-	lda room_z,y
-	sec
-	sbc door_sz,x
-	sta door_vz,x
+	rts
+.oo_pz
 	lda #FACE_PZ
 	sta door_vface,x
-	jmp .oo_rts
-.oo_px
-	; +X wall: door flush on room max X → face inward (-X)
-	lda room_x,y
+	rts
+.oo_x
+	lda room_idx
+	asl
+	tay
+	jsr .oo_pickx
+	lda rc_sx,y
+	lsr
 	clc
-	adc room_sx,y
-	cmp door_x,x
-	bne .oo_mx
+	adc rc_x,y
+	sta pv0
+	lda pv0
+	sec
+	sbc door_x,x
+	jsr .oo_abs
+	sta pv1
+	clc
+	lda door_x,x
+	adc door_sx,x
+	sta pv2
+	lda pv0
+	sec
+	sbc pv2
+	jsr .oo_abs
+	cmp pv1
+	bcc .oo_px
 	lda #FACE_MX
 	sta door_vface,x
-	jmp .oo_rts
-.oo_mx
-	; -X wall: door flush before room min X → face inward (+X)
-	lda door_x,x
-	clc
-	adc door_sx,x
-	cmp room_x,y
-	bne .oo_rts
-	lda room_x,y
-	sec
-	sbc door_sx,x
-	sta door_vx,x
+	rts
+.oo_px
 	lda #FACE_PX
 	sta door_vface,x
 .oo_rts
+	rts
+
+; A = signed difference (C from SBC); |A|
+.oo_abs
+	bcs .oo_ap
+	eor #$ff
+	clc
+	adc #1
+.oo_ap
+	rts
+
+; Y = collider 0. Prefer X-overlap, else first non-empty. Y = chosen.
+.oo_pickz
+	lda rc_sx,y
+	beq .oo_pz1
+	jsr .oo_ovx
+	bcs .oo_pr
+.oo_pz1
+	iny
+	lda rc_sx,y
+	beq .oo_pz0
+	jsr .oo_ovx
+	bcs .oo_pr
+.oo_pz0
+	dey
+	lda rc_sx,y
+	bne .oo_pr
+	iny
+.oo_pr
+	rts
+
+.oo_pickx
+	lda rc_sx,y
+	beq .oo_px1
+	jsr .oo_ovz
+	bcs .oo_pr
+.oo_px1
+	iny
+	lda rc_sx,y
+	beq .oo_px0
+	jsr .oo_ovz
+	bcs .oo_pr
+.oo_px0
+	dey
+	lda rc_sx,y
+	bne .oo_pr
+	iny
+	rts
+
+; C=1 door X overlaps collider Y
+.oo_ovx
+	clc
+	lda rc_x,y
+	adc rc_sx,y
+	cmp door_x,x
+	beq .oo_ov_no
+	bcc .oo_ov_no
+	clc
+	lda door_x,x
+	adc door_sx,x
+	cmp rc_x,y
+	beq .oo_ov_no
+	bcc .oo_ov_no
+	sec
+	rts
+.oo_ovz
+	clc
+	lda rc_z,y
+	adc rc_sz,y
+	cmp door_z,x
+	beq .oo_ov_no
+	bcc .oo_ov_no
+	clc
+	lda door_z,x
+	adc door_sz,x
+	cmp rc_z,y
+	beq .oo_ov_no
+	bcc .oo_ov_no
+	sec
+	rts
+.oo_ov_no
+	clc
 	rts
 
 ; ------------------------------------------------------------------
@@ -248,8 +352,7 @@ door_portal_ok
 	rts
 
 ; ------------------------------------------------------------------
-; try_room_switch — in an open door AABB: snap 1 unit into the other
-; room and switch. Else switch if already inside a neighbour room.
+; try_room_switch — if an open door's other room contains the player, switch
 ; ------------------------------------------------------------------
 try_room_switch
 	ldx #0
@@ -258,13 +361,6 @@ try_room_switch
 	bcs .trs_rts
 	lda door_open,x
 	beq .trs_n
-	txa
-	tay
-	jsr player_in_door_y
-	bcc .trs_nb
-	jsr door_push_through
-	rts
-.trs_nb
 	ldy door_ra,x
 	jsr .trs_inside
 	bcs .trs_rts
@@ -291,71 +387,6 @@ try_room_switch
 	rts
 .trs_no
 	clc
-	rts
-
-; X=door, player in its AABB. Place PLAYER_R inside the other room.
-door_push_through
-	jsr door_other_room
-	cmp #$ff
-	beq .dpt_rts
-	sta proc_tmp0
-	lda door_vface,x
-	cmp #FACE_PX
-	bcs .dpt_x
-	ldy proc_tmp0
-	lda room_z,y
-	ldy room_idx
-	cmp room_z,y
-	bcc .dpt_zd
-	ldy proc_tmp0
-	clc
-	lda room_z,y
-	adc #PLAYER_R
-	sta cam_zh
-	lda #0
-	sta cam_zl
-	jmp .dpt_sw
-.dpt_zd
-	ldy proc_tmp0
-	clc
-	lda room_z,y
-	adc room_sz,y
-	sec
-	sbc #1
-	sbc #PLAYER_R
-	sta cam_zh
-	lda #0
-	sta cam_zl
-	jmp .dpt_sw
-.dpt_x
-	ldy proc_tmp0
-	lda room_x,y
-	ldy room_idx
-	cmp room_x,y
-	bcc .dpt_xd
-	ldy proc_tmp0
-	clc
-	lda room_x,y
-	adc #PLAYER_R
-	sta cam_xh
-	lda #0
-	sta cam_xl
-	jmp .dpt_sw
-.dpt_xd
-	ldy proc_tmp0
-	clc
-	lda room_x,y
-	adc room_sx,y
-	sec
-	sbc #1
-	sbc #PLAYER_R
-	sta cam_xh
-	lda #0
-	sta cam_xl
-.dpt_sw
-	lda proc_tmp0
-	jsr set_room_idx
-.dpt_rts
 	rts
 
 ; ------------------------------------------------------------------

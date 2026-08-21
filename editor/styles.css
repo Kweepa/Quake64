@@ -611,6 +611,16 @@ button:disabled {
   align-items: center;
 }
 
+.btn-row.rot-axes {
+  flex-wrap: nowrap;
+  margin-top: 0;
+}
+
+.btn-row.rot-axes button {
+  min-width: 2.2rem;
+  padding: 0.2rem 0.35rem;
+}
+
 .check-inline {
   display: inline-flex;
   align-items: center;

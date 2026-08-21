@@ -21,6 +21,43 @@ export function hasDocFileHandle() {
   return !!docFileHandle;
 }
 
+const EDITOR_SETTINGS_KEY = "quake64-editor-settings";
+
+function isFlatEditorState(obj) {
+  return !!obj && typeof obj === "object" && (obj.layoutCamera || obj.mode || obj.animOrbit);
+}
+
+export function loadEditorSettings(fileName) {
+  try {
+    const raw = localStorage.getItem(EDITOR_SETTINGS_KEY);
+    if (!raw) return null;
+    const all = JSON.parse(raw);
+    if (!all || typeof all !== "object") return null;
+    if (isFlatEditorState(all)) return all;
+    const name = fileName || DEFAULT_DOC_PATH;
+    return all[name] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveEditorSettings(fileName, state) {
+  try {
+    const name = fileName || DEFAULT_DOC_PATH;
+    let all = {};
+    try {
+      all = JSON.parse(localStorage.getItem(EDITOR_SETTINGS_KEY) || "{}") || {};
+    } catch {
+      all = {};
+    }
+    if (isFlatEditorState(all)) all = { [name]: all };
+    all[name] = state;
+    localStorage.setItem(EDITOR_SETTINGS_KEY, JSON.stringify(all));
+  } catch {
+    /* private mode / quota */
+  }
+}
+
 function openHandleDb() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(HANDLE_DB, 1);
@@ -77,8 +114,14 @@ async function ensurePermission(handle, mode = "readwrite") {
   return (await handle.requestPermission(opts)) === "granted";
 }
 
+function withoutEditor(doc) {
+  if (!doc || typeof doc !== "object") return doc;
+  const { editor: _editor, ...rest } = doc;
+  return rest;
+}
+
 async function writeDocToHandle(handle, doc) {
-  const text = JSON.stringify(doc, null, 2);
+  const text = JSON.stringify(withoutEditor(doc), null, 2);
   const writable = await handle.createWritable();
   await writable.write(text);
   await writable.close();
@@ -346,7 +389,7 @@ export async function writePngFile(dirHandle, filename, blob) {
 }
 
 export function downloadJSON(doc, filename = DEFAULT_DOC_PATH) {
-  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+  const blob = new Blob([JSON.stringify(withoutEditor(doc), null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

@@ -1,4 +1,4 @@
-; HUD ms readout — Quake 8×8 font in UI charset $F000 (ASCII screen codes)
+; 40-col HUD — Quake 8×8 font in UI charset $F000 (ASCII screen codes)
 !zone hud
 
 init_hud
@@ -24,14 +24,100 @@ init_hud
 	dex
 	bne .copy
 
+	; rows 0–8 (360 bytes): spaces on both matrices, orange colour
 	ldx #0
 	lda #HUD_CH_SP
--
-	sta SCR_A + HUD_OFF,x
-	sta SCR_B + HUD_OFF,x
+-	sta SCR_A,x
+	sta SCR_B,x
 	inx
-	cpx #24
 	bne -
+	ldx #0
+-	sta SCR_A + 256,x
+	sta SCR_B + 256,x
+	inx
+	cpx #104
+	bne -
+	ldx #0
+	lda #COL_HUD
+-	sta $d800,x
+	inx
+	bne -
+	ldx #0
+-	sta $d800 + 256,x
+	inx
+	cpx #104
+	bne -
+
+	ldx #0
+-	lda hud_str_title,x
+	beq +
+	sta SCR_A + HUD_OFF_TITLE + HUD_TITLE_COL,x
+	sta SCR_B + HUD_OFF_TITLE + HUD_TITLE_COL,x
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF_TITLE + HUD_TITLE_COL,x
+	inx
+	bne -
++
+	ldy #0
+-	lda map_name,y
+	beq +
+	iny
+	cpy #HUD_MSG_W
+	bcc -
++	sty hud_n
+	lda #HUD_MSG_W
+	sec
+	sbc hud_n
+	lsr
+	tax
+	ldy #0
+.imap
+	lda map_name,y
+	beq .imap_done
+	sta SCR_A + HUD_OFF_MAP,x
+	sta SCR_B + HUD_OFF_MAP,x
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF_MAP,x
+	inx
+	iny
+	cpy #HUD_MSG_W
+	bcc .imap
+.imap_done
+
+	lda #HUD_CH_SHELL
+	sta SCR_A + HUD_OFF_SHELL + HUD_AMMO_ICON
+	sta SCR_B + HUD_OFF_SHELL + HUD_AMMO_ICON
+	lda #HUD_CH_NAIL
+	sta SCR_A + HUD_OFF_NAIL + HUD_AMMO_ICON
+	sta SCR_B + HUD_OFF_NAIL + HUD_AMMO_ICON
+	lda #HUD_CH_GREN
+	sta SCR_A + HUD_OFF_GREN + HUD_AMMO_ICON
+	sta SCR_B + HUD_OFF_GREN + HUD_AMMO_ICON
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF_SHELL + HUD_AMMO_ICON
+	sta $d800 + HUD_OFF_NAIL + HUD_AMMO_ICON
+	sta $d800 + HUD_OFF_GREN + HUD_AMMO_ICON
+
+	ldx #0
+-	lda hud_str_health,x
+	beq +
+	sta SCR_A + HUD_OFF_SHELL + HUD_HP_LABEL,x
+	sta SCR_B + HUD_OFF_SHELL + HUD_HP_LABEL,x
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF_SHELL + HUD_HP_LABEL,x
+	inx
+	bne -
++
+	ldx #0
+-	lda hud_str_armour,x
+	beq +
+	sta SCR_A + HUD_OFF_SHELL + HUD_AR_LABEL,x
+	sta SCR_B + HUD_OFF_SHELL + HUD_AR_LABEL,x
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF_SHELL + HUD_AR_LABEL,x
+	inx
+	bne -
++
 
 !if PROFILE = 1 {
 	lda #HUD_CH_R
@@ -46,47 +132,25 @@ init_hud
 	lda #HUD_CH_D
 	sta SCR_A + HUD_OFF + 19
 	sta SCR_B + HUD_OFF + 19
-}
-
-	ldx #0
-	lda #0
--	sta $da80,x
-	inx
-	bne -
-	ldx #0
--
-	sta $db80,x
-	inx
-	cpx #104
-	bne -
-
-	ldx #23
--
-	lda #COL_HUD
-	sta $d800 + HUD_OFF,x
-	dex
-	bpl -
-!if PROFILE = 1 {
 	lda #COL_HUD_DIM
 	sta $d800 + HUD_OFF + 4
 	sta $d800 + HUD_OFF + 9
 	sta $d800 + HUD_OFF + 14
 	sta $d800 + HUD_OFF + 19
+	lda #HUD_CH_R
+	sta SCR_A + HUD_OFF2
+	sta SCR_B + HUD_OFF2
+	lda #HUD_CH_P
+	sta SCR_A + HUD_OFF2 + 4
+	sta SCR_B + HUD_OFF2 + 4
+	lda #HUD_CH_K
+	sta SCR_A + HUD_OFF2 + 8
+	sta SCR_B + HUD_OFF2 + 8
+	lda #COL_HUD_DIM
+	sta $d800 + HUD_OFF2
+	sta $d800 + HUD_OFF2 + 4
+	sta $d800 + HUD_OFF2 + 8
 }
-	ldx #0
-	lda #HUD_CH_SP
--
-	sta SCR_A + HUD_OFF2,x
-	sta SCR_B + HUD_OFF2,x
-	inx
-	cpx #24
-	bne -
-	ldx #23
--
-	lda #COL_HUD
-	sta $d800 + HUD_OFF2,x
-	dex
-	bpl -
 
 !if HUD_POS = 1 {
 	lda #HUD_CH_X
@@ -111,89 +175,16 @@ init_hud
 	sta $d800 + HUD_OFF2 + 15
 	sta $d800 + HUD_OFF2 + 19
 }
-
-	ldx #0
-	lda #HUD_CH_SP
--
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
-	inx
-	cpx #24
-	bne -
-	ldx #23
--
-	lda #COL_HUD
-	sta $d800 + HUD_OFF3,x
-	dex
-	bpl -
-!if PROFILE = 1 {
-	lda #HUD_CH_R
-	sta SCR_A + HUD_OFF3
-	sta SCR_B + HUD_OFF3
-	lda #HUD_CH_P
-	sta SCR_A + HUD_OFF3 + 4
-	sta SCR_B + HUD_OFF3 + 4
-	lda #HUD_CH_K
-	sta SCR_A + HUD_OFF3 + 8
-	sta SCR_B + HUD_OFF3 + 8
-	lda #COL_HUD_DIM
-	sta $d800 + HUD_OFF3
-	sta $d800 + HUD_OFF3 + 4
-	sta $d800 + HUD_OFF3 + 8
-	lda #HUD_CH_SHELL
-	sta SCR_A + HUD_OFF3 + 12
-	sta SCR_B + HUD_OFF3 + 12
-	lda #HUD_CH_NAIL
-	sta SCR_A + HUD_OFF3 + 16
-	sta SCR_B + HUD_OFF3 + 16
-	lda #HUD_CH_GREN
-	sta SCR_A + HUD_OFF3 + 20
-	sta SCR_B + HUD_OFF3 + 20
-	lda #COL_HUD_DIM
-	sta $d800 + HUD_OFF3 + 12
-	sta $d800 + HUD_OFF3 + 16
-	sta $d800 + HUD_OFF3 + 20
-} else {
-	lda #HUD_CH_SHELL
-	sta SCR_A + HUD_OFF3
-	sta SCR_B + HUD_OFF3
-	lda #HUD_CH_NAIL
-	sta SCR_A + HUD_OFF3 + 4
-	sta SCR_B + HUD_OFF3 + 4
-	lda #HUD_CH_GREN
-	sta SCR_A + HUD_OFF3 + 8
-	sta SCR_B + HUD_OFF3 + 8
-	lda #COL_HUD_DIM
-	sta $d800 + HUD_OFF3
-	sta $d800 + HUD_OFF3 + 4
-	sta $d800 + HUD_OFF3 + 8
-}
-
-	ldx #0
-	lda #HUD_CH_SP
--
-	sta SCR_A + HUD_OFF4,x
-	sta SCR_B + HUD_OFF4,x
-	inx
-	cpx #HUD_MSG_W
-	bne -
-	ldx #23
--
-	lda #COL_HUD
-	sta $d800 + HUD_OFF4,x
-	dex
-	bpl -
 	rts
 
-; Row 1: frame ms (HUD_FRAME_MS) + R/P/K/D buckets (PROFILE)
-; Row 2: X/Y/Z/yaw/pitch (HUD_POS)
-; Row 3: vertex counts RNNNPNNNKNNN (PROFILE=1)
+; Row 0: frame ms FFF (HUD_FRAME_MS) + R/P/K/D buckets (PROFILE)
+; Row 3: X/Y/Z/yaw/pitch (HUD_POS) or vertex counts (PROFILE)
 hud_print
 !if HUD_FRAME_MS = 1 {
 	ldx #0
 	lda dt_msh
 	ldy dt_ms
-	jsr .dec4
+	jsr .dec3
 }
 !if PROFILE = 1 {
 	ldx #5
@@ -245,33 +236,38 @@ hud_print
 }
 	rts
 
-; Shell/nail/grenade counts at HUD_OFF3: {NNN|NNN}NNN (col 0, or 12 if PROFILE)
-; Call on init, after spend, and after backpack grant — not every frame.
+; Ammo + health + armour. Call on init, spend, backpack, damage — not every frame.
 hud_ammo
-!if PROFILE = 1 {
-	ldx #13
-} else {
-	ldx #1
-}
+	lda #<SCR_A + HUD_OFF_SHELL
+	sta dst_ptr
+	lda #>SCR_A + HUD_OFF_SHELL
+	sta dst_ptr+1
+	ldx #HUD_AMMO_NUM
 	lda ammo_shells
-	jsr .u8_3h
-!if PROFILE = 1 {
-	ldx #17
-} else {
-	ldx #5
-}
+	jsr .u8_3at
+	lda #<SCR_A + HUD_OFF_NAIL
+	sta dst_ptr
+	lda #>SCR_A + HUD_OFF_NAIL
+	sta dst_ptr+1
+	ldx #HUD_AMMO_NUM
 	lda ammo_nails
-	jsr .u8_3h
-!if PROFILE = 1 {
-	ldx #21
-} else {
-	ldx #9
-}
+	jsr .u8_3at
+	lda #<SCR_A + HUD_OFF_GREN
+	sta dst_ptr
+	lda #>SCR_A + HUD_OFF_GREN
+	sta dst_ptr+1
+	ldx #HUD_AMMO_NUM
 	lda ammo_grenades
+	jsr .u8_3at
+	ldx #HUD_HP_NUM
+	lda player_hp
+	jsr .u8_3at
+	ldx #HUD_AR_NUM
+	lda player_armour
 	; fall through
 
-; A unsigned → 3 digits at HUD_OFF3+X (pp_col)
-.u8_3h
+; A unsigned → 3 digits at (dst_ptr)+X on both screens (pp_col)
+.u8_3at
 	stx pp_col
 	sta pp_tmp_l
 	ldx #0
@@ -306,16 +302,27 @@ hud_ammo
 	sta pp_tmp_l
 	ldx pp_col
 	lda hud_n
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
+	jsr .sta2
 	inx
 	lda pp_tmp_h
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
+	jsr .sta2
 	inx
 	lda pp_tmp_l
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
+.sta2
+	pha
+	txa
+	tay
+	pla
+	sta (dst_ptr),y
+	pha
+	lda dst_ptr+1
+	eor #>(SCR_A ^ SCR_B)
+	sta dst_ptr+1
+	pla
+	sta (dst_ptr),y
+	lda dst_ptr+1
+	eor #>(SCR_A ^ SCR_B)
+	sta dst_ptr+1
 	rts
 
 !if HUD_POS = 1 {
@@ -389,7 +396,7 @@ hud_ammo
 	rts
 }
 
-!if HUD_FRAME_MS + PROFILE > 0 {
+!if PROFILE = 1 {
 ; A:Y = cy[2]:cy[1] → ms (>>2) then 4 digits at HUD_OFF+X
 .ms4
 	sta pp_tmp_h
@@ -501,9 +508,45 @@ hud_ammo
 	rts
 }
 
-; A:Y = 16-bit → 3 ASCII digits at HUD_OFF3+X; saturate 999
+; A:Y = 16-bit → 3 ASCII digits; saturate 999. .dec3 → HUD_OFF, .dec3n → HUD_OFF3
+!if HUD_FRAME_MS = 1 {
+.dec3
+	stx pp_col
+	jsr .d3conv
+	ldx pp_col
+	lda hud_n
+	sta SCR_A + HUD_OFF,x
+	sta SCR_B + HUD_OFF,x
+	inx
+	lda pp_tmp_h
+	sta SCR_A + HUD_OFF,x
+	sta SCR_B + HUD_OFF,x
+	inx
+	lda pp_tmp_l
+	sta SCR_A + HUD_OFF,x
+	sta SCR_B + HUD_OFF,x
+	rts
+}
+!if PROFILE = 1 {
 .dec3n
 	stx pp_col
+	jsr .d3conv
+	ldx pp_col
+	lda hud_n
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	lda pp_tmp_h
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	inx
+	lda pp_tmp_l
+	sta SCR_A + HUD_OFF3,x
+	sta SCR_B + HUD_OFF3,x
+	rts
+}
+!if HUD_FRAME_MS + PROFILE > 0 {
+.d3conv
 	sta pp_tmp_h
 	sty pp_tmp_l
 	cmp #>1000
@@ -516,7 +559,7 @@ hud_ammo
 	sta hud_n
 	sta pp_tmp_h
 	sta pp_tmp_l
-	jmp .d3out
+	rts
 .d3go
 	ldx #0
 .d3hlp
@@ -556,22 +599,10 @@ hud_ammo
 	lda pp_tmp_l
 	ora #$30
 	sta pp_tmp_l
-.d3out
-	ldx pp_col
-	lda hud_n
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
-	inx
-	lda pp_tmp_h
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
-	inx
-	lda pp_tmp_l
-	sta SCR_A + HUD_OFF3,x
-	sta SCR_B + HUD_OFF3,x
 	rts
+}
 
-; Message trigger on HUD_ROW4, centered in the 24-col viewport
+; Message trigger on HUD_ROW4, centered in 40 cols
 hud_message
 	lda msg_on
 	bne .hm_show
@@ -626,6 +657,11 @@ hud_message
 	bcc .hm_cp
 .hm_done
 	rts
+
+; ASCII (UI charset), not PETSCII
+hud_str_title	!byte 81,117,97,107,101,54,52,0	; Quake64
+hud_str_health	!byte 72,101,97,108,116,104,0		; Health
+hud_str_armour	!byte 65,114,109,111,117,114,0		; Armour
 
 ui_font
 	!source "uifont.asm"

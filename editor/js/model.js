@@ -1,3 +1,39 @@
+import {
+  ROOM_SHAPES,
+  clampRoomShape,
+  clampRoomSplits,
+  applyRoomShape,
+  roomGeometry,
+  pointInRoom,
+  aabbOverlapsRoom,
+  roomFloorY,
+  snapDoorToRoom,
+  doorNearFaceId,
+  nudgeDoorOutside,
+  rotateRoom,
+  preserveRoomSplits,
+  roomBasis,
+  defaultRoomSplits,
+} from "./roomGeom.js";
+
+export {
+  ROOM_SHAPES,
+  clampRoomShape,
+  clampRoomSplits,
+  applyRoomShape,
+  roomGeometry,
+  pointInRoom,
+  aabbOverlapsRoom,
+  roomFloorY,
+  snapDoorToRoom,
+  doorNearFaceId,
+  nudgeDoorOutside,
+  rotateRoom,
+  preserveRoomSplits,
+  roomBasis,
+  defaultRoomSplits,
+};
+
 export function uid() {
   if (globalThis.crypto?.randomUUID) return crypto.randomUUID();
   return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -31,7 +67,7 @@ export const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
 export const ANIM_ORBIT_DIST_MIN = 16;
 export const ANIM_ORBIT_DIST_MAX = 400;
-export const DOC_VERSION = 6;
+export const DOC_VERSION = 7;
 export const DEFAULT_WEAPON_SCALE = 0.4;
 export const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
 export const WEAPON_LABELS = {
@@ -561,6 +597,10 @@ export function clampObject(obj) {
     obj.weaponColor = normalizeColor(obj.weaponColor, ROOM_WPN_DEFAULT);
     delete obj.skyColor;
     delete obj.floorColor;
+    clampRoomSplits(obj);
+  } else {
+    if (obj.roomId != null) obj.roomId = String(obj.roomId);
+    else obj.roomId = null;
   }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
@@ -569,6 +609,8 @@ export function clampObject(obj) {
   if (obj.kind === "doorway") {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
+    if (obj.otherRoomId != null) obj.otherRoomId = String(obj.otherRoomId);
+    else obj.otherRoomId = null;
   }
   if (obj.kind === "platform") {
     obj.sy = 1;
@@ -612,6 +654,20 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.lineColor = normalizeColor(extra.lineColor, ROOM_LINE_DEFAULT);
     obj.fxColor = normalizeColor(extra.fxColor, ROOM_FX_DEFAULT);
     obj.weaponColor = normalizeColor(extra.weaponColor, ROOM_WPN_DEFAULT);
+    obj.shape = clampRoomShape(extra.shape);
+    obj.flip = !!extra.flip;
+    obj.rx = extra.rx | 0;
+    obj.ry = extra.ry | 0;
+    obj.rz = extra.rz | 0;
+    obj.cutU = extra.cutU | 0;
+    obj.cutV = extra.cutV | 0;
+    obj.stemW = extra.stemW | 0;
+    obj.stemPos = extra.stemPos | 0;
+    obj.barD = extra.barD | 0;
+    obj.shift = extra.shift | 0;
+    obj.mid = extra.mid | 0;
+  } else if (extra.roomId) {
+    obj.roomId = String(extra.roomId);
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
@@ -620,6 +676,7 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (kind === "doorway") {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
+    if (extra.otherRoomId) obj.otherRoomId = String(extra.otherRoomId);
   }
   if (kind === "platform") obj.collide = extra.collide !== false;
   return clampObject(obj);
@@ -752,11 +809,20 @@ export function mapStats(doc) {
       continue; // already counted in the fixed 5
     }
     c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
+    if (kind === "room") {
+      c64Bytes += 12; // two collider slots
+      if (clampRoomShape(obj.shape) !== "box") {
+        const g = roomGeometry(obj);
+        const nx = new Set(g.verts.map((v) => v.x)).size;
+        const nz = new Set(g.verts.map((v) => v.z)).size;
+        c64Bytes += 8 + nx + nz + g.verts.length * 4 + g.edges.length * 3;
+      }
+    }
     if (kind === "trigger") {
       const text = String(obj.text || "")
         .replace(/\r\n/g, "\n")
         .split("\n", 1)[0]
-        .slice(0, 24);
+        .slice(0, 40);
       c64Bytes += text.length + 1; // chars + NUL in map_text
     }
   }
@@ -829,29 +895,38 @@ export function doorwaysOf(doc) {
 }
 
 export function currentRoom(doc, cam) {
-  const rooms = roomsOf(doc).filter((r) => pointInAabb(cam, r));
+  const rooms = roomsOf(doc).filter((r) => pointInRoom(cam, r));
   if (!rooms.length) return null;
   rooms.sort((a, b) => aabbVolume(a) - aabbVolume(b));
   return rooms[0];
 }
 
+export function roomById(doc, id) {
+  if (!id) return null;
+  return roomsOf(doc).find((r) => r.id === id) || null;
+}
+
 export function roomUnderObject(doc, obj) {
-  if (obj.kind === "room") return null;
-  const hits = roomsOf(doc).filter((r) => aabbOverlap(obj, r));
-  if (!hits.length) return null;
-  hits.sort((a, b) => aabbVolume(a) - aabbVolume(b));
-  return hits[0];
+  if (!obj || obj.kind === "room") return null;
+  return roomById(doc, obj.roomId);
 }
 
 /** Rooms that contain / overlap an object (doors may sit in two). */
 export function roomsForObject(doc, obj) {
   if (!obj || obj.kind === "room") return [];
-  return roomsOf(doc).filter((r) => aabbOverlap(obj, r));
+  const out = [];
+  const a = roomById(doc, obj.roomId);
+  if (a) out.push(a);
+  if (obj.kind === "doorway") {
+    const b = roomById(doc, obj.otherRoomId);
+    if (b && b.id !== a?.id) out.push(b);
+  }
+  return out;
 }
 
 /**
  * Shallow room → children tree for the Objects panel.
- * Doors appear under every overlapping room; other objects under the smallest room.
+ * Doors appear under owner and associated room; other objects under roomId.
  */
 export function objectTree(doc) {
   const map = activeMap(doc);
@@ -862,11 +937,10 @@ export function objectTree(doc) {
     for (const obj of map.objects) {
       if (obj.kind === "room") continue;
       if (obj.kind === "doorway") {
-        if (aabbOverlap(obj, room)) children.push(obj);
+        if (obj.roomId === room.id || obj.otherRoomId === room.id) children.push(obj);
         continue;
       }
-      const under = roomUnderObject(doc, obj);
-      if (under && under.id === room.id) {
+      if (obj.roomId === room.id) {
         children.push(obj);
         claimed.add(obj.id);
       }
@@ -875,10 +949,18 @@ export function objectTree(doc) {
   });
   const orphans = map.objects.filter((o) => {
     if (o.kind === "room") return false;
-    if (o.kind === "doorway") return !rooms.some((r) => aabbOverlap(o, r));
+    if (o.kind === "doorway") return !roomById(doc, o.roomId) && !roomById(doc, o.otherRoomId);
     return !claimed.has(o.id);
   });
   return { nodes, orphans };
+}
+
+export function inferDoorOtherRoom(doc, door) {
+  if (!door || door.kind !== "doorway") return null;
+  const hits = roomsOf(doc).filter((r) => r.id !== door.roomId && aabbOverlapsRoom(door, r));
+  if (!hits.length) return null;
+  hits.sort((a, b) => aabbVolume(a) - aabbVolume(b));
+  return hits[0];
 }
 
 export function neighbourRooms(doc, room) {
@@ -887,7 +969,11 @@ export function neighbourRooms(doc, room) {
   const out = [];
   for (const other of roomsOf(doc)) {
     if (other.id === room.id) continue;
-    const linked = doors.some((d) => aabbOverlap(d, room) && aabbOverlap(d, other));
+    const linked = doors.some(
+      (d) =>
+        (d.roomId === room.id && d.otherRoomId === other.id) ||
+        (d.roomId === other.id && d.otherRoomId === room.id)
+    );
     if (linked) out.push(other);
   }
   return out;
@@ -900,9 +986,12 @@ export function localVisibleIds(doc, cam) {
   const neigh = neighbourRooms(doc, cur);
   for (const r of neigh) ids.add(r.id);
   const rooms = [cur, ...neigh];
+  const roomIds = new Set(rooms.map((r) => r.id));
   for (const obj of activeMap(doc).objects) {
     if (obj.kind === "room") continue;
-    if (rooms.some((r) => aabbOverlap(obj, r))) ids.add(obj.id);
+    if (roomIds.has(obj.roomId) || (obj.kind === "doorway" && roomIds.has(obj.otherRoomId))) {
+      ids.add(obj.id);
+    }
   }
   return ids;
 }
@@ -1055,6 +1144,20 @@ function parseObjects(list) {
       lineColor: o.lineColor,
       fxColor: o.fxColor,
       weaponColor: o.weaponColor,
+      shape: o.shape,
+      flip: o.flip,
+      rx: o.rx,
+      ry: o.ry,
+      rz: o.rz,
+      cutU: o.cutU,
+      cutV: o.cutV,
+      stemW: o.stemW,
+      stemPos: o.stemPos,
+      barD: o.barD,
+      shift: o.shift,
+      mid: o.mid,
+      roomId: o.roomId,
+      otherRoomId: o.otherRoomId,
     });
     if (!KINDS[o.kind].fixed) {
       obj.sx = o.sx ?? obj.sx;
@@ -1073,8 +1176,23 @@ function parseObjects(list) {
       if (o.lineColor != null) obj.lineColor = normalizeColor(o.lineColor, ROOM_LINE_DEFAULT);
       if (o.fxColor != null) obj.fxColor = normalizeColor(o.fxColor, ROOM_FX_DEFAULT);
       if (o.weaponColor != null) obj.weaponColor = normalizeColor(o.weaponColor, ROOM_WPN_DEFAULT);
+      if (o.shape != null) obj.shape = clampRoomShape(o.shape);
+      if (o.flip != null) obj.flip = !!o.flip;
+      if (o.rx != null) obj.rx = o.rx | 0;
+      if (o.ry != null) obj.ry = o.ry | 0;
+      if (o.rz != null) obj.rz = o.rz | 0;
+      if (o.cutU != null) obj.cutU = o.cutU | 0;
+      if (o.cutV != null) obj.cutV = o.cutV | 0;
+      if (o.stemW != null) obj.stemW = o.stemW | 0;
+      if (o.stemPos != null) obj.stemPos = o.stemPos | 0;
+      if (o.barD != null) obj.barD = o.barD | 0;
+      if (o.shift != null) obj.shift = o.shift | 0;
+      if (o.mid != null) obj.mid = o.mid | 0;
       delete obj.skyColor;
       delete obj.floorColor;
+    }
+    if (o.kind !== "room") {
+      if (o.roomId != null) obj.roomId = String(o.roomId);
     }
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
@@ -1083,6 +1201,7 @@ function parseObjects(list) {
     if (o.kind === "doorway") {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);
+      if (o.otherRoomId != null) obj.otherRoomId = String(o.otherRoomId);
     }
     if (o.kind === "platform" && o.collide != null) obj.collide = o.collide !== false;
     out.push(clampObject(obj));
@@ -1099,8 +1218,8 @@ function starterObjects() {
   roomB.sx = 24;
   roomB.sy = 12;
   roomB.sz = 24;
-  const door = createObject("doorway", 31, 0, 16, { face: "+x" });
-  const crate = createObject("crate", 14, 0, 14);
+  const door = createObject("doorway", 31, 0, 16, { face: "+x", roomId: roomA.id, otherRoomId: roomB.id });
+  const crate = createObject("crate", 14, 0, 14, { roomId: roomA.id });
   return [roomA, roomB, door, crate];
 }
 
@@ -1111,12 +1230,18 @@ export function defaultEditorState() {
     selectedIds: [],
     enemy: "Grunt",
     frameIndex: 0,
+    clipIndex: 0,
+    frameLocal: 0,
     selectedVerts: [],
     layoutCamera: { x: 28, y: 10, z: -6, yaw: 0.35, pitch: -0.2, speed: 28 },
     animOrbit: { yaw: 0.5, pitch: 0.15, dist: 48 },
     mdlScale: DEFAULT_MDL_SCALE,
     weapon: "axe",
     weaponFrame: 0,
+    overlayOn: true,
+    orthoMode: "top",
+    collapsedRooms: [],
+    activeLevel: null,
   };
 }
 
@@ -1181,6 +1306,8 @@ export function parseEditorState(raw) {
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
   d.frameIndex = Math.max(0, num(raw.frameIndex, 0) | 0);
+  d.clipIndex = Math.max(0, num(raw.clipIndex, 0) | 0);
+  d.frameLocal = Math.max(0, num(raw.frameLocal, 0) | 0);
   if (Array.isArray(raw.selectedVerts)) {
     d.selectedVerts = raw.selectedVerts.map((i) => i | 0).filter((i) => i >= 0 && i < 13);
   }
@@ -1208,7 +1335,28 @@ export function parseEditorState(raw) {
   }
   if (typeof raw.weapon === "string" && WEAPON_KEYS.includes(raw.weapon)) d.weapon = raw.weapon;
   d.weaponFrame = Math.max(0, num(raw.weaponFrame, 0) | 0);
+  if (raw.overlayOn != null) d.overlayOn = !!raw.overlayOn;
+  if (raw.orthoMode === "top" || raw.orthoMode === "left" || raw.orthoMode === "forward") {
+    d.orthoMode = raw.orthoMode;
+  }
+  if (Array.isArray(raw.collapsedRooms)) d.collapsedRooms = raw.collapsedRooms.map(String);
+  if (typeof raw.activeLevel === "string" && LEVEL_NAMES.includes(raw.activeLevel)) {
+    d.activeLevel = raw.activeLevel;
+  } else {
+    d.activeLevel = null;
+  }
   return d;
+}
+
+/** Game JSON only — no editor camera/tab/selection. */
+export function gameDocument(doc) {
+  return {
+    version: doc.version,
+    activeLevel: doc.activeLevel,
+    maps: doc.maps,
+    enemies: doc.enemies,
+    weapons: doc.weapons,
+  };
 }
 
 export function createDefaultDocument() {
@@ -1221,7 +1369,6 @@ export function createDefaultDocument() {
     maps,
     enemies: createAllCreatures(),
     weapons: defaultWeapons(),
-    editor: defaultEditorState(),
   };
 }
 
@@ -1229,9 +1376,50 @@ export function cloneDoc(doc) {
   return JSON.parse(JSON.stringify(doc));
 }
 
+function nudgeDoorsOutside(doc) {
+  for (const name of LEVEL_NAMES) {
+    const map = doc.maps[name];
+    if (!map) continue;
+    const rooms = map.objects.filter((o) => o.kind === "room");
+    const byId = new Map(rooms.map((r) => [r.id, r]));
+    for (const obj of map.objects) {
+      if (obj.kind !== "doorway") continue;
+      const room = byId.get(obj.roomId) || byId.get(obj.otherRoomId);
+      if (room) nudgeDoorOutside(obj, room);
+    }
+  }
+}
+
+function migrateRoomParents(doc) {
+  for (const name of LEVEL_NAMES) {
+    const map = doc.maps[name];
+    if (!map) continue;
+    const rooms = map.objects.filter((o) => o.kind === "room");
+    for (const obj of map.objects) {
+      if (obj.kind === "room") continue;
+      if (obj.kind === "doorway") {
+        const hits = rooms.filter((r) => aabbOverlap(obj, r));
+        hits.sort((a, b) => aabbVolume(a) - aabbVolume(b));
+        if (!obj.roomId) obj.roomId = hits[0]?.id || null;
+        if (!obj.otherRoomId) obj.otherRoomId = hits[1]?.id || hits.find((r) => r.id !== obj.roomId)?.id || null;
+        continue;
+      }
+      if (obj.roomId) continue;
+      const hits = rooms.filter((r) => aabbOverlap(obj, r));
+      if (!hits.length) {
+        obj.roomId = null;
+        continue;
+      }
+      hits.sort((a, b) => aabbVolume(a) - aabbVolume(b));
+      obj.roomId = hits[0].id;
+    }
+  }
+}
+
 export function normalizeDocument(raw) {
   const doc = createDefaultDocument();
   if (!raw || typeof raw !== "object") return doc;
+  const fromVersion = Number(raw.version) || 0;
   if (raw.maps && typeof raw.maps === "object") {
     for (const name of LEVEL_NAMES) {
       const src = raw.maps[name] || {};
@@ -1270,6 +1458,8 @@ export function normalizeDocument(raw) {
     }
   }
   if (!doc.enemies.length) doc.enemies = createAllCreatures();
+  if (fromVersion < 7) migrateRoomParents(doc);
+  nudgeDoorsOutside(doc);
   doc.version = DOC_VERSION;
   doc.weapons = parseWeapons(raw.weapons);
   doc.editor = parseEditorState(raw.editor);

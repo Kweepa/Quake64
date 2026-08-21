@@ -9,7 +9,7 @@ import {
   colorHex,
   ROOM_BG_DEFAULT,
   ROOM_LINE_DEFAULT,
-  ROOM_LINE_DEFAULT,
+  roomGeometry,
 } from "./model.js";
 import { lookVectors } from "./math3d.js";
 
@@ -125,6 +125,32 @@ export class OverheadView {
       ctx.strokeRect(p.x, p.y, uw, vh);
     };
 
+    const drawRoom = (obj, fill, stroke, lw = 1) => {
+      const g = roomGeometry(obj);
+      ctx.lineWidth = lw;
+      for (const c of g.colliders) {
+        const uw = c[axes.su] * s;
+        const vh = c[axes.sv] * s;
+        const p = toScreen(c[axes.u], c[axes.v] + c[axes.sv]);
+        if (fill) {
+          ctx.fillStyle = fill;
+          ctx.fillRect(p.x, p.y, uw, vh);
+        }
+      }
+      ctx.strokeStyle = stroke;
+      for (const e of g.edges) {
+        const a = g.verts[e.a];
+        const b = g.verts[e.b];
+        if (a[axes.u] === b[axes.u] && a[axes.v] === b[axes.v]) continue;
+        const pa = toScreen(a[axes.u], a[axes.v]);
+        const pb = toScreen(b[axes.u], b[axes.v]);
+        ctx.beginPath();
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+        ctx.stroke();
+      }
+    };
+
     for (const obj of activeMap(doc).objects) {
       if (obj.kind !== "room") continue;
       const isCur = cur && obj.id === cur.id;
@@ -137,7 +163,7 @@ export class OverheadView {
         : isN
           ? hexAlpha(bgHex, 0.18)
           : hexAlpha(bgHex, 0.08);
-      drawBox(obj, fill, faded ? "#333" : lineHex, isCur ? 2 : 1);
+      drawRoom(obj, fill, faded ? "#333" : lineHex, isCur ? 2 : 1);
     }
 
     for (const obj of activeMap(doc).objects) {

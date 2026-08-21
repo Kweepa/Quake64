@@ -166,6 +166,8 @@ init_weapon
 	sta ammo_grenades
 	lda #PLAYER_HP_START
 	sta player_hp
+	lda #PLAYER_ARMOUR_START
+	sta player_armour
 
 	lda #COL_WPN
 	sta col_wpn

@@ -96,6 +96,10 @@ box_vis_edges
 	!fill 24, 0
 box_vis_vert
 	!fill 12, 0
+room_pack_edges
+	!fill 64, 0
+room_pack_vert
+	!fill 32, 0
 box_vbit
 	!byte $01,$02,$04,$08,$10,$20,$40,$80
 
@@ -1169,8 +1173,162 @@ fill_slope_verts
 	jmp xform_mesh_xz
 
 ; ------------------------------------------------------------------
+; Tetromino hull: unique UX/UZ * sin/cos, then verts by xid/zid/VY.
+; Packed vis edges stroke in one pass (EDGE_VIS/CLIP_* are 32-wide).
+; ------------------------------------------------------------------
+draw_room_mesh
+	jsr load_view_trig
+	lda #$ff
+	sta mesh_vmask
+	ldx room_idx
+	lda room_x,x
+	sta box_x
+	lda room_y,x
+	sta box_y
+	lda room_z,x
+	sta box_z
+	lda room_sx,x
+	sta box_sx
+	lda room_sy,x
+	sta box_sy
+	lda room_sz,x
+	sta box_sz
+	lda #1
+	sta box_inside
+	jsr cull_box_faces
+	ldx room_idx
+	lda room_ne,x
+	sta pv0
+	lda room_eo,x
+	sta pv1
+	lda #0
+	sta pv2
+	sta pv3
+.drm_pk
+	lda pv0
+	beq .drm_pkd
+	ldx pv1
+	lda room_efaces,x
+	beq .drm_keep
+	and face_bits
+	beq .drm_pkn
+.drm_keep
+	ldy pv2
+	lda room_e0,x
+	sta room_pack_edges,y
+	iny
+	lda room_e1,x
+	sta room_pack_edges,y
+	iny
+	sty pv2
+	ldy pv3
+	lda room_evert,x
+	sta room_pack_vert,y
+	inc pv3
+.drm_pkn
+	inc pv1
+	dec pv0
+	bne .drm_pk
+.drm_pkd
+	lda pv3
+	bne .drm_xf
+	rts
+.drm_xf
+	ldx room_idx
+	lda room_nv,x
+	sta mesh_nv
+	lda room_nx,x
+	sta mesh_nx
+	lda room_nz,x
+	sta mesh_nz
+	lda room_uo,x
+	sta pv0
+	lda room_zo,x
+	sta pv1
+	lda room_vo,x
+	sta pv2
+	ldy #0
+.drm_ux
+	cpy mesh_nx
+	beq .drm_uz
+	tya
+	clc
+	adc pv0
+	tax
+	lda room_ux,x
+	sta UX,y
+	iny
+	bne .drm_ux
+.drm_uz
+	ldy #0
+.drm_uzl
+	cpy mesh_nz
+	beq .drm_vy
+	tya
+	clc
+	adc pv1
+	tax
+	lda room_uz,x
+	sta UZ,y
+	iny
+	bne .drm_uzl
+.drm_vy
+	ldy #0
+.drm_vyl
+	cpy mesh_nv
+	beq .drm_ptr
+	tya
+	clc
+	adc pv2
+	tax
+	lda room_vy,x
+	sta VY,y
+	iny
+	bne .drm_vyl
+.drm_ptr
+	clc
+	lda #<room_xid
+	adc pv2
+	sta xid_ptr
+	lda #>room_xid
+	adc #0
+	sta xid_ptr+1
+	clc
+	lda #<room_zid
+	adc pv2
+	sta zid_ptr
+	lda #>room_zid
+	adc #0
+	sta zid_ptr+1
+	clc
+	lda #<room_col
+	adc pv2
+	sta col_ptr
+	lda #>room_col
+	adc #0
+	sta col_ptr+1
+	jsr xform_mesh_xz
+	lda #<room_pack_edges
+	sta edge_ptr
+	lda #>room_pack_edges
+	sta edge_ptr+1
+	lda #<room_pack_vert
+	sta edge_vert_ptr
+	lda #>room_pack_vert
+	sta edge_vert_ptr+1
+	lda pv3
+	sta mesh_ne
+	jmp stroke_mesh
+
+; ------------------------------------------------------------------
 draw_world
 	jsr update_frustum
+	ldx room_idx
+	lda room_nv,x
+	beq .dw_box
+	jsr draw_room_mesh
+	jmp .dw_items
+.dw_box
 	; active room (inside cull) — not frustum-culled
 	ldx room_idx
 	lda room_x,x
@@ -1189,6 +1347,7 @@ draw_world
 	sta box_inside
 	jsr draw_box
 	; crates
+.dw_items
 	ldx #0
 .dw_c
 	cpx #MAP_NCRATES

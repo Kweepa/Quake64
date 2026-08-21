@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from roomgeom import clamp_room_shape, nudge_door_outside, room_geometry
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "editor" / "quake64.json"
@@ -50,16 +54,57 @@ def aabb_volume(box: dict) -> int:
     return int(box["sx"]) * int(box["sy"]) * int(box["sz"])
 
 
-def room_under(rooms: list[dict], obj: dict) -> int | None:
-    hits = [i for i, r in enumerate(rooms) if aabb_overlap(obj, r)]
-    if not hits:
-        return None
-    hits.sort(key=lambda i: aabb_volume(rooms[i]))
-    return hits[0]
+def room_index(rooms: list[dict], obj: dict, kind: str) -> int:
+    rid = obj.get("roomId")
+    id_to_i = {r.get("id"): i for i, r in enumerate(rooms)}
+    if rid in id_to_i:
+        return id_to_i[rid]
+    raise SystemExit(f"{kind} at {obj.get('x')},{obj.get('y')},{obj.get('z')} has no room")
 
 
-def rooms_for(rooms: list[dict], obj: dict) -> list[int]:
-    return [i for i, r in enumerate(rooms) if aabb_overlap(obj, r)]
+def unique_u8(vals: list[int], cap: int, what: str, name: str) -> tuple[list[int], list[int]]:
+    seen: list[int] = []
+    idx: list[int] = []
+    for v in vals:
+        v = v & 0xFF
+        if v not in seen:
+            if len(seen) >= cap:
+                raise SystemExit(f"room {name!r} has >{cap} unique {what}")
+            seen.append(v)
+        idx.append(seen.index(v))
+    return seen, idx
+
+
+def assign_missing_parents(objs: list[dict], rooms: list[dict]) -> None:
+    """JSON v6 fallback: smallest overlapping room, like the old editor tree."""
+    for obj in objs:
+        if obj.get("kind") == "room":
+            continue
+        if obj.get("kind") == "doorway":
+            hits = [r for r in rooms if aabb_overlap(obj, r)]
+            hits.sort(key=lambda r: aabb_volume(r))
+            if not obj.get("roomId") and hits:
+                obj["roomId"] = hits[0].get("id")
+            if not obj.get("otherRoomId"):
+                other = next((r for r in hits if r.get("id") != obj.get("roomId")), None)
+                if other:
+                    obj["otherRoomId"] = other.get("id")
+            continue
+        if obj.get("roomId"):
+            continue
+        hits = [r for r in rooms if aabb_overlap(obj, r)]
+        hits.sort(key=lambda r: aabb_volume(r))
+        if hits:
+            obj["roomId"] = hits[0].get("id")
+
+
+def door_rooms(rooms: list[dict], d: dict) -> tuple[int, int]:
+    id_to_i = {r.get("id"): i for i, r in enumerate(rooms)}
+    ra = id_to_i.get(d.get("roomId"), 255)
+    rb = id_to_i.get(d.get("otherRoomId"), 255)
+    if ra == 255:
+        raise SystemExit(f"doorway at {d.get('x')},{d.get('y')},{d.get('z')} has no owner room")
+    return ra, rb
 
 
 def xz_aabb_gap(a: dict, b: dict) -> int:
@@ -81,6 +126,28 @@ def xz_aabb_gap(a: dict, b: dict) -> int:
     else:
         dz = 0
     return dx + dz
+
+
+def nearest_floor_home(elev: dict, room: dict, floor_y: int) -> int | None:
+    """Upper stop so elev top meets another collider floor in this room, or None."""
+    elev_sy = int(elev["sy"])
+    elev_top = int(elev["y"]) + elev_sy
+    best_key: tuple[int, int] | None = None
+    best_home: int | None = None
+    for c in room_geometry(room).get("colliders") or []:
+        if int(c.get("sx") or 0) <= 0:
+            continue
+        cy = int(c["y"])
+        if cy <= floor_y:
+            continue
+        home = cy - elev_sy
+        if home <= floor_y:
+            continue
+        key = (xz_aabb_gap(elev, c), abs(cy - elev_top))
+        if best_key is None or key < best_key:
+            best_key = key
+            best_home = home
+    return best_home
 
 
 def nearest_plat_home(
@@ -114,11 +181,11 @@ def btable(name: str, vals: list[int]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def ascii_screen(s: str) -> list[int]:
+def ascii_screen(s: str, maxlen: int = 40) -> list[int]:
     """ASCII screen codes for the UI font (mixed case, 32..126)."""
     line = s.replace("\r\n", "\n").split("\n", 1)[0]
     out = []
-    for ch in line[:24]:
+    for ch in line[:maxlen]:
         o = ord(ch)
         out.append(o if 32 <= o <= 126 else 32)
     return out
@@ -130,7 +197,13 @@ def main() -> None:
     objs = level["objects"]
 
     rooms = [o for o in objs if o["kind"] == "room"]
+    assign_missing_parents(objs, rooms)
+    id_to_room = {r.get("id"): r for r in rooms}
     doors = [o for o in objs if o["kind"] == "doorway"]
+    for d in doors:
+        room = id_to_room.get(d.get("roomId")) or id_to_room.get(d.get("otherRoomId"))
+        if room:
+            nudge_door_outside(d, room)
     crates = [o for o in objs if o["kind"] == "crate"]
     slopes = [o for o in objs if o["kind"] == "slope"]
     plats = [o for o in objs if o["kind"] == "platform"]
@@ -182,13 +255,99 @@ def main() -> None:
     room_wpn = [norm_color(r.get("weaponColor"), ROOM_WPN_DEFAULT) for r in rooms]
     room_id = [map_id[id(r)] for r in rooms]
 
+    col_x: list[int] = []
+    col_y: list[int] = []
+    col_z: list[int] = []
+    col_sx: list[int] = []
+    col_sy: list[int] = []
+    col_sz: list[int] = []
+    room_nv: list[int] = []
+    room_ne: list[int] = []
+    room_vo: list[int] = []
+    room_eo: list[int] = []
+    room_nx: list[int] = []
+    room_nz: list[int] = []
+    room_uo: list[int] = []
+    room_zo: list[int] = []
+    mesh_ux: list[int] = []
+    mesh_uz: list[int] = []
+    mesh_vy: list[int] = []
+    mesh_xid: list[int] = []
+    mesh_zid: list[int] = []
+    mesh_col: list[int] = []
+    mesh_e0: list[int] = []
+    mesh_e1: list[int] = []
+    mesh_evert: list[int] = []
+    mesh_efaces: list[int] = []
+
+    for r in rooms:
+        geom = room_geometry(r)
+        cols = geom["colliders"][:2]
+        while len(cols) < 2:
+            cols.append({"x": 0, "y": 0, "z": 0, "sx": 0, "sy": 0, "sz": 0})
+        for c in cols:
+            col_x.append(int(c["x"]) & 0xFF)
+            col_y.append(int(c["y"]) & 0xFF)
+            col_z.append(int(c["z"]) & 0xFF)
+            col_sx.append(int(c["sx"]) & 0xFF)
+            col_sy.append(int(c["sy"]) & 0xFF)
+            col_sz.append(int(c["sz"]) & 0xFF)
+        if clamp_room_shape(r.get("shape")) == "box":
+            room_nv.append(0)
+            room_ne.append(0)
+            room_vo.append(0)
+            room_eo.append(0)
+            room_nx.append(0)
+            room_nz.append(0)
+            room_uo.append(0)
+            room_zo.append(0)
+            continue
+        verts = geom["verts"]
+        edges = geom["edges"]
+        rname = r.get("name") or "?"
+        if len(verts) > 16:
+            raise SystemExit(f"room {rname!r} has {len(verts)} verts (max 16)")
+        if len(edges) > 32:
+            raise SystemExit(f"room {rname!r} has {len(edges)} edges (max 32)")
+        ux, xid = unique_u8([int(v["x"]) for v in verts], 4, "X", rname)
+        uz, zid = unique_u8([int(v["z"]) for v in verts], 4, "Z", rname)
+        pairs: list[tuple[int, int]] = []
+        col: list[int] = []
+        for xi, zi in zip(xid, zid):
+            p = (xi, zi)
+            if p not in pairs:
+                if len(pairs) >= 16:
+                    raise SystemExit(f"room {rname!r} has >16 unique XZ columns")
+                pairs.append(p)
+            col.append(pairs.index(p))
+        room_nv.append(len(verts))
+        room_ne.append(len(edges))
+        room_vo.append(len(mesh_vy))
+        room_eo.append(len(mesh_e0))
+        room_nx.append(len(ux))
+        room_nz.append(len(uz))
+        room_uo.append(len(mesh_ux))
+        room_zo.append(len(mesh_uz))
+        mesh_ux.extend(ux)
+        mesh_uz.extend(uz)
+        for v, xi, zi, ci in zip(verts, xid, zid, col):
+            mesh_vy.append(int(v["y"]) & 0xFF)
+            mesh_xid.append(xi)
+            mesh_zid.append(zi)
+            mesh_col.append(ci)
+        for e in edges:
+            mesh_e0.append(int(e["a"]) & 0xFF)
+            mesh_e1.append(int(e["b"]) & 0xFF)
+            mesh_evert.append(1 if e["vert"] else 0)
+            mesh_efaces.append(int(e["faces"]) & 0xFF)
+
     # Doors
     door_x, door_y, door_z = [], [], []
     door_sx, door_sy, door_sz = [], [], []
     door_ra, door_rb, door_home_y, door_face = [], [], [], []
     door_id = []
     for d in doors:
-        ids = rooms_for(rooms, d)
+        ra, rb = door_rooms(rooms, d)
         door_x.append(d["x"])
         door_y.append(d["y"])
         door_z.append(d["z"])
@@ -196,8 +355,8 @@ def main() -> None:
         door_sy.append(d["sy"])
         door_sz.append(d["sz"])
         door_home_y.append(d["y"])
-        door_ra.append(ids[0] if len(ids) > 0 else 255)
-        door_rb.append(ids[1] if len(ids) > 1 else 255)
+        door_ra.append(ra)
+        door_rb.append(rb)
         door_face.append(FACE.get(d.get("face") or "+z", 0))
         door_id.append(map_id[id(d)])
 
@@ -206,9 +365,7 @@ def main() -> None:
     crate_sx, crate_sy, crate_sz, crate_room = [], [], [], []
     crate_id = []
     for c in crates:
-        ri = room_under(rooms, c)
-        if ri is None:
-            raise SystemExit(f"crate at {c['x']},{c['y']},{c['z']} has no room")
+        ri = room_index(rooms, c, "crate")
         crate_x.append(c["x"])
         crate_y.append(c["y"])
         crate_z.append(c["z"])
@@ -224,9 +381,7 @@ def main() -> None:
     slope_axis, slope_dir, slope_room = [], [], []
     slope_id = []
     for s in slopes:
-        ri = room_under(rooms, s)
-        if ri is None:
-            raise SystemExit("slope has no room")
+        ri = room_index(rooms, s, "slope")
         slope_x.append(s["x"])
         slope_y.append(s["y"])
         slope_z.append(s["z"])
@@ -243,9 +398,7 @@ def main() -> None:
     plat_sx, plat_sz, plat_room, plat_solid = [], [], [], []
     plat_id = []
     for p in plats:
-        ri = room_under(rooms, p)
-        if ri is None:
-            raise SystemExit(f"platform at {p['x']},{p['y']},{p['z']} has no room")
+        ri = room_index(rooms, p, "platform")
         plat_x.append(p["x"])
         plat_y.append(p["y"])
         plat_z.append(p["z"])
@@ -261,9 +414,7 @@ def main() -> None:
     elev_type, elev_home, elev_dest, elev_room = [], [], [], []
     elev_id = []
     for e in elevs:
-        ri = room_under(rooms, e)
-        if ri is None:
-            raise SystemExit("elevator has no room")
+        ri = room_index(rooms, e, "elevator")
         et = e.get("elevType") or "descending"
         floor_y = rooms[ri]["y"]
         elev_x.append(e["x"])
@@ -280,7 +431,9 @@ def main() -> None:
             elev_type.append(ELEV_DESCENDING)
         home = e["y"]
         if et == "toggle" and e["y"] == floor_y:
-            raised = nearest_plat_home(e, ri, plats, plat_room, floor_y)
+            raised = nearest_floor_home(e, rooms[ri], floor_y)
+            if raised is None:
+                raised = nearest_plat_home(e, ri, plats, plat_room, floor_y)
             if raised is not None:
                 home = raised
         elev_home.append(home)
@@ -294,9 +447,7 @@ def main() -> None:
     sw_elev, sw_room, sw_face = [], [], []
     sw_id = []
     for s in switches:
-        ri = room_under(rooms, s)
-        if ri is None:
-            raise SystemExit("switch has no room")
+        ri = room_index(rooms, s, "switch")
         tag = (s.get("tag") or "").strip()
         if tag not in elev_by_tag:
             raise SystemExit(f"switch tag {tag!r} has no elevator")
@@ -316,9 +467,7 @@ def main() -> None:
     en_type, en_rot, en_room = [], [], []
     en_id = []
     for e in enemies:
-        ri = room_under(rooms, e)
-        if ri is None:
-            raise SystemExit("enemy has no room")
+        ri = room_index(rooms, e, "enemy")
         name = e.get("enemy") or "Grunt"
         if name not in ENEMY_TYPE:
             raise SystemExit(f"unknown enemy type {name}")
@@ -338,9 +487,7 @@ def main() -> None:
     tr_id = []
     text_blob: list[int] = []
     for t in triggers:
-        ri = room_under(rooms, t)
-        if ri is None:
-            raise SystemExit("trigger has no room")
+        ri = room_index(rooms, t, "trigger")
         text = t.get("text") or ""
         off = len(text_blob)
         chars = ascii_screen(text)
@@ -360,9 +507,7 @@ def main() -> None:
     bp_x, bp_y, bp_z, bp_type, bp_room = [], [], [], [], []
     bp_id = []
     for b in backpacks:
-        ri = room_under(rooms, b)
-        if ri is None:
-            raise SystemExit(f"backpack at {b['x']},{b['y']},{b['z']} has no room")
+        ri = room_index(rooms, b, "backpack")
         bt = BP_TYPE.get((b.get("backpack") or "shells").strip(), 0)
         bp_x.append(b["x"])
         bp_y.append(b["y"])
@@ -371,9 +516,7 @@ def main() -> None:
         bp_room.append(ri)
         bp_id.append(map_id[id(b)])
 
-    spawn_room = room_under(rooms, spawn)
-    if spawn_room is None:
-        raise SystemExit("spawn has no room")
+    spawn_room = room_index(rooms, spawn, "spawn")
     spawn_id = map_id[id(spawn)]
 
     frustum = 1
@@ -438,6 +581,31 @@ def main() -> None:
         btable("room_fx", room_fx).rstrip(),
         btable("room_wpn", room_wpn).rstrip(),
         btable("room_id", room_id).rstrip(),
+        "",
+        btable("rc_x", col_x).rstrip(),
+        btable("rc_y", col_y).rstrip(),
+        btable("rc_z", col_z).rstrip(),
+        btable("rc_sx", col_sx).rstrip(),
+        btable("rc_sy", col_sy).rstrip(),
+        btable("rc_sz", col_sz).rstrip(),
+        btable("room_nv", room_nv).rstrip(),
+        btable("room_ne", room_ne).rstrip(),
+        btable("room_vo", room_vo).rstrip(),
+        btable("room_eo", room_eo).rstrip(),
+        btable("room_nx", room_nx).rstrip(),
+        btable("room_nz", room_nz).rstrip(),
+        btable("room_uo", room_uo).rstrip(),
+        btable("room_zo", room_zo).rstrip(),
+        btable("room_ux", mesh_ux or [0]).rstrip(),
+        btable("room_uz", mesh_uz or [0]).rstrip(),
+        btable("room_vy", mesh_vy or [0]).rstrip(),
+        btable("room_xid", mesh_xid or [0]).rstrip(),
+        btable("room_zid", mesh_zid or [0]).rstrip(),
+        btable("room_col", mesh_col or [0]).rstrip(),
+        btable("room_e0", mesh_e0 or [0]).rstrip(),
+        btable("room_e1", mesh_e1 or [0]).rstrip(),
+        btable("room_evert", mesh_evert or [0]).rstrip(),
+        btable("room_efaces", mesh_efaces or [0]).rstrip(),
         "",
         btable("door_x", door_x).rstrip(),
         btable("door_y", door_y).rstrip(),
@@ -527,6 +695,9 @@ def main() -> None:
         btable("bp_type", bp_type).rstrip(),
         btable("bp_room", bp_room).rstrip(),
         btable("bp_id", bp_id).rstrip(),
+        "",
+        "map_name",
+        "\t!byte " + ",".join(str(b) for b in (ascii_screen(level.get("name") or "") + [0])),
         "",
         "map_text",
         "\t!byte " + ",".join(str(b) for b in text_blob) if text_blob else "\t!byte 0",

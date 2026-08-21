@@ -20,12 +20,14 @@ SCREEN_XMAX	= 192
 MARGIN_CH	= 192			; col 24 row 0 — solid glyph, not cleared
 
 ; PAL text starts at raster 51 (YSCROLL=3). HUD 9 rows, then 16-row viewport.
-; Fire the line before each band's badline (raster&7 == 3) so $d018 is latched
-; before VIC fetches that character row. IRQ on the badline itself is too late:
-; the CPU is stunned, and the row stays on the previous charset (HUD glyphs in view).
-RASTER_TOP	= 50			; line before first HUD badline (51)
-RASTER_VIEW	= 121			; two lines before viewport badline 123
-RASTER_SPLIT	= 186			; last line of viewport top half — before 187
+; View/split: IRQ on the line *before* the last band line, wait for that line,
+; delay into the right border / past col 31, then $d018 (and $d021 at HUD→view).
+; UI+$d021 black runs in lower flyback after the last text row.
+RASTER_TOP	= 251			; flyback after last text line (row 24 ends ~250)
+RASTER_VIEW	= 121			; IRQ here; wait for 122, then right-border write
+RASTER_VIEW_LINE	= 122		; last HUD scanline (before badline 123)
+RASTER_SPLIT	= 185			; IRQ here; wait for 186, then right-border write
+RASTER_SPLIT_LINE	= 186		; last top-half scanline (before badline 187)
 
 D018_A_TOP	= $04			; matrix $C000, charset $D000
 D018_A_BOT	= $06			; matrix $C000, charset $D800
@@ -142,11 +144,13 @@ EN_APPROACH		= 2
 EN_ATTACK		= 3
 EN_PAIN		= 4
 EN_DYING		= 5
-EN_GONE		= 6
+EN_DEAD		= 6			; last death frame hold
+EN_GONE		= 7
 ENEMY_DETECT	= 12		; Chebyshev XZ wake distance
 ENEMY_STEP_MS	= 200		; approach cell cadence (dt acc + remainder)
 APPROACH_MIN_MS	= 1500		; min time in approach before attack (grunt)
 DOG_REPATH_MS	= 1000		; Rottweiler chase repath cadence (~Wolf DOG_REPATH)
+DEATH_HOLD_MS	= 1600		; EN_DEAD last-frame hold before EN_GONE
 GRUNT_BACKOFF	= 8		; Chebyshev ≤ this → weight dodge away from player
 AXE_DMG		= 4			; Quake axe 20 ÷ 5
 AXE_HIT_R		= 3			; XZ chebyshev radius for axe hit test
@@ -193,9 +197,8 @@ BOX_NVERTS	= 8
 BOX_NEDGES	= 12
 HUD_MSG_COL	= 8
 HUD_MSG_W	= 24
-SAMPLE_MS	= 20
-SAMPLE_TA_LO	= $ff			; 20ms * 1024 - 1 = $4FFF
-SAMPLE_TA_HI	= $4f
+SAMPLE_MS_PAL	= 20			; ms per mid-split tick (50 Hz)
+SAMPLE_MS_NTSC	= 17			; ≈1000/60
 in_fwd		= $CB6E			; 16-bit hold ms (IRQ accum)
 in_back		= $CB70
 in_strafel	= $CB72
@@ -368,8 +371,8 @@ drop_z		= $CD1E
 drop_room	= $CD2E
 drop_type	= $CD3E			; BP_* when active
 en_hp		= $CD4E			; ENEMY_MAX
-en_timer	= $CD5E			; ENEMY_MAX: approach min / dog repath ms lo
-en_timer_h	= $CD6E			; ENEMY_MAX: approach min / dog repath ms hi
+en_timer	= $CD5E			; ENEMY_MAX: approach min / dog repath / death hold ms lo
+en_timer_h	= $CD6E			; ENEMY_MAX: approach min / dog repath / death hold ms hi
 en_step		= $CD7E			; ENEMY_MAX: walk acc lo
 en_step_h	= $CD8E			; ENEMY_MAX: walk acc hi
 en_dir		= $CD9E			; ENEMY_MAX: 0..7 dodge facing

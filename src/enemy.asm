@@ -72,10 +72,10 @@ enemies_update
 
 eu_state_lo
 	!byte <eu_idle, <eu_alert, <eu_approach, <eu_attack
-	!byte <eu_pain, <eu_dying, <eu_gone
+	!byte <eu_pain, <eu_dying, <eu_dead, <eu_gone
 eu_state_hi
 	!byte >eu_idle, >eu_alert, >eu_approach, >eu_attack
-	!byte >eu_pain, >eu_dying, >eu_gone
+	!byte >eu_pain, >eu_dying, >eu_dead, >eu_gone
 
 eu_gone
 	jmp eu_next
@@ -207,6 +207,28 @@ eu_pain
 
 ; ------------------------------------------------------------------
 eu_dying
+	jmp eu_next
+
+; ------------------------------------------------------------------
+; Last death frame: countdown hold, then EN_GONE + drop.
+eu_dead
+	ldx enemy_idx
+	lda en_timer,x
+	ora en_timer_h,x
+	beq .eu_dead_done
+	sec
+	lda en_timer,x
+	sbc dt_ms
+	sta en_timer,x
+	lda en_timer_h,x
+	sbc dt_msh
+	sta en_timer_h,x
+	bcs eu_next
+	lda #0
+	sta en_timer,x
+	sta en_timer_h,x
+.eu_dead_done
+	jsr finish_enemy_death
 	jmp eu_next
 
 eu_next
@@ -360,7 +382,17 @@ enemy_anim_step
 	bcs +
 	jmp .eas_n
 +
-	jsr finish_enemy_death
+	; past end → hold last frame in EN_DEAD
+	lda enemy_death_len,y
+	sec
+	sbc #1
+	sta en_frame,x
+	lda #EN_DEAD
+	sta en_state,x
+	lda #<DEATH_HOLD_MS
+	sta en_timer,x
+	lda #>DEATH_HOLD_MS
+	sta en_timer_h,x
 	jmp .eas_n
 
 ; ------------------------------------------------------------------

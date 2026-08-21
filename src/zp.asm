@@ -196,9 +196,10 @@ sfx_zp_h	= $bc
 sfx_ch		= $bd			; current channel 0..2
 sfx_id		= $be			; sound id / freq scratch
 col_wpn		= $bf			; active room weapon sprite colour → $d027–$d02a
-; $c0 free (was single-channel count/max)
+sample_ms	= $c0			; PAL 20 / NTSC 17 — set at init
 ps_save_x	= $c1
 ps_save_y	= $c2
+sfx_q_len	= $da			; staged play_sound queue depth 0..4
 fn_rx		= $c3
 fn_rz		= $c4
 fn_fx		= $c5			; near/forward

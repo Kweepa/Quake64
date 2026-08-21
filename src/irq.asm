@@ -1,6 +1,20 @@
-; Raster chain. CIA1 Timer A runs for key hold + SFX but IRQs stay masked —
-; poll $dc0d from raster_body after $d018 so keys/SFX never delay a split.
+; Raster chain. No CIA Timer A — keys/SFX once per mid-split (PAL/NTSC sample_ms).
+; Phases: 0=HUD→view ($d018+$d021), 1=mid-split ($d018), 2=flyback UI ($d018+$d021).
+;
+; Right-border split (view + mid):
+;   1. IRQ on line L-1 (RASTER_VIEW / RASTER_SPLIT)
+;   2. Wait until $d012 == L (start of the real split line)
+;   3. Burn IRQ_RBORDER_* into post-viewport / right border
+;   4. sta $d018 (and $d021 on view)
+; Mid-split then: accum_keys, flush SFX, update_sfx, snapshot holds.
+; Flyback stays ASAP on 251.
 !zone irq
+
+; After sync to split-line start: 2+N*5-1 = 5N+1 cycles.
+; Mid: N=10 → 51cy then one sta (fits 186). View: three pla/sta after delay,
+; so N=7 → 36cy + stores still on 122 (N=10 was slipping $d021 onto 123).
+IRQ_RBORDER_N	= 10
+IRQ_RBORDER_VIEW	= 7
 
 nmi_rti
 	rti
@@ -35,18 +49,26 @@ init_irq
 	sta wish_dxh
 	sta wish_dz
 	sta wish_dzh
+	sta sfx_q_len
 	ldx #11
 -
 	sta in_fwd,x
 	dex
 	bpl -
 
-	lda #SAMPLE_TA_LO
-	sta $dc04
-	lda #SAMPLE_TA_HI
-	sta $dc05
-	lda #$11				; TA start + force load (IRQ stays masked; poll $dc0d)
-	sta $dc0e
+	; PAL/NTSC → sample_ms (KERNAL $02a6: 0=NTSC, 1=PAL)
+	lda $01
+	pha
+	lda #$37
+	sta $01
+	ldx #SAMPLE_MS_NTSC
+	lda $02a6
+	beq +
+	ldx #SAMPLE_MS_PAL
++
+	stx sample_ms
+	pla
+	sta $01
 
 	lda #RASTER_VIEW
 	sta $d012
@@ -57,11 +79,8 @@ init_irq
 	sta $d01a
 	rts
 
+; A/$01 saved first; VIC stores before any mid-split work.
 irq_entry
-	pha
-	txa
-	pha
-	tya
 	pha
 	lda $01
 	pha
@@ -70,25 +89,110 @@ irq_entry
 
 	lda $d019
 	and #1
-	beq .out
-	sta $d019
-	jsr raster_body
-.out
+	bne .do
 	pla
 	sta $01
+	pla
+	rti
+.do
+	sta $d019
+
+	lda irq_phase
+	beq .view
+	cmp #1
+	beq .split
+	jmp .top
+
+; Mid-viewport: sync to 186, right-border $d018, then keys/SFX.
+; accum_keys adds sample_ms into in_* each video frame; main snapshots.
+.split
+	txa
+	pha
+	tya
+	pha
+	lda $d012
+	cmp #RASTER_SPLIT_LINE
+	bcs .split_rb
+	lda #RASTER_SPLIT_LINE
+-
+	cmp $d012
+	bne -
+.split_rb
+	lda show_d018_bot
+	ldx #IRQ_RBORDER_N
+-
+	dex
+	bne -
+	sta $d018
+	lda #RASTER_TOP
+	sta $d012
+	lda $d011
+	and #$7f
+	sta $d011
+	lda #2
+	sta irq_phase
+	jsr accum_keys
+	jsr flush_sfx
+	jsr update_sfx
 	pla
 	tay
 	pla
 	tax
 	pla
+	sta $01
+	pla
 	rti
 
-raster_body
-	lda irq_phase
-	beq .view
-	cmp #1
-	beq .split
+; HUD → viewport: preload, sync to 122, shorter delay (extra stores vs mid).
+.view
+	txa
+	pha
+	tya
+	pha
+	ldx show_buf
+	lda col_bg
+	pha
+	lda show_bot_tab,x
+	pha
+	lda show_top_tab,x
+	pha
+	lda $d012
+	cmp #RASTER_VIEW_LINE
+	bcs .view_rb
+	lda #RASTER_VIEW_LINE
+-
+	cmp $d012
+	bne -
+.view_rb
+	ldx #IRQ_RBORDER_VIEW
+-
+	dex
+	bne -
+	pla
+	sta $d018
+	pla
+	sta show_d018_bot
+	pla
+	sta $d021
+	lda #RASTER_SPLIT
+	sta $d012
+	lda #1
+	sta irq_phase
+	pla
+	tay
+	pla
+	tax
+	pla
+	sta $01
+	pla
+	rti
 
+; Lower flyback: UI charset + black bg — long before badline 51.
+.top
+	txa
+	pha
+	tya
+	pha
 	ldx show_buf
 	lda show_ui_tab,x
 	sta $d018
@@ -99,45 +203,20 @@ raster_body
 	lda #0
 	sta irq_phase
 	inc frame_flag
-	jmp poll_keys
+	pla
+	tay
+	pla
+	tax
+	pla
+	sta $01
+	pla
+	rti
 
-.view
-	ldx show_buf
-	lda show_top_tab,x
-	sta $d018
-	lda show_bot_tab,x
-	sta show_d018_bot
-	lda col_bg
-	sta $d021
-	lda #RASTER_SPLIT
-	sta $d012
-	lda #1
-	sta irq_phase
-	jmp poll_keys
-
-.split
-	lda show_d018_bot
-	sta $d018
-	lda col_bg
-	sta $d021
-	lda #RASTER_TOP
-	sta $d012
-	lda #2
-	sta irq_phase
-poll_keys
-	lda $dc0d
-	and #1
-	beq .nokeys
-	jsr accum_keys
-	jsr update_sfx
-.nokeys
-	rts
-
-; Y = 0,2,4,… offset from in_fwd; add SAMPLE_MS, saturate at 65535
+; Y = 0,2,4,… offset from in_fwd; add sample_ms, saturate at 65535
 irq_add_ms
 	clc
 	lda in_fwd,y
-	adc #SAMPLE_MS
+	adc sample_ms
 	sta in_fwd,y
 	lda in_fwd+1,y
 	adc #0
@@ -265,9 +344,10 @@ accum_keys
 .nospc
 	rts
 
-; Snapshot IRQ hold ms; build turn + 8.8 wish. Call under I/O mapped.
-read_input
-	sei
+; Publish in_* → hold_* / key_* then clear (main, once per game frame).
+; IRQ only accumulates into in_* each mid-split — do not snapshot there or
+; a slow game frame only sees one video tick of hold ms.
+snapshot_input
 	ldx #11
 -
 	lda in_fwd,x
@@ -292,8 +372,11 @@ read_input
 	sta key_use
 	lda #0
 	sta in_use
-	cli
+	rts
 
+; Snapshot then build turn + wish from hold_*.
+read_input
+	jsr snapshot_input
 	lda #0
 	sta wish_dx
 	sta wish_dxh

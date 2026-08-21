@@ -107,7 +107,7 @@ apply_room_palette
 	sta $d029
 	sta $d02a
 	jsr fill_viewport_colour
-	; irq_phase: 0=HUD (leave $d021), 1/2=viewport → background
+	; irq_phase: 0=HUD band (leave black $d021), 1/2=viewport/below → room bg
 	lda irq_phase
 	beq .ardone
 	lda col_bg
@@ -366,30 +366,28 @@ clear_draw
 	bne .clp
 	rts
 
-; $01 must be $35. Swap A/B without poking the wrong band's $d018
-; (HUD vs top vs bot). irq_phase: 0=HUD, 1=top, 2=bot.
+; $01 must be $35. Publish show_buf's $d018 for the current band.
+; Wait (IRQs on) until irq_phase is HUD (0) or post mid-split (2) so we never
+; mask a split line or tear mid-viewport.
 apply_show
-	sei
+-
+	lda irq_phase
+	beq .do				; 0 = HUD
+	cmp #2
+	bne -				; 1 = view top — wait
+.do
 	ldx show_buf
 	lda show_bot_tab,x
 	sta show_d018_bot
 	lda irq_phase
 	beq .ui
-	cmp #1
-	beq .top
+	; phase 2 — bottom half charset live
 	lda show_d018_bot
 	sta $d018
-	cli
 	rts
 .ui
 	lda show_ui_tab,x
 	sta $d018
-	cli
-	rts
-.top
-	lda show_top_tab,x
-	sta $d018
-	cli
 	rts
 
 set_draw_ptrs

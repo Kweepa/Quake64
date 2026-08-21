@@ -54,6 +54,8 @@ ent_set_pose
 	lda en_state,x
 	cmp #EN_DYING
 	beq .esp_death
+	cmp #EN_DEAD
+	beq .esp_death
 	cmp #EN_PAIN
 	beq .esp_pain
 	cmp #EN_ATTACK
@@ -1919,7 +1921,9 @@ draw_enemies
 	sta ent_type
 	lda en_state,x
 	cmp #EN_DYING
-	beq .de_mesh			; dying: always full stick mesh
+	beq .de_mesh			; dying/dead: always full stick mesh
+	cmp #EN_DEAD
+	beq .de_mesh
 	lda CAM_ZH
 	bmi .de_mesh
 	cmp #ENEMY_LOD2_Z
@@ -2219,6 +2223,8 @@ kill_enemy
 	sta en_state,x
 	lda #0
 	sta en_frame,x
+	sta en_timer,x
+	sta en_timer_h,x
 	lda en_type,x
 	bne .ke_dog
 	lda #SOUND_DEATHSCREAM1

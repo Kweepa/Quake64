@@ -1,13 +1,14 @@
 ; Sound effects — PC-speaker envelopes on SID voices 1–3.
 ; Data: pcsounds.asm + pcsfreq.asm (tools/gensounds.py); sound_voices routes
 ; each ID to ch0=player V1 pulse, ch1=enemy V2 pulse, ch2=world V3 noise.
-; Decimated 3x; stepped once per CIA1 Timer A poll (~50 Hz) from raster IRQ.
+; Decimated 3x; stepped once per mid-split raster (~50/60 Hz).
 ; SID Fn lo fixed at $80 (hi LUT only — saves 256 bytes).
 
 !zone playsound
 
 SFX_VOL		= $0f
 SFX_NCH		= 3
+SFX_QMAX	= 4
 
 ; Per-channel queue (abs — visible at $01=$34/$35). Index $ff = idle.
 sfx_index
@@ -23,6 +24,10 @@ sfx_ptr_l
 sfx_ptr_h
 	!byte 0, 0, 0
 
+; Main stages here; mid-split IRQ flushes via play_sound_commit.
+sfx_q
+	!byte 0, 0, 0, 0
+
 ; SID Fn-lo offset from $d400 per channel (V1/V2/V3)
 sfx_sid_base
 	!byte $00, $07, $0e
@@ -35,6 +40,8 @@ sfx_wave
 ; play_sound_init — clear SID; V1/V2 pulse + V3 noise ADSR; volume full
 ; ------------------------------------------------------------------
 play_sound_init
+	lda #0
+	sta sfx_q_len
 	ldx #SFX_NCH-1
 .psi_ch
 	lda #$ff
@@ -75,24 +82,50 @@ sfx_voice_adsr_all
 	rts
 
 ; ------------------------------------------------------------------
-; play_sound — A = sound index; higher-or-equal priority preempts
-; Queue-only: no SID access (safe at $01=$34); raster Timer A poll
-; (update_sfx) does all SID writes, starting on the next tick.
-; Preserves X,Y and caller's I flag; A clobbered
+; play_sound — A = sound index; stage for mid-split IRQ (no sei).
+; Preserves X,Y; A clobbered
 ; ------------------------------------------------------------------
 play_sound
-	php
-	sei
 	stx ps_save_x
 	sty ps_save_y
-	sta sfx_id				; sound id
+	ldx sfx_q_len
+	cpx #SFX_QMAX
+	bcs .ps_full
+	sta sfx_q,x
+	inx
+	stx sfx_q_len
+.ps_full
+	ldx ps_save_x
+	ldy ps_save_y
+	rts
+
+; Mid-split IRQ: commit staged IDs into channel queues.
+flush_sfx
+	ldx #0
+.fs_loop
+	cpx sfx_q_len
+	bcs .fs_done
+	lda sfx_q,x
+	stx ps_save_x
+	jsr play_sound_commit
+	ldx ps_save_x
+	inx
+	bne .fs_loop
+.fs_done
+	lda #0
+	sta sfx_q_len
+	rts
+
+; A = sound index; higher-or-equal priority preempts (IRQ / flush only).
+play_sound_commit
+	sta sfx_id
 	tax
 	lda sound_voices,x
-	sta sfx_ch				; channel
+	sta sfx_ch
 	tay
 	lda sound_priorities,x
 	cmp sfx_priority,y
-	bcc .ps_skip
+	bcc .psc_skip
 
 	sta sfx_priority,y
 
@@ -117,14 +150,11 @@ play_sound
 	sta sfx_count,x
 	lda sfx_id
 	sta sfx_index,x
-.ps_skip
-	ldx ps_save_x
-	ldy ps_save_y
-	plp
+.psc_skip
 	rts
 
 ; ------------------------------------------------------------------
-; update_sfx — one PC speaker sample per channel (~50 Hz Timer A)
+; update_sfx — one PC speaker sample per channel (once per mid-split)
 ; Scratch ZP: sfx_zp_l/h, sfx_ch, sfx_id.
 ; ------------------------------------------------------------------
 update_sfx

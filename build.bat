@@ -28,6 +28,8 @@ python tools\genenemies.py
 if errorlevel 1 exit /b 1
 python tools\genmap.py
 if errorlevel 1 exit /b 1
+python tools\genitems.py
+if errorlevel 1 exit /b 1
 python tools\genweapons.py
 if errorlevel 1 exit /b 1
 

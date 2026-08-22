@@ -48,9 +48,10 @@ UI_FONT_PAGES	= 8			; 256 glyphs, ASCII-indexed from quakefont.png
 ; 40-col HUD (rows 0–8 above VIEW_ROW):
 ;  0FFF              Quake64
 ;  1          The Slipgate Complex
-;  3        S000     Health   Armour
-;  4        N000
-;  5        G000      100      000
+;  2                             
+;  3        S000   Health  Armour  PU
+;  4        N000                   PU
+;  5        G000    100     000  Damage
 ;  7                  trigger message
 HUD_ROW		= 0			; frame ms FFF
 HUD_ROW_TITLE	= 0			; "Quake64" (same row as FFF)
@@ -73,10 +74,12 @@ HUD_OFF4	= HUD_ROW4 * 40 + HUD_COL
 HUD_TITLE_COL	= 16
 HUD_AMMO_ICON	= 8
 HUD_AMMO_NUM	= 9
-HUD_HP_LABEL	= 17
-HUD_AR_LABEL	= 26
-HUD_HP_NUM	= 18
-HUD_AR_NUM	= 27
+HUD_HP_LABEL	= 13
+HUD_AR_LABEL	= 21
+HUD_HP_NUM	= 15
+HUD_AR_NUM	= 22
+HUD_PU_LABEL = 26
+HUD_PU_COL	= 28
 HUD_CH_SP	= $20			; ASCII space / digits / letters in UI charset
 HUD_CH_PLUS	= $2b
 HUD_CH_MINUS	= $2d
@@ -92,6 +95,9 @@ HUD_CH_Z	= $5a
 HUD_CH_SHELL	= $7b			; { → shell icon
 HUD_CH_NAIL	= $7c			; | → nail icon
 HUD_CH_GREN	= $7d			; } → grenade icon
+HUD_CH_QUAD	= $80			; 2×2 powerup tiles (quad/pent/ring)
+HUD_CH_PENT	= $84
+HUD_CH_RING	= $88
 COL_HUD		= 8			; orange digits
 COL_HUD_DIM	= 2			; dark red stage letters
 
@@ -274,18 +280,18 @@ fall_vh		= $CBDB
 fall_y0		= $CBDC			; cam_yh when fall started
 fall_acc	= $CBDD			; leftover ms toward FALL_TICK_MS
 
-; Unique world X/Z + 8.8 sin/cos products for xform_mesh_xz (4+4 unique, 16 verts)
-UX		= $CBDE
-UZ		= $CBE2
-VY		= $CBE6			; 16 bytes (vert Y)
-XC_L		= $CBF6
-XC_H		= $CBFA
-XS_L		= $CBFE
-XS_H		= $CC02
-ZC_L		= $CC06
-ZC_H		= $CC0A
-ZS_L		= $CC0E
-ZS_H		= $CC12			; 4 bytes → $CC12–$CC15
+; Unique world X/Z + 8.8 sin/cos products for xform_mesh_xz (6+6 unique, 16 verts)
+UX		= $CBDE			; 6 bytes
+UZ		= $CBE4
+VY		= $CBEA			; 16 bytes (vert Y)
+XC_L		= $CBFA			; 6
+XC_H		= $CC00
+XS_L		= $CC06
+XS_H		= $CC0C
+ZC_L		= $CC12
+ZC_H		= $CC18
+ZS_L		= $CC1E
+ZS_H		= $CC24			; last byte $CC29
 
 ; Hardware sprite view-model (VIC bank 3)
 WPN_RAM		= $C800			; 4 body sprites (256 bytes)
@@ -327,41 +333,43 @@ EMUZ_Z0		= 8			; tip CAM_ZH LOD bands → spr 0..2
 EMUZ_Z1		= 16
 
 ; Weapon BSS (after unique-XZ products)
-in_fire		= $CC16
-in_wpn_axe	= $CC17			; 4 bytes: axe shot nail gren
-in_wpn_shot	= $CC18
-in_wpn_nail	= $CC19
-in_wpn_gren	= $CC1A
-key_fire	= $CC1B
-key_wpn_axe	= $CC1C			; 4 bytes
-key_wpn_shot	= $CC1D
-key_wpn_nail	= $CC1E
-key_wpn_gren	= $CC1F
-cur_weapon	= $CC20
-wpn_pose	= $CC21			; POSE_*
-fire_rpt_l	= $CC22
-fire_rpt_h	= $CC23
-flash_ms_l	= $CC24
-flash_ms_h	= $CC25
-flash_phase	= $CC26			; sprite 4: 0 off, 1 yellow, 2 red
-mg_frame	= $CC27
-wpn_x		= $CC28
-wpn_y		= $CC29
-spr_en		= $CC2A
-anim_step	= $CC2B
-anim_ms_l	= $CC2C
-anim_ms_h	= $CC2D
-wpn_flash_en	= $CC2E
-wpn_flash_dy	= $CC2F
-wpn_tmp0	= $CC30
-flash5_ms_l	= $CC31
-flash5_ms_h	= $CC32
-flash5_phase	= $CC33			; sprite 5 (nail right)
-emuz_ms_l	= $CC34			; enemy muzzle remaining ms
-emuz_ms_h	= $CC35
-emuz_on		= $CC36			; 1 = sprite 6 enabled
-emuz_xmsb	= $CC37			; $d010 bit6 when X>=256
-; $CC38–$CC5F unused (door view SoA moved to $CE32, 16 slots)
+in_fire		= $CC2A
+in_wpn_axe	= $CC2B			; 4 bytes: axe shot nail gren
+in_wpn_shot	= $CC2C
+in_wpn_nail	= $CC2D
+in_wpn_gren	= $CC2E
+key_fire	= $CC2F
+key_wpn_axe	= $CC30			; 4 bytes
+key_wpn_shot	= $CC31
+key_wpn_nail	= $CC32
+key_wpn_gren	= $CC33
+cur_weapon	= $CC34
+wpn_pose	= $CC35			; POSE_*
+fire_rpt_l	= $CC36
+fire_rpt_h	= $CC37
+flash_ms_l	= $CC38
+flash_ms_h	= $CC39
+flash_phase	= $CC3A			; sprite 4: 0 off, 1 yellow, 2 red
+mg_frame	= $CC3B
+wpn_x		= $CC3C
+wpn_y		= $CC3D
+spr_en		= $CC3E
+anim_step	= $CC3F
+anim_ms_l	= $CC40
+anim_ms_h	= $CC41
+wpn_flash_en	= $CC42
+wpn_flash_dy	= $CC43
+wpn_tmp0	= $CC44
+flash5_ms_l	= $CC45
+flash5_ms_h	= $CC46
+flash5_phase	= $CC47			; sprite 5 (nail right)
+emuz_ms_l	= $CC48			; enemy muzzle remaining ms
+emuz_ms_h	= $CC49
+emuz_on		= $CC4A			; 1 = sprite 6 enabled
+emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
+item_spin	= $CC4C			; world powerup yaw (0..255)
+item_spin_l	= $CC4D			; 8.8 fraction
+; $CC4E–$CC5F unused (door view SoA moved to $CE32, 16 slots)
 
 ; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
 VOC		= $CC60			; Cohen–Sutherland outcode (front verts)
@@ -465,3 +473,10 @@ door_vsx	= $CE52
 door_vsz	= $CE62
 door_vface	= $CE72			; last byte $CE81
 en_pat_n	= $CE82			; ENEMY_MAX: patrol remaining cells
+have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD
+pu_kind		= $CE93			; 0 or BP_QUAD / BP_PENT / BP_RING
+pu_ms_l		= $CE94
+pu_ms_h		= $CE95
+HAVE_SILVER	= 1
+HAVE_GOLD	= 2
+POWERUP_MS	= 30000

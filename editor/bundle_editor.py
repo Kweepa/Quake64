@@ -21,6 +21,7 @@ JS_ORDER = [
     "js/overheadView.js",
     "js/animView.js",
     "js/weaponView.js",
+    "js/itemView.js",
     "js/main.js",
 ]
 
@@ -64,6 +65,7 @@ def main() -> None:
       <button type="button" id="btn-mode-layout" class="active">Layout</button>
       <button type="button" id="btn-mode-anim">Animation</button>
       <button type="button" id="btn-mode-weapons">Weapons</button>
+      <button type="button" id="btn-mode-items">Items</button>
     </div>
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
@@ -113,6 +115,10 @@ def main() -> None:
         <div class="btn-row">
           <button type="button" id="btn-weapon-export">Export PNGs</button>
         </div>
+      </section>
+      <section id="items-left" hidden>
+        <h2>Items</h2>
+        <ul id="item-mesh-list" class="object-list"></ul>
       </section>
     </aside>
 

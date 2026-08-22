@@ -22,6 +22,8 @@ import {
   snapSwitchToRoom,
   roomFloorY,
   roomById,
+  itemMeshFor,
+  itemMeshWorldSegs,
 } from "./model.js";
 import {
   BOX_CORNERS,
@@ -670,8 +672,9 @@ export class LayoutView {
       );
       return segs;
     }
-    if (obj.kind === "backpack") {
-      for (const s of this.#backpackTetraSegs(obj)) segs.push(s);
+    if (obj.kind === "pickup") {
+      const mesh = itemMeshFor(doc, obj.pickup);
+      for (const s of itemMeshWorldSegs(obj, mesh)) segs.push(s);
       return segs;
     }
     for (const [i, j] of BOX_EDGES) {
@@ -679,26 +682,6 @@ export class LayoutView {
     }
     for (const s of this.#glyphSegments(obj)) segs.push(s);
     return segs;
-  }
-
-  /** Equilateral base (side = sx); height = sy ≈ φ·sx. */
-  #backpackTetraSegs(obj) {
-    const s = obj.sx;
-    const y0 = obj.y;
-    const y1 = obj.y + obj.sy;
-    const depth = (s * Math.sqrt(3)) / 2;
-    const b0 = { x: obj.x, y: y0, z: obj.z };
-    const b1 = { x: obj.x + s, y: y0, z: obj.z };
-    const b2 = { x: obj.x + s / 2, y: y0, z: obj.z + depth };
-    const apex = { x: obj.x + s / 2, y: y1, z: obj.z + depth / 3 };
-    return [
-      { a: b0, b: b1 },
-      { a: b1, b: b2 },
-      { a: b2, b: b0 },
-      { a: apex, b: b0 },
-      { a: apex, b: b1 },
-      { a: apex, b: b2 },
-    ];
   }
 
   #glyphSegments(obj) {
@@ -750,15 +733,6 @@ export class LayoutView {
           a: { x: c.x + fx * 4, y: c.y, z: c.z + fz * 4 },
           b: { x: c.x + fx * 2 + fz * 1.5, y: c.y, z: c.z + fz * 2 - fx * 1.5 },
         }
-      );
-    }
-    if (obj.kind === "key") {
-      const c = aabbCenter(obj);
-      const top = obj.y + obj.sy;
-      segs.push(
-        { a: { x: c.x - 1, y: top, z: c.z }, b: { x: c.x + 1, y: top, z: c.z } },
-        { a: { x: c.x, y: top, z: c.z - 1 }, b: { x: c.x, y: top, z: c.z + 1 } },
-        { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: top, z: c.z } }
       );
     }
     if (obj.kind === "slope") {
@@ -1145,8 +1119,9 @@ export class LayoutView {
           if (verts[i] && verts[j]) this.#line3(ctx, verts[i], verts[j], cam, w, h);
         }
       }
-    } else if (obj.kind === "backpack") {
-      for (const seg of this.#backpackTetraSegs(obj)) {
+    } else if (obj.kind === "pickup") {
+      const mesh = itemMeshFor(doc, obj.pickup);
+      for (const seg of itemMeshWorldSegs(obj, mesh)) {
         this.#line3(ctx, seg.a, seg.b, cam, w, h);
       }
     } else if (obj.kind === "room") {

@@ -73,7 +73,7 @@ export const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
 export const ANIM_ORBIT_DIST_MIN = 16;
 export const ANIM_ORBIT_DIST_MAX = 400;
-export const DOC_VERSION = 7;
+export const DOC_VERSION = 9;
 export const DEFAULT_WEAPON_SCALE = 0.4;
 export const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
 export const WEAPON_LABELS = {
@@ -214,7 +214,7 @@ export const KINDS = {
     label: "Enemy",
     color: "#e07070",
     defaultSize: [2, 4, 2],
-    fixed: false,
+    fixed: true,
     slope: false,
   },
   spawn: {
@@ -241,17 +241,9 @@ export const KINDS = {
     fixed: true,
     slope: false,
   },
-  key: {
-    id: "key",
-    label: "Key",
-    color: "#f0d060",
-    defaultSize: [2, 2, 2],
-    fixed: false,
-    slope: false,
-  },
-  backpack: {
-    id: "backpack",
-    label: "Backpack",
+  pickup: {
+    id: "pickup",
+    label: "Pickup",
     color: "#6ec4a8",
     defaultSize: [1, 2, 1], // overwritten by applyBackpackProportions (1.5 tall, φ base)
     fixed: true,
@@ -266,12 +258,7 @@ export function isGhostKind(kind) {
 
 /** Kinds that always carry a link tag (resolved to indices on export). */
 export function usesLinkTag(kind) {
-  return (
-    kind === "switch" ||
-    kind === "elevator" ||
-    kind === "teleporter_dest" ||
-    kind === "key"
-  );
+  return kind === "switch" || kind === "elevator" || kind === "teleporter_dest";
 }
 
 /** Trigger purposes. Tag is only used for teleport / elevator. */
@@ -335,8 +322,7 @@ export const PALETTE_ORDER = [
   "spawn",
   "trigger",
   "teleporter_dest",
-  "key",
-  "backpack",
+  "pickup",
 ];
 export const MAX_TRIGGER_TEXT = 80;
 export const MAX_NAME_LEN = 40;
@@ -349,8 +335,8 @@ export function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
 }
 
-/** Backpack contents (ammo, weapon, health, or armour pickup). */
-export const BACKPACK_TYPES = [
+/** Placeable pickup contents (not including death-drop shells5). */
+export const PICKUP_TYPES = [
   "shells",
   "nailgun",
   "nails",
@@ -359,7 +345,31 @@ export const BACKPACK_TYPES = [
   "health 25%",
   "health 50%",
   "armour",
+  "quad damage",
+  "pentagram of protection",
+  "ring of shadows",
+  "silver key",
+  "gold key",
 ];
+/** @deprecated Use PICKUP_TYPES */
+export const BACKPACK_TYPES = PICKUP_TYPES;
+
+export const ITEM_MESH_KEYS = ["backpack", ...PICKUP_TYPES];
+export const ITEM_MIN = -4;
+export const ITEM_MAX = 4;
+export const ITEM_ORIGIN = 0;
+/** Editor 0 sits at the centre of the 2×2 pickup footprint. */
+export const ITEM_WORLD_BIAS = 1;
+export const ITEM_MAX_VERTS = 16;
+export const ITEM_MAX_LINES = 16;
+export const ITEM_MAX_UNIQUE = 6;
+
+export const DOOR_LOCKS = ["unlocked", "silver", "gold"];
+export const DOOR_LOCK_LABELS = {
+  unlocked: "Unlocked",
+  silver: "Silver key",
+  gold: "Gold key",
+};
 
 /** Height / base-side = φ. Fixed backpack: 1.5 tall. */
 export const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
@@ -367,8 +377,291 @@ export const BACKPACK_HEIGHT = 1.5;
 export const BACKPACK_SIDE = BACKPACK_HEIGHT / GOLDEN_RATIO;
 export const BACKPACK_DEPTH = (BACKPACK_SIDE * Math.sqrt(3)) / 2;
 
+export function clampPickupType(s) {
+  return PICKUP_TYPES.includes(s) ? s : "shells";
+}
+
+/** @deprecated Use clampPickupType */
 export function clampBackpackType(s) {
-  return BACKPACK_TYPES.includes(s) ? s : "shells";
+  return clampPickupType(s);
+}
+
+export function clampDoorLock(s) {
+  return s === "silver" || s === "gold" ? s : "unlocked";
+}
+
+export function clampItemCoord(n) {
+  const v = n | 0;
+  if (v < ITEM_MIN) return ITEM_MIN;
+  if (v > ITEM_MAX) return ITEM_MAX;
+  return v;
+}
+
+export function emptyItemMesh() {
+  return { verts: [], lines: [] };
+}
+
+function v3(x, y, z) {
+  return { x, y, z };
+}
+
+function meshOf(verts, lines) {
+  return { verts: verts.map((p) => v3(p[0], p[1], p[2])), lines: lines.map((p) => [p[0], p[1]]) };
+}
+
+/** Seeded meshes that obey 6 unique X / 6 unique Z. Empty types fall back to backpack. */
+export function defaultItemMeshes() {
+  return {
+    backpack: meshOf(
+      [
+        [-1, 0, -1],
+        [1, 0, -1],
+        [0, 0, 1],
+        [0, 2, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 0],
+        [3, 0],
+        [3, 1],
+        [3, 2],
+      ]
+    ),
+    "quad damage": meshOf(
+      [
+        [-1, 0, -1],
+        [1, 0, -1],
+        [1, 0, 1],
+        [-1, 0, 1],
+        [0, 3, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 0],
+        [4, 1],
+        [4, 2],
+        [4, 3],
+      ]
+    ),
+    "pentagram of protection": meshOf(
+      [
+        [0, 0, -2],
+        [2, 0, 0],
+        [0, 0, 2],
+        [-2, 0, 0],
+        [0, 4, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 0],
+        [4, 1],
+        [4, 2],
+        [4, 3],
+      ]
+    ),
+    "ring of shadows": meshOf(
+      [
+        [-2, 2, 0],
+        [-1, 1, 0],
+        [1, 1, 0],
+        [2, 2, 0],
+        [1, 4, 0],
+        [-1, 4, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [5, 0],
+      ]
+    ),
+    "silver key": meshOf(
+      [
+        [-2, 1, 0],
+        [-2, 2, 0],
+        [-1, 2, 0],
+        [-1, 1, 0],
+        [2, 1, 0],
+        [2, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [3, 4],
+        [4, 5],
+      ]
+    ),
+    "gold key": meshOf(
+      [
+        [-2, 1, 0],
+        [-2, 3, 0],
+        [-1, 3, 0],
+        [-1, 1, 0],
+        [2, 1, 0],
+        [2, 2, 0],
+        [2, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [3, 4],
+        [4, 5],
+        [4, 6],
+      ]
+    ),
+  };
+}
+
+function parseItemVert(v) {
+  if (Array.isArray(v) && v.length >= 3) return { x: clampItemCoord(v[0]), y: clampItemCoord(v[1]), z: clampItemCoord(v[2]) };
+  if (v && typeof v === "object") return { x: clampItemCoord(v.x), y: clampItemCoord(v.y), z: clampItemCoord(v.z) };
+  return null;
+}
+
+export function parseItemMesh(raw) {
+  if (!raw || typeof raw !== "object") return emptyItemMesh();
+  const verts = [];
+  const seen = new Set();
+  for (const src of raw.verts || []) {
+    const v = parseItemVert(src);
+    if (!v) continue;
+    const k = `${v.x},${v.y},${v.z}`;
+    if (seen.has(k) || verts.length >= ITEM_MAX_VERTS) continue;
+    seen.add(k);
+    verts.push(v);
+  }
+  const lines = [];
+  const lineSeen = new Set();
+  for (const src of raw.lines || []) {
+    const a = src?.[0] | 0;
+    const b = src?.[1] | 0;
+    if (a === b || a < 0 || b < 0 || a >= verts.length || b >= verts.length) continue;
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    const k = `${lo}-${hi}`;
+    if (lineSeen.has(k) || lines.length >= ITEM_MAX_LINES) continue;
+    lineSeen.add(k);
+    lines.push([lo, hi]);
+  }
+  return { verts, lines };
+}
+
+export function parseItemMeshes(raw) {
+  const d = defaultItemMeshes();
+  if (!raw || typeof raw !== "object") return d;
+  for (const key of ITEM_MESH_KEYS) {
+    if (raw[key] == null) continue;
+    const mesh = parseItemMesh(raw[key]);
+    if (key === "backpack" && !mesh.verts.length) continue;
+    d[key] = mesh;
+  }
+  return d;
+}
+
+function vertsMatch(verts, pts) {
+  if (!verts || verts.length !== pts.length) return false;
+  return pts.every((p, i) => verts[i].x === p[0] && verts[i].y === p[1] && verts[i].z === p[2]);
+}
+
+/** v8 stored 0..7 with origin at 4. Shift X/Z so origin is 0. */
+export function migrateItemMeshes(rawItems, fromVersion) {
+  if (fromVersion >= 9 || !rawItems || typeof rawItems !== "object") return rawItems;
+  const out = { ...rawItems };
+  for (const key of Object.keys(out)) {
+    const mesh = out[key];
+    if (!mesh || typeof mesh !== "object") continue;
+    const verts = (mesh.verts || []).map((src) => {
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      if (Array.isArray(src) && src.length >= 3) {
+        x = src[0] | 0;
+        y = src[1] | 0;
+        z = src[2] | 0;
+      } else if (src && typeof src === "object") {
+        x = src.x | 0;
+        y = src.y | 0;
+        z = src.z | 0;
+      }
+      return { x: clampItemCoord(x - 4), y: clampItemCoord(y), z: clampItemCoord(z - 4) };
+    });
+    out[key] = { ...mesh, verts };
+  }
+  const bp = out.backpack;
+  if (bp && vertsMatch(bp.verts, [
+    [0, 0, 0],
+    [2, 0, 0],
+    [1, 0, 2],
+    [1, 2, 1],
+  ])) {
+    out.backpack = defaultItemMeshes().backpack;
+  }
+  return out;
+}
+
+export function itemMeshHasGeom(mesh) {
+  return !!(mesh && mesh.verts?.length && mesh.lines?.length);
+}
+
+export function itemMeshFor(doc, type) {
+  const items = doc?.items || defaultItemMeshes();
+  const key = type === "backpack" ? "backpack" : clampPickupType(type);
+  const mesh = items[key];
+  if (itemMeshHasGeom(mesh)) return mesh;
+  return items.backpack || defaultItemMeshes().backpack;
+}
+
+export function itemUniqueXZ(verts) {
+  const xs = new Set();
+  const zs = new Set();
+  for (const v of verts || []) {
+    xs.add(v.x | 0);
+    zs.add(v.z | 0);
+  }
+  return { nx: xs.size, nz: zs.size, xs, zs };
+}
+
+export function itemMeshStats(mesh) {
+  const verts = mesh?.verts || [];
+  const lines = mesh?.lines || [];
+  const { nx, nz } = itemUniqueXZ(verts);
+  const nv = verts.length;
+  const ne = lines.length;
+  return {
+    nv,
+    ne,
+    nx,
+    nz,
+    bytes: nx + nz + nv * 4 + ne * 3,
+    over: nx > ITEM_MAX_UNIQUE || nz > ITEM_MAX_UNIQUE || nv > ITEM_MAX_VERTS || ne > ITEM_MAX_LINES,
+  };
+}
+
+export function itemMeshWorldSegs(obj, mesh) {
+  const m = mesh && itemMeshHasGeom(mesh) ? mesh : defaultItemMeshes().backpack;
+  const verts = m.verts.map((v) => ({
+    x: obj.x + (v.x | 0) + ITEM_WORLD_BIAS,
+    y: obj.y + (v.y | 0),
+    z: obj.z + (v.z | 0) + ITEM_WORLD_BIAS,
+  }));
+  const segs = [];
+  for (const [a, b] of m.lines) {
+    if (verts[a] && verts[b]) segs.push({ a: verts[a], b: verts[b] });
+  }
+  return segs;
 }
 
 /** Fixed equilateral tetra: height 1.5, base side = height/φ. */
@@ -583,7 +876,7 @@ export function clampObject(obj) {
   obj.z = clampByte(obj.z);
   if (obj.kind === "doorway" || obj.kind === "switch") {
     applyFaceSize(obj);
-  } else if (obj.kind === "backpack") {
+  } else if (obj.kind === "pickup") {
     applyBackpackProportions(obj);
   } else if (obj.kind === "slope") {
     obj.sx = clampSize(obj.x, obj.sx);
@@ -618,11 +911,12 @@ export function clampObject(obj) {
   }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
-  if (obj.kind === "backpack") obj.backpack = clampBackpackType(obj.backpack);
+  if (obj.kind === "pickup") obj.pickup = clampPickupType(obj.pickup);
   if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
   if (obj.kind === "doorway") {
-    obj.locked = !!obj.locked;
-    obj.keyTag = clampTag(obj.keyTag);
+    obj.lockKey = clampDoorLock(obj.lockKey);
+    obj.locked = obj.lockKey !== "unlocked";
+    delete obj.keyTag;
     if (obj.otherRoomId != null) obj.otherRoomId = String(obj.otherRoomId);
     else obj.otherRoomId = null;
   }
@@ -690,10 +984,9 @@ export function createObject(kind, x, y, z, extra = {}) {
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
-  if (kind === "backpack") obj.backpack = clampBackpackType(extra.backpack);
+  if (kind === "pickup") obj.pickup = clampPickupType(extra.pickup);
   if (kind === "doorway") {
-    obj.locked = !!extra.locked;
-    obj.keyTag = clampTag(extra.keyTag);
+    obj.lockKey = clampDoorLock(extra.lockKey ?? (extra.locked ? "silver" : "unlocked"));
     if (extra.otherRoomId) obj.otherRoomId = String(extra.otherRoomId);
   }
   if (kind === "platform") obj.collide = extra.collide !== false;
@@ -728,7 +1021,7 @@ export function objectLabel(obj) {
     return obj.name ? `Room  ${obj.name}` : "Room";
   }
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
-  if (obj.kind === "backpack") return `Backpack (${clampBackpackType(obj.backpack)})`;
+  if (obj.kind === "pickup") return `Pickup (${clampPickupType(obj.pickup)})`;
   return KINDS[obj.kind].label;
 }
 
@@ -797,9 +1090,7 @@ export const C64_OBJECT_BYTES = {
   enemy: 7,
   trigger: 10,
   spawn: 5,
-  backpack: 5,
-  // Editor-only / not yet cooked — treat like a typical AABB + room link
-  key: 7,
+  pickup: 5,
   teleporter_dest: 5,
 };
 
@@ -854,8 +1145,7 @@ export function formatMapStats(stats) {
     "enemy",
     "trigger",
     "spawn",
-    "backpack",
-    "key",
+    "pickup",
     "teleporter_dest",
   ];
   const plurals = {
@@ -869,8 +1159,7 @@ export function formatMapStats(stats) {
     enemy: "enemies",
     trigger: "triggers",
     spawn: "spawns",
-    backpack: "backpacks",
-    key: "keys",
+    pickup: "pickups",
     teleporter_dest: "dests",
   };
   for (const kind of order) {
@@ -1127,9 +1416,35 @@ export function createAllCreatures() {
   return ENEMY_TYPES.map((t) => createEnemy(t.name));
 }
 
+function migrateDoorLock(o) {
+  if (o.lockKey != null) return clampDoorLock(o.lockKey);
+  if (o.locked) {
+    const t = String(o.keyTag || o.tag || "").toLowerCase();
+    return t.includes("gold") ? "gold" : "silver";
+  }
+  return "unlocked";
+}
+
+function migrateLoadedObject(o) {
+  if (!o || typeof o !== "object") return o;
+  const out = { ...o };
+  if (out.kind === "backpack") {
+    out.kind = "pickup";
+    out.pickup = out.pickup || out.backpack;
+  }
+  if (out.kind === "key") {
+    out.kind = "pickup";
+    const t = `${out.tag || ""} ${out.keyTag || ""} ${out.pickup || ""}`.toLowerCase();
+    out.pickup = t.includes("gold") ? "gold key" : "silver key";
+  }
+  if (out.kind === "doorway") out.lockKey = migrateDoorLock(out);
+  return out;
+}
+
 function parseObjects(list) {
   const out = [];
-  for (const o of list || []) {
+  for (const raw of list || []) {
+    const o = migrateLoadedObject(raw);
     if (!KINDS[o.kind]) continue;
     const obj = createObject(o.kind, o.x, o.y, o.z, {
       id: o.id,
@@ -1143,9 +1458,11 @@ function parseObjects(list) {
       purpose: o.purpose,
       name: o.name,
       tag: o.tag,
+      lockKey: o.lockKey,
       locked: o.locked,
       keyTag: o.keyTag,
       elevType: o.elevType,
+      pickup: o.pickup,
       backpack: o.backpack,
       order: o.order,
       collide: o.collide,
@@ -1211,10 +1528,11 @@ function parseObjects(list) {
     }
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
-    if (o.kind === "backpack" && o.backpack != null) obj.backpack = clampBackpackType(o.backpack);
+    if (o.kind === "pickup" || o.kind === "backpack") {
+      obj.pickup = clampPickupType(o.pickup || o.backpack);
+    }
     if (o.kind === "doorway") {
-      obj.locked = !!o.locked;
-      if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);
+      obj.lockKey = migrateDoorLock(o);
       if (o.otherRoomId != null) obj.otherRoomId = String(o.otherRoomId);
     }
     if (o.kind === "platform" && o.collide != null) obj.collide = o.collide !== false;
@@ -1315,7 +1633,7 @@ function num(v, fallback) {
 export function parseEditorState(raw) {
   const d = defaultEditorState();
   if (!raw || typeof raw !== "object") return d;
-  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons") d.mode = raw.mode;
+  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons" || raw.mode === "items") d.mode = raw.mode;
   d.localDraw = !!raw.localDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
@@ -1370,6 +1688,7 @@ export function gameDocument(doc) {
     maps: doc.maps,
     enemies: doc.enemies,
     weapons: doc.weapons,
+    items: doc.items,
   };
 }
 
@@ -1383,6 +1702,7 @@ export function createDefaultDocument() {
     maps,
     enemies: createAllCreatures(),
     weapons: defaultWeapons(),
+    items: defaultItemMeshes(),
   };
 }
 
@@ -1476,6 +1796,7 @@ export function normalizeDocument(raw) {
   nudgeDoorsOutside(doc);
   doc.version = DOC_VERSION;
   doc.weapons = parseWeapons(raw.weapons);
+  doc.items = parseItemMeshes(migrateItemMeshes(raw.items, fromVersion));
   doc.editor = parseEditorState(raw.editor);
   return doc;
 }

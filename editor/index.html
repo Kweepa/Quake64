@@ -766,6 +766,7 @@ button:disabled {
       <button type="button" id="btn-mode-layout" class="active">Layout</button>
       <button type="button" id="btn-mode-anim">Animation</button>
       <button type="button" id="btn-mode-weapons">Weapons</button>
+      <button type="button" id="btn-mode-items">Items</button>
     </div>
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
@@ -815,6 +816,10 @@ button:disabled {
         <div class="btn-row">
           <button type="button" id="btn-weapon-export">Export PNGs</button>
         </div>
+      </section>
+      <section id="items-left" hidden>
+        <h2>Items</h2>
+        <ul id="item-mesh-list" class="object-list"></ul>
       </section>
     </aside>
 
@@ -2037,7 +2042,7 @@ const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
 const ANIM_ORBIT_DIST_MIN = 16;
 const ANIM_ORBIT_DIST_MAX = 400;
-const DOC_VERSION = 7;
+const DOC_VERSION = 9;
 const DEFAULT_WEAPON_SCALE = 0.4;
 const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
 const WEAPON_LABELS = {
@@ -2178,7 +2183,7 @@ const KINDS = {
     label: "Enemy",
     color: "#e07070",
     defaultSize: [2, 4, 2],
-    fixed: false,
+    fixed: true,
     slope: false,
   },
   spawn: {
@@ -2205,17 +2210,9 @@ const KINDS = {
     fixed: true,
     slope: false,
   },
-  key: {
-    id: "key",
-    label: "Key",
-    color: "#f0d060",
-    defaultSize: [2, 2, 2],
-    fixed: false,
-    slope: false,
-  },
-  backpack: {
-    id: "backpack",
-    label: "Backpack",
+  pickup: {
+    id: "pickup",
+    label: "Pickup",
     color: "#6ec4a8",
     defaultSize: [1, 2, 1], // overwritten by applyBackpackProportions (1.5 tall, φ base)
     fixed: true,
@@ -2230,12 +2227,7 @@ function isGhostKind(kind) {
 
 /** Kinds that always carry a link tag (resolved to indices on export). */
 function usesLinkTag(kind) {
-  return (
-    kind === "switch" ||
-    kind === "elevator" ||
-    kind === "teleporter_dest" ||
-    kind === "key"
-  );
+  return kind === "switch" || kind === "elevator" || kind === "teleporter_dest";
 }
 
 /** Trigger purposes. Tag is only used for teleport / elevator. */
@@ -2299,8 +2291,7 @@ const PALETTE_ORDER = [
   "spawn",
   "trigger",
   "teleporter_dest",
-  "key",
-  "backpack",
+  "pickup",
 ];
 const MAX_TRIGGER_TEXT = 80;
 const MAX_NAME_LEN = 40;
@@ -2313,8 +2304,8 @@ function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
 }
 
-/** Backpack contents (ammo, weapon, health, or armour pickup). */
-const BACKPACK_TYPES = [
+/** Placeable pickup contents (not including death-drop shells5). */
+const PICKUP_TYPES = [
   "shells",
   "nailgun",
   "nails",
@@ -2323,7 +2314,31 @@ const BACKPACK_TYPES = [
   "health 25%",
   "health 50%",
   "armour",
+  "quad damage",
+  "pentagram of protection",
+  "ring of shadows",
+  "silver key",
+  "gold key",
 ];
+/** @deprecated Use PICKUP_TYPES */
+const BACKPACK_TYPES = PICKUP_TYPES;
+
+const ITEM_MESH_KEYS = ["backpack", ...PICKUP_TYPES];
+const ITEM_MIN = -4;
+const ITEM_MAX = 4;
+const ITEM_ORIGIN = 0;
+/** Editor 0 sits at the centre of the 2×2 pickup footprint. */
+const ITEM_WORLD_BIAS = 1;
+const ITEM_MAX_VERTS = 16;
+const ITEM_MAX_LINES = 16;
+const ITEM_MAX_UNIQUE = 6;
+
+const DOOR_LOCKS = ["unlocked", "silver", "gold"];
+const DOOR_LOCK_LABELS = {
+  unlocked: "Unlocked",
+  silver: "Silver key",
+  gold: "Gold key",
+};
 
 /** Height / base-side = φ. Fixed backpack: 1.5 tall. */
 const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
@@ -2331,8 +2346,291 @@ const BACKPACK_HEIGHT = 1.5;
 const BACKPACK_SIDE = BACKPACK_HEIGHT / GOLDEN_RATIO;
 const BACKPACK_DEPTH = (BACKPACK_SIDE * Math.sqrt(3)) / 2;
 
+function clampPickupType(s) {
+  return PICKUP_TYPES.includes(s) ? s : "shells";
+}
+
+/** @deprecated Use clampPickupType */
 function clampBackpackType(s) {
-  return BACKPACK_TYPES.includes(s) ? s : "shells";
+  return clampPickupType(s);
+}
+
+function clampDoorLock(s) {
+  return s === "silver" || s === "gold" ? s : "unlocked";
+}
+
+function clampItemCoord(n) {
+  const v = n | 0;
+  if (v < ITEM_MIN) return ITEM_MIN;
+  if (v > ITEM_MAX) return ITEM_MAX;
+  return v;
+}
+
+function emptyItemMesh() {
+  return { verts: [], lines: [] };
+}
+
+function v3(x, y, z) {
+  return { x, y, z };
+}
+
+function meshOf(verts, lines) {
+  return { verts: verts.map((p) => v3(p[0], p[1], p[2])), lines: lines.map((p) => [p[0], p[1]]) };
+}
+
+/** Seeded meshes that obey 6 unique X / 6 unique Z. Empty types fall back to backpack. */
+function defaultItemMeshes() {
+  return {
+    backpack: meshOf(
+      [
+        [-1, 0, -1],
+        [1, 0, -1],
+        [0, 0, 1],
+        [0, 2, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 0],
+        [3, 0],
+        [3, 1],
+        [3, 2],
+      ]
+    ),
+    "quad damage": meshOf(
+      [
+        [-1, 0, -1],
+        [1, 0, -1],
+        [1, 0, 1],
+        [-1, 0, 1],
+        [0, 3, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 0],
+        [4, 1],
+        [4, 2],
+        [4, 3],
+      ]
+    ),
+    "pentagram of protection": meshOf(
+      [
+        [0, 0, -2],
+        [2, 0, 0],
+        [0, 0, 2],
+        [-2, 0, 0],
+        [0, 4, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 0],
+        [4, 1],
+        [4, 2],
+        [4, 3],
+      ]
+    ),
+    "ring of shadows": meshOf(
+      [
+        [-2, 2, 0],
+        [-1, 1, 0],
+        [1, 1, 0],
+        [2, 2, 0],
+        [1, 4, 0],
+        [-1, 4, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [5, 0],
+      ]
+    ),
+    "silver key": meshOf(
+      [
+        [-2, 1, 0],
+        [-2, 2, 0],
+        [-1, 2, 0],
+        [-1, 1, 0],
+        [2, 1, 0],
+        [2, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [3, 4],
+        [4, 5],
+      ]
+    ),
+    "gold key": meshOf(
+      [
+        [-2, 1, 0],
+        [-2, 3, 0],
+        [-1, 3, 0],
+        [-1, 1, 0],
+        [2, 1, 0],
+        [2, 2, 0],
+        [2, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [3, 4],
+        [4, 5],
+        [4, 6],
+      ]
+    ),
+  };
+}
+
+function parseItemVert(v) {
+  if (Array.isArray(v) && v.length >= 3) return { x: clampItemCoord(v[0]), y: clampItemCoord(v[1]), z: clampItemCoord(v[2]) };
+  if (v && typeof v === "object") return { x: clampItemCoord(v.x), y: clampItemCoord(v.y), z: clampItemCoord(v.z) };
+  return null;
+}
+
+function parseItemMesh(raw) {
+  if (!raw || typeof raw !== "object") return emptyItemMesh();
+  const verts = [];
+  const seen = new Set();
+  for (const src of raw.verts || []) {
+    const v = parseItemVert(src);
+    if (!v) continue;
+    const k = `${v.x},${v.y},${v.z}`;
+    if (seen.has(k) || verts.length >= ITEM_MAX_VERTS) continue;
+    seen.add(k);
+    verts.push(v);
+  }
+  const lines = [];
+  const lineSeen = new Set();
+  for (const src of raw.lines || []) {
+    const a = src?.[0] | 0;
+    const b = src?.[1] | 0;
+    if (a === b || a < 0 || b < 0 || a >= verts.length || b >= verts.length) continue;
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    const k = `${lo}-${hi}`;
+    if (lineSeen.has(k) || lines.length >= ITEM_MAX_LINES) continue;
+    lineSeen.add(k);
+    lines.push([lo, hi]);
+  }
+  return { verts, lines };
+}
+
+function parseItemMeshes(raw) {
+  const d = defaultItemMeshes();
+  if (!raw || typeof raw !== "object") return d;
+  for (const key of ITEM_MESH_KEYS) {
+    if (raw[key] == null) continue;
+    const mesh = parseItemMesh(raw[key]);
+    if (key === "backpack" && !mesh.verts.length) continue;
+    d[key] = mesh;
+  }
+  return d;
+}
+
+function vertsMatch(verts, pts) {
+  if (!verts || verts.length !== pts.length) return false;
+  return pts.every((p, i) => verts[i].x === p[0] && verts[i].y === p[1] && verts[i].z === p[2]);
+}
+
+/** v8 stored 0..7 with origin at 4. Shift X/Z so origin is 0. */
+function migrateItemMeshes(rawItems, fromVersion) {
+  if (fromVersion >= 9 || !rawItems || typeof rawItems !== "object") return rawItems;
+  const out = { ...rawItems };
+  for (const key of Object.keys(out)) {
+    const mesh = out[key];
+    if (!mesh || typeof mesh !== "object") continue;
+    const verts = (mesh.verts || []).map((src) => {
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      if (Array.isArray(src) && src.length >= 3) {
+        x = src[0] | 0;
+        y = src[1] | 0;
+        z = src[2] | 0;
+      } else if (src && typeof src === "object") {
+        x = src.x | 0;
+        y = src.y | 0;
+        z = src.z | 0;
+      }
+      return { x: clampItemCoord(x - 4), y: clampItemCoord(y), z: clampItemCoord(z - 4) };
+    });
+    out[key] = { ...mesh, verts };
+  }
+  const bp = out.backpack;
+  if (bp && vertsMatch(bp.verts, [
+    [0, 0, 0],
+    [2, 0, 0],
+    [1, 0, 2],
+    [1, 2, 1],
+  ])) {
+    out.backpack = defaultItemMeshes().backpack;
+  }
+  return out;
+}
+
+function itemMeshHasGeom(mesh) {
+  return !!(mesh && mesh.verts?.length && mesh.lines?.length);
+}
+
+function itemMeshFor(doc, type) {
+  const items = doc?.items || defaultItemMeshes();
+  const key = type === "backpack" ? "backpack" : clampPickupType(type);
+  const mesh = items[key];
+  if (itemMeshHasGeom(mesh)) return mesh;
+  return items.backpack || defaultItemMeshes().backpack;
+}
+
+function itemUniqueXZ(verts) {
+  const xs = new Set();
+  const zs = new Set();
+  for (const v of verts || []) {
+    xs.add(v.x | 0);
+    zs.add(v.z | 0);
+  }
+  return { nx: xs.size, nz: zs.size, xs, zs };
+}
+
+function itemMeshStats(mesh) {
+  const verts = mesh?.verts || [];
+  const lines = mesh?.lines || [];
+  const { nx, nz } = itemUniqueXZ(verts);
+  const nv = verts.length;
+  const ne = lines.length;
+  return {
+    nv,
+    ne,
+    nx,
+    nz,
+    bytes: nx + nz + nv * 4 + ne * 3,
+    over: nx > ITEM_MAX_UNIQUE || nz > ITEM_MAX_UNIQUE || nv > ITEM_MAX_VERTS || ne > ITEM_MAX_LINES,
+  };
+}
+
+function itemMeshWorldSegs(obj, mesh) {
+  const m = mesh && itemMeshHasGeom(mesh) ? mesh : defaultItemMeshes().backpack;
+  const verts = m.verts.map((v) => ({
+    x: obj.x + (v.x | 0) + ITEM_WORLD_BIAS,
+    y: obj.y + (v.y | 0),
+    z: obj.z + (v.z | 0) + ITEM_WORLD_BIAS,
+  }));
+  const segs = [];
+  for (const [a, b] of m.lines) {
+    if (verts[a] && verts[b]) segs.push({ a: verts[a], b: verts[b] });
+  }
+  return segs;
 }
 
 /** Fixed equilateral tetra: height 1.5, base side = height/φ. */
@@ -2547,7 +2845,7 @@ function clampObject(obj) {
   obj.z = clampByte(obj.z);
   if (obj.kind === "doorway" || obj.kind === "switch") {
     applyFaceSize(obj);
-  } else if (obj.kind === "backpack") {
+  } else if (obj.kind === "pickup") {
     applyBackpackProportions(obj);
   } else if (obj.kind === "slope") {
     obj.sx = clampSize(obj.x, obj.sx);
@@ -2582,11 +2880,12 @@ function clampObject(obj) {
   }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
-  if (obj.kind === "backpack") obj.backpack = clampBackpackType(obj.backpack);
+  if (obj.kind === "pickup") obj.pickup = clampPickupType(obj.pickup);
   if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
   if (obj.kind === "doorway") {
-    obj.locked = !!obj.locked;
-    obj.keyTag = clampTag(obj.keyTag);
+    obj.lockKey = clampDoorLock(obj.lockKey);
+    obj.locked = obj.lockKey !== "unlocked";
+    delete obj.keyTag;
     if (obj.otherRoomId != null) obj.otherRoomId = String(obj.otherRoomId);
     else obj.otherRoomId = null;
   }
@@ -2654,10 +2953,9 @@ function createObject(kind, x, y, z, extra = {}) {
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
-  if (kind === "backpack") obj.backpack = clampBackpackType(extra.backpack);
+  if (kind === "pickup") obj.pickup = clampPickupType(extra.pickup);
   if (kind === "doorway") {
-    obj.locked = !!extra.locked;
-    obj.keyTag = clampTag(extra.keyTag);
+    obj.lockKey = clampDoorLock(extra.lockKey ?? (extra.locked ? "silver" : "unlocked"));
     if (extra.otherRoomId) obj.otherRoomId = String(extra.otherRoomId);
   }
   if (kind === "platform") obj.collide = extra.collide !== false;
@@ -2692,7 +2990,7 @@ function objectLabel(obj) {
     return obj.name ? `Room  ${obj.name}` : "Room";
   }
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
-  if (obj.kind === "backpack") return `Backpack (${clampBackpackType(obj.backpack)})`;
+  if (obj.kind === "pickup") return `Pickup (${clampPickupType(obj.pickup)})`;
   return KINDS[obj.kind].label;
 }
 
@@ -2761,9 +3059,7 @@ const C64_OBJECT_BYTES = {
   enemy: 7,
   trigger: 10,
   spawn: 5,
-  backpack: 5,
-  // Editor-only / not yet cooked — treat like a typical AABB + room link
-  key: 7,
+  pickup: 5,
   teleporter_dest: 5,
 };
 
@@ -2818,8 +3114,7 @@ function formatMapStats(stats) {
     "enemy",
     "trigger",
     "spawn",
-    "backpack",
-    "key",
+    "pickup",
     "teleporter_dest",
   ];
   const plurals = {
@@ -2833,8 +3128,7 @@ function formatMapStats(stats) {
     enemy: "enemies",
     trigger: "triggers",
     spawn: "spawns",
-    backpack: "backpacks",
-    key: "keys",
+    pickup: "pickups",
     teleporter_dest: "dests",
   };
   for (const kind of order) {
@@ -3091,9 +3385,35 @@ function createAllCreatures() {
   return ENEMY_TYPES.map((t) => createEnemy(t.name));
 }
 
+function migrateDoorLock(o) {
+  if (o.lockKey != null) return clampDoorLock(o.lockKey);
+  if (o.locked) {
+    const t = String(o.keyTag || o.tag || "").toLowerCase();
+    return t.includes("gold") ? "gold" : "silver";
+  }
+  return "unlocked";
+}
+
+function migrateLoadedObject(o) {
+  if (!o || typeof o !== "object") return o;
+  const out = { ...o };
+  if (out.kind === "backpack") {
+    out.kind = "pickup";
+    out.pickup = out.pickup || out.backpack;
+  }
+  if (out.kind === "key") {
+    out.kind = "pickup";
+    const t = `${out.tag || ""} ${out.keyTag || ""} ${out.pickup || ""}`.toLowerCase();
+    out.pickup = t.includes("gold") ? "gold key" : "silver key";
+  }
+  if (out.kind === "doorway") out.lockKey = migrateDoorLock(out);
+  return out;
+}
+
 function parseObjects(list) {
   const out = [];
-  for (const o of list || []) {
+  for (const raw of list || []) {
+    const o = migrateLoadedObject(raw);
     if (!KINDS[o.kind]) continue;
     const obj = createObject(o.kind, o.x, o.y, o.z, {
       id: o.id,
@@ -3107,9 +3427,11 @@ function parseObjects(list) {
       purpose: o.purpose,
       name: o.name,
       tag: o.tag,
+      lockKey: o.lockKey,
       locked: o.locked,
       keyTag: o.keyTag,
       elevType: o.elevType,
+      pickup: o.pickup,
       backpack: o.backpack,
       order: o.order,
       collide: o.collide,
@@ -3175,10 +3497,11 @@ function parseObjects(list) {
     }
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
-    if (o.kind === "backpack" && o.backpack != null) obj.backpack = clampBackpackType(o.backpack);
+    if (o.kind === "pickup" || o.kind === "backpack") {
+      obj.pickup = clampPickupType(o.pickup || o.backpack);
+    }
     if (o.kind === "doorway") {
-      obj.locked = !!o.locked;
-      if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);
+      obj.lockKey = migrateDoorLock(o);
       if (o.otherRoomId != null) obj.otherRoomId = String(o.otherRoomId);
     }
     if (o.kind === "platform" && o.collide != null) obj.collide = o.collide !== false;
@@ -3279,7 +3602,7 @@ function num(v, fallback) {
 function parseEditorState(raw) {
   const d = defaultEditorState();
   if (!raw || typeof raw !== "object") return d;
-  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons") d.mode = raw.mode;
+  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons" || raw.mode === "items") d.mode = raw.mode;
   d.localDraw = !!raw.localDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
@@ -3334,6 +3657,7 @@ function gameDocument(doc) {
     maps: doc.maps,
     enemies: doc.enemies,
     weapons: doc.weapons,
+    items: doc.items,
   };
 }
 
@@ -3347,6 +3671,7 @@ function createDefaultDocument() {
     maps,
     enemies: createAllCreatures(),
     weapons: defaultWeapons(),
+    items: defaultItemMeshes(),
   };
 }
 
@@ -3440,6 +3765,7 @@ function normalizeDocument(raw) {
   nudgeDoorsOutside(doc);
   doc.version = DOC_VERSION;
   doc.weapons = parseWeapons(raw.weapons);
+  doc.items = parseItemMeshes(migrateItemMeshes(raw.items, fromVersion));
   doc.editor = parseEditorState(raw.editor);
   return doc;
 }
@@ -5804,8 +6130,9 @@ class LayoutView {
       );
       return segs;
     }
-    if (obj.kind === "backpack") {
-      for (const s of this.#backpackTetraSegs(obj)) segs.push(s);
+    if (obj.kind === "pickup") {
+      const mesh = itemMeshFor(doc, obj.pickup);
+      for (const s of itemMeshWorldSegs(obj, mesh)) segs.push(s);
       return segs;
     }
     for (const [i, j] of BOX_EDGES) {
@@ -5813,26 +6140,6 @@ class LayoutView {
     }
     for (const s of this.#glyphSegments(obj)) segs.push(s);
     return segs;
-  }
-
-  /** Equilateral base (side = sx); height = sy ≈ φ·sx. */
-  #backpackTetraSegs(obj) {
-    const s = obj.sx;
-    const y0 = obj.y;
-    const y1 = obj.y + obj.sy;
-    const depth = (s * Math.sqrt(3)) / 2;
-    const b0 = { x: obj.x, y: y0, z: obj.z };
-    const b1 = { x: obj.x + s, y: y0, z: obj.z };
-    const b2 = { x: obj.x + s / 2, y: y0, z: obj.z + depth };
-    const apex = { x: obj.x + s / 2, y: y1, z: obj.z + depth / 3 };
-    return [
-      { a: b0, b: b1 },
-      { a: b1, b: b2 },
-      { a: b2, b: b0 },
-      { a: apex, b: b0 },
-      { a: apex, b: b1 },
-      { a: apex, b: b2 },
-    ];
   }
 
   #glyphSegments(obj) {
@@ -5884,15 +6191,6 @@ class LayoutView {
           a: { x: c.x + fx * 4, y: c.y, z: c.z + fz * 4 },
           b: { x: c.x + fx * 2 + fz * 1.5, y: c.y, z: c.z + fz * 2 - fx * 1.5 },
         }
-      );
-    }
-    if (obj.kind === "key") {
-      const c = aabbCenter(obj);
-      const top = obj.y + obj.sy;
-      segs.push(
-        { a: { x: c.x - 1, y: top, z: c.z }, b: { x: c.x + 1, y: top, z: c.z } },
-        { a: { x: c.x, y: top, z: c.z - 1 }, b: { x: c.x, y: top, z: c.z + 1 } },
-        { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: top, z: c.z } }
       );
     }
     if (obj.kind === "slope") {
@@ -6279,8 +6577,9 @@ class LayoutView {
           if (verts[i] && verts[j]) this.#line3(ctx, verts[i], verts[j], cam, w, h);
         }
       }
-    } else if (obj.kind === "backpack") {
-      for (const seg of this.#backpackTetraSegs(obj)) {
+    } else if (obj.kind === "pickup") {
+      const mesh = itemMeshFor(doc, obj.pickup);
+      for (const seg of itemMeshWorldSegs(obj, mesh)) {
         this.#line3(ctx, seg.a, seg.b, cam, w, h);
       }
     } else if (obj.kind === "room") {
@@ -7434,6 +7733,822 @@ class WeaponView {
 }
 
 
+// ---- js/itemView.js ----
+const ITEM_VERT_HIT = 10;
+const ITEM_LINE_HIT = 6;
+const ITEM_DIST_MIN = 8;
+const ITEM_DIST_MAX = 80;
+const ITEM_BOX_CLICK = 4;
+const ITEM_ZOOM_K = 0.008;
+const ITEM_AXIS_LEN = 2;
+const ITEM_AXIS_HIT = 9;
+const ITEM_AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
+
+function clampItemDist(d) {
+  return Math.max(ITEM_DIST_MIN, Math.min(ITEM_DIST_MAX, d));
+}
+
+/** { verts: [{x,y,z}], lines: [[i,j]] } in local indices. Survives mesh-type switches. */
+let itemClip = null;
+
+function offsetSortKey([dx, dy, dz]) {
+  const m = Math.abs(dx) + Math.abs(dy) + Math.abs(dz);
+  const axis = dx !== 0 ? 0 : dz !== 0 ? 1 : 2;
+  const sign = dx + dy + dz < 0 ? 1 : 0;
+  return m * 100 + axis * 10 + sign;
+}
+
+class ItemView {
+  constructor(canvas, opts) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.opts = opts;
+    this.orbit = { yaw: 0.6, pitch: 0.35, dist: 16, target: { x: 0, y: 0, z: 0 } };
+    this.drag = null;
+    this.hoverVert = -1;
+    this.hoverLine = -1;
+    this.hoverAxis = null;
+    this.selectedVerts = [];
+    this.selectedLines = [];
+    this.enabled = false;
+    this._ro = new ResizeObserver(() => this.resize());
+    this._ro.observe(opts.stage || canvas.parentElement);
+    this.resize();
+
+    canvas.addEventListener("pointerdown", (e) => this.#onDown(e));
+    canvas.addEventListener("pointermove", (e) => this.#onMove(e));
+    canvas.addEventListener("pointerup", (e) => this.#onUp(e));
+    canvas.addEventListener("pointerleave", (e) => this.#onUp(e));
+    canvas.addEventListener("wheel", (e) => this.#onWheel(e), { passive: false });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+    canvas.addEventListener("mousedown", (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+    canvas.addEventListener("auxclick", (e) => {
+      if (e.button === 1) e.preventDefault();
+    });
+  }
+
+  resize() {
+    const stage = this.opts.stage || this.canvas.parentElement;
+    const rect = stage.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(64, Math.floor(rect.width));
+    const h = Math.max(64, Math.floor(rect.height));
+    this.canvas.width = Math.floor(w * dpr);
+    this.canvas.height = Math.floor(h * dpr);
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.cssW = w;
+    this.cssH = h;
+    this.draw();
+  }
+
+  selection() {
+    return { verts: [...this.selectedVerts], lines: [...this.selectedLines] };
+  }
+
+  clearSelection() {
+    this.selectedVerts = [];
+    this.selectedLines = [];
+    this.hoverVert = -1;
+    this.hoverLine = -1;
+    this.hoverAxis = null;
+  }
+
+  addVertAtOrigin() {
+    const mesh = this.#mesh();
+    if (mesh.verts.length >= ITEM_MAX_VERTS) {
+      this.opts.onStatus?.("Vertex cap (16)", true);
+      return false;
+    }
+    const cell = { x: ITEM_ORIGIN, y: ITEM_ORIGIN, z: ITEM_ORIGIN };
+    if (this.#occupied(mesh, cell.x, cell.y, cell.z)) {
+      this.opts.onStatus?.("Origin is occupied", true);
+      return false;
+    }
+    const next = [...mesh.verts, { ...cell }];
+    if (!this.#uniqueOk(next)) {
+      this.opts.onStatus?.(`Would exceed ${ITEM_MAX_UNIQUE} unique X or Z`, true);
+      return false;
+    }
+    this.opts.beginUndo?.();
+    mesh.verts.push({ ...cell });
+    this.opts.endUndo?.();
+    this.selectedVerts = [mesh.verts.length - 1];
+    this.selectedLines = [];
+    this.opts.onChange?.();
+    this.opts.onSelect?.();
+    this.draw();
+    return true;
+  }
+
+  addLineFromSelection() {
+    const mesh = this.#mesh();
+    if (this.selectedVerts.length !== 2) {
+      this.opts.onStatus?.("Select two vertices", true);
+      return false;
+    }
+    const [a, b] = this.selectedVerts;
+    if (!this.#canAddLine(mesh, a, b)) {
+      this.opts.onStatus?.(mesh.lines.length >= ITEM_MAX_LINES ? "Line cap (16)" : "Line already exists", true);
+      return false;
+    }
+    this.opts.beginUndo?.();
+    this.#tryAddLine(mesh, a, b);
+    this.opts.endUndo?.();
+    this.opts.onChange?.();
+    this.opts.onSelect?.();
+    this.draw();
+    return true;
+  }
+
+  deleteSelection() {
+    const mesh = this.#mesh();
+    if (!mesh) return false;
+    const lines = [...this.selectedLines].filter((i) => i >= 0 && i < mesh.lines.length).sort((a, b) => b - a);
+    const verts = [...this.selectedVerts].filter((i) => i >= 0 && i < mesh.verts.length).sort((a, b) => b - a);
+    if (!lines.length && !verts.length) return false;
+    this.opts.beginUndo?.();
+    for (const i of lines) mesh.lines.splice(i, 1);
+    for (const i of verts) {
+      mesh.verts.splice(i, 1);
+      mesh.lines = mesh.lines
+        .filter(([a, b]) => a !== i && b !== i)
+        .map(([a, b]) => [a > i ? a - 1 : a, b > i ? b - 1 : b]);
+    }
+    this.opts.endUndo?.();
+    this.clearSelection();
+    this.opts.onChange?.();
+    this.opts.onSelect?.();
+    this.draw();
+    return true;
+  }
+
+  hasClipboard() {
+    return !!(itemClip && itemClip.verts.length);
+  }
+
+  copySelection() {
+    const clip = this.#gatherSelection();
+    if (!clip) {
+      this.opts.onStatus?.("Nothing selected", true);
+      return false;
+    }
+    itemClip = clip;
+    this.opts.onSelect?.();
+    const nv = clip.verts.length;
+    const ne = clip.lines.length;
+    this.opts.onStatus?.(`Copied ${nv} vert${nv === 1 ? "" : "s"}, ${ne} line${ne === 1 ? "" : "s"}`);
+    return true;
+  }
+
+  pasteSelection() {
+    if (!itemClip?.verts.length) {
+      this.opts.onStatus?.("Nothing to paste", true);
+      return false;
+    }
+    const mesh = this.#mesh();
+    const addV = itemClip.verts.length;
+    const addE = itemClip.lines.length;
+    if (mesh.verts.length + addV > ITEM_MAX_VERTS) {
+      this.opts.onStatus?.("Vertex cap (16)", true);
+      return false;
+    }
+    if (mesh.lines.length + addE > ITEM_MAX_LINES) {
+      this.opts.onStatus?.("Line cap (16)", true);
+      return false;
+    }
+    let uniqueFail = false;
+    let placed = null;
+    for (const [dx, dy, dz] of this.#pasteOffsets(itemClip.verts)) {
+      const trial = this.#shiftedClip(dx, dy, dz);
+      if (!trial || this.#cellsBlocked(mesh, trial)) continue;
+      if (!this.#uniqueOk([...mesh.verts, ...trial])) {
+        uniqueFail = true;
+        continue;
+      }
+      placed = trial;
+      break;
+    }
+    if (!placed) {
+      this.opts.onStatus?.(
+        uniqueFail ? `Would exceed ${ITEM_MAX_UNIQUE} unique X or Z` : "No free cells for paste",
+        true
+      );
+      return false;
+    }
+    this.opts.beginUndo?.();
+    const base = mesh.verts.length;
+    for (const v of placed) mesh.verts.push({ x: v.x, y: v.y, z: v.z });
+    for (const [a, b] of itemClip.lines) this.#tryAddLine(mesh, base + a, base + b);
+    this.opts.endUndo?.();
+    this.selectedVerts = placed.map((_, i) => base + i);
+    this.selectedLines = [];
+    this.opts.onChange?.();
+    this.opts.onSelect?.();
+    this.draw();
+    this.opts.onStatus?.(`Pasted ${addV} vert${addV === 1 ? "" : "s"}, ${addE} line${addE === 1 ? "" : "s"}`);
+    return true;
+  }
+
+  #gatherSelection() {
+    const mesh = this.#mesh();
+    const vset = new Set();
+    const edgeKeys = new Set();
+    const addEdge = (a, b) => {
+      if (a === b || !mesh.verts[a] || !mesh.verts[b]) return;
+      edgeKeys.add(`${Math.min(a, b)},${Math.max(a, b)}`);
+    };
+    for (const i of this.selectedVerts) {
+      if (mesh.verts[i]) vset.add(i);
+    }
+    for (const i of this.selectedLines) {
+      const e = mesh.lines[i];
+      if (!e) continue;
+      if (mesh.verts[e[0]]) vset.add(e[0]);
+      if (mesh.verts[e[1]]) vset.add(e[1]);
+      addEdge(e[0], e[1]);
+    }
+    if (!vset.size) return null;
+    for (const [a, b] of mesh.lines) {
+      if (vset.has(a) && vset.has(b)) addEdge(a, b);
+    }
+    const indices = [...vset].sort((a, b) => a - b);
+    const imap = new Map(indices.map((i, j) => [i, j]));
+    return {
+      verts: indices.map((i) => {
+        const v = mesh.verts[i];
+        return { x: v.x | 0, y: v.y | 0, z: v.z | 0 };
+      }),
+      lines: [...edgeKeys].map((k) => {
+        const [a, b] = k.split(",").map(Number);
+        return [imap.get(a), imap.get(b)];
+      }),
+    };
+  }
+
+  #pasteOffsets(verts) {
+    let minx = ITEM_MAX;
+    let maxx = ITEM_MIN;
+    let miny = ITEM_MAX;
+    let maxy = ITEM_MIN;
+    let minz = ITEM_MAX;
+    let maxz = ITEM_MIN;
+    for (const v of verts) {
+      minx = Math.min(minx, v.x);
+      maxx = Math.max(maxx, v.x);
+      miny = Math.min(miny, v.y);
+      maxy = Math.max(maxy, v.y);
+      minz = Math.min(minz, v.z);
+      maxz = Math.max(maxz, v.z);
+    }
+    const offs = [];
+    for (let dx = ITEM_MIN - minx; dx <= ITEM_MAX - maxx; dx++) {
+      for (let dy = ITEM_MIN - miny; dy <= ITEM_MAX - maxy; dy++) {
+        for (let dz = ITEM_MIN - minz; dz <= ITEM_MAX - maxz; dz++) {
+          offs.push([dx, dy, dz]);
+        }
+      }
+    }
+    offs.sort((a, b) => offsetSortKey(a) - offsetSortKey(b));
+    return offs;
+  }
+
+  #shiftedClip(dx, dy, dz) {
+    const placed = [];
+    for (const v of itemClip.verts) {
+      const x = v.x + dx;
+      const y = v.y + dy;
+      const z = v.z + dz;
+      if (x < ITEM_MIN || x > ITEM_MAX || y < ITEM_MIN || y > ITEM_MAX || z < ITEM_MIN || z > ITEM_MAX) {
+        return null;
+      }
+      placed.push({ x, y, z });
+    }
+    return placed;
+  }
+
+  #cellsBlocked(mesh, placed) {
+    const seen = new Set();
+    for (const v of placed) {
+      const k = `${v.x},${v.y},${v.z}`;
+      if (seen.has(k) || this.#occupied(mesh, v.x, v.y, v.z)) return true;
+      seen.add(k);
+    }
+    return false;
+  }
+
+  #mesh() {
+    return this.opts.getMesh?.() || { verts: [], lines: [] };
+  }
+
+  #cam() {
+    const { yaw, pitch, dist, target } = this.orbit;
+    const { forward } = lookVectors(yaw, pitch);
+    return {
+      x: target.x - forward.x * dist,
+      y: target.y - forward.y * dist,
+      z: target.z - forward.z * dist,
+      yaw,
+      pitch,
+    };
+  }
+
+  #eventPos(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: ((e.clientX - rect.left) / rect.width) * this.cssW,
+      y: ((e.clientY - rect.top) / rect.height) * this.cssH,
+    };
+  }
+
+  #selectionAnchor() {
+    const mesh = this.#mesh();
+    const selected = this.selectedVerts.filter((i) => mesh.verts[i]);
+    if (!selected.length) return null;
+    if (selected.length === 1) {
+      const i = selected[0];
+      return { v: mesh.verts[i], indices: selected };
+    }
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    for (const i of selected) {
+      x += mesh.verts[i].x;
+      y += mesh.verts[i].y;
+      z += mesh.verts[i].z;
+    }
+    const n = selected.length;
+    return { v: { x: x / n, y: y / n, z: z / n }, indices: selected };
+  }
+
+  #axisEnd(v, axis) {
+    return {
+      x: v.x + (axis === "x" ? ITEM_AXIS_LEN : 0),
+      y: v.y + (axis === "y" ? ITEM_AXIS_LEN : 0),
+      z: v.z + (axis === "z" ? ITEM_AXIS_LEN : 0),
+    };
+  }
+
+  #hitVert(mx, my, verts) {
+    const cam = this.#cam();
+    let best = -1;
+    let bestD = ITEM_VERT_HIT;
+    verts.forEach((v, i) => {
+      const p = projectPoint(v, cam, this.cssW, this.cssH);
+      if (!p.ok) return;
+      const d = Math.hypot(mx - p.sx, my - p.sy);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  #hitLine(mx, my, mesh) {
+    const cam = this.#cam();
+    let best = -1;
+    let bestD = ITEM_LINE_HIT;
+    mesh.lines.forEach(([ia, ib], i) => {
+      const a = mesh.verts[ia];
+      const b = mesh.verts[ib];
+      if (!a || !b) return;
+      const pl = projectLine(a, b, cam, this.cssW, this.cssH);
+      if (!pl) return;
+      const d = distPointToSegment2d(mx, my, pl.ax, pl.ay, pl.bx, pl.by);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  #hitAxis(mx, my) {
+    const prim = this.#selectionAnchor();
+    if (!prim) return null;
+    const cam = this.#cam();
+    const w = this.cssW;
+    const h = this.cssH;
+    const pa = projectPoint(prim.v, cam, w, h);
+    if (!pa.ok) return null;
+    let best = null;
+    let bestD = ITEM_AXIS_HIT;
+    for (const axis of ["x", "y", "z"]) {
+      const pb = projectPoint(this.#axisEnd(prim.v, axis), cam, w, h);
+      if (!pb.ok) continue;
+      const d = distPointToSegment2d(mx, my, pa.sx, pa.sy, pb.sx, pb.sy);
+      if (d < bestD) {
+        bestD = d;
+        best = axis;
+      }
+    }
+    return best;
+  }
+
+  #occupied(mesh, x, y, z, skip = new Set()) {
+    return mesh.verts.some((v, i) => !skip.has(i) && v.x === x && v.y === y && v.z === z);
+  }
+
+  #uniqueOk(verts) {
+    const { nx, nz } = itemUniqueXZ(verts);
+    return nx <= ITEM_MAX_UNIQUE && nz <= ITEM_MAX_UNIQUE;
+  }
+
+  #canAddLine(mesh, a, b) {
+    if (a === b || a < 0 || b < 0 || a >= mesh.verts.length || b >= mesh.verts.length) return false;
+    if (mesh.lines.length >= ITEM_MAX_LINES) return false;
+    const lo = Math.min(a, b);
+    const hi = Math.max(a, b);
+    return !mesh.lines.some(([ia, ib]) => Math.min(ia, ib) === lo && Math.max(ia, ib) === hi);
+  }
+
+  #tryAddLine(mesh, a, b) {
+    if (!this.#canAddLine(mesh, a, b)) return false;
+    mesh.lines.push([Math.min(a, b), Math.max(a, b)]);
+    return true;
+  }
+
+  #selectVert(i, additive) {
+    if (i < 0) this.selectedVerts = [];
+    else if (additive) {
+      if (!this.selectedVerts.includes(i)) this.selectedVerts.push(i);
+    } else this.selectedVerts = [i];
+    this.selectedLines = [];
+    this.opts.onSelect?.();
+  }
+
+  #selectVerts(indices, additive) {
+    if (additive) {
+      for (const i of indices) {
+        if (!this.selectedVerts.includes(i)) this.selectedVerts.push(i);
+      }
+    } else this.selectedVerts = [...indices];
+    this.selectedLines = [];
+    this.opts.onSelect?.();
+  }
+
+  #selectLine(i, additive) {
+    if (i < 0) this.selectedLines = [];
+    else if (additive) {
+      if (!this.selectedLines.includes(i)) this.selectedLines.push(i);
+    } else this.selectedLines = [i];
+    this.selectedVerts = [];
+    this.opts.onSelect?.();
+  }
+
+  #onWheel(e) {
+    if (!this.enabled) return;
+    e.preventDefault();
+    this.orbit.dist = clampItemDist(this.orbit.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1));
+    this.opts.onViewChanged?.();
+    this.draw();
+  }
+
+  #onDown(e) {
+    if (!this.enabled) return;
+    this.canvas.focus();
+    const p = this.#eventPos(e);
+    const mesh = this.#mesh();
+
+    if (e.button === 2 && e.altKey) {
+      this.drag = { kind: "zoom", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button === 1) {
+      this.drag = { kind: "pan", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button === 2) {
+      this.drag = { kind: "orbit", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+    if (e.button !== 0) return;
+    if (e.altKey) {
+      e.preventDefault();
+      this.drag = { kind: "orbit", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    const vi = this.#hitVert(p.x, p.y, mesh.verts);
+    if (vi >= 0) {
+      this.#selectVert(vi, e.shiftKey);
+      this.drag = { kind: "select" };
+      this.canvas.setPointerCapture(e.pointerId);
+      this.draw();
+      return;
+    }
+
+    const axis = this.#hitAxis(p.x, p.y);
+    if (axis) {
+      const prim = this.#selectionAnchor();
+      this.opts.beginUndo?.();
+      this.drag = {
+        kind: "axis",
+        axis,
+        origs: prim.indices.map((i) => ({ i, x: mesh.verts[i].x, y: mesh.verts[i].y, z: mesh.verts[i].z })),
+        orig: { x: prim.v.x, y: prim.v.y, z: prim.v.z },
+        start: p,
+      };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
+
+    const li = this.#hitLine(p.x, p.y, mesh);
+    if (li >= 0) {
+      this.#selectLine(li, e.shiftKey);
+      this.drag = { kind: "select" };
+      this.canvas.setPointerCapture(e.pointerId);
+      this.draw();
+      return;
+    }
+
+    this.drag = { kind: "box", start: p, end: p, additive: e.shiftKey };
+    this.canvas.setPointerCapture(e.pointerId);
+  }
+
+  #onMove(e) {
+    if (!this.enabled) return;
+    const p = this.#eventPos(e);
+    const mesh = this.#mesh();
+    if (!this.drag) {
+      this.hoverVert = this.#hitVert(p.x, p.y, mesh.verts);
+      this.hoverAxis = this.hoverVert >= 0 ? null : this.#hitAxis(p.x, p.y);
+      this.hoverLine = this.hoverAxis || this.hoverVert >= 0 ? -1 : this.#hitLine(p.x, p.y, mesh);
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "orbit") {
+      const dx = p.x - this.drag.last.x;
+      const dy = p.y - this.drag.last.y;
+      this.drag.last = p;
+      this.orbit.yaw += dx * 0.01;
+      this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch - dy * 0.01));
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "pan") {
+      const dx = p.x - this.drag.last.x;
+      const dy = p.y - this.drag.last.y;
+      this.drag.last = p;
+      const focal = Math.min(this.cssW, this.cssH) * 0.9;
+      const scale = this.orbit.dist / focal;
+      const { right, up } = lookVectors(this.orbit.yaw, this.orbit.pitch);
+      const t = this.orbit.target;
+      t.x += (-right.x * dx + up.x * dy) * scale;
+      t.y += (-right.y * dx + up.y * dy) * scale;
+      t.z += (-right.z * dx + up.z * dy) * scale;
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "zoom") {
+      const dx = p.x - this.drag.last.x;
+      const dy = p.y - this.drag.last.y;
+      this.drag.last = p;
+      const delta = dx + dy;
+      if (delta) this.orbit.dist = clampItemDist(this.orbit.dist * Math.exp(-delta * ITEM_ZOOM_K));
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "box") {
+      this.drag.end = p;
+      this.draw();
+      return;
+    }
+    if (this.drag.kind === "axis") {
+      const cam = this.#cam();
+      const orig = this.drag.orig;
+      const pa = projectPoint(orig, cam, this.cssW, this.cssH);
+      const pb = projectPoint(this.#axisEnd(orig, this.drag.axis), cam, this.cssW, this.cssH);
+      if (!pa.ok || !pb.ok) return;
+      const ax = pb.sx - pa.sx;
+      const ay = pb.sy - pa.sy;
+      const alen2 = ax * ax + ay * ay;
+      if (alen2 < 16) return;
+      const t = ((p.x - this.drag.start.x) * ax + (p.y - this.drag.start.y) * ay) / alen2;
+      const delta = Math.round(t * ITEM_AXIS_LEN);
+      const next = mesh.verts.map((v) => ({ ...v }));
+      for (const o of this.drag.origs) {
+        next[o.i].x = o.x;
+        next[o.i].y = o.y;
+        next[o.i].z = o.z;
+        next[o.i][this.drag.axis] = clampItemCoord(o[this.drag.axis] + delta);
+      }
+      const seen = new Set();
+      for (const v of next) {
+        const k = `${v.x},${v.y},${v.z}`;
+        if (seen.has(k)) return;
+        seen.add(k);
+      }
+      if (!this.#uniqueOk(next)) return;
+      for (const o of this.drag.origs) {
+        mesh.verts[o.i].x = next[o.i].x;
+        mesh.verts[o.i].y = next[o.i].y;
+        mesh.verts[o.i].z = next[o.i].z;
+      }
+      this.opts.onChange?.();
+      this.draw();
+    }
+  }
+
+  #boxRect() {
+    const a = this.drag.start;
+    const b = this.drag.end;
+    const x0 = Math.min(a.x, b.x);
+    const y0 = Math.min(a.y, b.y);
+    const x1 = Math.max(a.x, b.x);
+    const y1 = Math.max(a.y, b.y);
+    return { x0, y0, x1, y1, w: x1 - x0, h: y1 - y0 };
+  }
+
+  #vertsInBox(rect) {
+    const mesh = this.#mesh();
+    const cam = this.#cam();
+    const hits = [];
+    mesh.verts.forEach((v, i) => {
+      const p = projectPoint(v, cam, this.cssW, this.cssH);
+      if (!p.ok) return;
+      if (p.sx >= rect.x0 && p.sx <= rect.x1 && p.sy >= rect.y0 && p.sy <= rect.y1) hits.push(i);
+    });
+    return hits;
+  }
+
+  #finishBox() {
+    const rect = this.#boxRect();
+    const additive = this.drag.additive;
+    if (rect.w < ITEM_BOX_CLICK && rect.h < ITEM_BOX_CLICK) {
+      if (!additive) {
+        this.selectedVerts = [];
+        this.selectedLines = [];
+        this.opts.onSelect?.();
+      }
+      return;
+    }
+    this.#selectVerts(this.#vertsInBox(rect), additive);
+  }
+
+  #onUp(e) {
+    if (!this.enabled) return;
+    const orbitEnded = this.drag?.kind === "orbit" || this.drag?.kind === "zoom" || this.drag?.kind === "pan";
+    if (this.drag?.kind === "box") this.#finishBox();
+    if (this.drag?.kind === "axis") this.opts.endUndo?.();
+    this.drag = null;
+    if (orbitEnded) this.opts.onViewChanged?.();
+    try {
+      this.canvas.releasePointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    this.draw();
+  }
+
+  #strokeSeg(ctx, cam, w, h, p0, p1, col, width = 1) {
+    const seg = projectLine(p0, p1, cam, w, h);
+    if (!seg) return;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(seg.ax, seg.ay);
+    ctx.lineTo(seg.bx, seg.by);
+    ctx.stroke();
+  }
+
+  #drawGizmo(ctx, cam, w, h, v) {
+    for (const axis of ["x", "y", "z"]) {
+      const hi = this.hoverAxis === axis || this.drag?.axis === axis;
+      const col = hi ? "#fff" : ITEM_AXIS_COLS[axis];
+      this.#strokeSeg(ctx, cam, w, h, v, this.#axisEnd(v, axis), col, hi ? 3 : 2);
+    }
+  }
+
+  draw() {
+    if (!this.enabled) return;
+    const ctx = this.ctx;
+    const w = this.cssW;
+    const h = this.cssH;
+    if (!w || !h) return;
+    ctx.fillStyle = "#0a0a0c";
+    ctx.fillRect(0, 0, w, h);
+    const cam = this.#cam();
+    const mesh = this.#mesh();
+    const lo = ITEM_MIN;
+    const hi = ITEM_MAX;
+
+    for (let i = lo; i <= hi; i++) {
+      const col = i === 0 ? "#3d4658" : "#2a3140";
+      this.#strokeSeg(ctx, cam, w, h, { x: i, y: 0, z: lo }, { x: i, y: 0, z: hi }, col);
+      this.#strokeSeg(ctx, cam, w, h, { x: lo, y: 0, z: i }, { x: hi, y: 0, z: i }, col);
+    }
+    const cube = [
+      [
+        { x: lo, y: lo, z: lo },
+        { x: hi, y: lo, z: lo },
+      ],
+      [
+        { x: hi, y: lo, z: lo },
+        { x: hi, y: lo, z: hi },
+      ],
+      [
+        { x: hi, y: lo, z: hi },
+        { x: lo, y: lo, z: hi },
+      ],
+      [
+        { x: lo, y: lo, z: hi },
+        { x: lo, y: lo, z: lo },
+      ],
+      [
+        { x: lo, y: hi, z: lo },
+        { x: hi, y: hi, z: lo },
+      ],
+      [
+        { x: hi, y: hi, z: lo },
+        { x: hi, y: hi, z: hi },
+      ],
+      [
+        { x: hi, y: hi, z: hi },
+        { x: lo, y: hi, z: hi },
+      ],
+      [
+        { x: lo, y: hi, z: hi },
+        { x: lo, y: hi, z: lo },
+      ],
+      [
+        { x: lo, y: lo, z: lo },
+        { x: lo, y: hi, z: lo },
+      ],
+      [
+        { x: hi, y: lo, z: lo },
+        { x: hi, y: hi, z: lo },
+      ],
+      [
+        { x: hi, y: lo, z: hi },
+        { x: hi, y: hi, z: hi },
+      ],
+      [
+        { x: lo, y: lo, z: hi },
+        { x: lo, y: hi, z: hi },
+      ],
+    ];
+    for (const [a, b] of cube) this.#strokeSeg(ctx, cam, w, h, a, b, "#252a35");
+
+    const o = { x: 0, y: 0, z: 0 };
+    this.#strokeSeg(ctx, cam, w, h, { x: lo, y: 0, z: 0 }, { x: hi, y: 0, z: 0 }, "#a66", 2);
+    this.#strokeSeg(ctx, cam, w, h, o, { x: 0, y: hi, z: 0 }, "#6a6", 2);
+    this.#strokeSeg(ctx, cam, w, h, { x: 0, y: 0, z: lo }, { x: 0, y: 0, z: hi }, "#66a", 2);
+
+    let shownVerts = this.selectedVerts;
+    if (this.drag?.kind === "box") {
+      const r = this.#boxRect();
+      if (r.w >= ITEM_BOX_CLICK || r.h >= ITEM_BOX_CLICK) {
+        const hits = this.#vertsInBox(r);
+        shownVerts = this.drag.additive ? [...new Set([...this.selectedVerts, ...hits])] : hits;
+      }
+    }
+
+    mesh.lines.forEach(([ia, ib], i) => {
+      const a = mesh.verts[ia];
+      const b = mesh.verts[ib];
+      if (!a || !b) return;
+      const sel = this.selectedLines.includes(i);
+      this.#strokeSeg(ctx, cam, w, h, a, b, sel ? "#f2d36b" : "#c8ccd4", sel ? 2.5 : 1.5);
+    });
+
+    mesh.verts.forEach((v, i) => {
+      const pr = projectPoint(v, cam, w, h);
+      if (!pr.ok) return;
+      const sel = shownVerts.includes(i);
+      const ho = i === this.hoverVert;
+      ctx.fillStyle = sel ? "#d4a017" : ho ? "#fff" : "#6ec4a8";
+      const r = sel || ho ? 5 : 4;
+      ctx.beginPath();
+      ctx.arc(pr.sx, pr.sy, r, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    const prim = this.#selectionAnchor();
+    if (prim) this.#drawGizmo(ctx, cam, w, h, prim.v);
+
+    if (this.drag?.kind === "box") {
+      const r = this.#boxRect();
+      ctx.fillStyle = "rgba(212, 160, 23, 0.12)";
+      ctx.fillRect(r.x0, r.y0, r.w, r.h);
+      ctx.strokeStyle = "#d4a017";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(r.x0 + 0.5, r.y0 + 0.5, r.w, r.h);
+      ctx.setLineDash([]);
+    }
+  }
+}
+
+
 // ---- js/main.js ----
 const statusEl = document.getElementById("status");
 const titleEl = document.querySelector(".toolbar h1");
@@ -7477,6 +8592,7 @@ let weaponKey = "axe";
 let weaponFrame = 0;
 let weaponClipWarn = false;
 let weaponSelectedVerts = [];
+let itemMeshKey = "backpack";
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
 /** Last room used for placement / parenting. */
@@ -7638,6 +8754,24 @@ const weaponView = new WeaponView(document.getElementById("view-canvas"), {
     weaponClipWarn = !!clipped;
     if (editorMode === "weapons") refreshWeaponClipStatus();
   },
+});
+
+const itemView = new ItemView(document.getElementById("view-canvas"), {
+  stage: document.getElementById("map-stage"),
+  getMesh: () => {
+    if (!doc.items) doc.items = {};
+    if (!doc.items[itemMeshKey]) doc.items[itemMeshKey] = { verts: [], lines: [] };
+    return doc.items[itemMeshKey];
+  },
+  beginUndo,
+  endUndo,
+  onChange: () => {
+    markDirty();
+    renderInspector();
+  },
+  onSelect: () => renderInspector(),
+  onStatus: (msg, isError) => setStatus(msg, isError),
+  onViewChanged: () => markUi(),
 });
 
 function setStatus(msg, isError = false) {
@@ -7826,6 +8960,7 @@ function snapshot() {
     maps: doc.maps,
     enemies: doc.enemies,
     weapons: doc.weapons,
+    items: doc.items,
   });
 }
 
@@ -7970,9 +9105,12 @@ function setMode(mode) {
   document.getElementById("btn-mode-layout").classList.toggle("active", mode === "layout");
   document.getElementById("btn-mode-anim").classList.toggle("active", mode === "anim");
   document.getElementById("btn-mode-weapons").classList.toggle("active", mode === "weapons");
+  document.getElementById("btn-mode-items")?.classList.toggle("active", mode === "items");
   document.getElementById("layout-left").hidden = mode !== "layout";
   document.getElementById("anim-left").hidden = mode !== "anim";
   document.getElementById("weapons-left").hidden = mode !== "weapons";
+  const itemsLeft = document.getElementById("items-left");
+  if (itemsLeft) itemsLeft.hidden = mode !== "items";
   document.getElementById("draw-mode-group").hidden = mode !== "layout";
   document.getElementById("overhead-panel").hidden = mode !== "layout";
   document.getElementById("weapon-preview-panel").hidden = mode !== "weapons";
@@ -7982,12 +9120,15 @@ function setMode(mode) {
       ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+LMB / Alt+MMB orbit · MMB pan · Alt+RMB zoom · F focus · G drop · gizmo moves selection · Del"
       : mode === "weapons"
         ? "LMB vertex to inspect · Shift add · click empty clears · drag empty pans · wheel scale"
-        : bindJoint >= 0
-          ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-          : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+        : mode === "items"
+          ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
+          : bindJoint >= 0
+            ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
+            : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
+  itemView.enabled = mode === "items";
   if (mode !== "anim") stopAnimPlay();
   refreshAll();
   markUi();
@@ -8227,7 +9368,13 @@ function updateCenterChrome() {
     return;
   }
   titleEl.textContent =
-    editorMode === "weapons" ? WEAPON_LABELS[weaponKey] || "Weapons" : "Enemy";
+    editorMode === "weapons"
+      ? WEAPON_LABELS[weaponKey] || "Weapons"
+      : editorMode === "items"
+        ? itemMeshKey === "backpack"
+          ? "Backpack"
+          : itemMeshKey
+        : "Enemy";
   if (statsEl) {
     statsEl.hidden = true;
     statsEl.textContent = "";
@@ -8379,6 +9526,29 @@ function renderEnemyList() {
     li.appendChild(btn);
     ul.appendChild(li);
   });
+}
+
+function renderItemList() {
+  const ul = document.getElementById("item-mesh-list");
+  if (!ul) return;
+  ul.innerHTML = "";
+  if (!doc.items) doc.items = {};
+  for (const key of ITEM_MESH_KEYS) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = key === "backpack" ? "Backpack" : key;
+    if (key === itemMeshKey) btn.className = "active";
+    btn.addEventListener("click", () => {
+      itemMeshKey = key;
+      if (!doc.items[key]) doc.items[key] = { verts: [], lines: [] };
+      itemView.clearSelection();
+      markUi();
+      refreshAll();
+    });
+    li.appendChild(btn);
+    ul.appendChild(li);
+  }
 }
 
 function ensureWeaponItem(key) {
@@ -8809,6 +9979,63 @@ function roomPaletteEditor(obj, apply) {
 function renderInspector() {
   const root = document.getElementById("right-editors");
   root.innerHTML = "";
+  if (editorMode === "items") {
+    const h = document.createElement("h2");
+    h.textContent = "Item";
+    root.appendChild(h);
+    if (!doc.items) doc.items = {};
+    if (!doc.items[itemMeshKey]) doc.items[itemMeshKey] = { verts: [], lines: [] };
+    const stats = itemMeshStats(doc.items[itemMeshKey]);
+    const p = document.createElement("p");
+    p.className = stats.over ? "error" : "muted";
+    p.textContent = `${stats.nv} verts · ${stats.ne} lines · unique X ${stats.nx}/${ITEM_MAX_UNIQUE} · unique Z ${stats.nz}/${ITEM_MAX_UNIQUE} · ~${stats.bytes} B`;
+    root.appendChild(p);
+    if (itemMeshKey !== "backpack" && !doc.items[itemMeshKey].verts.length) {
+      const f = document.createElement("p");
+      f.className = "muted";
+      f.textContent = "Empty — falls back to backpack.";
+      root.appendChild(f);
+    }
+    const sel = itemView.selection();
+    const row = document.createElement("div");
+    row.className = "btn-row";
+    const addV = document.createElement("button");
+    addV.type = "button";
+    addV.textContent = "Add Vert";
+    addV.title = "V";
+    addV.addEventListener("click", () => itemView.addVertAtOrigin());
+    const addL = document.createElement("button");
+    addL.type = "button";
+    addL.textContent = "Add Line";
+    addL.title = "L";
+    addL.disabled = sel.verts.length !== 2;
+    addL.addEventListener("click", () => itemView.addLineFromSelection());
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy";
+    copy.title = "Ctrl+C — verts plus connected edges";
+    copy.disabled = !sel.verts.length && !sel.lines.length;
+    copy.addEventListener("click", () => itemView.copySelection());
+    const paste = document.createElement("button");
+    paste.type = "button";
+    paste.textContent = "Paste";
+    paste.title = "Ctrl+V — skipped if it would exceed counts";
+    paste.disabled = !itemView.hasClipboard();
+    paste.addEventListener("click", () => itemView.pasteSelection());
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "danger";
+    del.textContent = "Delete";
+    del.disabled = !sel.verts.length && !sel.lines.length;
+    del.addEventListener("click", () => itemView.deleteSelection());
+    row.append(addV, addL, copy, paste, del);
+    root.appendChild(row);
+    const hint = document.createElement("p");
+    hint.className = "muted";
+    hint.textContent = "Grid −4…4 · origin at 0,0,0 · Add Vert places at origin.";
+    root.appendChild(hint);
+    return;
+  }
   if (editorMode === "weapons") {
     renderWeaponInspector(root);
     return;
@@ -8965,11 +10192,7 @@ function renderInspector() {
       tagInp.maxLength = MAX_TAG_LEN;
       tagInp.value = obj.tag || "";
       tagInp.placeholder =
-        obj.kind === "switch" || obj.kind === "elevator"
-          ? "elevator link"
-          : obj.kind === "key"
-            ? "key id"
-            : "destination tag";
+        obj.kind === "switch" || obj.kind === "elevator" ? "elevator link" : "destination tag";
       tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
       root.appendChild(field("Tag", tagInp));
     }
@@ -8985,16 +10208,16 @@ function renderInspector() {
       sel.addEventListener("change", () => apply(() => (obj.elevType = sel.value)));
       root.appendChild(field("Type", sel));
     }
-    if (obj.kind === "backpack") {
+    if (obj.kind === "pickup") {
       const sel = document.createElement("select");
-      for (const t of BACKPACK_TYPES) {
+      for (const t of PICKUP_TYPES) {
         const opt = document.createElement("option");
         opt.value = t;
         opt.textContent = t;
-        if (clampBackpackType(obj.backpack) === t) opt.selected = true;
+        if (clampPickupType(obj.pickup) === t) opt.selected = true;
         sel.appendChild(opt);
       }
-      sel.addEventListener("change", () => apply(() => (obj.backpack = sel.value)));
+      sel.addEventListener("change", () => apply(() => (obj.pickup = sel.value)));
       root.appendChild(field("Contains", sel));
     }
     if (obj.kind === "platform") {
@@ -9046,19 +10269,16 @@ function renderInspector() {
         })
       );
       root.appendChild(field("Other room", sel));
-      const lock = document.createElement("input");
-      lock.type = "checkbox";
-      lock.checked = !!obj.locked;
-      lock.addEventListener("change", () => apply(() => (obj.locked = lock.checked)));
-      root.appendChild(field("Locked", lock));
-      const keyInp = document.createElement("input");
-      keyInp.type = "text";
-      keyInp.maxLength = MAX_TAG_LEN;
-      keyInp.value = obj.keyTag || "";
-      keyInp.placeholder = "key tag";
-      keyInp.disabled = !obj.locked;
-      keyInp.addEventListener("change", () => apply(() => (obj.keyTag = clampTag(keyInp.value))));
-      root.appendChild(field("Key", keyInp));
+      const lockSel = document.createElement("select");
+      for (const t of DOOR_LOCKS) {
+        const opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = DOOR_LOCK_LABELS[t];
+        if (clampDoorLock(obj.lockKey) === t) opt.selected = true;
+        lockSel.appendChild(opt);
+      }
+      lockSel.addEventListener("change", () => apply(() => (obj.lockKey = lockSel.value)));
+      root.appendChild(field("Lock", lockSel));
     }
     const sizeP = document.createElement("p");
     sizeP.className = "muted";
@@ -9632,12 +10852,14 @@ function refreshPanels() {
   renderObjectList();
   renderEnemyList();
   renderWeaponList();
+  renderItemList();
   renderInspector();
   syncWeaponScaleInputs();
   syncWeaponGlobalButtons();
   overheadView.draw();
   if (editorMode === "anim") animView.draw();
   if (editorMode === "weapons") weaponView.draw();
+  if (editorMode === "items") itemView.draw();
 }
 
 function refreshAll() {
@@ -9645,6 +10867,7 @@ function refreshAll() {
   refreshPanels();
   if (editorMode === "layout") layoutView.draw();
   else if (editorMode === "weapons") weaponView.draw();
+  else if (editorMode === "items") itemView.draw();
   else animView.draw();
 }
 
@@ -9656,6 +10879,9 @@ document.getElementById("btn-mode-anim").addEventListener("click", () => {
 });
 document.getElementById("btn-mode-weapons").addEventListener("click", () => {
   setMode("weapons");
+});
+document.getElementById("btn-mode-items")?.addEventListener("click", () => {
+  setMode("items");
 });
 document.getElementById("mdl-scale").addEventListener("input", (e) => {
   setMdlScale(e.target.value);
@@ -9805,10 +11031,38 @@ window.addEventListener("keydown", (e) => {
     redo();
     return;
   }
+  if (editorMode === "items" && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+    e.preventDefault();
+    itemView.copySelection();
+    return;
+  }
+  if (editorMode === "items" && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+    e.preventDefault();
+    itemView.pasteSelection();
+    return;
+  }
   if (e.key === "Delete" || e.key === "Backspace") {
     if (editorMode === "layout") {
       e.preventDefault();
       deleteSelected();
+    }
+    if (editorMode === "items") {
+      e.preventDefault();
+      itemView.deleteSelection();
+      return;
+    }
+  }
+  if (editorMode === "items" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === "v") {
+      e.preventDefault();
+      itemView.addVertAtOrigin();
+      return;
+    }
+    if (k === "l") {
+      e.preventDefault();
+      itemView.addLineFromSelection();
+      return;
     }
   }
   if (e.key.toLowerCase() === "g" && editorMode === "layout" && !e.ctrlKey && !e.metaKey && !e.altKey) {

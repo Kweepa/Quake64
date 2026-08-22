@@ -168,6 +168,11 @@ init_weapon
 	sta player_hp
 	lda #PLAYER_ARMOUR_START
 	sta player_armour
+	lda #0
+	sta have_keys
+	sta pu_kind
+	sta pu_ms_l
+	sta pu_ms_h
 
 	lda #COL_WPN
 	sta col_wpn

@@ -212,7 +212,7 @@ def main() -> None:
     enemies = [o for o in objs if o["kind"] == "enemy"]
     triggers = [o for o in objs if o["kind"] == "trigger"]
     dests = [o for o in objs if o["kind"] == "teleporter_dest"]
-    backpacks = [o for o in objs if o["kind"] == "backpack"]
+    backpacks = [o for o in objs if o["kind"] in ("pickup", "backpack", "key")]
     spawns = [o for o in objs if o["kind"] == "spawn"]
 
     if not spawns:
@@ -233,6 +233,11 @@ def main() -> None:
         "health 25%": 5,
         "health 50%": 6,
         "armour": 8,
+        "quad damage": 9,
+        "pentagram of protection": 10,
+        "ring of shadows": 11,
+        "silver key": 12,
+        "gold key": 13,
     }
 
     # Tag → elevator index
@@ -377,7 +382,7 @@ def main() -> None:
     # Doors
     door_x, door_y, door_z = [], [], []
     door_sx, door_sy, door_sz = [], [], []
-    door_ra, door_rb, door_home_y, door_face = [], [], [], []
+    door_ra, door_rb, door_home_y, door_face, door_key = [], [], [], [], []
     door_id = []
     for d in doors:
         ra, rb = door_rooms(rooms, d)
@@ -391,6 +396,16 @@ def main() -> None:
         door_ra.append(ra)
         door_rb.append(rb)
         door_face.append(FACE.get(d.get("face") or "+z", 0))
+        lk = str(d.get("lockKey") or "").strip().lower()
+        if lk == "gold":
+            door_key.append(2)
+        elif lk == "silver":
+            door_key.append(1)
+        elif d.get("locked"):
+            tag = str(d.get("keyTag") or "").lower()
+            door_key.append(2 if "gold" in tag else 1)
+        else:
+            door_key.append(0)
         door_id.append(map_id[id(d)])
 
     # Crates
@@ -573,8 +588,14 @@ def main() -> None:
     bp_x, bp_y, bp_z, bp_type, bp_room = [], [], [], [], []
     bp_id = []
     for b in backpacks:
-        ri = room_index(rooms, b, "backpack")
-        bt = BP_TYPE.get((b.get("backpack") or "shells").strip(), 0)
+        kind = b.get("kind")
+        ri = room_index(rooms, b, "pickup")
+        if kind == "key":
+            tag = f"{b.get('tag') or ''} {b.get('keyTag') or ''} {b.get('pickup') or ''}".lower()
+            bt = 13 if "gold" in tag else 12
+        else:
+            name = (b.get("pickup") or b.get("backpack") or "shells").strip()
+            bt = BP_TYPE.get(name, 0)
         bp_x.append(b["x"])
         bp_y.append(b["y"])
         bp_z.append(b["z"])
@@ -625,7 +646,15 @@ def main() -> None:
         "BP_HEALTH50\t= 6",
         "BP_SHELLS5\t= 7",
         "BP_ARMOUR\t= 8",
-        "BP_NTYPES\t= 9",
+        "BP_QUAD\t= 9",
+        "BP_PENT\t= 10",
+        "BP_RING\t= 11",
+        "BP_SILVER\t= 12",
+        "BP_GOLD\t= 13",
+        "BP_NTYPES\t= 14",
+        "DOOR_KEY_NONE\t= 0",
+        "DOOR_KEY_SILVER\t= 1",
+        "DOOR_KEY_GOLD\t= 2",
         f"MAP_FRUSTUM\t= {frustum}",
         f"MAP_FRUSTUM_HALF\t= {frustum_half}",
         "",
@@ -696,6 +725,7 @@ def main() -> None:
         btable("door_rb", door_rb).rstrip(),
         btable("door_home_y", door_home_y).rstrip(),
         btable("door_face", door_face).rstrip(),
+        btable("door_key", door_key).rstrip(),
         btable("door_id", door_id).rstrip(),
         "",
         btable("crate_x", crate_x).rstrip(),

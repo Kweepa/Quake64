@@ -15,8 +15,6 @@ quad_edges
 	!byte 0,1, 1,2, 2,3, 3,0
 tri_edges
 	!byte 0,1, 1,2, 2,0
-tetra_edges
-	!byte 0,1, 1,2, 2,0,  3,0, 3,1, 3,2
 ; Closed: BL-TL, TL-TR, TR-BL, TR-BR. Open: left 0-1-4, right 2-5 + 2-3.
 door_closed_edges
 	!byte 0,1, 1,2, 2,0,  2,3
@@ -36,8 +34,6 @@ quad_vert
 	!byte 0,0,0,0
 tri_vert
 	!byte 0,0,0
-tetra_vert
-	!byte 0,0,0, 0,0,0
 
 ; Per-vert XZ column ids for mesh_project (verts sharing x,z share a column).
 ; box_col doubles as identity for ≤4-vert meshes with distinct columns.
@@ -55,12 +51,6 @@ box_xid
 	!byte 0,1,1,0, 0,1,1,0
 box_zid
 	!byte 0,0,1,1, 0,0,1,1
-bp_xid
-	!byte 0,1,2,2			; b0 b1 b2 apex
-bp_zid
-	!byte 0,0,1,2
-bp_col
-	!byte 0,1,2,3
 door_closed_z_xid
 	!byte 0,0,1,1
 door_closed_z_zid
@@ -704,70 +694,159 @@ draw_plat_mesh
 	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
-; Level-base tetrahedron: base 0-1-2, apex 3
+; Pickup mesh: type in A (BP_*). nv=0 → backpack fallback slot BP_NTYPES.
 draw_backpack_mesh
+	ldx obj_i
+	lda bp_type,x
+draw_pickup_mesh
+	pha
 	jsr load_view_trig
-	jsr fill_backpack_verts
-	lda #4
-	sta mesh_nv
-	lda #6
-	sta mesh_ne
-	lda #<tetra_edges
-	sta edge_ptr
-	lda #>tetra_edges
-	sta edge_ptr+1
-	lda #<tetra_vert
-	sta edge_vert_ptr
-	lda #>tetra_vert
-	sta edge_vert_ptr+1
+	pla
+	jsr fill_item_verts
 	jmp stroke_mesh
 
-fill_backpack_verts
-	; Level-base tetra: equilateral-ish triangle, apex above centroid
-	; b0 (x,z) b1 (x+2,z) b2 (x+1,z+2) apex (x+1,z+1,y+2)
-	lda box_x
-	sta UX				; 0
-	clc
-	adc #BP_FOOT_SX
-	sta UX+1			; 1 = x+2
-	lda box_x
-	clc
-	adc #1
-	sta UX+2			; 2 = x+1 (b2 + apex)
-	lda box_z
-	sta UZ				; 0
-	clc
-	adc #BP_FOOT_SZ
-	sta UZ+1			; 1 = z+2 (b2)
-	lda box_z
-	clc
-	adc #1
-	sta UZ+2			; 2 = z+1 (apex)
-	lda #3
-	sta mesh_nx
-	sta mesh_nz
-	lda box_y
-	sta VY
-	sta VY+1
-	sta VY+2
-	clc
-	adc #BP_FOOT_SY
-	sta VY+3
-	lda #<bp_col
-	sta col_ptr
-	lda #>bp_col
-	sta col_ptr+1
-	lda #<bp_xid
-	sta xid_ptr
-	lda #>bp_xid
-	sta xid_ptr+1
-	lda #<bp_zid
-	sta zid_ptr
-	lda #>bp_zid
-	sta zid_ptr+1
-	lda #4
+fill_item_verts
+	cmp #BP_NTYPES
+	bcc +
+	lda #0
++
+	tay
+	lda item_nv,y
+	bne +
+	ldy #BP_NTYPES
++
+	lda item_nv,y
 	sta mesh_nv
-	jmp xform_mesh_xz
+	lda item_ne,y
+	sta mesh_ne
+	lda item_nx,y
+	sta mesh_nx
+	lda item_nz,y
+	sta mesh_nz
+	sty rot0				; slot
+	; UX/UZ stay local (editor 0 = spin centre). World centre is box+ITEM_BIAS.
+	clc
+	lda #<item_ux
+	adc item_uo,y
+	sta src_ptr
+	lda #>item_ux
+	adc #0
+	sta src_ptr+1
+	ldy #0
+.fi_ux
+	cpy mesh_nx
+	bcs .fi_uz
+	lda (src_ptr),y
+	sta UX,y
+	iny
+	bne .fi_ux
+.fi_uz
+	ldy rot0
+	clc
+	lda #<item_uz
+	adc item_zo,y
+	sta src_ptr
+	lda #>item_uz
+	adc #0
+	sta src_ptr+1
+	ldy #0
+.fi_uzl
+	cpy mesh_nz
+	bcs .fi_vy
+	lda (src_ptr),y
+	sta UZ,y
+	iny
+	bne .fi_uzl
+.fi_vy
+	ldy rot0
+	clc
+	lda #<item_vy
+	adc item_vo,y
+	sta src_ptr
+	lda #>item_vy
+	adc #0
+	sta src_ptr+1
+	ldy #0
+.fi_vyl
+	cpy mesh_nv
+	bcs .fi_ptr
+	clc
+	lda (src_ptr),y
+	adc box_y
+	sta VY,y
+	iny
+	bne .fi_vyl
+.fi_ptr
+	ldy rot0
+	clc
+	lda #<item_xid
+	adc item_vo,y
+	sta xid_ptr
+	lda #>item_xid
+	adc #0
+	sta xid_ptr+1
+	clc
+	lda #<item_zid
+	adc item_vo,y
+	sta zid_ptr
+	lda #>item_zid
+	adc #0
+	sta zid_ptr+1
+	clc
+	lda #<item_col
+	adc item_vo,y
+	sta col_ptr
+	lda #>item_col
+	adc #0
+	sta col_ptr+1
+	clc
+	lda #<item_edges
+	adc item_eo,y
+	sta edge_ptr
+	lda #>item_edges
+	adc #0
+	sta edge_ptr+1
+	lda item_eo,y
+	lsr
+	clc
+	adc #<item_evert
+	sta edge_vert_ptr
+	lda #>item_evert
+	adc #0
+	sta edge_vert_ptr+1
+	; Quad / pent / ring yaw-spin; other pickups use angle 0 (still origin-centred).
+	lda #0
+	cpy #BP_QUAD
+	bcc +
+	cpy #BP_SILVER
+	bcs +
+	lda item_spin
++
+	sta ent_rot
+	jmp xform_item_spin
+
+; dt<<4 as 8.8 → ~1 rev / 4s
+update_item_spin
+	lda dt_ms
+	sta nlo
+	lda dt_msh
+	sta nhi
+	asl nlo
+	rol nhi
+	asl nlo
+	rol nhi
+	asl nlo
+	rol nhi
+	asl nlo
+	rol nhi
+	clc
+	lda item_spin_l
+	adc nlo
+	sta item_spin_l
+	lda item_spin
+	adc nhi
+	sta item_spin
+	rts
 
 fill_plat_verts
 	jsr aabb_uxuz
@@ -1595,7 +1674,9 @@ draw_world
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_dpr
-	jsr draw_backpack_mesh
+	ldx obj_i
+	lda drop_type,x
+	jsr draw_pickup_mesh
 .dw_dpr
 	ldx obj_i
 .dw_dpn

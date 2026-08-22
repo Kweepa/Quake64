@@ -2,7 +2,7 @@
 
 Source of truth for addresses is [`src/mem.asm`](src/mem.asm). Engine code lives in the PRG (loaded at `$0801`); this bank is screens, charsets, sprites, LUTs, and game scratch. Accessing `$D000–$FFFF` as RAM requires `$01` to unmap I/O and the KERNAL. Colour RAM (`$D800`) is the I/O overlay of charset A bottom.
 
-Caps used by the mesh path: **16 verts**, **32 edges**, **4 unique world X** and **4 unique world Z**.
+Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and **6 unique world Z** (rooms still cook at 4 unique).
 
 ## Bank overview
 
@@ -36,7 +36,7 @@ Caps used by the mesh path: **16 verts**, **32 edges**, **4 unique world X** and
 
 ## `$CA00+` scratch
 
-Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product tables are 4 slots.
+Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product tables are 6 slots (rooms still cook at 4 unique).
 
 | Address | Size | Label | Notes |
 | :--- | ---: | :--- | :--- |
@@ -96,41 +96,41 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CBDB` | 1 | `fall_vh` | 8.8 downward vel hi |
 | `$CBDC` | 1 | `fall_y0` | `cam_yh` at fall start |
 | `$CBDD` | 1 | `fall_acc` | leftover ms toward `FALL_TICK_MS` |
-| `$CBDE` | 4 | `UX` | Unique world X |
-| `$CBE2` | 4 | `UZ` | Unique world Z |
-| `$CBE6` | 16 | `VY` | Per-vert world Y |
-| `$CBF6` | 4 | `XC_L` | UX × cos (lo) |
-| `$CBFA` | 4 | `XC_H` | UX × cos (hi) |
-| `$CBFE` | 4 | `XS_L` | UX × sin (lo) |
-| `$CC02` | 4 | `XS_H` | UX × sin (hi) |
-| `$CC06` | 4 | `ZC_L` | UZ × cos (lo) |
-| `$CC0A` | 4 | `ZC_H` | UZ × cos (hi) |
-| `$CC0E` | 4 | `ZS_L` | UZ × sin (lo) |
-| `$CC12` | 4 | `ZS_H` | UZ × sin (hi) |
-| `$CC16` | 1 | `in_fire` | Weapon BSS |
-| `$CC17` | 4 | `in_wpn_axe`…`in_wpn_gren` | |
-| `$CC1B` | 1 | `key_fire` | |
-| `$CC1C` | 4 | `key_wpn_axe`…`key_wpn_gren` | |
-| `$CC20` | 1 | `cur_weapon` | |
-| `$CC21` | 1 | `wpn_pose` | |
-| `$CC22` | 2 | `fire_rpt_l/h` | |
-| `$CC24` | 2 | `flash_ms_l/h` | |
-| `$CC26` | 1 | `flash_phase` | Sprite 4 |
-| `$CC27` | 1 | `mg_frame` | |
-| `$CC28` | 1 | `wpn_x` | |
-| `$CC29` | 1 | `wpn_y` | |
-| `$CC2A` | 1 | `spr_en` | |
-| `$CC2B` | 1 | `anim_step` | |
-| `$CC2C` | 2 | `anim_ms_l/h` | |
-| `$CC2E` | 1 | `wpn_flash_en` | |
-| `$CC2F` | 1 | `wpn_flash_dy` | |
-| `$CC30` | 1 | `wpn_tmp0` | |
-| `$CC31` | 2 | `flash5_ms_l/h` | |
-| `$CC33` | 1 | `flash5_phase` | Sprite 5 |
-| `$CC34` | 2 | `emuz_ms_l/h` | |
-| `$CC36` | 1 | `emuz_on` | |
-| `$CC37` | 1 | `emuz_xmsb` | |
-| `$CC38` | 40 | — | Unused (was 8-slot door view SoA) |
+| `$CBDE` | 6 | `UX` | Unique world X |
+| `$CBE4` | 6 | `UZ` | Unique world Z |
+| `$CBEA` | 16 | `VY` | Per-vert world Y |
+| `$CBFA` | 6 | `XC_L` | UX × cos (lo) |
+| `$CC00` | 6 | `XC_H` | UX × cos (hi) |
+| `$CC06` | 6 | `XS_L` | UX × sin (lo) |
+| `$CC0C` | 6 | `XS_H` | UX × sin (hi) |
+| `$CC12` | 6 | `ZC_L` | UZ × cos (lo) |
+| `$CC18` | 6 | `ZC_H` | UZ × cos (hi) |
+| `$CC1E` | 6 | `ZS_L` | UZ × sin (lo) |
+| `$CC24` | 6 | `ZS_H` | UZ × sin (hi) |
+| `$CC2A` | 1 | `in_fire` | Weapon BSS |
+| `$CC2B` | 4 | `in_wpn_axe`…`in_wpn_gren` | |
+| `$CC2F` | 1 | `key_fire` | |
+| `$CC30` | 4 | `key_wpn_axe`…`key_wpn_gren` | |
+| `$CC34` | 1 | `cur_weapon` | |
+| `$CC35` | 1 | `wpn_pose` | |
+| `$CC36` | 2 | `fire_rpt_l/h` | |
+| `$CC38` | 2 | `flash_ms_l/h` | |
+| `$CC3A` | 1 | `flash_phase` | Sprite 4 |
+| `$CC3B` | 1 | `mg_frame` | |
+| `$CC3C` | 1 | `wpn_x` | |
+| `$CC3D` | 1 | `wpn_y` | |
+| `$CC3E` | 1 | `spr_en` | |
+| `$CC3F` | 1 | `anim_step` | |
+| `$CC40` | 2 | `anim_ms_l/h` | |
+| `$CC42` | 1 | `wpn_flash_en` | |
+| `$CC43` | 1 | `wpn_flash_dy` | |
+| `$CC44` | 1 | `wpn_tmp0` | |
+| `$CC45` | 2 | `flash5_ms_l/h` | |
+| `$CC47` | 1 | `flash5_phase` | Sprite 5 |
+| `$CC48` | 2 | `emuz_ms_l/h` | |
+| `$CC4A` | 1 | `emuz_on` | |
+| `$CC4B` | 1 | `emuz_xmsb` | |
+| `$CC4C` | 20 | — | Unused (was 8-slot door view SoA) |
 | `$CC60` | 16 | `VOC` | Cohen–Sutherland outcode |
 | `$CC70` | 16 | `VBEHIND` | 1 = z < ZCLIP |
 | `$CC80` | 16 | `VSX` | Front-vert screen X |

@@ -107,6 +107,13 @@ eu_idle
 	lda #0
 	sta en_timer,x
 	sta en_timer_h,x
+	lda gunshot_wake
+	bne .eu_id_retry_see
+	lda pu_kind
+	cmp #BP_RING
+	bne .eu_id_retry_see
+	jmp enemy_idle_try_patrol
+.eu_id_retry_see
 	jsr enemy_chebyshev
 	cmp #ENEMY_DETECT + 1
 	bcc .eu_id_goap
@@ -117,6 +124,11 @@ eu_idle
 .eu_id_sight
 	lda gunshot_wake
 	bne .eu_wake
+	lda pu_kind
+	cmp #BP_RING
+	bne .eu_id_sight2
+	jmp enemy_idle_try_patrol
+.eu_id_sight2
 	jsr enemy_chebyshev
 	cmp #ENEMY_DETECT + 1
 	bcc .eu_id_see
@@ -135,6 +147,9 @@ eu_patrol
 	ldx enemy_idx
 	lda gunshot_wake
 	bne .eu_pt_wake
+	lda pu_kind
+	cmp #BP_RING
+	beq .eu_pt_acc
 	jsr enemy_chebyshev
 	cmp #ENEMY_DETECT + 1
 	bcc .eu_pt_see
@@ -908,6 +923,9 @@ take_damage
 	sta rot0
 	lda player_hp
 	beq .td_rts
+	lda pu_kind
+	cmp #BP_PENT
+	beq .td_flash
 	lda player_armour
 	beq .td_hp
 	lda rot0
@@ -928,6 +946,7 @@ take_damage
 	lda #0
 +
 	sta player_hp
+.td_flash
 	lda #COL_HURT
 	sta vic_border
 	lda #<HURT_FLASH_MS
@@ -964,6 +983,26 @@ update_hurt_flash
 	lda #COL_BORDER
 	sta vic_border
 .uhf_rts
+	rts
+
+; Exclusive powerup: one kind, one 30s timer. Underflow clears HUD icon.
+update_powerup
+	lda pu_kind
+	beq .up_rts
+	sec
+	lda pu_ms_l
+	sbc dt_ms
+	sta pu_ms_l
+	lda pu_ms_h
+	sbc dt_msh
+	sta pu_ms_h
+	bcs .up_rts
+	lda #0
+	sta pu_kind
+	sta pu_ms_l
+	sta pu_ms_h
+	jmp hud_powerup
+.up_rts
 	rts
 
 ; A = dir to probe. C=1 walkable; ai_probe = dir
@@ -1515,6 +1554,12 @@ enemy_shot_clear
 ; X = enemy. A = damage. Pain chance if survives.
 damage_enemy
 	sta rot2
+	lda pu_kind
+	cmp #BP_QUAD
+	bne .de_sub
+	asl rot2
+	asl rot2
+.de_sub
 	lda en_state,x
 	cmp #EN_DYING
 	bcs .de_rts

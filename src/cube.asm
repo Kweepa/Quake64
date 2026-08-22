@@ -1659,6 +1659,161 @@ xform_mesh_xz
 	rts
 }
 
+; Local UX/UZ about box+ITEM_BIAS, then R_(yaw+ent_rot). Caller: load_view_trig.
+; Quad/pent/ring pass item_spin in ent_rot; other pickups pass 0.
+xform_item_spin
+	clc
+	lda box_x
+	adc #ITEM_BIAS
+	sta ent_wx
+	lda box_y
+	sta ent_wy
+	clc
+	lda box_z
+	adc #ITEM_BIAS
+	sta ent_wz
+	ldx #0
+	jsr xform_world_vert
+	lda CAM_X
+	sta org_xl
+	lda CAM_XH
+	sta org_xh
+	lda CAM_Z
+	sta org_zl
+	lda CAM_ZH
+	sta org_zh
+	clc
+	lda yaw
+	adc ent_rot
+	tay
+	lda COSTAB,y
+	jsr mulset_a
+	lda SINTAB,y
+	jsr mulset_b
+	ldx #0
+.xi_x
+	cpx mesh_nx
+	beq .xi_z
+	lda #0
+	sta nlo
+	sta e0x
+	lda UX,x
+	sta nhi
+	sta e0xh
+	stx vindex
+	jsr smul16_a
+	ldx vindex
+	lda nlo
+	sta XC_L,x
+	lda nhi
+	sta XC_H,x
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	jsr smul16_b
+	ldx vindex
+	lda nlo
+	sta XS_L,x
+	lda nhi
+	sta XS_H,x
+	inx
+	jmp .xi_x
+.xi_z
+	ldx #0
+.xi_zl
+	cpx mesh_nz
+	beq .xi_v
+	lda #0
+	sta nlo
+	sta e0x
+	lda UZ,x
+	sta nhi
+	sta e0xh
+	stx vindex
+	jsr smul16_a
+	ldx vindex
+	lda nlo
+	sta ZC_L,x
+	lda nhi
+	sta ZC_H,x
+	lda e0x
+	sta nlo
+	lda e0xh
+	sta nhi
+	jsr smul16_b
+	ldx vindex
+	lda nlo
+	sta ZS_L,x
+	lda nhi
+	sta ZS_H,x
+	inx
+	jmp .xi_zl
+.xi_v
+	lda #0
+	sta vindex
+.xi_vl
+	ldy vindex
+	jsr .vert_skip
+	bcs .xi_skip
+	lda (xid_ptr),y
+	tax
+	lda (zid_ptr),y
+	tay
+	lda XC_L,x
+	sec
+	sbc ZS_L,y
+	sta e0x
+	lda XC_H,x
+	sbc ZS_H,y
+	sta e0xh
+	lda XS_L,x
+	clc
+	adc ZC_L,y
+	sta e0y
+	lda XS_H,x
+	adc ZC_H,y
+	sta e0yh
+	ldx vindex
+	clc
+	lda org_xl
+	adc e0x
+	sta CAM_X,x
+	lda org_xh
+	adc e0xh
+	sta CAM_XH,x
+	clc
+	lda org_zl
+	adc e0y
+	sta CAM_Z,x
+	lda org_zh
+	adc e0yh
+	sta CAM_ZH,x
+	lda #0
+	sec
+	sbc cam_yl
+	sta CAM_Y,x
+	lda VY,x
+	sbc cam_yh
+	sta CAM_YH,x
+.xi_skip
+	inc vindex
+	lda vindex
+	cmp mesh_nv
+	bne .xi_vl
+	lda mesh_vmask
+	cmp #$ff
+	bne .xi_r
+	lda mesh_nv
+	sta mesh_nwork
+.xi_r
+!if PROFILE = 1 {
+	ldx #NV_ROT
+	jmp prof_add_nv
+} else {
+	rts
+}
+
 ; True-project feet (vert 11); limb PROJ = feet + dCAM * trunc(FOCAL/z) >> 8
 ent_far_project
 	lda #NVERTS

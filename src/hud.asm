@@ -109,6 +109,11 @@ init_hud
 	inx
 	bne -
 +
+	lda #COL_HUD_DIM
+	ldx #5
+-	sta $d800 + HUD_OFF_GREN + HUD_PU_LABEL,x
+	dex
+	bpl -
 
 !if PROFILE = 1 {
 	lda #HUD_CH_R
@@ -154,7 +159,7 @@ init_hud
 	sta $d800 + HUD_OFF2 + 15
 	sta $d800 + HUD_OFF2 + 19
 }
-	rts
+	jmp hud_powerup
 
 ; Row 0: frame ms FFF (HUD_FRAME_MS) + R/P/K/D buckets (PROFILE)
 ; Row 3: X/Y/Z/yaw/pitch (HUD_POS) or vertex counts (PROFILE)
@@ -605,18 +610,76 @@ hud_msg_center
 .hm_done
 	rts
 
+; Name at HUD_OFF_GREN + HUD_PU_LABEL (row below 2×2 icon on SHELL/NAIL).
+hud_powerup
+	lda pu_kind
+	cmp #BP_QUAD
+	beq .hpu_quad
+	cmp #BP_PENT
+	beq .hpu_pent
+	cmp #BP_RING
+	beq .hpu_ring
+	lda #HUD_CH_SP
+	ldx #5
+.hpu_clab
+	sta SCR_A + HUD_OFF_GREN + HUD_PU_LABEL,x
+	dex
+	bpl .hpu_clab
+	sta SCR_A + HUD_OFF_SHELL + HUD_PU_COL
+	sta SCR_A + HUD_OFF_SHELL + HUD_PU_COL + 1
+	sta SCR_A + HUD_OFF_NAIL + HUD_PU_COL
+	sta SCR_A + HUD_OFF_NAIL + HUD_PU_COL + 1
+	rts
+.hpu_quad
+	ldx #0
+	lda #HUD_CH_QUAD
+	bne .hpu_draw
+.hpu_pent
+	ldx #6
+	lda #HUD_CH_PENT
+	bne .hpu_draw
+.hpu_ring
+	ldx #12
+	lda #HUD_CH_RING
+.hpu_draw
+	sta SCR_A + HUD_OFF_SHELL + HUD_PU_COL
+	clc
+	adc #1
+	sta SCR_A + HUD_OFF_SHELL + HUD_PU_COL + 1
+	adc #1
+	sta SCR_A + HUD_OFF_NAIL + HUD_PU_COL
+	adc #1
+	sta SCR_A + HUD_OFF_NAIL + HUD_PU_COL + 1
+	ldy #0
+.hpu_lab
+	lda hud_str_pu,x
+	sta SCR_A + HUD_OFF_GREN + HUD_PU_LABEL,y
+	inx
+	iny
+	cpy #6
+	bne .hpu_lab
+	rts
+
 ; A = BP_* type. "Got the <name>" for 5s on HUD_ROW4.
+; Quad/pent/ring: name only (no prefix).
 hud_got
 	cmp #BP_NTYPES
 	bcc .hg_ok
 	rts
 .hg_ok
+	sta rot2
 	tay
 	lda bp_name_lo,y
 	sta src_ptr
 	lda bp_name_hi,y
 	sta src_ptr+1
 	jsr hud_msg_blank
+	lda rot2
+	cmp #BP_QUAD
+	bcc .hg_got
+	cmp #BP_SILVER
+	bcc .hg_nameonly
+.hg_got
 	ldy #0
 .hg_nl
 	lda (src_ptr),y
@@ -657,6 +720,9 @@ hud_got
 	lda #>STATUS_MS
 	sta status_ms_h
 	rts
+.hg_nameonly
+	jsr hud_msg_center
+	jmp .hg_arm
 
 ; Tick status line; blank and clear msg_on when the timer expires.
 update_status
@@ -688,17 +754,27 @@ bpn_gl		!byte 103,114,101,110,97,100,101,32,108,97,117,110,99,104,101,114,0	; gr
 bpn_grenades	!byte 103,114,101,110,97,100,101,115,0	; grenades
 bpn_health	!byte 104,101,97,108,116,104,0		; health
 bpn_armour	!byte 97,114,109,111,117,114,0		; armour
+bpn_quad	!byte 113,117,97,100,32,100,97,109,97,103,101,0	; quad damage
+bpn_pent	!byte 112,101,110,116,97,103,114,97,109,32,111,102,32,112,114,111,116,101,99,116,105,111,110,0	; pentagram of protection
+bpn_ring	!byte 114,105,110,103,32,111,102,32,115,104,97,100,111,119,115,0	; ring of shadows
+bpn_silver	!byte 115,105,108,118,101,114,32,107,101,121,0	; silver key
+bpn_gold	!byte 103,111,108,100,32,107,101,121,0		; gold key
 bp_name_lo
 	!byte <bpn_shells, <bpn_nailgun, <bpn_nails, <bpn_gl
 	!byte <bpn_grenades, <bpn_health, <bpn_health, <bpn_shells, <bpn_armour
+	!byte <bpn_quad, <bpn_pent, <bpn_ring, <bpn_silver, <bpn_gold
 bp_name_hi
 	!byte >bpn_shells, >bpn_nailgun, >bpn_nails, >bpn_gl
 	!byte >bpn_grenades, >bpn_health, >bpn_health, >bpn_shells, >bpn_armour
+	!byte >bpn_quad, >bpn_pent, >bpn_ring, >bpn_silver, >bpn_gold
 
 ; ASCII (UI charset), not PETSCII
 hud_str_title	!byte 81,117,97,107,101,54,52,0	; Quake64
 hud_str_health	!byte 72,101,97,108,116,104,0		; Health
 hud_str_armour	!byte 65,114,109,111,117,114,0		; Armour
+hud_str_pu	!byte 68,97,109,97,103,101			; Damage
+		!byte 83,104,105,101,108,100			; Shield
+		!byte 83,104,97,100,111,119			; Shadow
 
 ui_font
 	!source "uifont.asm"

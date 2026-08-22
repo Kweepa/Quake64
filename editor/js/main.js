@@ -26,8 +26,14 @@ import {
   MAX_NAME_LEN,
   MAX_TAG_LEN,
   ELEV_TYPES,
-  BACKPACK_TYPES,
-  clampBackpackType,
+  PICKUP_TYPES,
+  ITEM_MESH_KEYS,
+  DOOR_LOCKS,
+  DOOR_LOCK_LABELS,
+  clampPickupType,
+  clampDoorLock,
+  ITEM_MAX_UNIQUE,
+  itemMeshStats,
   createObject,
   createDefaultDocument,
   currentRoom,
@@ -111,6 +117,7 @@ import { LayoutView } from "./layoutView.js";
 import { OverheadView } from "./overheadView.js";
 import { AnimView } from "./animView.js";
 import { WeaponView } from "./weaponView.js";
+import { ItemView } from "./itemView.js";
 
 const statusEl = document.getElementById("status");
 const titleEl = document.querySelector(".toolbar h1");
@@ -154,6 +161,7 @@ let weaponKey = "axe";
 let weaponFrame = 0;
 let weaponClipWarn = false;
 let weaponSelectedVerts = [];
+let itemMeshKey = "backpack";
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
 /** Last room used for placement / parenting. */
@@ -315,6 +323,24 @@ const weaponView = new WeaponView(document.getElementById("view-canvas"), {
     weaponClipWarn = !!clipped;
     if (editorMode === "weapons") refreshWeaponClipStatus();
   },
+});
+
+const itemView = new ItemView(document.getElementById("view-canvas"), {
+  stage: document.getElementById("map-stage"),
+  getMesh: () => {
+    if (!doc.items) doc.items = {};
+    if (!doc.items[itemMeshKey]) doc.items[itemMeshKey] = { verts: [], lines: [] };
+    return doc.items[itemMeshKey];
+  },
+  beginUndo,
+  endUndo,
+  onChange: () => {
+    markDirty();
+    renderInspector();
+  },
+  onSelect: () => renderInspector(),
+  onStatus: (msg, isError) => setStatus(msg, isError),
+  onViewChanged: () => markUi(),
 });
 
 function setStatus(msg, isError = false) {
@@ -503,6 +529,7 @@ function snapshot() {
     maps: doc.maps,
     enemies: doc.enemies,
     weapons: doc.weapons,
+    items: doc.items,
   });
 }
 
@@ -647,9 +674,12 @@ function setMode(mode) {
   document.getElementById("btn-mode-layout").classList.toggle("active", mode === "layout");
   document.getElementById("btn-mode-anim").classList.toggle("active", mode === "anim");
   document.getElementById("btn-mode-weapons").classList.toggle("active", mode === "weapons");
+  document.getElementById("btn-mode-items")?.classList.toggle("active", mode === "items");
   document.getElementById("layout-left").hidden = mode !== "layout";
   document.getElementById("anim-left").hidden = mode !== "anim";
   document.getElementById("weapons-left").hidden = mode !== "weapons";
+  const itemsLeft = document.getElementById("items-left");
+  if (itemsLeft) itemsLeft.hidden = mode !== "items";
   document.getElementById("draw-mode-group").hidden = mode !== "layout";
   document.getElementById("overhead-panel").hidden = mode !== "layout";
   document.getElementById("weapon-preview-panel").hidden = mode !== "weapons";
@@ -659,12 +689,15 @@ function setMode(mode) {
       ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+LMB / Alt+MMB orbit · MMB pan · Alt+RMB zoom · F focus · G drop · gizmo moves selection · Del"
       : mode === "weapons"
         ? "LMB vertex to inspect · Shift add · click empty clears · drag empty pans · wheel scale"
-        : bindJoint >= 0
-          ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-          : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+        : mode === "items"
+          ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
+          : bindJoint >= 0
+            ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
+            : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
+  itemView.enabled = mode === "items";
   if (mode !== "anim") stopAnimPlay();
   refreshAll();
   markUi();
@@ -904,7 +937,13 @@ function updateCenterChrome() {
     return;
   }
   titleEl.textContent =
-    editorMode === "weapons" ? WEAPON_LABELS[weaponKey] || "Weapons" : "Enemy";
+    editorMode === "weapons"
+      ? WEAPON_LABELS[weaponKey] || "Weapons"
+      : editorMode === "items"
+        ? itemMeshKey === "backpack"
+          ? "Backpack"
+          : itemMeshKey
+        : "Enemy";
   if (statsEl) {
     statsEl.hidden = true;
     statsEl.textContent = "";
@@ -1056,6 +1095,29 @@ function renderEnemyList() {
     li.appendChild(btn);
     ul.appendChild(li);
   });
+}
+
+function renderItemList() {
+  const ul = document.getElementById("item-mesh-list");
+  if (!ul) return;
+  ul.innerHTML = "";
+  if (!doc.items) doc.items = {};
+  for (const key of ITEM_MESH_KEYS) {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = key === "backpack" ? "Backpack" : key;
+    if (key === itemMeshKey) btn.className = "active";
+    btn.addEventListener("click", () => {
+      itemMeshKey = key;
+      if (!doc.items[key]) doc.items[key] = { verts: [], lines: [] };
+      itemView.clearSelection();
+      markUi();
+      refreshAll();
+    });
+    li.appendChild(btn);
+    ul.appendChild(li);
+  }
 }
 
 function ensureWeaponItem(key) {
@@ -1486,6 +1548,63 @@ function roomPaletteEditor(obj, apply) {
 function renderInspector() {
   const root = document.getElementById("right-editors");
   root.innerHTML = "";
+  if (editorMode === "items") {
+    const h = document.createElement("h2");
+    h.textContent = "Item";
+    root.appendChild(h);
+    if (!doc.items) doc.items = {};
+    if (!doc.items[itemMeshKey]) doc.items[itemMeshKey] = { verts: [], lines: [] };
+    const stats = itemMeshStats(doc.items[itemMeshKey]);
+    const p = document.createElement("p");
+    p.className = stats.over ? "error" : "muted";
+    p.textContent = `${stats.nv} verts · ${stats.ne} lines · unique X ${stats.nx}/${ITEM_MAX_UNIQUE} · unique Z ${stats.nz}/${ITEM_MAX_UNIQUE} · ~${stats.bytes} B`;
+    root.appendChild(p);
+    if (itemMeshKey !== "backpack" && !doc.items[itemMeshKey].verts.length) {
+      const f = document.createElement("p");
+      f.className = "muted";
+      f.textContent = "Empty — falls back to backpack.";
+      root.appendChild(f);
+    }
+    const sel = itemView.selection();
+    const row = document.createElement("div");
+    row.className = "btn-row";
+    const addV = document.createElement("button");
+    addV.type = "button";
+    addV.textContent = "Add Vert";
+    addV.title = "V";
+    addV.addEventListener("click", () => itemView.addVertAtOrigin());
+    const addL = document.createElement("button");
+    addL.type = "button";
+    addL.textContent = "Add Line";
+    addL.title = "L";
+    addL.disabled = sel.verts.length !== 2;
+    addL.addEventListener("click", () => itemView.addLineFromSelection());
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.textContent = "Copy";
+    copy.title = "Ctrl+C — verts plus connected edges";
+    copy.disabled = !sel.verts.length && !sel.lines.length;
+    copy.addEventListener("click", () => itemView.copySelection());
+    const paste = document.createElement("button");
+    paste.type = "button";
+    paste.textContent = "Paste";
+    paste.title = "Ctrl+V — skipped if it would exceed counts";
+    paste.disabled = !itemView.hasClipboard();
+    paste.addEventListener("click", () => itemView.pasteSelection());
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "danger";
+    del.textContent = "Delete";
+    del.disabled = !sel.verts.length && !sel.lines.length;
+    del.addEventListener("click", () => itemView.deleteSelection());
+    row.append(addV, addL, copy, paste, del);
+    root.appendChild(row);
+    const hint = document.createElement("p");
+    hint.className = "muted";
+    hint.textContent = "Grid −4…4 · origin at 0,0,0 · Add Vert places at origin.";
+    root.appendChild(hint);
+    return;
+  }
   if (editorMode === "weapons") {
     renderWeaponInspector(root);
     return;
@@ -1642,11 +1761,7 @@ function renderInspector() {
       tagInp.maxLength = MAX_TAG_LEN;
       tagInp.value = obj.tag || "";
       tagInp.placeholder =
-        obj.kind === "switch" || obj.kind === "elevator"
-          ? "elevator link"
-          : obj.kind === "key"
-            ? "key id"
-            : "destination tag";
+        obj.kind === "switch" || obj.kind === "elevator" ? "elevator link" : "destination tag";
       tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
       root.appendChild(field("Tag", tagInp));
     }
@@ -1662,16 +1777,16 @@ function renderInspector() {
       sel.addEventListener("change", () => apply(() => (obj.elevType = sel.value)));
       root.appendChild(field("Type", sel));
     }
-    if (obj.kind === "backpack") {
+    if (obj.kind === "pickup") {
       const sel = document.createElement("select");
-      for (const t of BACKPACK_TYPES) {
+      for (const t of PICKUP_TYPES) {
         const opt = document.createElement("option");
         opt.value = t;
         opt.textContent = t;
-        if (clampBackpackType(obj.backpack) === t) opt.selected = true;
+        if (clampPickupType(obj.pickup) === t) opt.selected = true;
         sel.appendChild(opt);
       }
-      sel.addEventListener("change", () => apply(() => (obj.backpack = sel.value)));
+      sel.addEventListener("change", () => apply(() => (obj.pickup = sel.value)));
       root.appendChild(field("Contains", sel));
     }
     if (obj.kind === "platform") {
@@ -1723,19 +1838,16 @@ function renderInspector() {
         })
       );
       root.appendChild(field("Other room", sel));
-      const lock = document.createElement("input");
-      lock.type = "checkbox";
-      lock.checked = !!obj.locked;
-      lock.addEventListener("change", () => apply(() => (obj.locked = lock.checked)));
-      root.appendChild(field("Locked", lock));
-      const keyInp = document.createElement("input");
-      keyInp.type = "text";
-      keyInp.maxLength = MAX_TAG_LEN;
-      keyInp.value = obj.keyTag || "";
-      keyInp.placeholder = "key tag";
-      keyInp.disabled = !obj.locked;
-      keyInp.addEventListener("change", () => apply(() => (obj.keyTag = clampTag(keyInp.value))));
-      root.appendChild(field("Key", keyInp));
+      const lockSel = document.createElement("select");
+      for (const t of DOOR_LOCKS) {
+        const opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = DOOR_LOCK_LABELS[t];
+        if (clampDoorLock(obj.lockKey) === t) opt.selected = true;
+        lockSel.appendChild(opt);
+      }
+      lockSel.addEventListener("change", () => apply(() => (obj.lockKey = lockSel.value)));
+      root.appendChild(field("Lock", lockSel));
     }
     const sizeP = document.createElement("p");
     sizeP.className = "muted";
@@ -2309,12 +2421,14 @@ function refreshPanels() {
   renderObjectList();
   renderEnemyList();
   renderWeaponList();
+  renderItemList();
   renderInspector();
   syncWeaponScaleInputs();
   syncWeaponGlobalButtons();
   overheadView.draw();
   if (editorMode === "anim") animView.draw();
   if (editorMode === "weapons") weaponView.draw();
+  if (editorMode === "items") itemView.draw();
 }
 
 function refreshAll() {
@@ -2322,6 +2436,7 @@ function refreshAll() {
   refreshPanels();
   if (editorMode === "layout") layoutView.draw();
   else if (editorMode === "weapons") weaponView.draw();
+  else if (editorMode === "items") itemView.draw();
   else animView.draw();
 }
 
@@ -2333,6 +2448,9 @@ document.getElementById("btn-mode-anim").addEventListener("click", () => {
 });
 document.getElementById("btn-mode-weapons").addEventListener("click", () => {
   setMode("weapons");
+});
+document.getElementById("btn-mode-items")?.addEventListener("click", () => {
+  setMode("items");
 });
 document.getElementById("mdl-scale").addEventListener("input", (e) => {
   setMdlScale(e.target.value);
@@ -2482,10 +2600,38 @@ window.addEventListener("keydown", (e) => {
     redo();
     return;
   }
+  if (editorMode === "items" && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
+    e.preventDefault();
+    itemView.copySelection();
+    return;
+  }
+  if (editorMode === "items" && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") {
+    e.preventDefault();
+    itemView.pasteSelection();
+    return;
+  }
   if (e.key === "Delete" || e.key === "Backspace") {
     if (editorMode === "layout") {
       e.preventDefault();
       deleteSelected();
+    }
+    if (editorMode === "items") {
+      e.preventDefault();
+      itemView.deleteSelection();
+      return;
+    }
+  }
+  if (editorMode === "items" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === "v") {
+      e.preventDefault();
+      itemView.addVertAtOrigin();
+      return;
+    }
+    if (k === "l") {
+      e.preventDefault();
+      itemView.addLineFromSelection();
+      return;
     }
   }
   if (e.key.toLowerCase() === "g" && editorMode === "layout" && !e.ctrlKey && !e.metaKey && !e.altKey) {

@@ -46,7 +46,6 @@ start
 	jsr init_irq
 	jsr play_sound_init
 	jsr init_weapon
-	jsr init_hud
 	jsr prof_init
 	lda #BANK_RAM				; all RAM; I/O only in IRQ
 	sta $01
@@ -56,7 +55,13 @@ start
 	jsr clear_charsets
 	jsr fill_margin_glyph
 	jsr copy_luts
+	lda #BANK_IO				; colour RAM + HUD after screen wipe
+	sta $01
+	jsr init_hud
 	jsr hud_ammo
+	jsr hud_powerup
+	lda #BANK_RAM
+	sta $01
 	jsr mulset_init
 	jsr world_init
 	cli
@@ -82,6 +87,8 @@ main
 	jsr prof_frame_sample
 	jsr calc_frame_dt
 	jsr update_hurt_flash
+	jsr update_powerup
+	jsr update_item_spin
 	jsr hud_print
 
 	lda draw_buf
@@ -270,6 +277,7 @@ copy_luts
 !source "elevator.asm"
 !source "door.asm"
 !source "world.asm"
+!source "item_mesh.asm"
 !source "mesh.asm"
 !source "cube.asm"
 !source "enemy.asm"

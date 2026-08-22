@@ -25,6 +25,8 @@ world_init
 	sta hurt_flash_h
 	sta hurt_ms_l
 	sta hurt_ms_h
+	sta item_spin
+	sta item_spin_l
 	lda #$ff
 	sta trig_inside
 	; spawn eye at spawn_x+1 (center-ish), spawn_y+EYE, spawn_z+1
@@ -1343,26 +1345,10 @@ try_backpack_pickup
 	jsr hud_got
 	ldx obj_i
 	lda bp_type,x
-	cmp #BP_HEALTH25
-	beq .tbp_hp
-	cmp #BP_HEALTH50
-	beq .tbp_hp
-	lda #SOUND_GETAMMO
-	bne .tbp_snd
-.tbp_hp
-	cmp #BP_HEALTH50
-	beq .tbp_hp2
-	lda #SOUND_HEALTH1
-	bne .tbp_snd
-.tbp_hp2
-	lda #SOUND_HEALTH2
-.tbp_snd
+	jsr pickup_sound
 	ldx obj_i
-	pha
 	lda #1
 	sta bp_taken,x
-	pla
-	jsr play_sound
 .tbp_n
 	ldx obj_i
 	inx
@@ -1439,9 +1425,11 @@ grant_bp_type
 gb_lo
 	!byte <gb_shells, <gb_nailgun, <gb_nails, <gb_grenlaunch
 	!byte <gb_grenades, <gb_hp25, <gb_hp50, <gb_shells5, <gb_armour
+	!byte <gb_quad, <gb_pent, <gb_ring, <gb_silver, <gb_gold
 gb_hi
 	!byte >gb_shells, >gb_nailgun, >gb_nails, >gb_grenlaunch
 	!byte >gb_grenades, >gb_hp25, >gb_hp50, >gb_shells5, >gb_armour
+	!byte >gb_quad, >gb_pent, >gb_ring, >gb_silver, >gb_gold
 
 gb_hp25
 	lda player_hp
@@ -1587,9 +1575,71 @@ gb_armour
 	sta player_armour
 	sec
 	rts
+gb_quad
+	lda #BP_QUAD
+	bne gb_pu_set
+gb_pent
+	lda #BP_PENT
+	bne gb_pu_set
+gb_ring
+	lda #BP_RING
+gb_pu_set
+	sta pu_kind
+	lda #<POWERUP_MS
+	sta pu_ms_l
+	lda #>POWERUP_MS
+	sta pu_ms_h
+	jsr hud_powerup
+	sec
+	rts
+gb_silver
+	lda have_keys
+	and #HAVE_SILVER
+	bne gb_no
+	lda have_keys
+	ora #HAVE_SILVER
+	sta have_keys
+	sec
+	rts
+gb_gold
+	lda have_keys
+	and #HAVE_GOLD
+	bne gb_no
+	lda have_keys
+	ora #HAVE_GOLD
+	sta have_keys
+	sec
+	rts
 gb_no
 	clc
 	rts
+
+; A = BP_* — health / ammo / bonus / key
+pickup_sound
+	cmp #BP_HEALTH25
+	beq .ps_hp
+	cmp #BP_HEALTH50
+	beq .ps_hp
+	cmp #BP_QUAD
+	bcc .ps_ammo
+	cmp #BP_SILVER
+	bcc .ps_bonus
+	lda #SOUND_GETKEY
+	jmp play_sound
+.ps_bonus
+	lda #SOUND_BONUS1
+	jmp play_sound
+.ps_ammo
+	lda #SOUND_GETAMMO
+	jmp play_sound
+.ps_hp
+	cmp #BP_HEALTH50
+	beq .ps_hp2
+	lda #SOUND_HEALTH1
+	jmp play_sound
+.ps_hp2
+	lda #SOUND_HEALTH2
+	jmp play_sound
 
 ; X=switch; C=1 if within SW_USE_RANGE of pad XZ, Y overlaps, facing the face
 .prox_switch

@@ -101,7 +101,23 @@ door_activate
 	lda door_id,x
 	sta proc_tmp1			; world id for busy / PROC_A
 	jsr proc_target_busy
-	bcs .da_fail
+	bcc .da_free
+	jmp .da_fail
+.da_free
+	ldx proc_tmp5
+	lda door_key,x
+	beq .da_unlocked
+	cmp #DOOR_KEY_GOLD
+	beq .da_gold
+	lda have_keys
+	and #HAVE_SILVER
+	beq .da_fail
+	bne .da_unlocked
+.da_gold
+	lda have_keys
+	and #HAVE_GOLD
+	beq .da_fail
+.da_unlocked
 	ldx proc_tmp5
 	lda door_open,x
 	cmp door_sy,x

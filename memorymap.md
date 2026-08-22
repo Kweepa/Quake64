@@ -88,7 +88,11 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CBD6` | 1 | `in_use` | K latch |
 | `$CBD7` | 1 | `key_use` | |
 | `$CBD8` | 1 | `key_use_was` | Rising-edge debounce |
-| `$CBD9` | 5 | — | Unused (was `sw_latched`) |
+| `$CBD9` | 1 | `pl_falling` | 0 grounded, 1 airborne |
+| `$CBDA` | 1 | `fall_vl` | 8.8 downward vel lo |
+| `$CBDB` | 1 | `fall_vh` | 8.8 downward vel hi |
+| `$CBDC` | 1 | `fall_y0` | `cam_yh` at fall start |
+| `$CBDD` | 1 | `fall_acc` | leftover ms toward `FALL_TICK_MS` |
 | `$CBDE` | 4 | `UX` | Unique world X |
 | `$CBE2` | 4 | `UZ` | Unique world Z |
 | `$CBE6` | 16 | `VY` | Per-vert world Y |
@@ -177,5 +181,6 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CE1A` | 1 | `splat_skip` | |
 | `$CE1B` | 1 | `shot_hit_i` | |
 | `$CE1C` | 1 | `shot_hit_z` | |
-| `$CE1D` | 2 | — | Unused |
+| `$CE1D` | 1 | `hurt_flash_l` | Remaining red-border ms lo |
+| `$CE1E` | 1 | `hurt_flash_h` | Remaining red-border ms hi |
 | `$CE1F` | 1 | `bite_splat_i` | Last used scratch byte |

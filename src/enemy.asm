@@ -724,7 +724,7 @@ enemy_bite
 .eb_rts
 	rts
 
-; A = damage — subtract from player_hp; hurt/death SFX
+; A = damage — subtract from player_hp; hurt/death SFX; red border flash
 take_damage
 	sta rot0
 	lda player_hp
@@ -735,6 +735,12 @@ take_damage
 	lda #0
 +
 	sta player_hp
+	lda #COL_HURT
+	sta $d020
+	lda #<HURT_FLASH_MS
+	sta hurt_flash_l
+	lda #>HURT_FLASH_MS
+	sta hurt_flash_h
 	jsr hud_ammo
 	lda player_hp
 	beq .td_death
@@ -744,6 +750,27 @@ take_damage
 	lda #SOUND_PLAYERDEATH
 	jmp play_sound
 .td_rts
+	rts
+
+; Tick red $d020 flash; restore COL_BORDER when remaining ms underflows.
+update_hurt_flash
+	lda hurt_flash_l
+	ora hurt_flash_h
+	beq .uhf_rts
+	sec
+	lda hurt_flash_l
+	sbc dt_ms
+	sta hurt_flash_l
+	lda hurt_flash_h
+	sbc dt_msh
+	sta hurt_flash_h
+	bcs .uhf_rts
+	lda #0
+	sta hurt_flash_l
+	sta hurt_flash_h
+	lda #COL_BORDER
+	sta $d020
+.uhf_rts
 	rts
 
 ; A = dir to probe. C=1 walkable; ai_probe = dir

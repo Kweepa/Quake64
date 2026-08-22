@@ -13,6 +13,14 @@ world_init
 	sta msg_on
 	lda #$ff
 	sta pl_on_elev
+	lda #0
+	sta pl_falling
+	sta fall_vl
+	sta fall_vh
+	sta fall_y0
+	sta fall_acc
+	sta hurt_flash_l
+	sta hurt_flash_h
 	; spawn eye at spawn_x+1 (center-ish), spawn_y+EYE, spawn_z+1
 	clc
 	lda spawn_x
@@ -374,6 +382,110 @@ sync_eye
 	rts
 
 ; ------------------------------------------------------------------
+; update_fall — snap if gap <= FALL_LEDGE; else accelerate down (no WASD).
+; Call after update_floor. Landing: snap, maybe take_damage(FALL_DAMAGE).
+; ------------------------------------------------------------------
+update_fall
+	lda pl_falling
+	bne .ufl_air
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	cmp floor_y
+	beq .ufl_sync			; on floor
+	bcc .ufl_sync			; floor rose (elevator)
+	sec
+	sbc floor_y			; gap
+	cmp #FALL_LEDGE + 1
+	bcs .ufl_start
+.ufl_sync
+	jmp sync_eye
+
+.ufl_start
+	lda #1
+	sta pl_falling
+	lda #0
+	sta fall_vl
+	sta fall_vh
+	sta fall_acc
+	lda cam_yh
+	sta fall_y0
+
+.ufl_air
+	; acc16 = fall_acc + dt_ms
+	clc
+	lda fall_acc
+	adc dt_ms
+	sta proc_tmp0
+	lda #0
+	adc dt_msh
+	sta proc_tmp1
+.ufl_tick
+	lda proc_tmp1
+	bne .ufl_step
+	lda proc_tmp0
+	cmp #FALL_TICK_MS
+	bcc .ufl_ticks_done
+.ufl_step
+	sec
+	lda proc_tmp0
+	sbc #FALL_TICK_MS
+	sta proc_tmp0
+	lda proc_tmp1
+	sbc #0
+	sta proc_tmp1
+	clc
+	lda fall_vl
+	adc #<FALL_ACCEL
+	sta fall_vl
+	lda fall_vh
+	adc #>FALL_ACCEL
+	sta fall_vh
+	sec
+	lda cam_yl
+	sbc fall_vl
+	sta cam_yl
+	lda cam_yh
+	sbc fall_vh
+	sta cam_yh
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	cmp floor_y
+	beq .ufl_land
+	bcc .ufl_land
+	jmp .ufl_tick
+
+.ufl_ticks_done
+	lda proc_tmp0
+	sta fall_acc
+	; overshoot / floor rose to meet us
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT
+	cmp floor_y
+	beq .ufl_land
+	bcc .ufl_land
+	rts
+
+.ufl_land
+	jsr sync_eye
+	lda #0
+	sta pl_falling
+	sta fall_vl
+	sta fall_vh
+	sta fall_acc
+	sec
+	lda fall_y0
+	sbc cam_yh			; eye drop
+	cmp #FALL_SAFE + 1
+	bcc .ufl_rts
+	lda #FALL_DAMAGE
+	jsr take_damage
+.ufl_rts
+	rts
+
+; ------------------------------------------------------------------
 ; solid_at — col_x/col_z blocked by crate, solid platform, or closed door?
 ; C=1 blocked
 ; ------------------------------------------------------------------
@@ -731,6 +843,10 @@ pos_ok
 ; Horizontal move from IRQ hold-ms wish (8 units/s). Slide on X then Z.
 ; ------------------------------------------------------------------
 apply_move_world
+	lda pl_falling
+	beq .am_go
+	rts
+.am_go
 	lda $01
 	pha
 	lda #$34

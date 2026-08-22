@@ -89,6 +89,7 @@ main
 	jsr apply_show
 	jsr prof_frame_sample
 	jsr calc_frame_dt
+	jsr update_hurt_flash
 	jsr hud_print
 	jsr hud_message
 
@@ -103,7 +104,7 @@ main
 	jsr try_proximity
 	jsr proc_update
 	jsr update_floor
-	jsr sync_eye
+	jsr update_fall
 	jsr update_message
 	jsr enemies_update
 	jmp main

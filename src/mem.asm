@@ -6,6 +6,7 @@
 ; Judd sqlo/sqhi live in the PRG.
 
 COL_BORDER	= 0
+COL_HURT	= 2			; red $d020 flash on damage
 COL_BG		= 9			; default viewport background (brown)
 COL_HUD_BG	= 0
 COL_LINE	= 7			; default vectors (yellow)
@@ -158,6 +159,12 @@ PLAYER_H	= 4			; Y collision height [feet, feet+PLAYER_H)
 DOOR_PROX	= 3			; open trigger: depth in front of door face
 MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
+FALL_LEDGE	= 1			; start fall if feet-floor > this
+FALL_TICK_MS	= 32			; gravity cadence (like MOTION_STEP_MS)
+FALL_ACCEL	= $10			; 8.8 added to downward vel per tick
+FALL_SAFE	= 8			; no damage if eye-drop <= this
+FALL_DAMAGE	= 15			; HP on hard landing
+HURT_FLASH_MS	= 300			; red border duration
 ENEMY_CULL_R	= 2			; view-space |x| vs z+R (8.8 high)
 ENEMY_CULL_H	= 6			; view-space |y| vs z+H (figure height)
 ENEMY_LOD_Z	= 4			; mid: cheap stick projection (shared)
@@ -239,7 +246,11 @@ hold_turn_r	= $CBD4
 in_use		= $CBD6			; IRQ latch: K pressed
 key_use		= $CBD7			; frame snapshot
 key_use_was	= $CBD8			; rising-edge debounce
-; $CBD9–$CBDD free (was sw_latched)
+pl_falling	= $CBD9			; 0 grounded, 1 airborne
+fall_vl		= $CBDA			; 8.8 downward vel lo
+fall_vh		= $CBDB
+fall_y0		= $CBDC			; cam_yh when fall started
+fall_acc	= $CBDD			; leftover ms toward FALL_TICK_MS
 
 ; Unique world X/Z + 8.8 sin/cos products for xform_mesh_xz (4+4 unique, 16 verts)
 UX		= $CBDE
@@ -422,5 +433,6 @@ splat_col	= $CE19			; COL_SPLAT_HIT or col_line (miss)
 splat_skip	= $CE1A			; 1 = skip next tick (spawn frame)
 shot_hit_i	= $CE1B			; closest SSG hit enemy, $ff = miss
 shot_hit_z	= $CE1C			; CAM_ZH of that hit
-; $CE1D–$CE1E unused
+hurt_flash_l	= $CE1D			; remaining red-border ms
+hurt_flash_h	= $CE1E
 bite_splat_i	= $CE1F			; dog idx pending blood splat, $ff = none

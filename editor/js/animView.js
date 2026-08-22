@@ -201,6 +201,12 @@ export class AnimView {
       return;
     }
     if (e.button !== 0) return;
+    if (e.altKey) {
+      e.preventDefault();
+      this.drag = { kind: "orbit", last: p };
+      this.canvas.setPointerCapture(e.pointerId);
+      return;
+    }
 
     const binding = this.#binding();
     const axis = binding ? null : this.#hitAxis(p.x, p.y);

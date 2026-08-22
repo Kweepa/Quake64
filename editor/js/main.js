@@ -650,12 +650,12 @@ function setMode(mode) {
   updateCenterChrome();
   document.getElementById("hint").textContent =
     mode === "layout"
-      ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB / Alt+LMB look · Alt+RMB zoom · MMB pan · Alt+MMB orbit · F focus · G drop · gizmo moves selection · Del"
+      ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+LMB / Alt+MMB orbit · MMB pan · Alt+RMB zoom · F focus · G drop · gizmo moves selection · Del"
       : mode === "weapons"
         ? "LMB vertex to inspect · Shift add · click empty clears · drag empty pans · wheel scale"
         : bindJoint >= 0
           ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-          : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · RMB orbit · Alt+RMB zoom";
+          : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
@@ -1896,7 +1896,7 @@ function updateAnimHint() {
   hint.textContent =
     bindJoint >= 0
       ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · RMB orbit · Alt+RMB zoom";
+      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
 }
 
 function assignMeshVerts(indices, additive) {

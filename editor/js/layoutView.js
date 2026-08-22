@@ -233,8 +233,7 @@ export class LayoutView {
     if (e.button !== 0) return;
     if (e.altKey) {
       e.preventDefault();
-      this.look = true;
-      this.lookLast = p;
+      this.orbit = this.#beginOrbit(p);
       this.canvas.setPointerCapture(e.pointerId);
       return;
     }

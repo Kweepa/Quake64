@@ -19,8 +19,8 @@ Caps used by the mesh path: **16 verts**, **32 edges**, **4 unique world X** and
 | `$C940`–`$C97F` | 64 | Sprite 5 nail R (`WPN_FLASH2`) |
 | `$C980`–`$C9BF` | 64 | Sprite 6 enemy muzzle (`WPN_EMUZ`) |
 | `$C9C0`–`$C9FF` | 64 | Sprite 7 impact splat (`WPN_SPLAT`) |
-| `$CA00`–`$CE1F` | 544 | Project / clip / game scratch (table below) |
-| `$CE20`–`$CFFF` | 480 | Unused (before charset A) |
+| `$CA00`–`$CE81` | 642 | Project / clip / game scratch (table below) |
+| `$CE82`–`$CFFF` | 382 | Unused (before charset A) |
 | `$D000`–`$D7FF` | 2048 | Charset A top (`CH_A_TOP`) |
 | `$D800`–`$DFFF` | 2048 | Charset A bottom (`CH_A_BOT`) |
 | `$E000`–`$E7FF` | 2048 | Charset B top (`CH_B_TOP`) |
@@ -68,7 +68,10 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CB90` | 8 | `PROC_D` | Timer hi |
 | `$CB98` | 8 | `PROC_E` | Elev home Y |
 | `$CBA0` | 8 | `PROC_L` | Local SoA index |
-| `$CBA8` | 8 | `door_open` | `MAP_NDOORS` ≤ 8 |
+| `$CBA8` | 1 | `floor_slope` | 1 if this frame's floor is a ramp |
+| `$CBA9` | 1 | `trig_inside` | Trigger SoA index or `$ff` |
+| `$CBAA` | 2 | `hurt_ms_l/h` | Hurt-trigger cooldown remaining |
+| `$CBAC` | 4 | — | Unused |
 | `$CBB0` | 4 | `elev_y` | `MAP_NELEVS` ≤ 4 |
 | `$CBB4` | 1 | `elev_noise_n` | SID V3 rumble refcount |
 | `$CBB5` | 3 | — | Unused |
@@ -127,11 +130,7 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CC34` | 2 | `emuz_ms_l/h` | |
 | `$CC36` | 1 | `emuz_on` | |
 | `$CC37` | 1 | `emuz_xmsb` | |
-| `$CC38` | 8 | `door_vx` | Oriented door SoA |
-| `$CC40` | 8 | `door_vz` | |
-| `$CC48` | 8 | `door_vsx` | |
-| `$CC50` | 8 | `door_vsz` | |
-| `$CC58` | 8 | `door_vface` | |
+| `$CC38` | 40 | — | Unused (was 8-slot door view SoA) |
 | `$CC60` | 16 | `VOC` | Cohen–Sutherland outcode |
 | `$CC70` | 16 | `VBEHIND` | 1 = z < ZCLIP |
 | `$CC80` | 16 | `VSX` | Front-vert screen X |
@@ -183,4 +182,11 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CE1C` | 1 | `shot_hit_z` | |
 | `$CE1D` | 1 | `hurt_flash_l` | Remaining red-border ms lo |
 | `$CE1E` | 1 | `hurt_flash_h` | Remaining red-border ms hi |
-| `$CE1F` | 1 | `bite_splat_i` | Last used scratch byte |
+| `$CE1F` | 1 | `bite_splat_i` | |
+| `$CE20` | 2 | `status_ms_l/h` | Status HUD remaining ms |
+| `$CE22` | 16 | `door_open` | `MAP_NDOORS` ≤ `DOOR_MAX` (16) |
+| `$CE32` | 16 | `door_vx` | Oriented door SoA |
+| `$CE42` | 16 | `door_vz` | |
+| `$CE52` | 16 | `door_vsx` | |
+| `$CE62` | 16 | `door_vsz` | |
+| `$CE72` | 16 | `door_vface` | Last used scratch byte `$CE81` |

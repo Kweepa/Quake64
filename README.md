@@ -14,7 +14,7 @@ Each frame **wipes the live 24 charset columns** (~16.6k cycles). Dirty-tile tra
 
 The map is **rooms as axis-aligned boxes**, not a global mesh. Collision is 8-bit bounds against the active room. Closed doors are blocking planes; open doors are portals that reveal the next room index. I might extend the room boxes to arbitrary meshes, chosen to make collision easy and to give the levels maximum variety. For example, T junctions, L hallways.
 
-Elevation is locked to **1:2 ramps** (`height = local_x >> 1`) so slopes never need multiply or divide. Elevators, switches, and crates share the same box tests.
+Ramps use the AABB for **rise/run** (`height = slope_y + (local * sy) / run` in 8.8) so the eye rides the slope smoothly. Only the two side hypotenuses are stroked — top and bottom edges already come from floors and landings. Elevators, switches, and crates share the same box tests.
 
 Off-screen **items** (AABB meshes) and **enemies** skip rotate/project/draw. Horizontal and vertical tests use a fat 45° cone (`|axis| ≤ z` plus a size pad) so the miss is drawing something a bit off-screen, not dropping something that is still in the 192×128 view. The active room's bounding lines are not frustum-culled.
 

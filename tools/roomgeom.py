@@ -105,47 +105,196 @@ def _uvw_box_to_world(room: dict, box: dict, basis: dict) -> dict:
     }
 
 
+def _cut_count(shape: str) -> int:
+    if shape == "L":
+        return 1
+    if shape in ("T", "S"):
+        return 2
+    return 0
+
+
+def _default_cuts(shape: str, u_size: int, v_size: int) -> list[dict]:
+    u = max(1, int(u_size))
+    v = max(1, int(v_size))
+    if shape == "L":
+        return [{"su": max(1, min(u - 1, u >> 1)), "sv": max(1, min(v - 1, v >> 1))}]
+    if shape == "T":
+        stem_w = max(1, min(max(1, u - 2), max(1, u >> 2)))
+        stem_pos = max(1, min(u - stem_w - 1, (u - stem_w) >> 1))
+        bar_d = max(1, min(v - 1, max(1, v >> 2)))
+        sv = max(1, v - bar_d)
+        return [{"su": stem_pos, "sv": sv}, {"su": max(1, u - stem_pos - stem_w), "sv": sv}]
+    if shape == "S":
+        max_shift = max(1, (u - 1) // 2)
+        shift = max(1, min(max_shift, max(1, u >> 2)))
+        mid = max(1, min(v - 1, v >> 1))
+        return [{"su": shift, "sv": max(1, v - mid)}, {"su": shift, "sv": mid}]
+    return []
+
+
+def _cuts_from_legacy(room: dict, shape: str, u_size: int, v_size: int) -> list[dict]:
+    fallback = _default_cuts(shape, u_size, v_size)
+    if shape == "L":
+        su = int(room.get("cutU") or 0)
+        sv = int(room.get("cutV") or 0)
+        if su >= 1 and sv >= 1:
+            return [{"su": su, "sv": sv}]
+        return fallback
+    if shape == "T":
+        stem_w = int(room.get("stemW") or 0)
+        stem_pos = int(room.get("stemPos") or 0)
+        bar_d = int(room.get("barD") or 0)
+        if stem_w >= 1 and stem_pos >= 1 and bar_d >= 1:
+            sv = max(1, v_size - bar_d)
+            return [
+                {"su": stem_pos, "sv": sv},
+                {"su": max(1, u_size - stem_pos - stem_w), "sv": sv},
+            ]
+        return fallback
+    if shape == "S":
+        shift = int(room.get("shift") or 0)
+        mid = int(room.get("mid") or 0)
+        if shift >= 1 and mid >= 1:
+            return [
+                {"su": shift, "sv": max(1, v_size - mid)},
+                {"su": shift, "sv": mid},
+            ]
+        return fallback
+    return []
+
+
+def _resolve_cuts(room: dict, shape: str, u_size: int, v_size: int) -> list[dict]:
+    n = _cut_count(shape)
+    if n == 0:
+        return []
+    raw = room.get("cuts")
+    if isinstance(raw, list) and len(raw) >= n:
+        return [{"su": int(c.get("su") or 0), "sv": int(c.get("sv") or 0)} for c in raw[:n]]
+    return _cuts_from_legacy(room, shape, u_size, v_size)
+
+
+_LEGACY_SPLIT = ("flip", "cutU", "cutV", "stemW", "stemPos", "barD", "shift", "mid")
+
+
+def bake_room_cuts(room: dict) -> dict:
+    """Write canonical cuts[] and drop flip / old split fields."""
+    shape = clamp_room_shape(room.get("shape"))
+    basis = room_basis(room)
+    cuts = _resolve_cuts(room, shape, basis["uSize"], basis["vSize"])
+    if cuts:
+        room["cuts"] = cuts
+    else:
+        room.pop("cuts", None)
+    for k in _LEGACY_SPLIT:
+        room.pop(k, None)
+    return room
+
+
+def _keep_uv(box: dict) -> bool:
+    return box["su"] > 0 and box["sv"] > 0
+
+
 def _local_footprint(room: dict, basis: dict) -> list[dict]:
     shape = clamp_room_shape(room.get("shape"))
     u_size = basis["uSize"]
     v_size = basis["vSize"]
-    flip = bool(room.get("flip"))
-
-    def mirror_u(box: dict) -> dict:
-        if not flip:
-            return box
-        return {"u": u_size - box["u"] - box["su"], "v": box["v"], "su": box["su"], "sv": box["sv"]}
+    cuts = _resolve_cuts(room, shape, u_size, v_size)
 
     if shape == "box":
         return [{"u": 0, "v": 0, "su": u_size, "sv": v_size}]
     if shape == "L":
-        cut_u = int(room.get("cutU") or 1)
-        cut_v = int(room.get("cutV") or 1)
+        c = cuts[0] if cuts else {"su": 1, "sv": 1}
         return [
-            mirror_u({"u": 0, "v": 0, "su": u_size, "sv": v_size - cut_v}),
-            mirror_u({"u": 0, "v": v_size - cut_v, "su": u_size - cut_u, "sv": cut_v}),
+            box
+            for box in (
+                {"u": 0, "v": 0, "su": u_size, "sv": v_size - c["sv"]},
+                {"u": 0, "v": v_size - c["sv"], "su": u_size - c["su"], "sv": c["sv"]},
+            )
+            if _keep_uv(box)
         ]
     if shape == "T":
-        stem_w = int(room.get("stemW") or 1)
-        stem_pos = int(room.get("stemPos") or 1)
-        bar_d = int(room.get("barD") or 1)
+        a = cuts[0] if cuts else {"su": 1, "sv": 1}
+        b = cuts[1] if len(cuts) > 1 else {"su": 1, "sv": 1}
+        stem_u = a["su"]
+        stem_w = u_size - a["su"] - b["su"]
+        if a["sv"] == b["sv"]:
+            boxes = [
+                {"u": 0, "v": a["sv"], "su": u_size, "sv": v_size - a["sv"]},
+                {"u": stem_u, "v": 0, "su": stem_w, "sv": a["sv"]},
+            ]
+        else:
+            boxes = [
+                {"u": stem_u, "v": 0, "su": stem_w, "sv": v_size},
+                {"u": 0, "v": a["sv"], "su": a["su"], "sv": v_size - a["sv"]},
+                {"u": u_size - b["su"], "v": b["sv"], "su": b["su"], "sv": v_size - b["sv"]},
+            ]
+        return [box for box in boxes if _keep_uv(box)]
+    if shape == "S":
+        a = cuts[0] if cuts else {"su": 1, "sv": 1}
+        b = cuts[1] if len(cuts) > 1 else {"su": 1, "sv": 1}
+        top_v0 = v_size - a["sv"]
+        if b["sv"] == top_v0:
+            boxes = [
+                {"u": 0, "v": b["sv"], "su": u_size - a["su"], "sv": a["sv"]},
+                {"u": b["su"], "v": 0, "su": u_size - b["su"], "sv": b["sv"]},
+            ]
+        elif b["sv"] < top_v0:
+            boxes = [
+                {"u": 0, "v": top_v0, "su": u_size - a["su"], "sv": a["sv"]},
+                {"u": 0, "v": b["sv"], "su": u_size, "sv": top_v0 - b["sv"]},
+                {"u": b["su"], "v": 0, "su": u_size - b["su"], "sv": b["sv"]},
+            ]
+        else:
+            boxes = [
+                {"u": 0, "v": b["sv"], "su": u_size - a["su"], "sv": v_size - b["sv"]},
+                {"u": b["su"], "v": top_v0, "su": u_size - a["su"] - b["su"], "sv": b["sv"] - top_v0},
+                {"u": b["su"], "v": 0, "su": u_size - b["su"], "sv": top_v0},
+            ]
+        return [box for box in boxes if _keep_uv(box)]
+    return [{"u": 0, "v": 0, "su": u_size, "sv": v_size}]
+
+
+def _local_cutouts(room: dict, basis: dict) -> list[dict]:
+    """Negative-space UV boxes (complement of footprint inside the outer UV)."""
+    shape = clamp_room_shape(room.get("shape"))
+    u_size = basis["uSize"]
+    v_size = basis["vSize"]
+    cuts = _resolve_cuts(room, shape, u_size, v_size)
+
+    def keep(box: dict) -> bool:
+        return box["su"] > 0 and box["sv"] > 0
+
+    if shape == "L":
+        if not cuts:
+            return []
+        c = cuts[0]
+        box = {"u": u_size - c["su"], "v": v_size - c["sv"], "su": c["su"], "sv": c["sv"]}
+        return [box] if keep(box) else []
+    if shape == "T":
+        if len(cuts) < 2:
+            return []
+        a, b = cuts[0], cuts[1]
         return [
-            mirror_u({"u": 0, "v": v_size - bar_d, "su": u_size, "sv": bar_d}),
-            mirror_u({"u": stem_pos, "v": 0, "su": stem_w, "sv": v_size - bar_d}),
+            box
+            for box in (
+                {"u": 0, "v": 0, "su": a["su"], "sv": a["sv"]},
+                {"u": u_size - b["su"], "v": 0, "su": b["su"], "sv": b["sv"]},
+            )
+            if keep(box)
         ]
     if shape == "S":
-        shift = int(room.get("shift") or 1)
-        mid = int(room.get("mid") or 1)
-        if flip:
-            return [
-                {"u": shift, "v": mid, "su": u_size - shift, "sv": v_size - mid},
-                {"u": 0, "v": 0, "su": u_size - shift, "sv": mid},
-            ]
+        if len(cuts) < 2:
+            return []
+        a, b = cuts[0], cuts[1]
         return [
-            {"u": 0, "v": mid, "su": u_size - shift, "sv": v_size - mid},
-            {"u": shift, "v": 0, "su": u_size - shift, "sv": mid},
+            box
+            for box in (
+                {"u": u_size - a["su"], "v": v_size - a["sv"], "su": a["su"], "sv": a["sv"]},
+                {"u": 0, "v": 0, "su": b["su"], "sv": b["sv"]},
+            )
+            if keep(box)
         ]
-    return [{"u": 0, "v": 0, "su": u_size, "sv": v_size}]
+    return []
 
 
 def _aabb_faces(box: dict) -> list[dict]:
@@ -265,6 +414,46 @@ def _buried_on_plane(va: dict, vb: dict, faces: list[dict]) -> bool:
     return inside(a) and inside(b)
 
 
+def _axis_collinear(a: dict, b: dict, c: dict) -> bool:
+    same_x = a["x"] == b["x"] == c["x"]
+    same_y = a["y"] == b["y"] == c["y"]
+    same_z = a["z"] == b["z"] == c["z"]
+    return (same_x + same_y + same_z) == 2
+
+
+def _dissolve_collinear(verts: list[dict], edges: list[dict]) -> None:
+    """Drop AABB-union T-junctions that lie mid-edge (silhouette unchanged)."""
+    changed = True
+    while changed:
+        changed = False
+        adj: list[list[tuple[int, int]]] = [[] for _ in verts]
+        for i, e in enumerate(edges):
+            adj[e["a"]].append((i, e["b"]))
+            adj[e["b"]].append((i, e["a"]))
+        for v, nbrs in enumerate(adj):
+            if len(nbrs) != 2:
+                continue
+            (ia, oa), (ib, ob) = nbrs
+            if oa == ob:
+                continue
+            if not _axis_collinear(verts[oa], verts[v], verts[ob]):
+                continue
+            drop = {ia, ib}
+            va, vb = verts[oa], verts[ob]
+            nxt = [e for i, e in enumerate(edges) if i not in drop]
+            nxt.append(
+                {
+                    "a": oa,
+                    "b": ob,
+                    "vert": 1 if va["x"] == vb["x"] and va["z"] == vb["z"] and va["y"] != vb["y"] else 0,
+                    "faces": edges[ia]["faces"] | edges[ib]["faces"],
+                }
+            )
+            edges[:] = nxt
+            changed = True
+            break
+
+
 def _union_hull(colliders: list[dict], outer: dict) -> dict:
     hull_faces = []
     for i, box in enumerate(colliders):
@@ -364,6 +553,7 @@ def _union_hull(colliders: list[dict], outer: dict) -> dict:
                 "faces": _outer_face_bits(outer, va, vb),
             }
         )
+    _dissolve_collinear(verts, edges)
     used = set()
     for e in edges:
         used.add(e["a"])
@@ -396,6 +586,7 @@ def room_geometry(room: dict) -> dict:
             "outer": outer,
             "shape": "box",
             "colliders": [dict(outer)],
+            "cutouts": [],
             "verts": [],
             "edges": [],
             "hullFaces": _aabb_faces(outer),
@@ -404,8 +595,9 @@ def room_geometry(room: dict) -> dict:
     basis = room_basis(room)
     fp = _local_footprint(room, basis)
     colliders = [_uvw_box_to_world(room, box, basis) for box in fp]
+    cutouts = [_uvw_box_to_world(room, box, basis) for box in _local_cutouts(room, basis)]
     hull = _union_hull(colliders, outer)
-    return {"outer": outer, "shape": shape, "colliders": colliders, **hull}
+    return {"outer": outer, "shape": shape, "colliders": colliders, "cutouts": cutouts, **hull}
 
 
 _DOOR_FACE_IDS = ("+x", "-x", "+z", "-z")

@@ -91,7 +91,6 @@ main
 	jsr calc_frame_dt
 	jsr update_hurt_flash
 	jsr hud_print
-	jsr hud_message
 
 	lda draw_buf
 	eor #1
@@ -105,7 +104,8 @@ main
 	jsr proc_update
 	jsr update_floor
 	jsr update_fall
-	jsr update_message
+	jsr update_status
+	jsr update_triggers
 	jsr enemies_update
 	jmp main
 
@@ -277,6 +277,7 @@ copy_luts
 !source "profil.asm"
 !source "hud.asm"
 !source "math.asm"
+!source "util.asm"
 !source "line.asm"
 !source "playsound.asm"
 !source "pcsounds.asm"

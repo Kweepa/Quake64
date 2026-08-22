@@ -958,39 +958,171 @@ function uvwBoxToWorld(room, box, basis) {
   };
 }
 
-function defaultRoomSplits(shape, uSize, vSize) {
+function cutCount(shape) {
+  if (shape === "L") return 1;
+  if (shape === "T" || shape === "S") return 2;
+  return 0;
+}
+
+function cloneCuts(cuts) {
+  return (cuts || []).map((c) => ({ su: c.su | 0, sv: c.sv | 0 }));
+}
+
+function stripLegacySplits(room) {
+  delete room.flip;
+  delete room.cutU;
+  delete room.cutV;
+  delete room.stemW;
+  delete room.stemPos;
+  delete room.barD;
+  delete room.shift;
+  delete room.mid;
+}
+
+function defaultCuts(shape, uSize, vSize) {
   const u = Math.max(1, uSize | 0);
   const v = Math.max(1, vSize | 0);
   if (shape === "L") {
-    return {
-      cutU: Math.max(1, Math.min(u - 1, u >> 1)),
-      cutV: Math.max(1, Math.min(v - 1, v >> 1)),
-    };
+    return [
+      {
+        su: Math.max(1, Math.min(u - 1, u >> 1)),
+        sv: Math.max(1, Math.min(v - 1, v >> 1)),
+      },
+    ];
   }
   if (shape === "T") {
     const stemW = Math.max(1, Math.min(Math.max(1, u - 2), Math.max(1, u >> 2)));
     const stemPos = Math.max(1, Math.min(u - stemW - 1, (u - stemW) >> 1));
     const barD = Math.max(1, Math.min(v - 1, Math.max(1, v >> 2)));
-    return { stemW, stemPos, barD };
+    const sv = Math.max(1, v - barD);
+    return [
+      { su: stemPos, sv },
+      { su: Math.max(1, u - stemPos - stemW), sv },
+    ];
   }
   if (shape === "S") {
     const maxShift = Math.max(1, Math.floor((u - 1) / 2));
     const shift = Math.max(1, Math.min(maxShift, Math.max(1, u >> 2)));
     const mid = Math.max(1, Math.min(v - 1, v >> 1));
-    return { shift, mid };
+    return [
+      { su: shift, sv: Math.max(1, v - mid) },
+      { su: shift, sv: mid },
+    ];
   }
-  return {};
+  return [];
 }
 
-function clampRoomSplits(room) {
+function defaultRoomSplits(shape, uSize, vSize) {
+  return { cuts: defaultCuts(shape, uSize, vSize) };
+}
+
+function cutsFromLegacy(room, shape, uSize, vSize) {
+  const fallback = defaultCuts(shape, uSize, vSize);
+  if (shape === "L") {
+    const su = room.cutU | 0;
+    const sv = room.cutV | 0;
+    if (su >= 1 && sv >= 1) return [{ su, sv }];
+    return fallback;
+  }
+  if (shape === "T") {
+    const stemW = room.stemW | 0;
+    const stemPos = room.stemPos | 0;
+    const barD = room.barD | 0;
+    if (stemW >= 1 && stemPos >= 1 && barD >= 1) {
+      const sv = Math.max(1, vSize - barD);
+      return [
+        { su: stemPos, sv },
+        { su: Math.max(1, uSize - stemPos - stemW), sv },
+      ];
+    }
+    return fallback;
+  }
+  if (shape === "S") {
+    const shift = room.shift | 0;
+    const mid = room.mid | 0;
+    if (shift >= 1 && mid >= 1) {
+      return [
+        { su: shift, sv: Math.max(1, vSize - mid) },
+        { su: shift, sv: mid },
+      ];
+    }
+    return fallback;
+  }
+  return [];
+}
+
+/** Corner-anchored UV boxes for the room's cuts (no mutation). */
+function cutoutUvBoxes(shape, cuts, uSize, vSize) {
+  const keep = (box) => box.su > 0 && box.sv > 0;
+  if (shape === "L") {
+    const c = cuts[0];
+    if (!c) return [];
+    const box = { u: uSize - c.su, v: vSize - c.sv, su: c.su, sv: c.sv };
+    return keep(box) ? [box] : [];
+  }
+  if (shape === "T") {
+    const a = cuts[0];
+    const b = cuts[1];
+    if (!a || !b) return [];
+    return [
+      { u: 0, v: 0, su: a.su, sv: a.sv },
+      { u: uSize - b.su, v: 0, su: b.su, sv: b.sv },
+    ].filter(keep);
+  }
+  if (shape === "S") {
+    const a = cuts[0];
+    const b = cuts[1];
+    if (!a || !b) return [];
+    return [
+      { u: uSize - a.su, v: vSize - a.sv, su: a.su, sv: a.sv },
+      { u: 0, v: 0, su: b.su, sv: b.sv },
+    ].filter(keep);
+  }
+  return [];
+}
+
+function axisGap(a0, as, b0, bs) {
+  const a1 = a0 + as;
+  const b1 = b0 + bs;
+  if (a1 < b0) return b0 - a1;
+  if (b1 < a0) return a0 - b1;
+  return 0;
+}
+
+function uvSeparated(a, b) {
+  return axisGap(a.u, a.su, b.u, b.su) >= 1 || axisGap(a.v, a.sv, b.v, b.sv) >= 1;
+}
+
+function maxCutDim(shape, cuts, index, dim, uSize, vSize) {
+  const hi = dim === "su" ? uSize - 1 : vSize - 1;
+  if (cuts.length < 2) return Math.max(1, hi);
+  const trial = cloneCuts(cuts);
+  for (let s = hi; s >= 1; s--) {
+    trial[index][dim] = s;
+    const boxes = cutoutUvBoxes(shape, trial, uSize, vSize);
+    if (boxes.length < 2 || uvSeparated(boxes[0], boxes[1])) return s;
+  }
+  return 1;
+}
+
+function resolveCuts(room, shape, uSize, vSize) {
+  const n = cutCount(shape);
+  if (n === 0) return [];
+  if (Array.isArray(room.cuts) && room.cuts.length >= n) {
+    return cloneCuts(room.cuts).slice(0, n);
+  }
+  return cutsFromLegacy(room, shape, uSize, vSize);
+}
+
+function clampRoomSplits(room, opts) {
   const shape = clampRoomShape(room.shape);
   room.shape = shape;
-  room.flip = !!room.flip;
   room.rx = clampQuarter(room.rx);
   room.ry = clampQuarter(room.ry);
   room.rz = clampQuarter(room.rz);
   const basis = roomBasis(room);
   let { uSize, vSize } = basis;
+  const n = cutCount(shape);
   if (shape === "L") {
     if (uSize < 2) {
       bumpAxis(room, basis.u, 2);
@@ -1000,10 +1132,7 @@ function clampRoomSplits(room) {
       bumpAxis(room, basis.v, 2);
       vSize = 2;
     }
-    const d = defaultRoomSplits("L", uSize, vSize);
-    room.cutU = clampInt(room.cutU, 1, uSize - 1, d.cutU);
-    room.cutV = clampInt(room.cutV, 1, vSize - 1, d.cutV);
-  } else if (shape === "T") {
+  } else if (shape === "T" || shape === "S") {
     if (uSize < 3) {
       bumpAxis(room, basis.u, 3);
       uSize = 3;
@@ -1012,24 +1141,26 @@ function clampRoomSplits(room) {
       bumpAxis(room, basis.v, 2);
       vSize = 2;
     }
-    const d = defaultRoomSplits("T", uSize, vSize);
-    room.stemW = clampInt(room.stemW, 1, uSize - 2, d.stemW);
-    room.stemPos = clampInt(room.stemPos, 1, uSize - room.stemW - 1, d.stemPos);
-    room.barD = clampInt(room.barD, 1, vSize - 1, d.barD);
-  } else if (shape === "S") {
-    if (uSize < 3) {
-      bumpAxis(room, basis.u, 3);
-      uSize = 3;
-    }
-    if (vSize < 2) {
-      bumpAxis(room, basis.v, 2);
-      vSize = 2;
-    }
-    const maxShift = Math.max(1, Math.floor((uSize - 1) / 2));
-    const d = defaultRoomSplits("S", uSize, vSize);
-    room.shift = clampInt(room.shift, 1, maxShift, d.shift);
-    room.mid = clampInt(room.mid, 1, vSize - 1, d.mid);
   }
+  if (n === 0) {
+    room.cuts = [];
+    stripLegacySplits(room);
+    return room;
+  }
+  const prefer = opts?.preferCut ?? 0;
+  const preferDim = opts?.preferDim;
+  const cuts = resolveCuts(room, shape, uSize, vSize);
+  const dims = preferDim === "sv" ? ["sv", "su"] : ["su", "sv"];
+  const order = [prefer, ...cuts.map((_, i) => i).filter((i) => i !== prefer)];
+  for (const i of order) {
+    for (const dim of dims) {
+      const hi = dim === "su" ? uSize - 1 : vSize - 1;
+      cuts[i][dim] = clampInt(cuts[i][dim], 1, hi, 1);
+      cuts[i][dim] = Math.min(cuts[i][dim], maxCutDim(shape, cuts, i, dim, uSize, vSize));
+    }
+  }
+  room.cuts = cuts;
+  stripLegacySplits(room);
   return room;
 }
 
@@ -1048,9 +1179,9 @@ function bumpAxis(room, hat, minSize) {
 
 function applyRoomShape(room, shape) {
   room.shape = clampRoomShape(shape);
+  stripLegacySplits(room);
   const b = roomBasis(room);
-  const d = defaultRoomSplits(room.shape, b.uSize, b.vSize);
-  Object.assign(room, d);
+  room.cuts = defaultCuts(room.shape, b.uSize, b.vSize);
   return clampRoomSplits(room);
 }
 
@@ -1062,19 +1193,6 @@ function coordAlongHat(room, t, hat, tSize) {
 function tAlongHat(room, world, hat, tSize) {
   const min = room[hatAxis(hat)] | 0;
   return hatSign(hat) > 0 ? world - min : min + tSize - world;
-}
-
-function uvEndMoved(orig, room, hat) {
-  const axis = hatAxis(hat);
-  const sizeKey = axis === "x" ? "sx" : axis === "y" ? "sy" : "sz";
-  const oldMin = orig[axis] | 0;
-  const newMin = room[axis] | 0;
-  const oldMax = oldMin + (orig[sizeKey] | 0);
-  const newMax = newMin + (room[sizeKey] | 0);
-  const minMoved = newMin !== oldMin;
-  const maxMoved = newMax !== oldMax;
-  if (hatSign(hat) > 0) return { minusMoved: minMoved, plusMoved: maxMoved };
-  return { minusMoved: maxMoved, plusMoved: minMoved };
 }
 
 /** Keep inner walls in world space when the AABB is resized from a face/corner. */
@@ -1089,89 +1207,114 @@ function preserveRoomSplits(room, orig) {
   const newV = newBasis.vSize;
   const mapU = (t) => Math.round(tAlongHat(room, coordAlongHat(orig, t, basis.u, oldU), newBasis.u, newU));
   const mapV = (t) => Math.round(tAlongHat(room, coordAlongHat(orig, t, basis.v, oldV), newBasis.v, newV));
-
+  const origCuts = resolveCuts(orig, shape, oldU, oldV);
+  const cuts = [];
   if (shape === "L") {
-    const uInner = orig.flip ? orig.cutU | 0 : oldU - (orig.cutU | 0);
-    const mapped = mapU(uInner);
-    room.cutU = orig.flip ? mapped : newU - mapped;
-    room.cutV = newV - mapV(oldV - (orig.cutV | 0));
+    const c = origCuts[0] || { su: 1, sv: 1 };
+    cuts.push({
+      su: newU - mapU(oldU - c.su),
+      sv: newV - mapV(oldV - c.sv),
+    });
   } else if (shape === "T") {
-    let p0 = orig.stemPos | 0;
-    let p1 = p0 + (orig.stemW | 0);
-    if (orig.flip) {
-      p0 = oldU - (orig.stemPos | 0) - (orig.stemW | 0);
-      p1 = oldU - (orig.stemPos | 0);
-    }
-    let n0 = mapU(p0);
-    let n1 = mapU(p1);
-    if (n1 < n0) {
-      const t = n0;
-      n0 = n1;
-      n1 = t;
-    }
-    room.stemW = n1 - n0;
-    room.stemPos = orig.flip ? newU - n1 : n0;
-    room.barD = newV - mapV(oldV - (orig.barD | 0));
+    const a = origCuts[0] || { su: 1, sv: 1 };
+    const b = origCuts[1] || { su: 1, sv: 1 };
+    cuts.push({ su: mapU(a.su), sv: mapV(a.sv) });
+    cuts.push({ su: newU - mapU(oldU - b.su), sv: mapV(b.sv) });
   } else if (shape === "S") {
-    const s0 = orig.shift | 0;
-    const from0 = mapU(s0);
-    const from1 = newU - mapU(oldU - s0);
-    if (from0 === from1) {
-      room.shift = from0;
-    } else {
-      const u = uvEndMoved(orig, room, basis.u);
-      if (u.plusMoved && !u.minusMoved) room.shift = from0;
-      else if (u.minusMoved && !u.plusMoved) room.shift = from1;
-      else room.shift = Math.round((from0 + from1) / 2);
-    }
-    room.mid = mapV(orig.mid | 0);
+    const a = origCuts[0] || { su: 1, sv: 1 };
+    const b = origCuts[1] || { su: 1, sv: 1 };
+    cuts.push({
+      su: newU - mapU(oldU - a.su),
+      sv: newV - mapV(oldV - a.sv),
+    });
+    cuts.push({ su: mapU(b.su), sv: mapV(b.sv) });
   }
+  room.cuts = cuts;
+  stripLegacySplits(room);
   return clampRoomSplits(room);
+}
+
+function applyRoomSplitDelta(room, orig, key, delta) {
+  const m = /^cut(\d)([uv])$/.exec(key);
+  if (!m) return clampRoomSplits(room);
+  const i = m[1] | 0;
+  const dim = m[2] === "u" ? "su" : "sv";
+  const shape = clampRoomShape(orig.shape);
+  const basis = roomBasis(orig);
+  const cuts = resolveCuts(orig, shape, basis.uSize, basis.vSize);
+  if (i >= cuts.length) return clampRoomSplits(room);
+  cuts[i][dim] = (cuts[i][dim] | 0) + (delta | 0);
+  room.cuts = cuts;
+  room.shape = shape;
+  return clampRoomSplits(room, { preferCut: i, preferDim: dim });
+}
+
+function keepUv(box) {
+  return box.su > 0 && box.sv > 0;
 }
 
 function localFootprint(room, basis) {
   const shape = clampRoomShape(room.shape);
   const uSize = basis.uSize;
   const vSize = basis.vSize;
-  const flip = !!room.flip;
-  const mirrorU = (box) =>
-    flip ? { u: uSize - box.u - box.su, v: box.v, su: box.su, sv: box.sv } : box;
+  const cuts = resolveCuts(room, shape, uSize, vSize);
 
   if (shape === "box") {
     return [{ u: 0, v: 0, su: uSize, sv: vSize }];
   }
   if (shape === "L") {
-    const cutU = room.cutU | 0;
-    const cutV = room.cutV | 0;
+    const c = cuts[0] || { su: 1, sv: 1 };
     return [
-      mirrorU({ u: 0, v: 0, su: uSize, sv: vSize - cutV }),
-      mirrorU({ u: 0, v: vSize - cutV, su: uSize - cutU, sv: cutV }),
-    ];
+      { u: 0, v: 0, su: uSize, sv: vSize - c.sv },
+      { u: 0, v: vSize - c.sv, su: uSize - c.su, sv: c.sv },
+    ].filter(keepUv);
   }
   if (shape === "T") {
-    const stemW = room.stemW | 0;
-    const stemPos = room.stemPos | 0;
-    const barD = room.barD | 0;
-    return [
-      mirrorU({ u: 0, v: vSize - barD, su: uSize, sv: barD }),
-      mirrorU({ u: stemPos, v: 0, su: stemW, sv: vSize - barD }),
-    ];
-  }
-  if (shape === "S") {
-    const shift = room.shift | 0;
-    const mid = room.mid | 0;
-    if (flip) {
+    const a = cuts[0] || { su: 1, sv: 1 };
+    const b = cuts[1] || { su: 1, sv: 1 };
+    const stemU = a.su;
+    const stemW = uSize - a.su - b.su;
+    if (a.sv === b.sv) {
       return [
-        { u: shift, v: mid, su: uSize - shift, sv: vSize - mid },
-        { u: 0, v: 0, su: uSize - shift, sv: mid },
-      ];
+        { u: 0, v: a.sv, su: uSize, sv: vSize - a.sv },
+        { u: stemU, v: 0, su: stemW, sv: a.sv },
+      ].filter(keepUv);
     }
     return [
-      { u: 0, v: mid, su: uSize - shift, sv: vSize - mid },
-      { u: shift, v: 0, su: uSize - shift, sv: mid },
-    ];
+      { u: stemU, v: 0, su: stemW, sv: vSize },
+      { u: 0, v: a.sv, su: a.su, sv: vSize - a.sv },
+      { u: uSize - b.su, v: b.sv, su: b.su, sv: vSize - b.sv },
+    ].filter(keepUv);
+  }
+  if (shape === "S") {
+    const a = cuts[0] || { su: 1, sv: 1 };
+    const b = cuts[1] || { su: 1, sv: 1 };
+    const topV0 = vSize - a.sv;
+    if (b.sv === topV0) {
+      return [
+        { u: 0, v: b.sv, su: uSize - a.su, sv: a.sv },
+        { u: b.su, v: 0, su: uSize - b.su, sv: b.sv },
+      ].filter(keepUv);
+    }
+    if (b.sv < topV0) {
+      return [
+        { u: 0, v: topV0, su: uSize - a.su, sv: a.sv },
+        { u: 0, v: b.sv, su: uSize, sv: topV0 - b.sv },
+        { u: b.su, v: 0, su: uSize - b.su, sv: b.sv },
+      ].filter(keepUv);
+    }
+    return [
+      { u: 0, v: b.sv, su: uSize - a.su, sv: vSize - b.sv },
+      { u: b.su, v: topV0, su: uSize - a.su - b.su, sv: b.sv - topV0 },
+      { u: b.su, v: 0, su: uSize - b.su, sv: topV0 },
+    ].filter(keepUv);
   }
   return [{ u: 0, v: 0, su: uSize, sv: vSize }];
+}
+
+function localCutouts(room, basis) {
+  const shape = clampRoomShape(room.shape);
+  return cutoutUvBoxes(shape, resolveCuts(room, shape, basis.uSize, basis.vSize), basis.uSize, basis.vSize);
 }
 
 function aabbFaces(box) {
@@ -1316,6 +1459,49 @@ function buriedOnPlane(va, vb, faces) {
   return inside(a) && inside(b);
 }
 
+/** True if b sits on the axis-aligned segment a–c (not a corner). */
+function axisCollinear(a, b, c) {
+  const sameX = a.x === b.x && b.x === c.x;
+  const sameY = a.y === b.y && b.y === c.y;
+  const sameZ = a.z === b.z && b.z === c.z;
+  return (sameX ? 1 : 0) + (sameY ? 1 : 0) + (sameZ ? 1 : 0) === 2;
+}
+
+/** Drop AABB-union T-junctions that lie mid-edge (silhouette unchanged). */
+function dissolveCollinear(verts, edges) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const adj = verts.map(() => []);
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i];
+      adj[e.a].push({ i, o: e.b });
+      adj[e.b].push({ i, o: e.a });
+    }
+    for (let v = 0; v < verts.length; v++) {
+      if (adj[v].length !== 2) continue;
+      const ia = adj[v][0];
+      const ib = adj[v][1];
+      if (ia.o === ib.o) continue;
+      if (!axisCollinear(verts[ia.o], verts[v], verts[ib.o])) continue;
+      const drop = new Set([ia.i, ib.i]);
+      const va = verts[ia.o];
+      const vb = verts[ib.o];
+      const next = edges.filter((_, i) => !drop.has(i));
+      next.push({
+        a: ia.o,
+        b: ib.o,
+        vert: va.x === vb.x && va.z === vb.z && va.y !== vb.y ? 1 : 0,
+        faces: edges[ia.i].faces | edges[ib.i].faces,
+      });
+      edges.length = 0;
+      edges.push(...next);
+      changed = true;
+      break;
+    }
+  }
+}
+
 function unionHull(colliders, outer) {
   const hullFaces = [];
   for (let i = 0; i < colliders.length; i++) {
@@ -1431,6 +1617,7 @@ function unionHull(colliders, outer) {
       faces: outerFaceBits(outer, va, vb),
     });
   }
+  dissolveCollinear(verts, kept);
   const used = new Set();
   for (const e of kept) {
     used.add(e.a);
@@ -1456,6 +1643,7 @@ function innerHandles(room, basis) {
   const uSize = basis.uSize;
   const vSize = basis.vSize;
   const w2 = basis.wSize / 2;
+  const cuts = resolveCuts(room, shape, uSize, vSize);
   const handles = [];
   const push = (u, w, v, key, alongHat, scale) => {
     const world = localToWorld(room, u, w, v, basis);
@@ -1468,64 +1656,53 @@ function innerHandles(room, basis) {
     });
   };
 
+  const addCut = (i, u0, v0, growU, growV) => {
+    const c = cuts[i];
+    if (!c) return;
+    const uFace = growU > 0 ? u0 + c.su : u0;
+    const vFace = growV > 0 ? v0 + c.sv : v0;
+    const uMid = u0 + c.su / 2;
+    const vMid = v0 + c.sv / 2;
+    push(uFace, w2, vMid, `cut${i}u`, basis.u, growU);
+    push(uMid, w2, vFace, `cut${i}v`, basis.v, growV);
+  };
+
   if (shape === "L") {
-    const cutU = room.cutU | 0;
-    const cutV = room.cutV | 0;
-    const uFace = room.flip ? cutU : uSize - cutU;
-    const uMid = room.flip ? cutU / 2 : uSize - cutU / 2;
-    push(uFace, w2, vSize - cutV / 2, "cutU", basis.u, room.flip ? 1 : -1);
-    push(uMid, w2, vSize - cutV, "cutV", basis.v, -1);
+    const c = cuts[0];
+    if (c) addCut(0, uSize - c.su, vSize - c.sv, -1, -1);
   } else if (shape === "T") {
-    const stemW = room.stemW | 0;
-    let stemPos = room.stemPos | 0;
-    const barD = room.barD | 0;
-    if (room.flip) stemPos = uSize - stemPos - stemW;
-    push(stemPos, w2, (vSize - barD) / 2, "stemPos", basis.u, room.flip ? -1 : 1);
-    push(stemPos + stemW, w2, (vSize - barD) / 2, "stemW", basis.u, room.flip ? -1 : 1);
-    push(stemPos / 2, w2, vSize - barD, "barD", basis.v, -1);
+    const a = cuts[0];
+    const b = cuts[1];
+    if (a) addCut(0, 0, 0, 1, 1);
+    if (b) addCut(1, uSize - b.su, 0, -1, 1);
   } else if (shape === "S") {
-    const shift = room.shift | 0;
-    const mid = room.mid | 0;
-    if (room.flip) {
-      push(shift, w2, mid + (vSize - mid) / 2, "shift", basis.u, 1);
-    } else {
-      push(uSize - shift, w2, mid + (vSize - mid) / 2, "shift", basis.u, -1);
-    }
-    push(uSize / 2, w2, mid, "mid", basis.v, 1);
+    const a = cuts[0];
+    const b = cuts[1];
+    if (a) addCut(0, uSize - a.su, vSize - a.sv, -1, -1);
+    if (b) addCut(1, 0, 0, 1, 1);
   }
   return handles;
 }
 
-/** Outer AABB walls: one handle per hull face that sits on the room bounds. */
-function wallHandles(room, hullFaces) {
+/** Six AABB face-center handles (not one per hull fragment). */
+function aabbWallHandles(room) {
   const x0 = room.x | 0;
   const y0 = room.y | 0;
   const z0 = room.z | 0;
-  const x1 = x0 + (room.sx | 0);
-  const y1 = y0 + (room.sy | 0);
-  const z1 = z0 + (room.sz | 0);
-  const handles = [];
-  for (const f of hullFaces) {
-    let side = null;
-    if (f.axis === "x") {
-      if (f.plane === x0) side = "x0";
-      else if (f.plane === x1) side = "x1";
-    } else if (f.axis === "y") {
-      if (f.plane === y0) side = "y0";
-      else if (f.plane === y1) side = "y1";
-    } else if (f.axis === "z") {
-      if (f.plane === z0) side = "z0";
-      else if (f.plane === z1) side = "z1";
-    }
-    if (!side || !f.center) continue;
-    handles.push({
-      kind: "face",
-      side,
-      axis: f.axis,
-      world: f.center,
-    });
-  }
-  return handles;
+  const sx = room.sx | 0;
+  const sy = room.sy | 0;
+  const sz = room.sz | 0;
+  const cx = x0 + sx / 2;
+  const cy = y0 + sy / 2;
+  const cz = z0 + sz / 2;
+  return [
+    { kind: "face", side: "x0", axis: "x", world: { x: x0, y: cy, z: cz } },
+    { kind: "face", side: "x1", axis: "x", world: { x: x0 + sx, y: cy, z: cz } },
+    { kind: "face", side: "y0", axis: "y", world: { x: cx, y: y0, z: cz } },
+    { kind: "face", side: "y1", axis: "y", world: { x: cx, y: y0 + sy, z: cz } },
+    { kind: "face", side: "z0", axis: "z", world: { x: cx, y: cy, z: z0 } },
+    { kind: "face", side: "z1", axis: "z", world: { x: cx, y: cy, z: z0 + sz } },
+  ];
 }
 
 function roomGeometry(room) {
@@ -1582,25 +1759,28 @@ function roomGeometry(room) {
       outer,
       shape: "box",
       colliders: [{ ...outer }],
+      cutouts: [],
       verts,
       edges,
       hullFaces,
-      handles: wallHandles(room, hullFaces),
+      handles: aabbWallHandles(room),
     };
   }
 
   const basis = roomBasis(room);
   const fp = localFootprint(room, basis);
   const colliders = fp.map((box) => uvwBoxToWorld(room, box, basis));
+  const cutouts = localCutouts(room, basis).map((box) => uvwBoxToWorld(room, box, basis));
   const { hullFaces, verts, edges } = unionHull(colliders, outer);
   return {
     outer,
     shape,
     colliders,
+    cutouts,
     verts,
     edges,
     hullFaces,
-    handles: [...wallHandles(room, hullFaces), ...innerHandles(room, basis)],
+    handles: [...aabbWallHandles(room), ...innerHandles(room, basis)],
   };
 }
 
@@ -1956,14 +2136,6 @@ const KINDS = {
     fixed: false,
     slope: false,
   },
-  teleporter: {
-    id: "teleporter",
-    label: "Teleporter",
-    color: "#9b7eed",
-    defaultSize: [4, 1, 4],
-    fixed: false,
-    slope: false,
-  },
   teleporter_dest: {
     id: "teleporter_dest",
     label: "Teleport dest",
@@ -1988,37 +2160,40 @@ const KINDS = {
     fixed: true,
     slope: false,
   },
-  patrol: {
-    id: "patrol",
-    label: "Patrol point",
-    color: "#e89050",
-    defaultSize: [2, 2, 2],
-    fixed: true,
-    slope: false,
-  },
 };
 
 /** Editor-only dashed / ghost volumes (not solid world geometry). */
 function isGhostKind(kind) {
-  return (
-    kind === "trigger" ||
-    kind === "teleporter" ||
-    kind === "teleporter_dest" ||
-    kind === "patrol"
-  );
+  return kind === "trigger" || kind === "teleporter_dest";
 }
 
-/** Kinds linked by a shared editor tag (resolved to indices on export). */
+/** Kinds that always carry a link tag (resolved to indices on export). */
 function usesLinkTag(kind) {
   return (
     kind === "switch" ||
     kind === "elevator" ||
-    kind === "teleporter" ||
     kind === "teleporter_dest" ||
-    kind === "key" ||
-    kind === "patrol" ||
-    kind === "enemy"
+    kind === "key"
   );
+}
+
+/** Trigger purposes. Tag is only used for teleport / elevator. */
+const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator"];
+const TRIGGER_PURPOSE_LABELS = {
+  message: "Display message",
+  end_level: "End of level",
+  hurt: "Hurt player",
+  teleport: "Teleport",
+  elevator: "Activate elevator",
+};
+
+function clampTriggerPurpose(s) {
+  return TRIGGER_PURPOSES.includes(s) ? s : "message";
+}
+
+function triggerUsesTag(purpose) {
+  const p = clampTriggerPurpose(purpose);
+  return p === "teleport" || p === "elevator";
 }
 
 /** Layout placements draw the first stick frame at this fraction of anim units (Grunt ~4 world high). */
@@ -2043,11 +2218,9 @@ const PALETTE_ORDER = [
   "elevator",
   "spawn",
   "trigger",
-  "teleporter",
   "teleporter_dest",
   "key",
   "backpack",
-  "patrol",
 ];
 const MAX_TRIGGER_TEXT = 80;
 const MAX_NAME_LEN = 40;
@@ -2060,7 +2233,7 @@ function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
 }
 
-/** Backpack contents (ammo, weapon, or health pickup). */
+/** Backpack contents (ammo, weapon, health, or armour pickup). */
 const BACKPACK_TYPES = [
   "shells",
   "nailgun",
@@ -2069,6 +2242,7 @@ const BACKPACK_TYPES = [
   "grenades",
   "health 25%",
   "health 50%",
+  "armour",
 ];
 
 /** Height / base-side = φ. Fixed backpack: 1.5 tall. */
@@ -2079,13 +2253,6 @@ const BACKPACK_DEPTH = (BACKPACK_SIDE * Math.sqrt(3)) / 2;
 
 function clampBackpackType(s) {
   return BACKPACK_TYPES.includes(s) ? s : "shells";
-}
-
-/** Sequence among patrol points that share a tag (lower first). */
-function clampPatrolOrder(n) {
-  const v = n | 0;
-  if (!Number.isFinite(v)) return 0;
-  return Math.max(0, Math.min(255, v));
 }
 
 /** Fixed equilateral tetra: height 1.5, base side = height/φ. */
@@ -2278,18 +2445,16 @@ function applyFaceSize(obj) {
   return obj;
 }
 
-/** Keep 2:1 run = 2 * rise. Rise is sy. */
+/** Axis x/z, dir ±1; sizes independent (rise = sy, run = sx or sz). */
 function applySlopeConstraint(obj) {
   if (obj.kind !== "slope") return obj;
-  const rise = Math.max(1, obj.sy | 0);
-  const run = Math.max(2, rise * 2);
-  obj.sy = clampSize(obj.y, rise);
+  obj.sy = clampSize(obj.y, Math.max(1, obj.sy | 0));
   if (obj.axis === "x") {
-    obj.sx = clampSize(obj.x, run);
+    obj.sx = clampSize(obj.x, Math.max(1, obj.sx | 0));
     obj.sz = clampSize(obj.z, Math.max(1, obj.sz | 0));
   } else {
     obj.axis = "z";
-    obj.sz = clampSize(obj.z, run);
+    obj.sz = clampSize(obj.z, Math.max(1, obj.sz | 0));
     obj.sx = clampSize(obj.x, Math.max(1, obj.sx | 0));
   }
   if (obj.dir !== -1) obj.dir = 1;
@@ -2317,7 +2482,11 @@ function clampObject(obj) {
   if (obj.kind === "enemy" || obj.kind === "spawn" || obj.kind === "teleporter_dest") {
     obj.rot = clampEnemyRot(obj.rot ?? 0);
   }
-  if (obj.kind === "trigger") obj.text = clampTriggerText(obj.text);
+  if (obj.kind === "trigger") {
+    obj.purpose = clampTriggerPurpose(obj.purpose);
+    obj.text = clampTriggerText(obj.text);
+    obj.tag = clampTag(obj.tag);
+  }
   if (obj.kind === "room") {
     obj.name = clampName(obj.name);
     obj.bgColor = normalizeColor(obj.bgColor ?? obj.skyColor, ROOM_BG_DEFAULT);
@@ -2334,7 +2503,7 @@ function clampObject(obj) {
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
   if (obj.kind === "backpack") obj.backpack = clampBackpackType(obj.backpack);
-  if (obj.kind === "patrol") obj.order = clampPatrolOrder(obj.order);
+  if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
   if (obj.kind === "doorway") {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
@@ -2375,8 +2544,13 @@ function createObject(kind, x, y, z, extra = {}) {
   if (kind === "enemy") {
     const name = extra.enemy || "Grunt";
     obj.enemy = ENEMY_TYPES.some((t) => t.name === name) ? name : "Grunt";
+    obj.patrol = !!extra.patrol;
   }
-  if (kind === "trigger") obj.text = clampTriggerText(extra.text);
+  if (kind === "trigger") {
+    obj.purpose = clampTriggerPurpose(extra.purpose);
+    obj.text = extra.text;
+    obj.tag = extra.tag;
+  }
   if (kind === "room") {
     obj.name = clampName(extra.name);
     obj.bgColor = normalizeColor(extra.bgColor ?? extra.skyColor, ROOM_BG_DEFAULT);
@@ -2384,10 +2558,10 @@ function createObject(kind, x, y, z, extra = {}) {
     obj.fxColor = normalizeColor(extra.fxColor, ROOM_FX_DEFAULT);
     obj.weaponColor = normalizeColor(extra.weaponColor, ROOM_WPN_DEFAULT);
     obj.shape = clampRoomShape(extra.shape);
-    obj.flip = !!extra.flip;
     obj.rx = extra.rx | 0;
     obj.ry = extra.ry | 0;
     obj.rz = extra.rz | 0;
+    if (Array.isArray(extra.cuts)) obj.cuts = extra.cuts.map((c) => ({ su: c.su | 0, sv: c.sv | 0 }));
     obj.cutU = extra.cutU | 0;
     obj.cutV = extra.cutV | 0;
     obj.stemW = extra.stemW | 0;
@@ -2401,7 +2575,6 @@ function createObject(kind, x, y, z, extra = {}) {
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
   if (kind === "backpack") obj.backpack = clampBackpackType(extra.backpack);
-  if (kind === "patrol") obj.order = clampPatrolOrder(extra.order);
   if (kind === "doorway") {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
@@ -2440,10 +2613,6 @@ function objectLabel(obj) {
   }
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
   if (obj.kind === "backpack") return `Backpack (${clampBackpackType(obj.backpack)})`;
-  if (obj.kind === "patrol") {
-    const tag = clampTag(obj.tag);
-    return tag ? `Patrol (${tag})` : "Patrol point";
-  }
   return KINDS[obj.kind].label;
 }
 
@@ -2509,15 +2678,13 @@ const C64_OBJECT_BYTES = {
   platform: 7,
   elevator: 10,
   switch: 9,
-  enemy: 6,
-  trigger: 8,
+  enemy: 7,
+  trigger: 10,
   spawn: 5,
   backpack: 5,
   // Editor-only / not yet cooked — treat like a typical AABB + room link
   key: 7,
-  teleporter: 8,
-  teleporter_dest: 6,
-  patrol: 5,
+  teleporter_dest: 5,
 };
 
 /** Counts + estimated packed map RAM for the active level. */
@@ -2539,7 +2706,7 @@ function mapStats(doc) {
     }
     c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
     if (kind === "room") {
-      c64Bytes += 12; // two collider slots
+      c64Bytes += 18; // three collider slots
       if (clampRoomShape(obj.shape) !== "box") {
         const g = roomGeometry(obj);
         const nx = new Set(g.verts.map((v) => v.x)).size;
@@ -2547,7 +2714,7 @@ function mapStats(doc) {
         c64Bytes += 8 + nx + nz + g.verts.length * 4 + g.edges.length * 3;
       }
     }
-    if (kind === "trigger") {
+    if (kind === "trigger" && clampTriggerPurpose(obj.purpose) === "message") {
       const text = String(obj.text || "")
         .replace(/\r\n/g, "\n")
         .split("\n", 1)[0]
@@ -2573,9 +2740,7 @@ function formatMapStats(stats) {
     "spawn",
     "backpack",
     "key",
-    "teleporter",
     "teleporter_dest",
-    "patrol",
   ];
   const plurals = {
     room: "rooms",
@@ -2590,9 +2755,7 @@ function formatMapStats(stats) {
     spawn: "spawns",
     backpack: "backpacks",
     key: "keys",
-    teleporter: "teleporters",
     teleporter_dest: "dests",
-    patrol: "patrols",
   };
   for (const kind of order) {
     const n = stats.byKind[kind];
@@ -2858,8 +3021,10 @@ function parseObjects(list) {
       axis: o.axis,
       dir: o.dir,
       enemy: o.enemy,
+      patrol: o.patrol,
       rot: o.rot,
       text: o.text,
+      purpose: o.purpose,
       name: o.name,
       tag: o.tag,
       locked: o.locked,
@@ -2874,10 +3039,10 @@ function parseObjects(list) {
       fxColor: o.fxColor,
       weaponColor: o.weaponColor,
       shape: o.shape,
-      flip: o.flip,
       rx: o.rx,
       ry: o.ry,
       rz: o.rz,
+      cuts: o.cuts,
       cutU: o.cutU,
       cutV: o.cutV,
       stemW: o.stemW,
@@ -2897,7 +3062,12 @@ function parseObjects(list) {
       if (o.enemy && o.kind === "enemy") obj.enemy = o.enemy;
       if (o.rot != null) obj.rot = o.rot;
     }
-    if (o.kind === "trigger" && o.text != null) obj.text = clampTriggerText(o.text);
+    if (o.kind === "enemy") obj.patrol = !!o.patrol;
+    if (o.kind === "trigger") {
+      if (o.text != null) obj.text = clampTriggerText(o.text);
+      if (o.purpose != null) obj.purpose = clampTriggerPurpose(o.purpose);
+      if (o.tag != null) obj.tag = clampTag(o.tag);
+    }
     if (o.kind === "room") {
       if (o.name != null) obj.name = clampName(o.name);
       const bg = o.bgColor ?? o.skyColor;
@@ -2906,10 +3076,10 @@ function parseObjects(list) {
       if (o.fxColor != null) obj.fxColor = normalizeColor(o.fxColor, ROOM_FX_DEFAULT);
       if (o.weaponColor != null) obj.weaponColor = normalizeColor(o.weaponColor, ROOM_WPN_DEFAULT);
       if (o.shape != null) obj.shape = clampRoomShape(o.shape);
-      if (o.flip != null) obj.flip = !!o.flip;
       if (o.rx != null) obj.rx = o.rx | 0;
       if (o.ry != null) obj.ry = o.ry | 0;
       if (o.rz != null) obj.rz = o.rz | 0;
+      if (Array.isArray(o.cuts)) obj.cuts = o.cuts.map((c) => ({ su: c.su | 0, sv: c.sv | 0 }));
       if (o.cutU != null) obj.cutU = o.cutU | 0;
       if (o.cutV != null) obj.cutV = o.cutV | 0;
       if (o.stemW != null) obj.stemW = o.stemW | 0;
@@ -2926,7 +3096,6 @@ function parseObjects(list) {
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
     if (o.kind === "backpack" && o.backpack != null) obj.backpack = clampBackpackType(o.backpack);
-    if (o.kind === "patrol" && o.order != null) obj.order = clampPatrolOrder(o.order);
     if (o.kind === "doorway") {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);
@@ -5145,7 +5314,10 @@ class LayoutView {
     const origs = ids
       .map((id) => objs.find((o) => o.id === id))
       .filter(Boolean)
-      .map((o) => ({ ...o }));
+      .map((o) => ({
+        ...o,
+        cuts: (o.cuts || []).map((c) => ({ su: c.su | 0, sv: c.sv | 0 })),
+      }));
     const contents = [];
     const claimed = new Set(ids);
     for (const o of origs) {
@@ -5490,7 +5662,7 @@ class LayoutView {
       if (!obj || obj.kind !== "room") return;
       const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
       if (delta == null) return;
-      obj[d.key] = (orig[d.key] | 0) + delta * (d.scale || 1);
+      applyRoomSplitDelta(obj, orig, d.key, delta * (d.scale || 1));
       clampObject(obj);
       return;
     }
@@ -5617,15 +5789,6 @@ class LayoutView {
         { a: cornerWorld(obj, 1), b: cornerWorld(obj, 4) }
       );
     }
-    if (obj.kind === "teleporter") {
-      const c = aabbCenter(obj);
-      const y = obj.y + obj.sy;
-      segs.push(
-        { a: { x: obj.x, y, z: obj.z }, b: { x: obj.x + obj.sx, y, z: obj.z + obj.sz } },
-        { a: { x: obj.x + obj.sx, y, z: obj.z }, b: { x: obj.x, y, z: obj.z + obj.sz } },
-        { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: y + 2, z: c.z } }
-      );
-    }
     if (obj.kind === "teleporter_dest") {
       const c = aabbCenter(obj);
       const rot = clampEnemyRot(obj.rot ?? 0);
@@ -5653,23 +5816,10 @@ class LayoutView {
         { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: top, z: c.z } }
       );
     }
-    if (obj.kind === "patrol") {
-      const c = aabbCenter(obj);
-      const top = obj.y + obj.sy;
-      const mid = top - 0.75;
-      segs.push(
-        { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: top, z: c.z } },
-        { a: { x: c.x, y: top, z: c.z }, b: { x: c.x + 2, y: mid, z: c.z } },
-        { a: { x: c.x + 2, y: mid, z: c.z }, b: { x: c.x, y: mid - 0.5, z: c.z } },
-        { a: { x: c.x, y: mid - 0.5, z: c.z }, b: { x: c.x, y: top, z: c.z } }
-      );
-    }
     if (obj.kind === "slope") {
       const ramp = this.#rampCorners(obj);
       segs.push(
-        { a: ramp.p0, b: ramp.p1 },
         { a: ramp.p1, b: ramp.p2 },
-        { a: ramp.p2, b: ramp.p3 },
         { a: ramp.p3, b: ramp.p0 }
       );
     }
@@ -8644,17 +8794,13 @@ function renderInspector() {
         const rotRow = document.createElement("div");
         rotRow.className = "btn-row rot-axes";
         for (const axis of ["x", "y", "z"]) {
-          const minus = document.createElement("button");
-          minus.type = "button";
-          minus.textContent = `−${axis}`;
-          minus.addEventListener("click", () => apply(() => rotateRoom(obj, axis, -1)));
-          const plus = document.createElement("button");
-          plus.type = "button";
-          plus.textContent = `+${axis}`;
-          plus.addEventListener("click", () => apply(() => rotateRoom(obj, axis, 1)));
-          rotRow.append(minus, plus);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = axis.toUpperCase();
+          btn.addEventListener("click", () => apply(() => rotateRoom(obj, axis, 1)));
+          rotRow.append(btn);
         }
-        root.appendChild(field("Rot", rotRow));
+        root.appendChild(field("Rotate", rotRow));
       }
     }
     if (obj.kind === "enemy") {
@@ -8668,6 +8814,11 @@ function renderInspector() {
       }
       sel.addEventListener("change", () => apply(() => (obj.enemy = sel.value)));
       root.appendChild(field("Type", sel));
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = !!obj.patrol;
+      chk.addEventListener("change", () => apply(() => (obj.patrol = chk.checked)));
+      root.appendChild(field("Patrol", chk));
     }
     if (isFigureObject(obj) || obj.kind === "teleporter_dest") {
       const rotWrap = document.createElement("div");
@@ -8680,15 +8831,36 @@ function renderInspector() {
       root.appendChild(field("Rot", rotWrap));
     }
     if (obj.kind === "trigger") {
-      const ta = document.createElement("textarea");
-      ta.rows = 3;
-      ta.maxLength = MAX_TRIGGER_TEXT;
-      ta.value = obj.text || "";
-      ta.placeholder = "Shown while inside";
-      ta.addEventListener("change", () => apply(() => (obj.text = clampTriggerText(ta.value))));
-      const row = field("Text", ta);
-      row.classList.add("block");
-      root.appendChild(row);
+      const sel = document.createElement("select");
+      for (const p of TRIGGER_PURPOSES) {
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = TRIGGER_PURPOSE_LABELS[p];
+        if (clampTriggerPurpose(obj.purpose) === p) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () => apply(() => (obj.purpose = sel.value)));
+      root.appendChild(field("Purpose", sel));
+      if (clampTriggerPurpose(obj.purpose) === "message") {
+        const ta = document.createElement("textarea");
+        ta.rows = 3;
+        ta.maxLength = MAX_TRIGGER_TEXT;
+        ta.value = obj.text || "";
+        ta.placeholder = "Shown while inside";
+        ta.addEventListener("change", () => apply(() => (obj.text = clampTriggerText(ta.value))));
+        const row = field("Text", ta);
+        row.classList.add("block");
+        root.appendChild(row);
+      }
+      if (triggerUsesTag(obj.purpose)) {
+        const tagInp = document.createElement("input");
+        tagInp.type = "text";
+        tagInp.maxLength = MAX_TAG_LEN;
+        tagInp.value = obj.tag || "";
+        tagInp.placeholder = "destination tag";
+        tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
+        root.appendChild(field("Tag", tagInp));
+      }
     }
     if (usesLinkTag(obj.kind)) {
       const tagInp = document.createElement("input");
@@ -8700,15 +8872,9 @@ function renderInspector() {
           ? "elevator link"
           : obj.kind === "key"
             ? "key id"
-            : obj.kind === "patrol" || obj.kind === "enemy"
-              ? "patrol link"
-              : "teleporter link";
+            : "destination tag";
       tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
       root.appendChild(field("Tag", tagInp));
-    }
-    if (obj.kind === "patrol") {
-      const orderInp = numInput(obj.order ?? 0, (v) => apply(() => (obj.order = clampPatrolOrder(v))), 0, 255);
-      root.appendChild(field("Order", orderInp));
     }
     if (obj.kind === "elevator") {
       const sel = document.createElement("select");

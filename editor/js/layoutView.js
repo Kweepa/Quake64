@@ -16,6 +16,7 @@ import {
   ROOM_LINE_DEFAULT,
   roomGeometry,
   preserveRoomSplits,
+  applyRoomSplitDelta,
   inferDoorOtherRoom,
   roomFloorY,
   roomById,
@@ -258,7 +259,10 @@ export class LayoutView {
     const origs = ids
       .map((id) => objs.find((o) => o.id === id))
       .filter(Boolean)
-      .map((o) => ({ ...o }));
+      .map((o) => ({
+        ...o,
+        cuts: (o.cuts || []).map((c) => ({ su: c.su | 0, sv: c.sv | 0 })),
+      }));
     const contents = [];
     const claimed = new Set(ids);
     for (const o of origs) {
@@ -603,7 +607,7 @@ export class LayoutView {
       if (!obj || obj.kind !== "room") return;
       const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
       if (delta == null) return;
-      obj[d.key] = (orig[d.key] | 0) + delta * (d.scale || 1);
+      applyRoomSplitDelta(obj, orig, d.key, delta * (d.scale || 1));
       clampObject(obj);
       return;
     }
@@ -730,15 +734,6 @@ export class LayoutView {
         { a: cornerWorld(obj, 1), b: cornerWorld(obj, 4) }
       );
     }
-    if (obj.kind === "teleporter") {
-      const c = aabbCenter(obj);
-      const y = obj.y + obj.sy;
-      segs.push(
-        { a: { x: obj.x, y, z: obj.z }, b: { x: obj.x + obj.sx, y, z: obj.z + obj.sz } },
-        { a: { x: obj.x + obj.sx, y, z: obj.z }, b: { x: obj.x, y, z: obj.z + obj.sz } },
-        { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: y + 2, z: c.z } }
-      );
-    }
     if (obj.kind === "teleporter_dest") {
       const c = aabbCenter(obj);
       const rot = clampEnemyRot(obj.rot ?? 0);
@@ -766,23 +761,10 @@ export class LayoutView {
         { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: top, z: c.z } }
       );
     }
-    if (obj.kind === "patrol") {
-      const c = aabbCenter(obj);
-      const top = obj.y + obj.sy;
-      const mid = top - 0.75;
-      segs.push(
-        { a: { x: c.x, y: obj.y, z: c.z }, b: { x: c.x, y: top, z: c.z } },
-        { a: { x: c.x, y: top, z: c.z }, b: { x: c.x + 2, y: mid, z: c.z } },
-        { a: { x: c.x + 2, y: mid, z: c.z }, b: { x: c.x, y: mid - 0.5, z: c.z } },
-        { a: { x: c.x, y: mid - 0.5, z: c.z }, b: { x: c.x, y: top, z: c.z } }
-      );
-    }
     if (obj.kind === "slope") {
       const ramp = this.#rampCorners(obj);
       segs.push(
-        { a: ramp.p0, b: ramp.p1 },
         { a: ramp.p1, b: ramp.p2 },
-        { a: ramp.p2, b: ramp.p3 },
         { a: ramp.p3, b: ramp.p0 }
       );
     }

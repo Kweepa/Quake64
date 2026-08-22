@@ -10,6 +10,9 @@ import {
   clampName,
   clampTag,
   clampElevType,
+  clampTriggerPurpose,
+  TRIGGER_PURPOSES,
+  TRIGGER_PURPOSE_LABELS,
   clampVert,
   C64_HEX,
   C64_NAMES,
@@ -23,7 +26,6 @@ import {
   ELEV_TYPES,
   BACKPACK_TYPES,
   clampBackpackType,
-  clampPatrolOrder,
   createObject,
   createDefaultDocument,
   currentRoom,
@@ -44,6 +46,7 @@ import {
   roomsOf,
   inferDoorOtherRoom,
   usesLinkTag,
+  triggerUsesTag,
   emptyMdlRig,
   DEFAULT_MDL_SCALE,
   clampMdlScale,
@@ -1544,17 +1547,13 @@ function renderInspector() {
         const rotRow = document.createElement("div");
         rotRow.className = "btn-row rot-axes";
         for (const axis of ["x", "y", "z"]) {
-          const minus = document.createElement("button");
-          minus.type = "button";
-          minus.textContent = `−${axis}`;
-          minus.addEventListener("click", () => apply(() => rotateRoom(obj, axis, -1)));
-          const plus = document.createElement("button");
-          plus.type = "button";
-          plus.textContent = `+${axis}`;
-          plus.addEventListener("click", () => apply(() => rotateRoom(obj, axis, 1)));
-          rotRow.append(minus, plus);
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = axis.toUpperCase();
+          btn.addEventListener("click", () => apply(() => rotateRoom(obj, axis, 1)));
+          rotRow.append(btn);
         }
-        root.appendChild(field("Rot", rotRow));
+        root.appendChild(field("Rotate", rotRow));
       }
     }
     if (obj.kind === "enemy") {
@@ -1568,6 +1567,11 @@ function renderInspector() {
       }
       sel.addEventListener("change", () => apply(() => (obj.enemy = sel.value)));
       root.appendChild(field("Type", sel));
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = !!obj.patrol;
+      chk.addEventListener("change", () => apply(() => (obj.patrol = chk.checked)));
+      root.appendChild(field("Patrol", chk));
     }
     if (isFigureObject(obj) || obj.kind === "teleporter_dest") {
       const rotWrap = document.createElement("div");
@@ -1580,15 +1584,36 @@ function renderInspector() {
       root.appendChild(field("Rot", rotWrap));
     }
     if (obj.kind === "trigger") {
-      const ta = document.createElement("textarea");
-      ta.rows = 3;
-      ta.maxLength = MAX_TRIGGER_TEXT;
-      ta.value = obj.text || "";
-      ta.placeholder = "Shown while inside";
-      ta.addEventListener("change", () => apply(() => (obj.text = clampTriggerText(ta.value))));
-      const row = field("Text", ta);
-      row.classList.add("block");
-      root.appendChild(row);
+      const sel = document.createElement("select");
+      for (const p of TRIGGER_PURPOSES) {
+        const opt = document.createElement("option");
+        opt.value = p;
+        opt.textContent = TRIGGER_PURPOSE_LABELS[p];
+        if (clampTriggerPurpose(obj.purpose) === p) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      sel.addEventListener("change", () => apply(() => (obj.purpose = sel.value)));
+      root.appendChild(field("Purpose", sel));
+      if (clampTriggerPurpose(obj.purpose) === "message") {
+        const ta = document.createElement("textarea");
+        ta.rows = 3;
+        ta.maxLength = MAX_TRIGGER_TEXT;
+        ta.value = obj.text || "";
+        ta.placeholder = "Shown while inside";
+        ta.addEventListener("change", () => apply(() => (obj.text = clampTriggerText(ta.value))));
+        const row = field("Text", ta);
+        row.classList.add("block");
+        root.appendChild(row);
+      }
+      if (triggerUsesTag(obj.purpose)) {
+        const tagInp = document.createElement("input");
+        tagInp.type = "text";
+        tagInp.maxLength = MAX_TAG_LEN;
+        tagInp.value = obj.tag || "";
+        tagInp.placeholder = "destination tag";
+        tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
+        root.appendChild(field("Tag", tagInp));
+      }
     }
     if (usesLinkTag(obj.kind)) {
       const tagInp = document.createElement("input");
@@ -1600,15 +1625,9 @@ function renderInspector() {
           ? "elevator link"
           : obj.kind === "key"
             ? "key id"
-            : obj.kind === "patrol" || obj.kind === "enemy"
-              ? "patrol link"
-              : "teleporter link";
+            : "destination tag";
       tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
       root.appendChild(field("Tag", tagInp));
-    }
-    if (obj.kind === "patrol") {
-      const orderInp = numInput(obj.order ?? 0, (v) => apply(() => (obj.order = clampPatrolOrder(v))), 0, 255);
-      root.appendChild(field("Order", orderInp));
     }
     if (obj.kind === "elevator") {
       const sel = document.createElement("select");

@@ -550,26 +550,16 @@ hud_ammo
 	rts
 }
 
-; Message trigger on HUD_ROW4, centered in 40 cols
+; Message trigger on HUD_ROW4, centered. Call on enter/leave only.
 hud_message
+	lda #0
+	sta status_ms_l
+	sta status_ms_h
 	lda msg_on
 	bne .hm_show
-	ldx #0
-	lda #HUD_CH_SP
-.hm_blank
-	sta SCR_A + HUD_OFF4,x
-	inx
-	cpx #HUD_MSG_W
-	bne .hm_blank
-	rts
+	jmp hud_msg_blank
 .hm_show
-	ldx #0
-	lda #HUD_CH_SP
-.hm_clr
-	sta SCR_A + HUD_OFF4,x
-	inx
-	cpx #HUD_MSG_W
-	bne .hm_clr
+	jsr hud_msg_blank
 	clc
 	lda #<map_text
 	adc msg_off
@@ -577,6 +567,20 @@ hud_message
 	lda #>map_text
 	adc #0
 	sta src_ptr+1
+	jmp hud_msg_center
+
+hud_msg_blank
+	ldx #0
+	lda #HUD_CH_SP
+.hmb
+	sta SCR_A + HUD_OFF4,x
+	inx
+	cpx #HUD_MSG_W
+	bne .hmb
+	rts
+
+; src_ptr → NUL string, already blanked, centered on HUD_OFF4
+hud_msg_center
 	ldy #0
 .hm_len
 	lda (src_ptr),y
@@ -602,6 +606,96 @@ hud_message
 	bcc .hm_cp
 .hm_done
 	rts
+
+; A = BP_* type. "Got the <name>" for 5s on HUD_ROW4.
+hud_got
+	cmp #BP_NTYPES
+	bcc .hg_ok
+	rts
+.hg_ok
+	tay
+	lda bp_name_lo,y
+	sta src_ptr
+	lda bp_name_hi,y
+	sta src_ptr+1
+	jsr hud_msg_blank
+	ldy #0
+.hg_nl
+	lda (src_ptr),y
+	beq .hg_nlen
+	iny
+	cpy #HUD_MSG_W
+	bcc .hg_nl
+.hg_nlen
+	tya
+	clc
+	adc #HUD_GOT_LEN
+	sta hud_n
+	lda #HUD_MSG_W
+	sec
+	sbc hud_n
+	lsr
+	tax
+	ldy #0
+.hg_pre
+	lda hud_str_got,y
+	beq .hg_name
+	sta SCR_A + HUD_OFF4,x
+	inx
+	iny
+	bne .hg_pre
+.hg_name
+	ldy #0
+.hg_cp
+	lda (src_ptr),y
+	beq .hg_arm
+	sta SCR_A + HUD_OFF4,x
+	inx
+	iny
+	bne .hg_cp
+.hg_arm
+	lda #<STATUS_MS
+	sta status_ms_l
+	lda #>STATUS_MS
+	sta status_ms_h
+	rts
+
+; Tick status line; blank and clear msg_on when the timer expires.
+update_status
+	lda status_ms_l
+	ora status_ms_h
+	beq .us_rts
+	sec
+	lda status_ms_l
+	sbc dt_ms
+	sta status_ms_l
+	lda status_ms_h
+	sbc dt_msh
+	sta status_ms_h
+	bcs .us_rts
+	lda #0
+	sta status_ms_l
+	sta status_ms_h
+	sta msg_on
+	jmp hud_msg_blank
+.us_rts
+	rts
+
+HUD_GOT_LEN	= 8			; "Got the "
+hud_str_got	!byte 71,111,116,32,116,104,101,32,0	; Got the
+bpn_shells	!byte 115,104,101,108,108,115,0		; shells
+bpn_nailgun	!byte 110,97,105,108,103,117,110,0	; nailgun
+bpn_nails	!byte 110,97,105,108,115,0		; nails
+bpn_gl		!byte 103,114,101,110,97,100,101,32,108,97,117,110,99,104,101,114,0	; grenade launcher
+bpn_grenades	!byte 103,114,101,110,97,100,101,115,0	; grenades
+bpn_health	!byte 104,101,97,108,116,104,0		; health
+bpn_armour	!byte 97,114,109,111,117,114,0		; armour
+bp_name_lo
+	!byte <bpn_shells, <bpn_nailgun, <bpn_nails, <bpn_gl
+	!byte <bpn_grenades, <bpn_health, <bpn_health, <bpn_shells, <bpn_armour
+bp_name_hi
+	!byte >bpn_shells, >bpn_nailgun, >bpn_nails, >bpn_gl
+	!byte >bpn_grenades, >bpn_health, >bpn_health, >bpn_shells, >bpn_armour
 
 ; ASCII (UI charset), not PETSCII
 hud_str_title	!byte 81,117,97,107,101,54,52,0	; Quake64

@@ -7,7 +7,10 @@ box_edges
 	!byte 4,5, 5,6, 6,7, 7,4
 	!byte 0,4, 1,5, 2,6, 3,7
 
-; Ramp quad, switch triangle, door closed/open (no floor edge)
+; Ramp hypotenuses (no top/bottom — room/platform already draw those)
+ramp_side_edges
+	!byte 1,2, 3,0
+; Platform quad, switch triangle, door closed/open (no floor edge)
 quad_edges
 	!byte 0,1, 1,2, 2,3, 3,0
 tri_edges
@@ -27,6 +30,8 @@ door_closed_vert
 	!byte 1,0,0,1
 door_open_vert
 	!byte 1,0,0,0,1
+ramp_side_vert
+	!byte 0,0
 quad_vert
 	!byte 0,0,0,0
 tri_vert
@@ -670,15 +675,15 @@ draw_slope_mesh
 	jsr fill_slope_verts
 	lda #4
 	sta mesh_nv
-	lda #4
+	lda #2
 	sta mesh_ne
-	lda #<quad_edges
+	lda #<ramp_side_edges
 	sta edge_ptr
-	lda #>quad_edges
+	lda #>ramp_side_edges
 	sta edge_ptr+1
-	lda #<quad_vert
+	lda #<ramp_side_vert
 	sta edge_vert_ptr
-	lda #>quad_vert
+	lda #>ramp_side_vert
 	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
@@ -1077,7 +1082,7 @@ fill_switch_verts
 	sta mesh_nv
 	jmp xform_mesh_xz
 
-; Four sloped ramp edges (no AABB)
+; Four ramp corners; stroke uses the two hypotenuses only
 fill_slope_verts
 	ldx obj_i
 	lda slope_axis,x
@@ -1392,6 +1397,8 @@ draw_world
 	bne .dw_dn
 .dw_doku
 	stx obj_i
+	jsr door_front
+	bcc .dw_dn0
 	lda door_vx,x
 	sta box_x
 	lda door_y,x

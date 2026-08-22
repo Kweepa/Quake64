@@ -23,26 +23,24 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
-          "flip": false,
           "rx": 0,
           "ry": 2,
           "rz": 0,
-          "cutU": 26,
-          "cutV": 12,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 0,
-          "mid": 0
+          "cuts": [
+            {
+              "su": 26,
+              "sv": 12
+            }
+          ]
         },
         {
           "id": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "kind": "room",
           "x": 19,
-          "y": 65,
+          "y": 63,
           "z": 124,
           "sx": 12,
-          "sy": 47,
+          "sy": 49,
           "sz": 16,
           "face": "+z",
           "axis": "z",
@@ -53,17 +51,15 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
-          "flip": false,
           "rx": 1,
           "ry": 1,
           "rz": 0,
-          "cutU": 10,
-          "cutV": 39,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 0,
-          "mid": 0
+          "cuts": [
+            {
+              "su": 10,
+              "sv": 41
+            }
+          ]
         },
         {
           "id": "7f98a06a-3a51-401a-b1d4-40b9ebad9a87",
@@ -110,14 +106,14 @@
           "dir": 1,
           "rot": 6,
           "enemy": "Grunt",
-          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
-          "tag": ""
+          "patrol": false,
+          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
         },
         {
           "id": "ff17085e-f2eb-4bfd-b862-549c30420579",
           "kind": "doorway",
           "x": 31,
-          "y": 65,
+          "y": 63,
           "z": 135,
           "sx": 1,
           "sy": 5,
@@ -179,17 +175,19 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
-          "flip": false,
           "rx": 3,
           "ry": 0,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 8,
-          "stemPos": 32,
-          "barD": 20,
-          "shift": 0,
-          "mid": 0
+          "cuts": [
+            {
+              "su": 32,
+              "sv": 10
+            },
+            {
+              "su": 21,
+              "sv": 12
+            }
+          ]
         },
         {
           "id": "cba58a11-acb7-4f28-9eba-39a459657721",
@@ -220,8 +218,8 @@
           "dir": 1,
           "rot": 6,
           "enemy": "Rottweiler",
-          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
-          "tag": ""
+          "patrol": false,
+          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
         },
         {
           "id": "0d9293ec-43a9-4ea6-8505-b8fbe04e89bb",
@@ -252,7 +250,9 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "purpose": "message",
           "text": "Welcome to Quake64!",
+          "tag": "",
           "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434"
         },
         {
@@ -289,7 +289,7 @@
           "id": "6775dd62-2420-42eb-9331-05501c7cdb39",
           "kind": "switch",
           "x": 21,
-          "y": 66,
+          "y": 64,
           "z": 139,
           "sx": 2,
           "sy": 3,
@@ -318,17 +318,10 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
-          "flip": false,
           "rx": 0,
           "ry": 0,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 0,
-          "mid": 0
+          "cuts": []
         },
         {
           "id": "8fff08eb-f3f6-4448-8608-54c3449f4486",
@@ -348,17 +341,10 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
-          "flip": false,
           "rx": 0,
           "ry": 0,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 0,
-          "mid": 0
+          "cuts": []
         },
         {
           "id": "54e070d8-96e5-45df-a8a6-c4d0981579aa",
@@ -391,8 +377,8 @@
           "dir": 1,
           "rot": 6,
           "enemy": "Grunt",
-          "roomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
-          "tag": ""
+          "patrol": false,
+          "roomId": "a537a113-f506-4ee9-bb08-41449d638e8e"
         },
         {
           "id": "a507d16c-e206-4d55-8bee-2ae92c2322cf",
@@ -492,17 +478,10 @@
           "fxColor": 1,
           "weaponColor": 12,
           "shape": "box",
-          "flip": false,
           "rx": 0,
           "ry": 0,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 0,
-          "mid": 0
+          "cuts": []
         },
         {
           "id": "5815d324-6a01-4d2c-9502-3f3a421cee04",
@@ -522,17 +501,19 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
-          "flip": false,
           "rx": 3,
           "ry": 3,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 20,
-          "stemPos": 20,
-          "barD": 20,
-          "shift": 0,
-          "mid": 0
+          "cuts": [
+            {
+              "su": 20,
+              "sv": 10
+            },
+            {
+              "su": 40,
+              "sv": 10
+            }
+          ]
         },
         {
           "id": "bcc49cd0-7f52-4aff-b5b0-06934f74d4d6",
@@ -555,7 +536,7 @@
           "x": 140,
           "y": 55,
           "z": 116,
-          "sx": 10,
+          "sx": 14,
           "sy": 1,
           "sz": 20,
           "face": "+z",
@@ -594,8 +575,8 @@
           "dir": 1,
           "rot": 0,
           "enemy": "Grunt",
-          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
-          "tag": ""
+          "patrol": false,
+          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04"
         },
         {
           "id": "407fb003-7727-4917-b4bd-93775665b031",
@@ -611,8 +592,8 @@
           "dir": 1,
           "rot": 0,
           "enemy": "Grunt",
-          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
-          "tag": ""
+          "patrol": false,
+          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04"
         },
         {
           "id": "56bf6182-22f3-4597-8b74-fe9036b65200",
@@ -628,37 +609,6 @@
           "dir": 1,
           "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "tag": "hidden"
-        },
-        {
-          "id": "060c4ca4-f4c0-4234-9993-9104cc1da69f",
-          "kind": "patrol",
-          "x": 108,
-          "y": 65,
-          "z": 153,
-          "sx": 2,
-          "sy": 2,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
-          "tag": "",
-          "order": 0
-        },
-        {
-          "id": "287f41c8-d4c9-4300-91c9-4536ce3b15b6",
-          "kind": "platform",
-          "x": 64,
-          "y": 65,
-          "z": 125,
-          "sx": 8,
-          "sy": 1,
-          "sz": 4,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
-          "collide": true
         },
         {
           "id": "46f7f038-d8c3-4de4-9862-07496de7b5a3",
@@ -695,17 +645,10 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
-          "flip": false,
           "rx": 0,
           "ry": 0,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 0,
-          "mid": 0
+          "cuts": []
         },
         {
           "id": "305f295c-a13a-4b18-8b11-ddd111b1b39e",
@@ -736,8 +679,8 @@
           "dir": 1,
           "rot": 0,
           "enemy": "Grunt",
-          "roomId": "d3c3453f-ac80-4092-a737-d02046fc3ceb",
-          "tag": ""
+          "patrol": false,
+          "roomId": "d3c3453f-ac80-4092-a737-d02046fc3ceb"
         },
         {
           "id": "fe882475-4577-4b90-b224-f631a99db34d",
@@ -757,17 +700,15 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
-          "flip": false,
           "rx": 0,
           "ry": 3,
           "rz": 0,
-          "cutU": 17,
-          "cutV": 24,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 0,
-          "mid": 0
+          "cuts": [
+            {
+              "su": 17,
+              "sv": 24
+            }
+          ]
         },
         {
           "id": "80e7e930-1707-46f3-9e8c-de2f5070ee6f",
@@ -807,10 +748,10 @@
           "id": "b569290e-9dbc-4322-9838-ff8bdf565a1d",
           "kind": "room",
           "x": 91,
-          "y": 37,
+          "y": 48,
           "z": 48,
           "sx": 30,
-          "sy": 40,
+          "sy": 29,
           "sz": 30,
           "face": "+z",
           "axis": "z",
@@ -821,26 +762,19 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
-          "flip": false,
           "rx": 0,
           "ry": 0,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 0,
-          "mid": 0
+          "cuts": []
         },
         {
           "id": "2fbf6971-14d3-4f11-8416-71e930b6cb0c",
           "kind": "slope",
           "x": 105,
-          "y": 57,
+          "y": 61,
           "z": 71,
           "sx": 16,
-          "sy": 8,
+          "sy": 4,
           "sz": 6,
           "face": "+z",
           "axis": "x",
@@ -851,7 +785,7 @@
           "id": "8a071844-c19e-45c6-bf23-9e66816817e2",
           "kind": "platform",
           "x": 99,
-          "y": 57,
+          "y": 61,
           "z": 71,
           "sx": 6,
           "sy": 1,
@@ -866,10 +800,10 @@
           "id": "0784137f-d54b-41d4-bbca-ff1798526922",
           "kind": "slope",
           "x": 99,
-          "y": 49,
+          "y": 57,
           "z": 55,
           "sx": 6,
-          "sy": 8,
+          "sy": 4,
           "sz": 16,
           "face": "+z",
           "axis": "z",
@@ -880,7 +814,7 @@
           "id": "685c24d0-4f3d-4384-96b8-cd89e1e2dab0",
           "kind": "platform",
           "x": 99,
-          "y": 49,
+          "y": 57,
           "z": 49,
           "sx": 6,
           "sy": 1,
@@ -895,10 +829,10 @@
           "id": "e1549781-eec2-4ef0-958d-24e76206cdd5",
           "kind": "slope",
           "x": 105,
-          "y": 41,
+          "y": 53,
           "z": 49,
           "sx": 16,
-          "sy": 8,
+          "sy": 4,
           "sz": 6,
           "face": "+z",
           "axis": "x",
@@ -909,11 +843,11 @@
           "id": "c181607a-0146-4be9-8946-5c3b0527e1ef",
           "kind": "room",
           "x": 122,
-          "y": 41,
+          "y": 53,
           "z": 48,
           "sx": 43,
           "sy": 9,
-          "sz": 16,
+          "sz": 30,
           "face": "+z",
           "axis": "z",
           "dir": 1,
@@ -923,23 +857,25 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "S",
-          "flip": false,
           "rx": 2,
           "ry": 0,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 0,
-          "stemPos": 0,
-          "barD": 0,
-          "shift": 18,
-          "mid": 8
+          "cuts": [
+            {
+              "su": 18,
+              "sv": 22
+            },
+            {
+              "su": 18,
+              "sv": 22
+            }
+          ]
         },
         {
           "id": "dee114a8-e507-4015-aee7-50b82b68bb7a",
           "kind": "doorway",
           "x": 121,
-          "y": 41,
+          "y": 53,
           "z": 50,
           "sx": 1,
           "sy": 5,
@@ -956,8 +892,8 @@
           "id": "7aa01381-3e67-4124-a149-f7e145551ec3",
           "kind": "room",
           "x": 166,
-          "y": 41,
-          "z": 49,
+          "y": 53,
+          "z": 63,
           "sx": 26,
           "sy": 13,
           "sz": 20,
@@ -970,24 +906,26 @@
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
-          "flip": false,
           "rx": 0,
           "ry": 1,
           "rz": 0,
-          "cutU": 0,
-          "cutV": 0,
-          "stemW": 8,
-          "stemPos": 5,
-          "barD": 14,
-          "shift": 0,
-          "mid": 0
+          "cuts": [
+            {
+              "su": 5,
+              "sv": 12
+            },
+            {
+              "su": 7,
+              "sv": 12
+            }
+          ]
         },
         {
           "id": "06698ef7-d49f-45ab-8c25-628ccba3de67",
           "kind": "doorway",
           "x": 165,
-          "y": 41,
-          "z": 58,
+          "y": 53,
+          "z": 72,
           "sx": 1,
           "sy": 5,
           "sz": 4,
@@ -1003,8 +941,8 @@
           "id": "b4d9d818-2e8d-4e83-bd34-74cf2e2a11fb",
           "kind": "crate",
           "x": 186,
-          "y": 41,
-          "z": 57,
+          "y": 53,
+          "z": 71,
           "sx": 6,
           "sy": 1,
           "sz": 6,
@@ -1017,23 +955,25 @@
           "id": "54f78549-1173-46d2-9982-916ba0e0e1cf",
           "kind": "trigger",
           "x": 187,
-          "y": 42,
-          "z": 58,
+          "y": 54,
+          "z": 72,
           "sx": 4,
           "sy": 9,
           "sz": 4,
           "face": "+z",
           "axis": "z",
           "dir": 1,
+          "purpose": "message",
           "text": "End of level",
+          "tag": "",
           "roomId": "7aa01381-3e67-4124-a149-f7e145551ec3"
         },
         {
           "id": "0610c011-7497-42cd-b209-dee85db55d0c",
           "kind": "enemy",
           "x": 181,
-          "y": 41,
-          "z": 59,
+          "y": 53,
+          "z": 73,
           "sx": 2,
           "sy": 4,
           "sz": 2,
@@ -1042,14 +982,14 @@
           "dir": 1,
           "rot": 6,
           "enemy": "Grunt",
-          "roomId": "7aa01381-3e67-4124-a149-f7e145551ec3",
-          "tag": ""
+          "patrol": false,
+          "roomId": "7aa01381-3e67-4124-a149-f7e145551ec3"
         },
         {
           "id": "8d4ae143-3b98-4544-b2fa-14c49000054b",
           "kind": "enemy",
           "x": 101,
-          "y": 50,
+          "y": 57,
           "z": 50,
           "sx": 2,
           "sy": 4,
@@ -1059,8 +999,37 @@
           "dir": 1,
           "rot": 0,
           "enemy": "Grunt",
-          "roomId": "b569290e-9dbc-4322-9838-ff8bdf565a1d",
-          "tag": ""
+          "patrol": false,
+          "roomId": "b569290e-9dbc-4322-9838-ff8bdf565a1d"
+        },
+        {
+          "id": "233873ef-ff35-48ee-993f-0659c4496431",
+          "kind": "backpack",
+          "x": 21,
+          "y": 104,
+          "z": 113,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "55bb6f77-5638-4dfc-a488-eda26561ed21",
+          "backpack": "armour"
+        },
+        {
+          "id": "838b61aa-ebcf-4643-aabb-f1026aa2133b",
+          "kind": "slope",
+          "x": 64,
+          "y": 63,
+          "z": 126,
+          "sx": 8,
+          "sy": 2,
+          "sz": 4,
+          "face": "+z",
+          "axis": "x",
+          "dir": 1,
+          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
         }
       ]
     },

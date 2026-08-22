@@ -12,6 +12,7 @@ import {
   nudgeDoorOutside,
   rotateRoom,
   preserveRoomSplits,
+  applyRoomSplitDelta,
   roomBasis,
   defaultRoomSplits,
 } from "./roomGeom.js";
@@ -30,6 +31,7 @@ export {
   nudgeDoorOutside,
   rotateRoom,
   preserveRoomSplits,
+  applyRoomSplitDelta,
   roomBasis,
   defaultRoomSplits,
 };
@@ -227,14 +229,6 @@ export const KINDS = {
     fixed: false,
     slope: false,
   },
-  teleporter: {
-    id: "teleporter",
-    label: "Teleporter",
-    color: "#9b7eed",
-    defaultSize: [4, 1, 4],
-    fixed: false,
-    slope: false,
-  },
   teleporter_dest: {
     id: "teleporter_dest",
     label: "Teleport dest",
@@ -259,37 +253,40 @@ export const KINDS = {
     fixed: true,
     slope: false,
   },
-  patrol: {
-    id: "patrol",
-    label: "Patrol point",
-    color: "#e89050",
-    defaultSize: [2, 2, 2],
-    fixed: true,
-    slope: false,
-  },
 };
 
 /** Editor-only dashed / ghost volumes (not solid world geometry). */
 export function isGhostKind(kind) {
-  return (
-    kind === "trigger" ||
-    kind === "teleporter" ||
-    kind === "teleporter_dest" ||
-    kind === "patrol"
-  );
+  return kind === "trigger" || kind === "teleporter_dest";
 }
 
-/** Kinds linked by a shared editor tag (resolved to indices on export). */
+/** Kinds that always carry a link tag (resolved to indices on export). */
 export function usesLinkTag(kind) {
   return (
     kind === "switch" ||
     kind === "elevator" ||
-    kind === "teleporter" ||
     kind === "teleporter_dest" ||
-    kind === "key" ||
-    kind === "patrol" ||
-    kind === "enemy"
+    kind === "key"
   );
+}
+
+/** Trigger purposes. Tag is only used for teleport / elevator. */
+export const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator"];
+export const TRIGGER_PURPOSE_LABELS = {
+  message: "Display message",
+  end_level: "End of level",
+  hurt: "Hurt player",
+  teleport: "Teleport",
+  elevator: "Activate elevator",
+};
+
+export function clampTriggerPurpose(s) {
+  return TRIGGER_PURPOSES.includes(s) ? s : "message";
+}
+
+export function triggerUsesTag(purpose) {
+  const p = clampTriggerPurpose(purpose);
+  return p === "teleport" || p === "elevator";
 }
 
 /** Layout placements draw the first stick frame at this fraction of anim units (Grunt ~4 world high). */
@@ -314,11 +311,9 @@ export const PALETTE_ORDER = [
   "elevator",
   "spawn",
   "trigger",
-  "teleporter",
   "teleporter_dest",
   "key",
   "backpack",
-  "patrol",
 ];
 export const MAX_TRIGGER_TEXT = 80;
 export const MAX_NAME_LEN = 40;
@@ -331,7 +326,7 @@ export function clampElevType(s) {
   return ELEV_TYPES.includes(s) ? s : "descending";
 }
 
-/** Backpack contents (ammo, weapon, or health pickup). */
+/** Backpack contents (ammo, weapon, health, or armour pickup). */
 export const BACKPACK_TYPES = [
   "shells",
   "nailgun",
@@ -340,6 +335,7 @@ export const BACKPACK_TYPES = [
   "grenades",
   "health 25%",
   "health 50%",
+  "armour",
 ];
 
 /** Height / base-side = φ. Fixed backpack: 1.5 tall. */
@@ -350,13 +346,6 @@ export const BACKPACK_DEPTH = (BACKPACK_SIDE * Math.sqrt(3)) / 2;
 
 export function clampBackpackType(s) {
   return BACKPACK_TYPES.includes(s) ? s : "shells";
-}
-
-/** Sequence among patrol points that share a tag (lower first). */
-export function clampPatrolOrder(n) {
-  const v = n | 0;
-  if (!Number.isFinite(v)) return 0;
-  return Math.max(0, Math.min(255, v));
 }
 
 /** Fixed equilateral tetra: height 1.5, base side = height/φ. */
@@ -549,18 +538,16 @@ export function applyFaceSize(obj) {
   return obj;
 }
 
-/** Keep 2:1 run = 2 * rise. Rise is sy. */
+/** Axis x/z, dir ±1; sizes independent (rise = sy, run = sx or sz). */
 export function applySlopeConstraint(obj) {
   if (obj.kind !== "slope") return obj;
-  const rise = Math.max(1, obj.sy | 0);
-  const run = Math.max(2, rise * 2);
-  obj.sy = clampSize(obj.y, rise);
+  obj.sy = clampSize(obj.y, Math.max(1, obj.sy | 0));
   if (obj.axis === "x") {
-    obj.sx = clampSize(obj.x, run);
+    obj.sx = clampSize(obj.x, Math.max(1, obj.sx | 0));
     obj.sz = clampSize(obj.z, Math.max(1, obj.sz | 0));
   } else {
     obj.axis = "z";
-    obj.sz = clampSize(obj.z, run);
+    obj.sz = clampSize(obj.z, Math.max(1, obj.sz | 0));
     obj.sx = clampSize(obj.x, Math.max(1, obj.sx | 0));
   }
   if (obj.dir !== -1) obj.dir = 1;
@@ -588,7 +575,11 @@ export function clampObject(obj) {
   if (obj.kind === "enemy" || obj.kind === "spawn" || obj.kind === "teleporter_dest") {
     obj.rot = clampEnemyRot(obj.rot ?? 0);
   }
-  if (obj.kind === "trigger") obj.text = clampTriggerText(obj.text);
+  if (obj.kind === "trigger") {
+    obj.purpose = clampTriggerPurpose(obj.purpose);
+    obj.text = clampTriggerText(obj.text);
+    obj.tag = clampTag(obj.tag);
+  }
   if (obj.kind === "room") {
     obj.name = clampName(obj.name);
     obj.bgColor = normalizeColor(obj.bgColor ?? obj.skyColor, ROOM_BG_DEFAULT);
@@ -605,7 +596,7 @@ export function clampObject(obj) {
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
   if (obj.kind === "backpack") obj.backpack = clampBackpackType(obj.backpack);
-  if (obj.kind === "patrol") obj.order = clampPatrolOrder(obj.order);
+  if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
   if (obj.kind === "doorway") {
     obj.locked = !!obj.locked;
     obj.keyTag = clampTag(obj.keyTag);
@@ -646,8 +637,13 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (kind === "enemy") {
     const name = extra.enemy || "Grunt";
     obj.enemy = ENEMY_TYPES.some((t) => t.name === name) ? name : "Grunt";
+    obj.patrol = !!extra.patrol;
   }
-  if (kind === "trigger") obj.text = clampTriggerText(extra.text);
+  if (kind === "trigger") {
+    obj.purpose = clampTriggerPurpose(extra.purpose);
+    obj.text = extra.text;
+    obj.tag = extra.tag;
+  }
   if (kind === "room") {
     obj.name = clampName(extra.name);
     obj.bgColor = normalizeColor(extra.bgColor ?? extra.skyColor, ROOM_BG_DEFAULT);
@@ -655,10 +651,10 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.fxColor = normalizeColor(extra.fxColor, ROOM_FX_DEFAULT);
     obj.weaponColor = normalizeColor(extra.weaponColor, ROOM_WPN_DEFAULT);
     obj.shape = clampRoomShape(extra.shape);
-    obj.flip = !!extra.flip;
     obj.rx = extra.rx | 0;
     obj.ry = extra.ry | 0;
     obj.rz = extra.rz | 0;
+    if (Array.isArray(extra.cuts)) obj.cuts = extra.cuts.map((c) => ({ su: c.su | 0, sv: c.sv | 0 }));
     obj.cutU = extra.cutU | 0;
     obj.cutV = extra.cutV | 0;
     obj.stemW = extra.stemW | 0;
@@ -672,7 +668,6 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
   if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
   if (kind === "backpack") obj.backpack = clampBackpackType(extra.backpack);
-  if (kind === "patrol") obj.order = clampPatrolOrder(extra.order);
   if (kind === "doorway") {
     obj.locked = !!extra.locked;
     obj.keyTag = clampTag(extra.keyTag);
@@ -711,10 +706,6 @@ export function objectLabel(obj) {
   }
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
   if (obj.kind === "backpack") return `Backpack (${clampBackpackType(obj.backpack)})`;
-  if (obj.kind === "patrol") {
-    const tag = clampTag(obj.tag);
-    return tag ? `Patrol (${tag})` : "Patrol point";
-  }
   return KINDS[obj.kind].label;
 }
 
@@ -780,15 +771,13 @@ export const C64_OBJECT_BYTES = {
   platform: 7,
   elevator: 10,
   switch: 9,
-  enemy: 6,
-  trigger: 8,
+  enemy: 7,
+  trigger: 10,
   spawn: 5,
   backpack: 5,
   // Editor-only / not yet cooked — treat like a typical AABB + room link
   key: 7,
-  teleporter: 8,
-  teleporter_dest: 6,
-  patrol: 5,
+  teleporter_dest: 5,
 };
 
 /** Counts + estimated packed map RAM for the active level. */
@@ -810,7 +799,7 @@ export function mapStats(doc) {
     }
     c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
     if (kind === "room") {
-      c64Bytes += 12; // two collider slots
+      c64Bytes += 18; // three collider slots
       if (clampRoomShape(obj.shape) !== "box") {
         const g = roomGeometry(obj);
         const nx = new Set(g.verts.map((v) => v.x)).size;
@@ -818,7 +807,7 @@ export function mapStats(doc) {
         c64Bytes += 8 + nx + nz + g.verts.length * 4 + g.edges.length * 3;
       }
     }
-    if (kind === "trigger") {
+    if (kind === "trigger" && clampTriggerPurpose(obj.purpose) === "message") {
       const text = String(obj.text || "")
         .replace(/\r\n/g, "\n")
         .split("\n", 1)[0]
@@ -844,9 +833,7 @@ export function formatMapStats(stats) {
     "spawn",
     "backpack",
     "key",
-    "teleporter",
     "teleporter_dest",
-    "patrol",
   ];
   const plurals = {
     room: "rooms",
@@ -861,9 +848,7 @@ export function formatMapStats(stats) {
     spawn: "spawns",
     backpack: "backpacks",
     key: "keys",
-    teleporter: "teleporters",
     teleporter_dest: "dests",
-    patrol: "patrols",
   };
   for (const kind of order) {
     const n = stats.byKind[kind];
@@ -1129,8 +1114,10 @@ function parseObjects(list) {
       axis: o.axis,
       dir: o.dir,
       enemy: o.enemy,
+      patrol: o.patrol,
       rot: o.rot,
       text: o.text,
+      purpose: o.purpose,
       name: o.name,
       tag: o.tag,
       locked: o.locked,
@@ -1145,10 +1132,10 @@ function parseObjects(list) {
       fxColor: o.fxColor,
       weaponColor: o.weaponColor,
       shape: o.shape,
-      flip: o.flip,
       rx: o.rx,
       ry: o.ry,
       rz: o.rz,
+      cuts: o.cuts,
       cutU: o.cutU,
       cutV: o.cutV,
       stemW: o.stemW,
@@ -1168,7 +1155,12 @@ function parseObjects(list) {
       if (o.enemy && o.kind === "enemy") obj.enemy = o.enemy;
       if (o.rot != null) obj.rot = o.rot;
     }
-    if (o.kind === "trigger" && o.text != null) obj.text = clampTriggerText(o.text);
+    if (o.kind === "enemy") obj.patrol = !!o.patrol;
+    if (o.kind === "trigger") {
+      if (o.text != null) obj.text = clampTriggerText(o.text);
+      if (o.purpose != null) obj.purpose = clampTriggerPurpose(o.purpose);
+      if (o.tag != null) obj.tag = clampTag(o.tag);
+    }
     if (o.kind === "room") {
       if (o.name != null) obj.name = clampName(o.name);
       const bg = o.bgColor ?? o.skyColor;
@@ -1177,10 +1169,10 @@ function parseObjects(list) {
       if (o.fxColor != null) obj.fxColor = normalizeColor(o.fxColor, ROOM_FX_DEFAULT);
       if (o.weaponColor != null) obj.weaponColor = normalizeColor(o.weaponColor, ROOM_WPN_DEFAULT);
       if (o.shape != null) obj.shape = clampRoomShape(o.shape);
-      if (o.flip != null) obj.flip = !!o.flip;
       if (o.rx != null) obj.rx = o.rx | 0;
       if (o.ry != null) obj.ry = o.ry | 0;
       if (o.rz != null) obj.rz = o.rz | 0;
+      if (Array.isArray(o.cuts)) obj.cuts = o.cuts.map((c) => ({ su: c.su | 0, sv: c.sv | 0 }));
       if (o.cutU != null) obj.cutU = o.cutU | 0;
       if (o.cutV != null) obj.cutV = o.cutV | 0;
       if (o.stemW != null) obj.stemW = o.stemW | 0;
@@ -1197,7 +1189,6 @@ function parseObjects(list) {
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
     if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
     if (o.kind === "backpack" && o.backpack != null) obj.backpack = clampBackpackType(o.backpack);
-    if (o.kind === "patrol" && o.order != null) obj.order = clampPatrolOrder(o.order);
     if (o.kind === "doorway") {
       obj.locked = !!o.locked;
       if (o.keyTag != null) obj.keyTag = clampTag(o.keyTag);

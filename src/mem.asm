@@ -46,6 +46,7 @@ UI_FONT_PAGES	= 8			; 256 glyphs, ASCII-indexed from quakefont.png
 ;  3        S000     Health   Armour
 ;  4        N000
 ;  5        G000      100      000
+;  7                  trigger message
 HUD_ROW		= 0			; frame ms FFF
 HUD_ROW_TITLE	= 0			; "Quake64" (same row as FFF)
 HUD_ROW_MAP	= 1			; map display name
@@ -53,7 +54,7 @@ HUD_ROW2	= 2			; HUD_POS / PROFILE verts
 HUD_ROW_SHELL	= 3
 HUD_ROW_NAIL	= 4
 HUD_ROW_GREN	= 5			; grenades + health / armour values
-HUD_ROW4	= 6			; trigger message
+HUD_ROW4	= 7			; trigger message
 HUD_COL		= 0
 HUD_OFF		= HUD_ROW * 40 + HUD_COL
 HUD_OFF_TITLE	= HUD_ROW_TITLE * 40 + HUD_COL
@@ -160,6 +161,7 @@ DOOR_PROX	= 3			; open trigger: depth in front of door face
 MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
 FALL_LEDGE	= 1			; start fall if feet-floor > this
+STEP_UP		= 2			; max walk-up; 2 units plays SOUND_OOF
 FALL_TICK_MS	= 32			; gravity cadence (like MOTION_STEP_MS)
 FALL_ACCEL	= $10			; 8.8 added to downward vel per tick
 FALL_SAFE	= 8			; no damage if eye-drop <= this
@@ -171,24 +173,29 @@ ENEMY_LOD_Z	= 4			; mid: cheap stick projection (shared)
 ENEMY_LOD2_Z	= 40			; far: 8×8 LOD char (shared, grunt ~8px)
 ENEMY_MAX		= 16		; MAP_NENEMIES ≤ this
 EN_IDLE		= 0
-EN_ALERT		= 1
-EN_APPROACH		= 2
-EN_ATTACK		= 3
-EN_PAIN		= 4
-EN_DYING		= 5
-EN_DEAD		= 6			; last death frame hold
-EN_GONE		= 7
+EN_PATROL		= 1
+EN_ALERT		= 2
+EN_APPROACH		= 3
+EN_ATTACK		= 4
+EN_PAIN		= 5
+EN_DYING		= 6
+EN_DEAD		= 7			; last death frame hold
+EN_GONE		= 8
 ENEMY_DETECT	= 12		; Chebyshev XZ wake distance
 ENEMY_STEP_MS	= 200		; approach cell cadence (dt acc + remainder)
 APPROACH_MIN_MS	= 1500		; min time in approach before attack (grunt)
 DOG_REPATH_MS	= 1000		; Rottweiler chase repath cadence (~Wolf DOG_REPATH)
+DOG_WAIT_MS	= 2000		; idle pause when player is on another floor piece
 DEATH_HOLD_MS	= 1600		; EN_DEAD last-frame hold before EN_GONE
+PATROL_MIN	= 6			; min clear cells along a cardinal before walking
+PATROL_SCAN	= 32		; max cells probed when picking a patrol point
+PATROL_WAIT_MS	= 1000		; idle after arriving; + rnd*4 → ~1–2s
 GRUNT_BACKOFF	= 8		; Chebyshev ≤ this → weight dodge away from player
 AXE_DMG		= 4			; Quake axe 20 ÷ 5
 AXE_HIT_R		= 3			; XZ chebyshev radius for axe hit test
 SHOT_DMG_MAX	= 11		; Quake SSG 14×4=56 ÷ 5
 SHOT_HIT_X	= 20		; |sx − SCREEN_CX| ≤ this (pixels)
-SHOT_Z_MAX	= 16		; view-Z high: dmg ∝ (SHOT_Z_MAX − z) / SHOT_Z_MAX (÷16 = lsr×4)
+SHOT_Z_MAX	= 32		; view-Z high max range; dmg = SHOT_DMG_MAX − (z>>2), min 1
 SHOT_MID_H	= 3			; mid-body Y above feet (≈ ENEMY_CULL_H/2)
 ITEM_CULL_Y	= 2			; AABB |y| vs Chebyshev XZ + pad
 FOV_HALF	= 31			; yaw ticks ≈ atan(SCREEN_CX/FOCAL)
@@ -209,8 +216,14 @@ PROC_C		= $CB88			; timer/accum lo
 PROC_D		= $CB90			; timer/accum hi
 PROC_E		= $CB98			; elev home return Y
 PROC_L		= $CBA0			; local door/elev SoA index
+floor_slope	= $CBA8			; 1 if this frame's floor is a ramp
+trig_inside	= $CBA9			; trigger SoA index or $ff
+hurt_ms_l	= $CBAA			; hurt-trigger cooldown remaining
+hurt_ms_h	= $CBAB
+; $CBAC–$CBAF unused (door_open moved to $CE22, 16 slots)
+HURT_MS		= 2000			; hurt trigger period
+HURT_HP		= 10			; 10% of PLAYER_HP_MAX
 
-door_open	= $CBA8			; MAP_NDOORS (≤8)
 elev_y		= $CBB0			; MAP_NELEVS (≤4)
 elev_noise_n	= $CBB4			; refcount: SID V3 rumble while elevs move
 proc_tmp0	= $CBB8
@@ -223,6 +236,7 @@ MOTION_STEP_MS	= 64
 ELEV_STEP_MS	= 128			; half elevator travel speed vs doors
 DOOR_RECLOSE_MS	= 5000
 ELEV_WAIT_MS	= 5000
+STATUS_MS	= 5000			; backpack / status HUD line
 
 ; Box / mesh draw
 BOX_NVERTS	= 8
@@ -339,13 +353,7 @@ emuz_ms_l	= $CC34			; enemy muzzle remaining ms
 emuz_ms_h	= $CC35
 emuz_on		= $CC36			; 1 = sprite 6 enabled
 emuz_xmsb	= $CC37			; $d010 bit6 when X>=256
-
-; Per-room door view (canonical door_* in map; game uses these at runtime)
-door_vx		= $CC38			; MAP_NDOORS (≤8)
-door_vz		= $CC40
-door_vsx	= $CC48
-door_vsz	= $CC50
-door_vface	= $CC58
+; $CC38–$CC5F unused (door view SoA moved to $CE32, 16 slots)
 
 ; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
 VOC		= $CC60			; Cohen–Sutherland outcode (front verts)
@@ -375,6 +383,7 @@ AMMO_SHELLS_START	= 25
 PLAYER_HP_MAX		= 100
 PLAYER_HP_START		= 100
 PLAYER_ARMOUR_START	= 0
+PLAYER_ARMOUR_MAX	= 100
 HP_PACK_25		= 25
 HP_PACK_50		= 50
 BP_FOOT_SX		= 2			; AABB around equilateral-ish base
@@ -399,7 +408,7 @@ ammo_grenades	= $CD02
 have_wpn	= $CD03			; bitfield HAVE_*
 bp_taken	= $CD04			; MAP_NBACKPACKS (≤ BP_MAX)
 player_hp	= $CD24			; 0..PLAYER_HP_MAX
-player_armour	= $CD25			; 0..255 (no pickups yet)
+player_armour	= $CD25			; 0..PLAYER_ARMOUR_MAX
 en_state	= $CD26			; ENEMY_MAX: EN_* 
 en_frame	= $CD36			; ENEMY_MAX: local frame in current clip
 drop_taken	= $CD46			; ENEMY_MAX: 1=inactive/taken, 0=active
@@ -436,3 +445,15 @@ shot_hit_z	= $CE1C			; CAM_ZH of that hit
 hurt_flash_l	= $CE1D			; remaining red-border ms
 hurt_flash_h	= $CE1E
 bite_splat_i	= $CE1F			; dog idx pending blood splat, $ff = none
+status_ms_l	= $CE20			; status HUD remaining ms
+status_ms_h	= $CE21
+
+; Door runtime SoA — 16 slots (map had 11; 8 overflowed into VOC / door 0)
+DOOR_MAX	= 16
+door_open	= $CE22			; MAP_NDOORS (≤ DOOR_MAX)
+door_vx		= $CE32			; oriented AABB (canonical door_* in map)
+door_vz		= $CE42
+door_vsx	= $CE52
+door_vsz	= $CE62
+door_vface	= $CE72			; last byte $CE81
+en_pat_n	= $CE82			; ENEMY_MAX: patrol remaining cells

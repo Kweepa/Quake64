@@ -126,7 +126,7 @@ enemy_idx	= $77			; current enemy in enemies_update
 
 ; World / map (Step 2)
 room_idx	= $78
-floor_y		= $79
+floor_y		= $79			; floor integer (8.8 with floor_yl)
 ent_wx		= $7a			; entity world X (int)
 ent_wy		= $7b
 ent_wz		= $7c
@@ -223,6 +223,7 @@ org_yl		= $d6
 org_yh		= $d7
 org_zl		= $d8
 org_zh		= $d9
+floor_yl	= $db			; floor 8.8 fraction (ramps); 0 on flats
 lx_b		= $dc			; enemy local vert scratch
 lz_b		= $dd
 
@@ -239,4 +240,21 @@ pb_s1h		= $e9			; + $ea
 pb_s2l		= $eb			; + $ec
 pb_s2h		= $ed			; + $ee
 sg_b		= $ef
+
+; Line-vs-AABB (util.asm). Live during AI / hitscan, not mesh stroke.
+ln_ax		= $f0
+ln_ay		= $f1
+ln_az		= $f2
+ln_bx		= $f3
+ln_by		= $f4
+ln_bz		= $f5
+ln_t0		= $f6			; clip enter Q7 (0..127)
+ln_t1		= $f7			; clip exit Q7
+ln_best		= $f8			; nearest hit t
+ln_oc0		= $f9
+ln_oc1		= $fa
+ln_mx		= $fb			; box exclusive max X/Y/Z
+ln_my		= $fc
+ln_mz		= $fd
+ln_face		= $fe			; current face bit / axis scratch
 

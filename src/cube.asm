@@ -64,6 +64,8 @@ ent_set_pose
 	beq .esp_alert
 	cmp #EN_APPROACH
 	beq .esp_run
+	cmp #EN_PATROL
+	beq .esp_run
 	; idle (and fallback)
 	jmp .esp_idle
 .esp_idle

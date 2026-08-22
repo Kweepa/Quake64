@@ -1,6 +1,10 @@
 ; Doors — room-relative orientation, collision, portals, proximity
 !zone door
 
+!if MAP_NDOORS > DOOR_MAX {
+	!error "MAP_NDOORS exceeds DOOR_MAX"
+}
+
 ; ------------------------------------------------------------------
 ; set_room_idx — A = room; orients connected doors toward this room
 ; ------------------------------------------------------------------
@@ -44,7 +48,7 @@ orient_one_door
 	jmp .oo_x
 .oo_z
 	lda room_idx
-	asl
+	jsr room_mul3
 	tay
 	jsr .oo_pickz
 	lda rc_sz,y
@@ -76,7 +80,7 @@ orient_one_door
 	rts
 .oo_x
 	lda room_idx
-	asl
+	jsr room_mul3
 	tay
 	jsr .oo_pickx
 	lda rc_sx,y
@@ -117,42 +121,54 @@ orient_one_door
 .oo_ap
 	rts
 
-; Y = collider 0. Prefer X-overlap, else first non-empty. Y = chosen.
+; Y = collider 0. Prefer overlap, else first non-empty. Y = chosen.
 .oo_pickz
-	lda rc_sx,y
-	beq .oo_pz1
-	jsr .oo_ovx
+	jsr .oo_tryz
 	bcs .oo_pr
-.oo_pz1
+	jmp .oo_first
+.oo_pickx
+	jsr .oo_tryx
+	bcs .oo_pr
+.oo_first
+	ldy proc_tmp5
+	lda rc_sx,y
+	bne .oo_pr
 	iny
-	lda rc_sx,y
-	beq .oo_pz0
-	jsr .oo_ovx
-	bcs .oo_pr
-.oo_pz0
-	dey
 	lda rc_sx,y
 	bne .oo_pr
 	iny
 .oo_pr
 	rts
 
-.oo_pickx
-	lda rc_sx,y
-	beq .oo_px1
-	jsr .oo_ovz
-	bcs .oo_pr
-.oo_px1
+.oo_tryz
+	ldy proc_tmp5
+	jsr .oo_z1
+	bcs .oo_th
 	iny
-	lda rc_sx,y
-	beq .oo_px0
-	jsr .oo_ovz
-	bcs .oo_pr
-.oo_px0
-	dey
-	lda rc_sx,y
-	bne .oo_pr
+	jsr .oo_z1
+	bcs .oo_th
 	iny
+.oo_z1
+	lda rc_sx,y
+	beq .oo_tn
+	jsr .oo_ovx
+	rts
+.oo_tryx
+	ldy proc_tmp5
+	jsr .oo_x1
+	bcs .oo_th
+	iny
+	jsr .oo_x1
+	bcs .oo_th
+	iny
+.oo_x1
+	lda rc_sx,y
+	beq .oo_tn
+	jsr .oo_ovz
+	rts
+.oo_tn
+	clc
+.oo_th
 	rts
 
 ; C=1 door X overlaps collider Y
@@ -228,6 +244,45 @@ door_other_room
 	lda door_rb,x
 	rts
 .dor_a
+	rts
+
+; ------------------------------------------------------------------
+; door_front — X=door; C=1 if camera is in front of (or on) the door plane
+; ------------------------------------------------------------------
+door_front
+	lda door_vface,x
+	cmp #FACE_PX
+	bcs .df_x
+	cmp #FACE_MZ
+	beq .df_mz
+	; FACE_PZ: plane at vz+vsz; front if cam_zh >= plane
+	clc
+	lda door_vz,x
+	adc door_vsz,x
+	sta pv0
+	lda cam_zh
+	cmp pv0
+	rts
+.df_mz
+	; FACE_MZ: plane at vz; front if cam_zh <= plane
+	lda door_vz,x
+	cmp cam_zh
+	rts
+.df_x
+	cmp #FACE_MX
+	beq .df_mx
+	; FACE_PX: plane at vx+vsx; front if cam_xh >= plane
+	clc
+	lda door_vx,x
+	adc door_vsx,x
+	sta pv0
+	lda cam_xh
+	cmp pv0
+	rts
+.df_mx
+	; FACE_MX: plane at vx; front if cam_xh <= plane
+	lda door_vx,x
+	cmp cam_xh
 	rts
 
 ; ------------------------------------------------------------------

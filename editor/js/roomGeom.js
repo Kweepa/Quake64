@@ -102,39 +102,171 @@ function uvwBoxToWorld(room, box, basis) {
   };
 }
 
-export function defaultRoomSplits(shape, uSize, vSize) {
+function cutCount(shape) {
+  if (shape === "L") return 1;
+  if (shape === "T" || shape === "S") return 2;
+  return 0;
+}
+
+function cloneCuts(cuts) {
+  return (cuts || []).map((c) => ({ su: c.su | 0, sv: c.sv | 0 }));
+}
+
+function stripLegacySplits(room) {
+  delete room.flip;
+  delete room.cutU;
+  delete room.cutV;
+  delete room.stemW;
+  delete room.stemPos;
+  delete room.barD;
+  delete room.shift;
+  delete room.mid;
+}
+
+export function defaultCuts(shape, uSize, vSize) {
   const u = Math.max(1, uSize | 0);
   const v = Math.max(1, vSize | 0);
   if (shape === "L") {
-    return {
-      cutU: Math.max(1, Math.min(u - 1, u >> 1)),
-      cutV: Math.max(1, Math.min(v - 1, v >> 1)),
-    };
+    return [
+      {
+        su: Math.max(1, Math.min(u - 1, u >> 1)),
+        sv: Math.max(1, Math.min(v - 1, v >> 1)),
+      },
+    ];
   }
   if (shape === "T") {
     const stemW = Math.max(1, Math.min(Math.max(1, u - 2), Math.max(1, u >> 2)));
     const stemPos = Math.max(1, Math.min(u - stemW - 1, (u - stemW) >> 1));
     const barD = Math.max(1, Math.min(v - 1, Math.max(1, v >> 2)));
-    return { stemW, stemPos, barD };
+    const sv = Math.max(1, v - barD);
+    return [
+      { su: stemPos, sv },
+      { su: Math.max(1, u - stemPos - stemW), sv },
+    ];
   }
   if (shape === "S") {
     const maxShift = Math.max(1, Math.floor((u - 1) / 2));
     const shift = Math.max(1, Math.min(maxShift, Math.max(1, u >> 2)));
     const mid = Math.max(1, Math.min(v - 1, v >> 1));
-    return { shift, mid };
+    return [
+      { su: shift, sv: Math.max(1, v - mid) },
+      { su: shift, sv: mid },
+    ];
   }
-  return {};
+  return [];
 }
 
-export function clampRoomSplits(room) {
+export function defaultRoomSplits(shape, uSize, vSize) {
+  return { cuts: defaultCuts(shape, uSize, vSize) };
+}
+
+function cutsFromLegacy(room, shape, uSize, vSize) {
+  const fallback = defaultCuts(shape, uSize, vSize);
+  if (shape === "L") {
+    const su = room.cutU | 0;
+    const sv = room.cutV | 0;
+    if (su >= 1 && sv >= 1) return [{ su, sv }];
+    return fallback;
+  }
+  if (shape === "T") {
+    const stemW = room.stemW | 0;
+    const stemPos = room.stemPos | 0;
+    const barD = room.barD | 0;
+    if (stemW >= 1 && stemPos >= 1 && barD >= 1) {
+      const sv = Math.max(1, vSize - barD);
+      return [
+        { su: stemPos, sv },
+        { su: Math.max(1, uSize - stemPos - stemW), sv },
+      ];
+    }
+    return fallback;
+  }
+  if (shape === "S") {
+    const shift = room.shift | 0;
+    const mid = room.mid | 0;
+    if (shift >= 1 && mid >= 1) {
+      return [
+        { su: shift, sv: Math.max(1, vSize - mid) },
+        { su: shift, sv: mid },
+      ];
+    }
+    return fallback;
+  }
+  return [];
+}
+
+/** Corner-anchored UV boxes for the room's cuts (no mutation). */
+function cutoutUvBoxes(shape, cuts, uSize, vSize) {
+  const keep = (box) => box.su > 0 && box.sv > 0;
+  if (shape === "L") {
+    const c = cuts[0];
+    if (!c) return [];
+    const box = { u: uSize - c.su, v: vSize - c.sv, su: c.su, sv: c.sv };
+    return keep(box) ? [box] : [];
+  }
+  if (shape === "T") {
+    const a = cuts[0];
+    const b = cuts[1];
+    if (!a || !b) return [];
+    return [
+      { u: 0, v: 0, su: a.su, sv: a.sv },
+      { u: uSize - b.su, v: 0, su: b.su, sv: b.sv },
+    ].filter(keep);
+  }
+  if (shape === "S") {
+    const a = cuts[0];
+    const b = cuts[1];
+    if (!a || !b) return [];
+    return [
+      { u: uSize - a.su, v: vSize - a.sv, su: a.su, sv: a.sv },
+      { u: 0, v: 0, su: b.su, sv: b.sv },
+    ].filter(keep);
+  }
+  return [];
+}
+
+function axisGap(a0, as, b0, bs) {
+  const a1 = a0 + as;
+  const b1 = b0 + bs;
+  if (a1 < b0) return b0 - a1;
+  if (b1 < a0) return a0 - b1;
+  return 0;
+}
+
+function uvSeparated(a, b) {
+  return axisGap(a.u, a.su, b.u, b.su) >= 1 || axisGap(a.v, a.sv, b.v, b.sv) >= 1;
+}
+
+function maxCutDim(shape, cuts, index, dim, uSize, vSize) {
+  const hi = dim === "su" ? uSize - 1 : vSize - 1;
+  if (cuts.length < 2) return Math.max(1, hi);
+  const trial = cloneCuts(cuts);
+  for (let s = hi; s >= 1; s--) {
+    trial[index][dim] = s;
+    const boxes = cutoutUvBoxes(shape, trial, uSize, vSize);
+    if (boxes.length < 2 || uvSeparated(boxes[0], boxes[1])) return s;
+  }
+  return 1;
+}
+
+function resolveCuts(room, shape, uSize, vSize) {
+  const n = cutCount(shape);
+  if (n === 0) return [];
+  if (Array.isArray(room.cuts) && room.cuts.length >= n) {
+    return cloneCuts(room.cuts).slice(0, n);
+  }
+  return cutsFromLegacy(room, shape, uSize, vSize);
+}
+
+export function clampRoomSplits(room, opts) {
   const shape = clampRoomShape(room.shape);
   room.shape = shape;
-  room.flip = !!room.flip;
   room.rx = clampQuarter(room.rx);
   room.ry = clampQuarter(room.ry);
   room.rz = clampQuarter(room.rz);
   const basis = roomBasis(room);
   let { uSize, vSize } = basis;
+  const n = cutCount(shape);
   if (shape === "L") {
     if (uSize < 2) {
       bumpAxis(room, basis.u, 2);
@@ -144,10 +276,7 @@ export function clampRoomSplits(room) {
       bumpAxis(room, basis.v, 2);
       vSize = 2;
     }
-    const d = defaultRoomSplits("L", uSize, vSize);
-    room.cutU = clampInt(room.cutU, 1, uSize - 1, d.cutU);
-    room.cutV = clampInt(room.cutV, 1, vSize - 1, d.cutV);
-  } else if (shape === "T") {
+  } else if (shape === "T" || shape === "S") {
     if (uSize < 3) {
       bumpAxis(room, basis.u, 3);
       uSize = 3;
@@ -156,24 +285,26 @@ export function clampRoomSplits(room) {
       bumpAxis(room, basis.v, 2);
       vSize = 2;
     }
-    const d = defaultRoomSplits("T", uSize, vSize);
-    room.stemW = clampInt(room.stemW, 1, uSize - 2, d.stemW);
-    room.stemPos = clampInt(room.stemPos, 1, uSize - room.stemW - 1, d.stemPos);
-    room.barD = clampInt(room.barD, 1, vSize - 1, d.barD);
-  } else if (shape === "S") {
-    if (uSize < 3) {
-      bumpAxis(room, basis.u, 3);
-      uSize = 3;
-    }
-    if (vSize < 2) {
-      bumpAxis(room, basis.v, 2);
-      vSize = 2;
-    }
-    const maxShift = Math.max(1, Math.floor((uSize - 1) / 2));
-    const d = defaultRoomSplits("S", uSize, vSize);
-    room.shift = clampInt(room.shift, 1, maxShift, d.shift);
-    room.mid = clampInt(room.mid, 1, vSize - 1, d.mid);
   }
+  if (n === 0) {
+    room.cuts = [];
+    stripLegacySplits(room);
+    return room;
+  }
+  const prefer = opts?.preferCut ?? 0;
+  const preferDim = opts?.preferDim;
+  const cuts = resolveCuts(room, shape, uSize, vSize);
+  const dims = preferDim === "sv" ? ["sv", "su"] : ["su", "sv"];
+  const order = [prefer, ...cuts.map((_, i) => i).filter((i) => i !== prefer)];
+  for (const i of order) {
+    for (const dim of dims) {
+      const hi = dim === "su" ? uSize - 1 : vSize - 1;
+      cuts[i][dim] = clampInt(cuts[i][dim], 1, hi, 1);
+      cuts[i][dim] = Math.min(cuts[i][dim], maxCutDim(shape, cuts, i, dim, uSize, vSize));
+    }
+  }
+  room.cuts = cuts;
+  stripLegacySplits(room);
   return room;
 }
 
@@ -192,9 +323,9 @@ function bumpAxis(room, hat, minSize) {
 
 export function applyRoomShape(room, shape) {
   room.shape = clampRoomShape(shape);
+  stripLegacySplits(room);
   const b = roomBasis(room);
-  const d = defaultRoomSplits(room.shape, b.uSize, b.vSize);
-  Object.assign(room, d);
+  room.cuts = defaultCuts(room.shape, b.uSize, b.vSize);
   return clampRoomSplits(room);
 }
 
@@ -206,19 +337,6 @@ function coordAlongHat(room, t, hat, tSize) {
 function tAlongHat(room, world, hat, tSize) {
   const min = room[hatAxis(hat)] | 0;
   return hatSign(hat) > 0 ? world - min : min + tSize - world;
-}
-
-function uvEndMoved(orig, room, hat) {
-  const axis = hatAxis(hat);
-  const sizeKey = axis === "x" ? "sx" : axis === "y" ? "sy" : "sz";
-  const oldMin = orig[axis] | 0;
-  const newMin = room[axis] | 0;
-  const oldMax = oldMin + (orig[sizeKey] | 0);
-  const newMax = newMin + (room[sizeKey] | 0);
-  const minMoved = newMin !== oldMin;
-  const maxMoved = newMax !== oldMax;
-  if (hatSign(hat) > 0) return { minusMoved: minMoved, plusMoved: maxMoved };
-  return { minusMoved: maxMoved, plusMoved: minMoved };
 }
 
 /** Keep inner walls in world space when the AABB is resized from a face/corner. */
@@ -233,89 +351,114 @@ export function preserveRoomSplits(room, orig) {
   const newV = newBasis.vSize;
   const mapU = (t) => Math.round(tAlongHat(room, coordAlongHat(orig, t, basis.u, oldU), newBasis.u, newU));
   const mapV = (t) => Math.round(tAlongHat(room, coordAlongHat(orig, t, basis.v, oldV), newBasis.v, newV));
-
+  const origCuts = resolveCuts(orig, shape, oldU, oldV);
+  const cuts = [];
   if (shape === "L") {
-    const uInner = orig.flip ? orig.cutU | 0 : oldU - (orig.cutU | 0);
-    const mapped = mapU(uInner);
-    room.cutU = orig.flip ? mapped : newU - mapped;
-    room.cutV = newV - mapV(oldV - (orig.cutV | 0));
+    const c = origCuts[0] || { su: 1, sv: 1 };
+    cuts.push({
+      su: newU - mapU(oldU - c.su),
+      sv: newV - mapV(oldV - c.sv),
+    });
   } else if (shape === "T") {
-    let p0 = orig.stemPos | 0;
-    let p1 = p0 + (orig.stemW | 0);
-    if (orig.flip) {
-      p0 = oldU - (orig.stemPos | 0) - (orig.stemW | 0);
-      p1 = oldU - (orig.stemPos | 0);
-    }
-    let n0 = mapU(p0);
-    let n1 = mapU(p1);
-    if (n1 < n0) {
-      const t = n0;
-      n0 = n1;
-      n1 = t;
-    }
-    room.stemW = n1 - n0;
-    room.stemPos = orig.flip ? newU - n1 : n0;
-    room.barD = newV - mapV(oldV - (orig.barD | 0));
+    const a = origCuts[0] || { su: 1, sv: 1 };
+    const b = origCuts[1] || { su: 1, sv: 1 };
+    cuts.push({ su: mapU(a.su), sv: mapV(a.sv) });
+    cuts.push({ su: newU - mapU(oldU - b.su), sv: mapV(b.sv) });
   } else if (shape === "S") {
-    const s0 = orig.shift | 0;
-    const from0 = mapU(s0);
-    const from1 = newU - mapU(oldU - s0);
-    if (from0 === from1) {
-      room.shift = from0;
-    } else {
-      const u = uvEndMoved(orig, room, basis.u);
-      if (u.plusMoved && !u.minusMoved) room.shift = from0;
-      else if (u.minusMoved && !u.plusMoved) room.shift = from1;
-      else room.shift = Math.round((from0 + from1) / 2);
-    }
-    room.mid = mapV(orig.mid | 0);
+    const a = origCuts[0] || { su: 1, sv: 1 };
+    const b = origCuts[1] || { su: 1, sv: 1 };
+    cuts.push({
+      su: newU - mapU(oldU - a.su),
+      sv: newV - mapV(oldV - a.sv),
+    });
+    cuts.push({ su: mapU(b.su), sv: mapV(b.sv) });
   }
+  room.cuts = cuts;
+  stripLegacySplits(room);
   return clampRoomSplits(room);
+}
+
+export function applyRoomSplitDelta(room, orig, key, delta) {
+  const m = /^cut(\d)([uv])$/.exec(key);
+  if (!m) return clampRoomSplits(room);
+  const i = m[1] | 0;
+  const dim = m[2] === "u" ? "su" : "sv";
+  const shape = clampRoomShape(orig.shape);
+  const basis = roomBasis(orig);
+  const cuts = resolveCuts(orig, shape, basis.uSize, basis.vSize);
+  if (i >= cuts.length) return clampRoomSplits(room);
+  cuts[i][dim] = (cuts[i][dim] | 0) + (delta | 0);
+  room.cuts = cuts;
+  room.shape = shape;
+  return clampRoomSplits(room, { preferCut: i, preferDim: dim });
+}
+
+function keepUv(box) {
+  return box.su > 0 && box.sv > 0;
 }
 
 function localFootprint(room, basis) {
   const shape = clampRoomShape(room.shape);
   const uSize = basis.uSize;
   const vSize = basis.vSize;
-  const flip = !!room.flip;
-  const mirrorU = (box) =>
-    flip ? { u: uSize - box.u - box.su, v: box.v, su: box.su, sv: box.sv } : box;
+  const cuts = resolveCuts(room, shape, uSize, vSize);
 
   if (shape === "box") {
     return [{ u: 0, v: 0, su: uSize, sv: vSize }];
   }
   if (shape === "L") {
-    const cutU = room.cutU | 0;
-    const cutV = room.cutV | 0;
+    const c = cuts[0] || { su: 1, sv: 1 };
     return [
-      mirrorU({ u: 0, v: 0, su: uSize, sv: vSize - cutV }),
-      mirrorU({ u: 0, v: vSize - cutV, su: uSize - cutU, sv: cutV }),
-    ];
+      { u: 0, v: 0, su: uSize, sv: vSize - c.sv },
+      { u: 0, v: vSize - c.sv, su: uSize - c.su, sv: c.sv },
+    ].filter(keepUv);
   }
   if (shape === "T") {
-    const stemW = room.stemW | 0;
-    const stemPos = room.stemPos | 0;
-    const barD = room.barD | 0;
-    return [
-      mirrorU({ u: 0, v: vSize - barD, su: uSize, sv: barD }),
-      mirrorU({ u: stemPos, v: 0, su: stemW, sv: vSize - barD }),
-    ];
-  }
-  if (shape === "S") {
-    const shift = room.shift | 0;
-    const mid = room.mid | 0;
-    if (flip) {
+    const a = cuts[0] || { su: 1, sv: 1 };
+    const b = cuts[1] || { su: 1, sv: 1 };
+    const stemU = a.su;
+    const stemW = uSize - a.su - b.su;
+    if (a.sv === b.sv) {
       return [
-        { u: shift, v: mid, su: uSize - shift, sv: vSize - mid },
-        { u: 0, v: 0, su: uSize - shift, sv: mid },
-      ];
+        { u: 0, v: a.sv, su: uSize, sv: vSize - a.sv },
+        { u: stemU, v: 0, su: stemW, sv: a.sv },
+      ].filter(keepUv);
     }
     return [
-      { u: 0, v: mid, su: uSize - shift, sv: vSize - mid },
-      { u: shift, v: 0, su: uSize - shift, sv: mid },
-    ];
+      { u: stemU, v: 0, su: stemW, sv: vSize },
+      { u: 0, v: a.sv, su: a.su, sv: vSize - a.sv },
+      { u: uSize - b.su, v: b.sv, su: b.su, sv: vSize - b.sv },
+    ].filter(keepUv);
+  }
+  if (shape === "S") {
+    const a = cuts[0] || { su: 1, sv: 1 };
+    const b = cuts[1] || { su: 1, sv: 1 };
+    const topV0 = vSize - a.sv;
+    if (b.sv === topV0) {
+      return [
+        { u: 0, v: b.sv, su: uSize - a.su, sv: a.sv },
+        { u: b.su, v: 0, su: uSize - b.su, sv: b.sv },
+      ].filter(keepUv);
+    }
+    if (b.sv < topV0) {
+      return [
+        { u: 0, v: topV0, su: uSize - a.su, sv: a.sv },
+        { u: 0, v: b.sv, su: uSize, sv: topV0 - b.sv },
+        { u: b.su, v: 0, su: uSize - b.su, sv: b.sv },
+      ].filter(keepUv);
+    }
+    return [
+      { u: 0, v: b.sv, su: uSize - a.su, sv: vSize - b.sv },
+      { u: b.su, v: topV0, su: uSize - a.su - b.su, sv: b.sv - topV0 },
+      { u: b.su, v: 0, su: uSize - b.su, sv: topV0 },
+    ].filter(keepUv);
   }
   return [{ u: 0, v: 0, su: uSize, sv: vSize }];
+}
+
+function localCutouts(room, basis) {
+  const shape = clampRoomShape(room.shape);
+  return cutoutUvBoxes(shape, resolveCuts(room, shape, basis.uSize, basis.vSize), basis.uSize, basis.vSize);
 }
 
 function aabbFaces(box) {
@@ -460,6 +603,49 @@ function buriedOnPlane(va, vb, faces) {
   return inside(a) && inside(b);
 }
 
+/** True if b sits on the axis-aligned segment a–c (not a corner). */
+function axisCollinear(a, b, c) {
+  const sameX = a.x === b.x && b.x === c.x;
+  const sameY = a.y === b.y && b.y === c.y;
+  const sameZ = a.z === b.z && b.z === c.z;
+  return (sameX ? 1 : 0) + (sameY ? 1 : 0) + (sameZ ? 1 : 0) === 2;
+}
+
+/** Drop AABB-union T-junctions that lie mid-edge (silhouette unchanged). */
+function dissolveCollinear(verts, edges) {
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const adj = verts.map(() => []);
+    for (let i = 0; i < edges.length; i++) {
+      const e = edges[i];
+      adj[e.a].push({ i, o: e.b });
+      adj[e.b].push({ i, o: e.a });
+    }
+    for (let v = 0; v < verts.length; v++) {
+      if (adj[v].length !== 2) continue;
+      const ia = adj[v][0];
+      const ib = adj[v][1];
+      if (ia.o === ib.o) continue;
+      if (!axisCollinear(verts[ia.o], verts[v], verts[ib.o])) continue;
+      const drop = new Set([ia.i, ib.i]);
+      const va = verts[ia.o];
+      const vb = verts[ib.o];
+      const next = edges.filter((_, i) => !drop.has(i));
+      next.push({
+        a: ia.o,
+        b: ib.o,
+        vert: va.x === vb.x && va.z === vb.z && va.y !== vb.y ? 1 : 0,
+        faces: edges[ia.i].faces | edges[ib.i].faces,
+      });
+      edges.length = 0;
+      edges.push(...next);
+      changed = true;
+      break;
+    }
+  }
+}
+
 function unionHull(colliders, outer) {
   const hullFaces = [];
   for (let i = 0; i < colliders.length; i++) {
@@ -575,6 +761,7 @@ function unionHull(colliders, outer) {
       faces: outerFaceBits(outer, va, vb),
     });
   }
+  dissolveCollinear(verts, kept);
   const used = new Set();
   for (const e of kept) {
     used.add(e.a);
@@ -600,6 +787,7 @@ function innerHandles(room, basis) {
   const uSize = basis.uSize;
   const vSize = basis.vSize;
   const w2 = basis.wSize / 2;
+  const cuts = resolveCuts(room, shape, uSize, vSize);
   const handles = [];
   const push = (u, w, v, key, alongHat, scale) => {
     const world = localToWorld(room, u, w, v, basis);
@@ -612,64 +800,53 @@ function innerHandles(room, basis) {
     });
   };
 
+  const addCut = (i, u0, v0, growU, growV) => {
+    const c = cuts[i];
+    if (!c) return;
+    const uFace = growU > 0 ? u0 + c.su : u0;
+    const vFace = growV > 0 ? v0 + c.sv : v0;
+    const uMid = u0 + c.su / 2;
+    const vMid = v0 + c.sv / 2;
+    push(uFace, w2, vMid, `cut${i}u`, basis.u, growU);
+    push(uMid, w2, vFace, `cut${i}v`, basis.v, growV);
+  };
+
   if (shape === "L") {
-    const cutU = room.cutU | 0;
-    const cutV = room.cutV | 0;
-    const uFace = room.flip ? cutU : uSize - cutU;
-    const uMid = room.flip ? cutU / 2 : uSize - cutU / 2;
-    push(uFace, w2, vSize - cutV / 2, "cutU", basis.u, room.flip ? 1 : -1);
-    push(uMid, w2, vSize - cutV, "cutV", basis.v, -1);
+    const c = cuts[0];
+    if (c) addCut(0, uSize - c.su, vSize - c.sv, -1, -1);
   } else if (shape === "T") {
-    const stemW = room.stemW | 0;
-    let stemPos = room.stemPos | 0;
-    const barD = room.barD | 0;
-    if (room.flip) stemPos = uSize - stemPos - stemW;
-    push(stemPos, w2, (vSize - barD) / 2, "stemPos", basis.u, room.flip ? -1 : 1);
-    push(stemPos + stemW, w2, (vSize - barD) / 2, "stemW", basis.u, room.flip ? -1 : 1);
-    push(stemPos / 2, w2, vSize - barD, "barD", basis.v, -1);
+    const a = cuts[0];
+    const b = cuts[1];
+    if (a) addCut(0, 0, 0, 1, 1);
+    if (b) addCut(1, uSize - b.su, 0, -1, 1);
   } else if (shape === "S") {
-    const shift = room.shift | 0;
-    const mid = room.mid | 0;
-    if (room.flip) {
-      push(shift, w2, mid + (vSize - mid) / 2, "shift", basis.u, 1);
-    } else {
-      push(uSize - shift, w2, mid + (vSize - mid) / 2, "shift", basis.u, -1);
-    }
-    push(uSize / 2, w2, mid, "mid", basis.v, 1);
+    const a = cuts[0];
+    const b = cuts[1];
+    if (a) addCut(0, uSize - a.su, vSize - a.sv, -1, -1);
+    if (b) addCut(1, 0, 0, 1, 1);
   }
   return handles;
 }
 
-/** Outer AABB walls: one handle per hull face that sits on the room bounds. */
-function wallHandles(room, hullFaces) {
+/** Six AABB face-center handles (not one per hull fragment). */
+function aabbWallHandles(room) {
   const x0 = room.x | 0;
   const y0 = room.y | 0;
   const z0 = room.z | 0;
-  const x1 = x0 + (room.sx | 0);
-  const y1 = y0 + (room.sy | 0);
-  const z1 = z0 + (room.sz | 0);
-  const handles = [];
-  for (const f of hullFaces) {
-    let side = null;
-    if (f.axis === "x") {
-      if (f.plane === x0) side = "x0";
-      else if (f.plane === x1) side = "x1";
-    } else if (f.axis === "y") {
-      if (f.plane === y0) side = "y0";
-      else if (f.plane === y1) side = "y1";
-    } else if (f.axis === "z") {
-      if (f.plane === z0) side = "z0";
-      else if (f.plane === z1) side = "z1";
-    }
-    if (!side || !f.center) continue;
-    handles.push({
-      kind: "face",
-      side,
-      axis: f.axis,
-      world: f.center,
-    });
-  }
-  return handles;
+  const sx = room.sx | 0;
+  const sy = room.sy | 0;
+  const sz = room.sz | 0;
+  const cx = x0 + sx / 2;
+  const cy = y0 + sy / 2;
+  const cz = z0 + sz / 2;
+  return [
+    { kind: "face", side: "x0", axis: "x", world: { x: x0, y: cy, z: cz } },
+    { kind: "face", side: "x1", axis: "x", world: { x: x0 + sx, y: cy, z: cz } },
+    { kind: "face", side: "y0", axis: "y", world: { x: cx, y: y0, z: cz } },
+    { kind: "face", side: "y1", axis: "y", world: { x: cx, y: y0 + sy, z: cz } },
+    { kind: "face", side: "z0", axis: "z", world: { x: cx, y: cy, z: z0 } },
+    { kind: "face", side: "z1", axis: "z", world: { x: cx, y: cy, z: z0 + sz } },
+  ];
 }
 
 export function roomGeometry(room) {
@@ -726,25 +903,28 @@ export function roomGeometry(room) {
       outer,
       shape: "box",
       colliders: [{ ...outer }],
+      cutouts: [],
       verts,
       edges,
       hullFaces,
-      handles: wallHandles(room, hullFaces),
+      handles: aabbWallHandles(room),
     };
   }
 
   const basis = roomBasis(room);
   const fp = localFootprint(room, basis);
   const colliders = fp.map((box) => uvwBoxToWorld(room, box, basis));
+  const cutouts = localCutouts(room, basis).map((box) => uvwBoxToWorld(room, box, basis));
   const { hullFaces, verts, edges } = unionHull(colliders, outer);
   return {
     outer,
     shape,
     colliders,
+    cutouts,
     verts,
     edges,
     hullFaces,
-    handles: [...wallHandles(room, hullFaces), ...innerHandles(room, basis)],
+    handles: [...aabbWallHandles(room), ...innerHandles(room, basis)],
   };
 }
 

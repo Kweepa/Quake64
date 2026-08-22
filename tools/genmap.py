@@ -211,6 +211,7 @@ def main() -> None:
     elevs = [o for o in objs if o["kind"] == "elevator"]
     enemies = [o for o in objs if o["kind"] == "enemy"]
     triggers = [o for o in objs if o["kind"] == "trigger"]
+    dests = [o for o in objs if o["kind"] == "teleporter_dest"]
     backpacks = [o for o in objs if o["kind"] == "backpack"]
     spawns = [o for o in objs if o["kind"] == "spawn"]
 
@@ -231,6 +232,7 @@ def main() -> None:
         "grenades": 4,
         "health 25%": 5,
         "health 50%": 6,
+        "armour": 8,
     }
 
     # Tag → elevator index
@@ -239,6 +241,19 @@ def main() -> None:
         tag = (e.get("tag") or "").strip()
         if tag:
             elev_by_tag[tag] = i
+
+    TRIG_MSG = 0
+    TRIG_END = 1
+    TRIG_HURT = 2
+    TRIG_TELE = 3
+    TRIG_ELEV = 4
+    TRIG_PURPOSE = {
+        "message": TRIG_MSG,
+        "end_level": TRIG_END,
+        "hurt": TRIG_HURT,
+        "teleport": TRIG_TELE,
+        "elevator": TRIG_ELEV,
+    }
 
     # Rooms SoA
     room_x = [r["x"] for r in rooms]
@@ -261,6 +276,12 @@ def main() -> None:
     col_sx: list[int] = []
     col_sy: list[int] = []
     col_sz: list[int] = []
+    cut_x: list[int] = []
+    cut_y: list[int] = []
+    cut_z: list[int] = []
+    cut_sx: list[int] = []
+    cut_sy: list[int] = []
+    cut_sz: list[int] = []
     room_nv: list[int] = []
     room_ne: list[int] = []
     room_vo: list[int] = []
@@ -282,8 +303,10 @@ def main() -> None:
 
     for r in rooms:
         geom = room_geometry(r)
-        cols = geom["colliders"][:2]
-        while len(cols) < 2:
+        cols = geom["colliders"]
+        if len(cols) > 3:
+            raise SystemExit(f"room {r.get('name') or '?'} has {len(cols)} floor areas (max 3)")
+        while len(cols) < 3:
             cols.append({"x": 0, "y": 0, "z": 0, "sx": 0, "sy": 0, "sz": 0})
         for c in cols:
             col_x.append(int(c["x"]) & 0xFF)
@@ -292,6 +315,16 @@ def main() -> None:
             col_sx.append(int(c["sx"]) & 0xFF)
             col_sy.append(int(c["sy"]) & 0xFF)
             col_sz.append(int(c["sz"]) & 0xFF)
+        cuts = geom.get("cutouts", [])[:2]
+        while len(cuts) < 2:
+            cuts.append({"x": 0, "y": 0, "z": 0, "sx": 0, "sy": 0, "sz": 0})
+        for c in cuts:
+            cut_x.append(int(c["x"]) & 0xFF)
+            cut_y.append(int(c["y"]) & 0xFF)
+            cut_z.append(int(c["z"]) & 0xFF)
+            cut_sx.append(int(c["sx"]) & 0xFF)
+            cut_sy.append(int(c["sy"]) & 0xFF)
+            cut_sz.append(int(c["sz"]) & 0xFF)
         if clamp_room_shape(r.get("shape")) == "box":
             room_nv.append(0)
             room_ne.append(0)
@@ -464,7 +497,7 @@ def main() -> None:
 
     # Enemies
     en_x, en_y, en_z = [], [], []
-    en_type, en_rot, en_room = [], [], []
+    en_type, en_rot, en_room, en_patrol = [], [], [], []
     en_id = []
     for e in enemies:
         ri = room_index(rooms, e, "enemy")
@@ -478,21 +511,53 @@ def main() -> None:
         en_type.append(ENEMY_TYPE[name])
         en_rot.append(int(e.get("rot") or 0) & 7)
         en_room.append(ri)
+        en_patrol.append(1 if e.get("patrol") else 0)
         en_id.append(map_id[id(e)])
 
-    # Message triggers
+    # Teleport destinations
+    td_x, td_y, td_z, td_rot, td_room = [], [], [], [], []
+    dest_by_tag: dict[str, int] = {}
+    for i, d in enumerate(dests):
+        ri = room_index(rooms, d, "teleporter_dest")
+        tag = (d.get("tag") or "").strip()
+        if tag:
+            if tag in dest_by_tag:
+                raise SystemExit(f"duplicate teleport dest tag {tag!r}")
+            dest_by_tag[tag] = i
+        td_x.append((int(d["x"]) + int(d["sx"]) // 2) & 0xFF)
+        td_y.append(int(d["y"]) & 0xFF)
+        td_z.append((int(d["z"]) + int(d["sz"]) // 2) & 0xFF)
+        td_rot.append(int(d.get("rot") or 0) & 7)
+        td_room.append(ri)
+
+    # Triggers
     tr_x, tr_y, tr_z = [], [], []
     tr_sx, tr_sy, tr_sz, tr_room = [], [], [], []
-    tr_text_off = []
-    tr_id = []
+    tr_purpose, tr_arg, tr_id = [], [], []
     text_blob: list[int] = []
     for t in triggers:
         ri = room_index(rooms, t, "trigger")
-        text = t.get("text") or ""
-        off = len(text_blob)
-        chars = ascii_screen(text)
-        text_blob.extend(chars)
-        text_blob.append(0)  # NUL
+        purpose_s = t.get("purpose") or "message"
+        if purpose_s not in TRIG_PURPOSE:
+            raise SystemExit(f"unknown trigger purpose {purpose_s!r}")
+        purpose = TRIG_PURPOSE[purpose_s]
+        arg = 0
+        if purpose == TRIG_MSG:
+            text = t.get("text") or ""
+            arg = len(text_blob)
+            chars = ascii_screen(text)
+            text_blob.extend(chars)
+            text_blob.append(0)  # NUL
+        elif purpose == TRIG_TELE:
+            tag = (t.get("tag") or "").strip()
+            if tag not in dest_by_tag:
+                raise SystemExit(f"teleport trigger tag {tag!r} has no destination")
+            arg = dest_by_tag[tag]
+        elif purpose == TRIG_ELEV:
+            tag = (t.get("tag") or "").strip()
+            if tag not in elev_by_tag:
+                raise SystemExit(f"elevator trigger tag {tag!r} has no elevator")
+            arg = elev_by_tag[tag]
         tr_x.append(t["x"])
         tr_y.append(t["y"])
         tr_z.append(t["z"])
@@ -500,7 +565,8 @@ def main() -> None:
         tr_sy.append(t["sy"])
         tr_sz.append(t["sz"])
         tr_room.append(ri)
-        tr_text_off.append(off)
+        tr_purpose.append(purpose)
+        tr_arg.append(arg)
         tr_id.append(map_id[id(t)])
 
     # Backpacks (pickup tetrahedrons)
@@ -536,10 +602,16 @@ def main() -> None:
         f"MAP_NELEVS\t= {len(elevs)}",
         f"MAP_NENEMIES\t= {len(enemies)}",
         f"MAP_NTRIGS\t= {len(triggers)}",
+        f"MAP_NDESTS\t= {len(dests)}",
         f"MAP_NBACKPACKS\t= {len(backpacks)}",
         "ELEV_TYPE_DESCEND\t= 0",
         "ELEV_TYPE_AUTO\t= 1",
         "ELEV_TYPE_TOGGLE\t= 2",
+        "TRIG_MSG\t= 0",
+        "TRIG_END\t= 1",
+        "TRIG_HURT\t= 2",
+        "TRIG_TELE\t= 3",
+        "TRIG_ELEV\t= 4",
         "FACE_PZ\t= 0",
         "FACE_MZ\t= 1",
         "FACE_PX\t= 2",
@@ -552,7 +624,8 @@ def main() -> None:
         "BP_HEALTH25\t= 5",
         "BP_HEALTH50\t= 6",
         "BP_SHELLS5\t= 7",
-        "BP_NTYPES\t= 8",
+        "BP_ARMOUR\t= 8",
+        "BP_NTYPES\t= 9",
         f"MAP_FRUSTUM\t= {frustum}",
         f"MAP_FRUSTUM_HALF\t= {frustum_half}",
         "",
@@ -588,6 +661,12 @@ def main() -> None:
         btable("rc_sx", col_sx).rstrip(),
         btable("rc_sy", col_sy).rstrip(),
         btable("rc_sz", col_sz).rstrip(),
+        btable("rb_x", cut_x).rstrip(),
+        btable("rb_y", cut_y).rstrip(),
+        btable("rb_z", cut_z).rstrip(),
+        btable("rb_sx", cut_sx).rstrip(),
+        btable("rb_sy", cut_sy).rstrip(),
+        btable("rb_sz", cut_sz).rstrip(),
         btable("room_nv", room_nv).rstrip(),
         btable("room_ne", room_ne).rstrip(),
         btable("room_vo", room_vo).rstrip(),
@@ -677,6 +756,7 @@ def main() -> None:
         btable("en_type", en_type).rstrip(),
         btable("en_rot", en_rot).rstrip(),
         btable("en_room", en_room).rstrip(),
+        btable("en_patrol", en_patrol).rstrip(),
         btable("en_id", en_id).rstrip(),
         "",
         btable("tr_x", tr_x).rstrip(),
@@ -686,8 +766,15 @@ def main() -> None:
         btable("tr_sy", tr_sy).rstrip(),
         btable("tr_sz", tr_sz).rstrip(),
         btable("tr_room", tr_room).rstrip(),
-        btable("tr_text_off", tr_text_off).rstrip(),
+        btable("tr_purpose", tr_purpose).rstrip(),
+        btable("tr_arg", tr_arg).rstrip(),
         btable("tr_id", tr_id).rstrip(),
+        "",
+        btable("td_x", td_x).rstrip(),
+        btable("td_y", td_y).rstrip(),
+        btable("td_z", td_z).rstrip(),
+        btable("td_rot", td_rot).rstrip(),
+        btable("td_room", td_room).rstrip(),
         "",
         btable("bp_x", bp_x).rstrip(),
         btable("bp_y", bp_y).rstrip(),

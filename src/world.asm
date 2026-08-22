@@ -11,6 +11,8 @@ world_init
 	sta cam_zl
 	sta pitch
 	sta msg_on
+	sta status_ms_l
+	sta status_ms_h
 	lda #$ff
 	sta pl_on_elev
 	lda #0
@@ -21,6 +23,10 @@ world_init
 	sta fall_acc
 	sta hurt_flash_l
 	sta hurt_flash_h
+	sta hurt_ms_l
+	sta hurt_ms_h
+	lda #$ff
+	sta trig_inside
 	; spawn eye at spawn_x+1 (center-ish), spawn_y+EYE, spawn_z+1
 	clc
 	lda spawn_x
@@ -84,6 +90,7 @@ init_enemies
 	sta en_timer_h,x
 	sta en_step,x
 	sta en_step_h,x
+	sta en_pat_n,x
 	lda en_rot,x			; map rot = editor octant (0=+Z)
 	sta en_dir,x
 	asl
@@ -168,7 +175,7 @@ player_overlaps_y
 	clc
 	rts
 
-; If col_x/z in collider X, set floor_y to rc_y (proc_tmp0 = found).
+; If col_x/z in collider X, set proc_tmp2 to rc_y (proc_tmp0 = found).
 ; Several colliders may overlap in XZ when an L/T/S is rotated so one
 ; arm is vertical (lid over a shaft). The union hull leaves a hole;
 ; use the lowest floor so you drop, not the lid.
@@ -180,16 +187,36 @@ uf_rc_floor
 	lda proc_tmp0
 	bne .urf_min
 	lda rc_y,x
-	sta floor_y
+	sta proc_tmp2
 	lda #1
 	sta proc_tmp0
 	rts
 .urf_min
 	lda rc_y,x
-	cmp floor_y
+	cmp proc_tmp2
 	bcs .urf_rts
-	sta floor_y
+	sta proc_tmp2
 .urf_rts
+	rts
+
+; Y = room. col_x/col_z set. C=1 found; proc_tmp0=1, proc_tmp2=lowest rc_y.
+peek_rc_floor
+	tya
+	jsr room_mul3
+	tax
+	lda #0
+	sta proc_tmp0
+	jsr uf_rc_floor
+	inx
+	jsr uf_rc_floor
+	inx
+	jsr uf_rc_floor
+	lda proc_tmp0
+	beq .prf_no
+	sec
+	rts
+.prf_no
+	clc
 	rts
 
 ; ------------------------------------------------------------------
@@ -199,20 +226,20 @@ update_floor
 	lda #$ff
 	sta pl_on_elev
 	lda #0
-	sta proc_tmp0			; in a room collider?
-	ldx room_idx
+	sta floor_yl			; integer floors; ramp fills 8.8
+	sta floor_slope
 	lda cam_xh
 	sta col_x
 	lda cam_zh
 	sta col_z
-	txa
-	asl
-	tax
-	jsr uf_rc_floor
-	inx
-	jsr uf_rc_floor
-	; crate tops (walkable)
+	ldy room_idx
+	jsr peek_rc_floor
+	bcc .uf_c0
+	lda proc_tmp2
+	sta floor_y
+.uf_c0
 	ldx #0
+	; crate tops (walkable)
 .uf_c
 	cpx #MAP_NCRATES
 	bcs .uf_p
@@ -320,50 +347,82 @@ update_floor
 	bcs .uf_sxz
 	jmp .uf_sn
 .uf_sxz
-	; height = slope_y + (high face of cell >> 1)
+	; height = slope_y + (local_8.8 * sy) / run
+	lda #1
+	sta floor_slope
 	lda slope_axis,x
 	bne .uf_sz
-	; axis X
+	lda cam_xl
+	sta ylo
 	sec
 	lda cam_xh
 	sbc slope_x,x
-	sta col_y			; local
+	sta yhi
 	lda slope_dir,x
-	bne .uf_sx_p
-	; dir -1: local' = sx-local
-	lda slope_sx,x
+	bne .uf_sx_go
+	lda #0
 	sec
-	sbc col_y
-	sta col_y
-	jmp .uf_sx_lsr
-.uf_sx_p
-	inc col_y			; dir +: sample high face
-.uf_sx_lsr
-	lsr col_y
-	clc
-	lda slope_y,x
-	adc col_y
-	sta floor_y
-	jmp .uf_done
+	sbc ylo
+	sta ylo
+	lda slope_sx,x
+	sbc yhi
+	sta yhi
+.uf_sx_go
+	lda slope_sx,x
+	jmp .uf_sinterp
 .uf_sz
+	lda cam_zl
+	sta ylo
 	sec
 	lda cam_zh
 	sbc slope_z,x
-	sta col_y
+	sta yhi
 	lda slope_dir,x
-	bne .uf_sz_p
-	lda slope_sz,x
+	bne .uf_sz_go
+	lda #0
 	sec
-	sbc col_y
-	sta col_y
-	jmp .uf_sz_lsr
-.uf_sz_p
-	inc col_y
-.uf_sz_lsr
-	lsr col_y
+	sbc ylo
+	sta ylo
+	lda slope_sz,x
+	sbc yhi
+	sta yhi
+.uf_sz_go
+	lda slope_sz,x
+.uf_sinterp
+	sta dlo				; run
+	beq .uf_sflat
+	stx obj_i
+	ldy slope_sy,x
+	lda ylo
+	jsr umul8j			; local_l * sy
+	lda prod_l
+	sta rot0
+	lda prod_h
+	sta rot1
+	lda #0
+	sta rot2
+	ldx obj_i
+	ldy slope_sy,x
+	lda yhi
+	jsr umul8j			; local_h * sy → bits 8–23
+	clc
+	lda rot1
+	adc prod_l
+	sta rot1
+	lda rot2
+	adc prod_h
+	sta rot2
+	jsr div24u8			; rot0:rot1 = 8.8 rise
+	ldx obj_i
 	clc
 	lda slope_y,x
-	adc col_y
+	adc rot1
+	sta floor_y
+	lda rot0
+	sta floor_yl
+	jmp .uf_done
+.uf_sflat
+	lda slope_y,x
 	sta floor_y
 	jmp .uf_done
 .uf_sn
@@ -377,29 +436,53 @@ sync_eye
 	lda floor_y
 	adc #EYE_HEIGHT
 	sta cam_yh
-	lda #0
+	lda floor_yl
 	sta cam_yl
 	rts
 
 ; ------------------------------------------------------------------
 ; update_fall — snap if gap <= FALL_LEDGE; else accelerate down (no WASD).
 ; Call after update_floor. Landing: snap, maybe take_damage(FALL_DAMAGE).
+; Step-up: rise <= STEP_UP snaps (SOUND_OOF at exactly 2, unless elevator).
 ; ------------------------------------------------------------------
 update_fall
 	lda pl_falling
 	bne .ufl_air
+	lda floor_slope
+	bne .ufl_sync			; on ramp — snap 8.8, skip gap
 	sec
 	lda cam_yh
 	sbc #EYE_HEIGHT			; feet
 	cmp floor_y
 	beq .ufl_sync			; on floor
-	bcc .ufl_sync			; floor rose (elevator)
+	bcc .ufl_up			; floor above feet
 	sec
 	sbc floor_y			; gap
 	cmp #FALL_LEDGE + 1
 	bcs .ufl_start
 .ufl_sync
 	jmp sync_eye
+
+.ufl_up
+	lda pl_on_elev
+	cmp #$ff
+	bne .ufl_sync			; elevator — always snap
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	sta proc_tmp0
+	lda floor_y
+	sec
+	sbc proc_tmp0			; rise
+	cmp #STEP_UP + 1
+	bcc .ufl_riseok
+	rts				; too high — pos_ok should have blocked
+.ufl_riseok
+	cmp #STEP_UP
+	bne .ufl_sync			; 1-unit ledge: silent
+	lda #SOUND_OOF
+	jsr play_sound
+	jmp .ufl_sync
 
 .ufl_start
 	lda #1
@@ -584,15 +667,14 @@ point_in_rc_xz
 	rts
 
 ; X = collider index. C=1 inside inset by PLAYER_R.
-; Faces shared with the sibling collider are not inset, so L/T/S joins stay walkable.
+; Faces shared with another collider in this room are not inset, so L/T/S joins stay walkable.
+; proc_tmp5 = room*3 (group base).
 rc_inset_ok
 	lda rc_sx,x
 	bne .rio_go
 	jmp .rio_no
 .rio_go
-	txa
-	eor #1
-	tay				; Y = sibling (sx=0 → no join)
+	stx proc_tmp3
 	lda col_x
 	jsr .rio_join_xmin
 	bcs .rio_x0
@@ -639,65 +721,137 @@ rc_inset_ok
 	clc
 	rts
 
-; C=1 skip inset (shared face). A preserved.
+; C=1 skip inset (shared face with any sibling). A preserved.
 .rio_join_xmin
 	pha
+	ldy proc_tmp5
+	jsr .rio_xmin_one
+	bcs .rj_xmin_y
+	iny
+	jsr .rio_xmin_one
+	bcs .rj_xmin_y
+	iny
+	jsr .rio_xmin_one
+	bcs .rj_xmin_y
+	pla
+	clc
+	rts
+.rj_xmin_y
+	pla
+	sec
+	rts
+.rio_xmin_one
+	tya
+	cmp proc_tmp3
+	beq .rio_xmin_n
 	lda rc_sx,y
-	beq .rj_no
+	beq .rio_xmin_n
 	clc
 	lda rc_x,y
 	adc rc_sx,y
 	cmp rc_x,x
-	bne .rj_no
-	jsr .rio_ovz
-	bcc .rj_no
-	pla
-	sec
+	bne .rio_xmin_n
+	jmp .rio_ovz
+.rio_xmin_n
+	clc
 	rts
 .rio_join_xmax
 	pha
+	ldy proc_tmp5
+	jsr .rio_xmax_one
+	bcs .rj_xmax_y
+	iny
+	jsr .rio_xmax_one
+	bcs .rj_xmax_y
+	iny
+	jsr .rio_xmax_one
+	bcs .rj_xmax_y
+	pla
+	clc
+	rts
+.rj_xmax_y
+	pla
+	sec
+	rts
+.rio_xmax_one
+	tya
+	cmp proc_tmp3
+	beq .rio_xmax_n
 	lda rc_sx,y
-	beq .rj_no
+	beq .rio_xmax_n
 	clc
 	lda rc_x,x
 	adc rc_sx,x
 	cmp rc_x,y
-	bne .rj_no
-	jsr .rio_ovz
-	bcc .rj_no
-	pla
-	sec
+	bne .rio_xmax_n
+	jmp .rio_ovz
+.rio_xmax_n
+	clc
 	rts
 .rio_join_zmin
 	pha
+	ldy proc_tmp5
+	jsr .rio_zmin_one
+	bcs .rj_zmin_y
+	iny
+	jsr .rio_zmin_one
+	bcs .rj_zmin_y
+	iny
+	jsr .rio_zmin_one
+	bcs .rj_zmin_y
+	pla
+	clc
+	rts
+.rj_zmin_y
+	pla
+	sec
+	rts
+.rio_zmin_one
+	tya
+	cmp proc_tmp3
+	beq .rio_zmin_n
 	lda rc_sx,y
-	beq .rj_no
+	beq .rio_zmin_n
 	clc
 	lda rc_z,y
 	adc rc_sz,y
 	cmp rc_z,x
-	bne .rj_no
-	jsr .rio_ovx
-	bcc .rj_no
-	pla
-	sec
+	bne .rio_zmin_n
+	jmp .rio_ovx
+.rio_zmin_n
+	clc
 	rts
 .rio_join_zmax
 	pha
+	ldy proc_tmp5
+	jsr .rio_zmax_one
+	bcs .rj_zmax_y
+	iny
+	jsr .rio_zmax_one
+	bcs .rj_zmax_y
+	iny
+	jsr .rio_zmax_one
+	bcs .rj_zmax_y
+	pla
+	clc
+	rts
+.rj_zmax_y
+	pla
+	sec
+	rts
+.rio_zmax_one
+	tya
+	cmp proc_tmp3
+	beq .rio_zmax_n
 	lda rc_sx,y
-	beq .rj_no
+	beq .rio_zmax_n
 	clc
 	lda rc_z,x
 	adc rc_sz,x
 	cmp rc_z,y
-	bne .rj_no
-	jsr .rio_ovx
-	bcc .rj_no
-	pla
-	sec
-	rts
-.rj_no
-	pla
+	bne .rio_zmax_n
+	jmp .rio_ovx
+.rio_zmax_n
 	clc
 	rts
 
@@ -743,8 +897,11 @@ col_in_room_y
 	beq .cir_no
 	stx pv4
 	tya
-	asl
+	jsr room_mul3
 	tax
+	jsr point_in_rc_xz
+	bcs .cir_yes
+	inx
 	jsr point_in_rc_xz
 	bcs .cir_yes
 	inx
@@ -758,12 +915,15 @@ col_in_room_y
 	clc
 	rts
 
-; Y = room. C=1 if col_x/z in either collider inset by 1 (enemy)
+; Y = room. C=1 if col_x/z in a collider inset by 1 (enemy)
 room_cols_inset1
 	stx pv4
 	tya
-	asl
+	jsr room_mul3
 	tax
+	jsr .rci1
+	bcs .rci_yes
+	inx
 	jsr .rci1
 	bcs .rci_yes
 	inx
@@ -808,13 +968,16 @@ room_cols_inset1
 
 ; ------------------------------------------------------------------
 ; in_room_or_portal — col_x/col_z allowed for room_idx?
-; Inside either collider inset by PLAYER_R (shared faces not inset), or open door hole.
+; Inside a collider inset by PLAYER_R (shared faces not inset), or open door hole.
 ; C=1 allowed
 ; ------------------------------------------------------------------
 in_room_or_portal
 	lda room_idx
-	asl
+	jsr room_mul3
 	tax
+	jsr rc_inset_ok
+	bcs .irp_yes
+	inx
 	jsr rc_inset_ok
 	bcs .irp_yes
 	inx
@@ -833,10 +996,32 @@ pos_ok
 	bcc .po_no
 	jsr solid_at
 	bcs .po_no
-	sec
-	rts
+	jmp step_up_ok
 .po_no
 	clc
+	rts
+
+; Dest room floor vs feet. C=1 ok (no floor, lower, or rise <= STEP_UP).
+step_up_ok
+	ldy room_idx
+	jsr peek_rc_floor
+	bcc .suo_yes			; portal hole / no collider
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	sta proc_tmp1
+	lda proc_tmp2			; dest floor
+	cmp proc_tmp1
+	beq .suo_yes
+	bcc .suo_yes			; dest lower — fall later
+	sec
+	sbc proc_tmp1			; rise
+	cmp #STEP_UP + 1
+	bcc .suo_yes
+	clc
+	rts
+.suo_yes
+	sec
 	rts
 
 ; ------------------------------------------------------------------
@@ -1161,6 +1346,9 @@ try_backpack_pickup
 	jsr hud_ammo
 	ldx obj_i
 	lda bp_type,x
+	jsr hud_got
+	ldx obj_i
+	lda bp_type,x
 	cmp #BP_HEALTH25
 	beq .tbp_hp
 	cmp #BP_HEALTH50
@@ -1223,6 +1411,9 @@ try_backpack_pickup
 	bcc .tdp_n
 	jsr hud_ammo
 	ldx obj_i
+	lda drop_type,x
+	jsr hud_got
+	ldx obj_i
 	lda #1
 	sta drop_taken,x
 	lda #SOUND_GETAMMO
@@ -1253,10 +1444,10 @@ grant_bp_type
 
 gb_lo
 	!byte <gb_shells, <gb_nailgun, <gb_nails, <gb_grenlaunch
-	!byte <gb_grenades, <gb_hp25, <gb_hp50, <gb_shells5
+	!byte <gb_grenades, <gb_hp25, <gb_hp50, <gb_shells5, <gb_armour
 gb_hi
 	!byte >gb_shells, >gb_nailgun, >gb_nails, >gb_grenlaunch
-	!byte >gb_grenades, >gb_hp25, >gb_hp50, >gb_shells5
+	!byte >gb_grenades, >gb_hp25, >gb_hp50, >gb_shells5, >gb_armour
 
 gb_hp25
 	lda player_hp
@@ -1392,6 +1583,14 @@ gb_gl_ok
 	sta ammo_grenades
 	ldx #WPN_GREN
 	jsr switch_weapon
+	sec
+	rts
+gb_armour
+	lda player_armour
+	cmp #PLAYER_ARMOUR_MAX
+	bcs gb_no
+	lda #PLAYER_ARMOUR_MAX
+	sta player_armour
 	sec
 	rts
 gb_no
@@ -1532,16 +1731,18 @@ near_box_xz
 	rts
 
 ; ------------------------------------------------------------------
-update_message
-	lda #0
-	sta msg_on
+; update_triggers — first overlapping volume in the active room (XZ).
+; Message: HUD while inside. Hurt: 10 HP on enter, then every HURT_MS.
+; End of level / teleport / elevator: once on entry until leave.
+; ------------------------------------------------------------------
+update_triggers
 	ldx #0
-.um
+.ut
 	cpx #MAP_NTRIGS
-	bcs .um_rts
+	bcs .ut_miss
 	lda tr_room,x
 	cmp room_idx
-	bne .um_n
+	bne .ut_n
 	lda tr_x,x
 	sta box_x
 	lda tr_y,x
@@ -1556,29 +1757,155 @@ update_message
 	sta box_sz
 	lda cam_xh
 	cmp box_x
-	bcc .um_n
+	bcc .ut_n
 	clc
 	lda box_x
 	adc box_sx
 	cmp cam_xh
-	bcc .um_n
-	beq .um_n
+	bcc .ut_n
+	beq .ut_n
 	lda cam_zh
 	cmp box_z
-	bcc .um_n
+	bcc .ut_n
 	clc
 	lda box_z
 	adc box_sz
 	cmp cam_zh
-	bcc .um_n
-	beq .um_n
+	bcc .ut_n
+	beq .ut_n
+	stx pv0				; hit index
+	jmp .ut_apply
+.ut_n
+	inx
+	bne .ut
+.ut_miss
+	lda #$ff
+	sta pv0
+.ut_apply
+	lda pv0
+	cmp trig_inside
+	beq .ut_same
+	sta trig_inside
+	cmp #$ff
+	bne .ut_enter
+	lda msg_on
+	beq .ut_done
+	lda #0
+	sta msg_on
+	jmp hud_msg_blank
+.ut_enter
+	ldx pv0
+	jmp trig_enter
+.ut_same
+	lda trig_inside
+	cmp #$ff
+	beq .ut_done
+	tax
+	lda tr_purpose,x
+	cmp #TRIG_MSG
+	beq .ut_msghold
+	cmp #TRIG_HURT
+	beq .ut_hurttick
+.ut_done
+	rts
+.ut_msghold
+	lda msg_on
+	cmp #1
+	bne .ut_msgdraw
+	lda tr_arg,x
+	cmp msg_off
+	beq .ut_done
+.ut_msgdraw
 	lda #1
 	sta msg_on
-	lda tr_text_off,x
+	lda tr_arg,x
 	sta msg_off
-	rts
-.um_n
-	inx
-	bne .um
-.um_rts
+	jmp hud_message
+.ut_hurttick
+	sec
+	lda hurt_ms_l
+	sbc dt_ms
+	sta hurt_ms_l
+	lda hurt_ms_h
+	sbc dt_msh
+	sta hurt_ms_h
+	bcs .ut_done
+	lda #<HURT_MS
+	sta hurt_ms_l
+	lda #>HURT_MS
+	sta hurt_ms_h
+	lda #HURT_HP
+	jmp take_damage
+
+; X = trigger SoA. On-entry dispatch.
+trig_enter
+	lda tr_purpose,x
+	cmp #TRIG_MSG
+	beq .te_msg
+	lda msg_on
+	beq .te_act
+	lda #0
+	sta msg_on
+	stx obj_i
+	jsr hud_msg_blank
+	ldx obj_i
+.te_act
+	lda tr_purpose,x
+	cmp #TRIG_HURT
+	beq .te_hurt
+	cmp #TRIG_TELE
+	beq .te_tele
+	cmp #TRIG_ELEV
+	beq .te_elev
+	rts				; TRIG_END stub
+.te_msg
+	lda #1
+	sta msg_on
+	lda tr_arg,x
+	sta msg_off
+	jmp hud_message
+.te_hurt
+	lda #<HURT_MS
+	sta hurt_ms_l
+	lda #>HURT_MS
+	sta hurt_ms_h
+	lda #HURT_HP
+	jmp take_damage
+.te_elev
+	lda tr_arg,x
+	tax
+	jmp elev_activate
+.te_tele
+!if MAP_NDESTS > 0 {
+	ldy tr_arg,x
+	lda #0
+	sta cam_xl
+	sta cam_zl
+	sta cam_yl
+	lda td_x,y
+	sta cam_xh
+	lda td_z,y
+	sta cam_zh
+	clc
+	lda td_y,y
+	adc #EYE_HEIGHT
+	sta cam_yh
+	lda td_rot,y
+	asl
+	asl
+	asl
+	asl
+	asl
+	sta yaw
+	lda td_room,y
+	jsr set_room_idx
+	lda #$ff
+	sta pl_on_elev
+	lda #0
+	sta pl_falling
+	sta fall_vl
+	sta fall_vh
+	jsr update_floor
+	jmp sync_eye
+}
 	rts

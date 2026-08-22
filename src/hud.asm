@@ -4,8 +4,6 @@
 !zone hud
 
 init_hud
-	lda #$35
-	sta $01
 	lda #<ui_font
 	sta src_ptr
 	lda #>ui_font

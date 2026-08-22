@@ -171,6 +171,9 @@ init_weapon
 
 	lda #COL_WPN
 	sta col_wpn
+	lda #COL_FLASH_Y
+	sta flash4_col
+	sta flash5_col
 	lda #$ff
 	sta cur_weapon
 	ldx #WPN_SHOT
@@ -221,19 +224,14 @@ setup_weapon
 .su_dx
 	lda wpn_flashdy,x
 	sta wpn_flash_dy
-	lda col_wpn
-	sta $d027
-	sta $d028
-	sta $d029
-	sta $d02a
 	lda #COL_FLASH_Y
-	sta $d02b
-	sta $d02c
+	sta flash4_col
+	sta flash5_col
 	lda wpn_idle_x,x
 	sta wpn_x
 	lda wpn_idle_y,x
 	sta wpn_y
-	jmp apply_xy
+	rts
 
 ; A = src lo, Y = src hi → WPN_RAM (256)
 blit256
@@ -298,6 +296,7 @@ blit_splat
 	bcc .bs7
 	rts
 
+; IRQ (I/O on): weapon/muzzle/splat XY, $d015, $d010.
 apply_xy
 	lda #0
 	sta $d010
@@ -380,7 +379,7 @@ start_flash
 	lda #>FLASH_YEL_MS
 	sta flash_ms_h
 	lda #COL_FLASH_Y
-	sta $d02b
+	sta flash4_col
 	ldx cur_weapon
 	cpx #WPN_NAIL
 	beq .sf_xy
@@ -395,10 +394,9 @@ start_flash
 	lda #>FLASH_YEL_MS
 	sta flash5_ms_h
 	lda #COL_FLASH_Y
-	sta $d02c
+	sta flash5_col
 .sf_xy
-	jsr place_flash
-	jmp apply_en
+	rts
 
 hide_flash
 	lda #0
@@ -408,7 +406,7 @@ hide_flash
 	sta flash5_phase
 	sta flash5_ms_l
 	sta flash5_ms_h
-	jmp apply_en
+	rts
 
 ; ------------------------------------------------------------------
 update_weapon
@@ -517,7 +515,7 @@ fire_shot
 	lda mg_frame
 	eor #1
 	sta mg_frame
-	jmp apply_xy
+	rts
 
 ; X = cur_weapon; C=1 spent (or free), C=0 cannot fire
 try_spend_ammo
@@ -576,7 +574,7 @@ nail_idle
 	sta wpn_x
 	lda wpn_idle_y,x
 	sta wpn_y
-	jmp apply_xy
+	rts
 
 start_axe
 	lda #POSE_ANIM
@@ -601,7 +599,6 @@ axe_apply_step
 	sta anim_ms_h
 	lda axe_step_flags,x
 	sta wpn_tmp0
-	jsr apply_xy
 	lda wpn_tmp0
 	and #AXE_F_OOF
 	beq .aas_hit
@@ -645,7 +642,7 @@ wpn_to_idle
 	jsr blit256
 	ldx cur_weapon
 .ti_xy
-	jmp apply_xy
+	rts
 
 start_recoil
 	lda #POSE_RECOIL
@@ -673,7 +670,7 @@ recoil_apply_step
 	sta anim_ms_l
 	lda recoil_step_ms_hi,x
 	sta anim_ms_h
-	jmp apply_xy
+	rts
 
 tick_flash
 	lda flash_phase
@@ -706,7 +703,7 @@ tick_flash
 .tf5_exp
 	jsr flash5_expired
 .tf_en
-	jmp apply_en
+	rts
 
 flash4_expired
 	lda flash_phase
@@ -715,7 +712,7 @@ flash4_expired
 	lda #2
 	sta flash_phase
 	lda #COL_FLASH_R
-	sta $d02b
+	sta flash4_col
 	lda #<FLASH_RED_MS
 	sta flash_ms_l
 	lda #>FLASH_RED_MS
@@ -733,7 +730,7 @@ flash5_expired
 	lda #2
 	sta flash5_phase
 	lda #COL_FLASH_R
-	sta $d02c
+	sta flash5_col
 	lda #<FLASH_RED_MS
 	sta flash5_ms_l
 	lda #>FLASH_RED_MS
@@ -745,7 +742,7 @@ flash5_expired
 	rts
 
 ; A = tip viewport sx, Y = tip viewport sy. Depth = CAM_ZH+12.
-; Safe at $01=$34: blit + stage VIC regs (apply_en pokes when I/O is mapped).
+; Blit + stage; IRQ apply_xy pokes VIC.
 ; Sprite top-left at tip −12/−10; LOD 0..2 from distance; colour = col_fx.
 start_enemy_muzzle
 	sta wpn_tmp0			; tip sx
@@ -795,9 +792,9 @@ start_enemy_muzzle
 	sta emuz_ms_l
 	lda #>EMUZ_MS
 	sta emuz_ms_h
-	rts				; apply_en runs later with I/O on
+	rts				; IRQ apply_xy pokes VIC
 
-; Write staged enemy-muzzle VIC regs (call with $01=$35).
+; Write staged enemy-muzzle VIC regs (IRQ, I/O on).
 place_enemy_muzzle
 	lda emuz_on
 	beq .pem_rts
@@ -836,7 +833,7 @@ tick_enemy_muzzle
 	sta emuz_ms_h
 	sta emuz_xmsb
 	sta emuz_skip
-	jmp apply_en
+	rts
 .tem_rts
 	rts
 
@@ -920,7 +917,7 @@ tick_splat
 	sta splat_ms_h
 	sta splat_xmsb
 	sta splat_skip
-	jmp apply_en
+	rts
 .tsp_rts
 	rts
 

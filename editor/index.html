@@ -511,7 +511,7 @@ button:disabled {
 }
 
 .rot-label {
-  flex: 0 0 2.2rem;
+  flex: 0 0 2.6rem;
   color: var(--text);
   font-size: 0.85rem;
   align-self: center;
@@ -1823,22 +1823,49 @@ function roomFloorY(room, x, z) {
 
 const DOOR_FACE_IDS = ["+x", "-x", "+z", "-z"];
 
-function bestDoorHullFace(door, room) {
+function faceYRange(f) {
+  if (f.axis === "x") return [f.a0, f.a1];
+  return [f.b0, f.b1];
+}
+
+function hullFaceScore(obj, f) {
+  const cx = obj.x + obj.sx / 2;
+  const cy = obj.y + obj.sy / 2;
+  const cz = obj.z + obj.sz / 2;
+  const planeDist = f.axis === "x" ? Math.abs(cx - f.plane) : Math.abs(cz - f.plane);
+  const [fy0, fy1] = faceYRange(f);
+  const yOverlap = obj.y + obj.sy > fy0 && obj.y < fy1;
+  let lat;
+  let lat0;
+  let lat1;
+  if (f.axis === "x") {
+    lat = cz;
+    lat0 = f.b0;
+    lat1 = f.b1;
+  } else {
+    lat = cx;
+    lat0 = f.a0;
+    lat1 = f.a1;
+  }
+  const latOverlap = lat >= lat0 - 1 && lat <= lat1 + 1;
+  let score = planeDist;
+  if (!yOverlap) {
+    score += 1000 + Math.min(Math.abs(cy - fy0), Math.abs(cy - fy1));
+  }
+  if (!latOverlap) {
+    score += 50 + Math.min(Math.abs(lat - lat0), Math.abs(lat - lat1));
+  }
+  return score;
+}
+
+function bestDoorHullFace(obj, room) {
   const geom = roomGeometry(room);
   const faces = geom.hullFaces || [];
-  const cx = door.x + door.sx / 2;
-  const cy = door.y + door.sy / 2;
-  const cz = door.z + door.sz / 2;
   let best = null;
   for (const f of faces) {
     if (f.axis === "y") continue;
     if (!DOOR_FACE_IDS.includes(f.faceId)) continue;
-    const dist = f.axis === "x" ? Math.abs(cx - f.plane) : Math.abs(cz - f.plane);
-    const a = f.axis === "x" ? cy : cx;
-    const b = f.axis === "x" ? cz : cy;
-    const inA = a >= f.a0 - 1 && a <= f.a1 + 1;
-    const inB = b >= f.b0 - 1 && b <= f.b1 + 1;
-    const score = dist + (inA && inB ? 0 : 8);
+    const score = hullFaceScore(obj, f);
     if (!best || score < best.score) best = { f, score };
   }
   return best?.f || null;
@@ -1898,41 +1925,75 @@ function nudgeDoorOutside(door, room) {
   return door;
 }
 
+const DOOR_SIZE = [4, 5, 1];
+const SWITCH_SIZE = [2, 3, 1];
+
+function wallDims(size, face) {
+  const [a, b, thick] = size;
+  if (face.axis === "x") return { sx: thick, sy: b, sz: a };
+  return { sx: a, sy: b, sz: thick };
+}
+
+/** Flush AABB onto hull face. `inside` puts the box in the room (switch); doors sit outside.
+ * Keep Y (and off-face lateral) so a door at the bottom of a shaft does not jump to another fragment. */
+function snapBoxToHullFace(obj, f, size, inside) {
+  const cx = obj.x + obj.sx / 2;
+  const cy = obj.y + obj.sy / 2;
+  const cz = obj.z + obj.sz / 2;
+  const dims = wallDims(size, f);
+  obj.face = f.faceId;
+  obj.sx = dims.sx;
+  obj.sy = dims.sy;
+  obj.sz = dims.sz;
+  const along = (sign, plane, thick) => {
+    if (inside) return sign > 0 ? plane - thick : plane;
+    return sign > 0 ? plane : plane - thick;
+  };
+  obj.y = Math.round(cy - obj.sy / 2);
+  if (f.axis === "x") {
+    obj.x = along(f.sign, f.plane, obj.sx);
+    obj.z = Math.round(cz - obj.sz / 2);
+    if (cz >= f.b0 - 2 && cz <= f.b1 + 2) {
+      obj.z = Math.max(f.b0, Math.min(f.b1 - obj.sz, obj.z));
+    }
+  } else {
+    obj.z = along(f.sign, f.plane, obj.sz);
+    obj.x = Math.round(cx - obj.sx / 2);
+    if (cx >= f.a0 - 2 && cx <= f.a1 + 2) {
+      obj.x = Math.max(f.a0, Math.min(f.a1 - obj.sx, obj.x));
+    }
+  }
+  if (obj.x < 0) obj.x = 0;
+  if (obj.y < 0) obj.y = 0;
+  if (obj.z < 0) obj.z = 0;
+  return obj;
+}
+
 function snapDoorToRoom(door, room) {
   const f = bestDoorHullFace(door, room);
   if (!f) return door;
-  const cx = door.x + door.sx / 2;
-  const cy = door.y + door.sy / 2;
-  const cz = door.z + door.sz / 2;
-  door.face = f.faceId;
-  const [fw, fh, thick] = [4, 5, 1];
-  if (f.axis === "x") {
-    door.sx = thick;
-    door.sy = fh;
-    door.sz = fw;
-    door.x = f.sign > 0 ? f.plane : f.plane - door.sx;
-    const z0 = f.b0;
-    const z1 = f.b1;
-    door.z = Math.round(cz - door.sz / 2);
-    door.z = Math.max(z0, Math.min(z1 - door.sz, door.z));
-    door.y = Math.round(cy - door.sy / 2);
-    door.y = Math.max(f.a0, Math.min(f.a1 - door.sy, door.y));
-  } else {
-    door.sx = fw;
-    door.sy = fh;
-    door.sz = thick;
-    door.z = f.sign > 0 ? f.plane : f.plane - door.sz;
-    const x0 = f.a0;
-    const x1 = f.a1;
-    door.x = Math.round(cx - door.sx / 2);
-    door.x = Math.max(x0, Math.min(x1 - door.sx, door.x));
-    door.y = Math.round(cy - door.sy / 2);
-    door.y = Math.max(f.b0, Math.min(f.b1 - door.sy, door.y));
+  return snapBoxToHullFace(door, f, DOOR_SIZE, false);
+}
+
+function snapDoorBetweenRooms(door, roomA, roomB) {
+  if (!door) return door;
+  let best = null;
+  for (const room of [roomA, roomB]) {
+    if (!room) continue;
+    const f = bestDoorHullFace(door, room);
+    if (!f) continue;
+    const score = hullFaceScore(door, f);
+    if (!best || score < best.score) best = { f, score };
   }
-  if (door.x < 0) door.x = 0;
-  if (door.y < 0) door.y = 0;
-  if (door.z < 0) door.z = 0;
-  return door;
+  if (!best) return door;
+  return snapBoxToHullFace(door, best.f, DOOR_SIZE, false);
+}
+
+function snapSwitchToRoom(sw, room) {
+  if (!sw || !room) return sw;
+  const f = bestDoorHullFace(sw, room);
+  if (!f) return sw;
+  return snapBoxToHullFace(sw, f, SWITCH_SIZE, true);
 }
 
 function rotateRoom(room, axis, delta) {
@@ -2206,6 +2267,25 @@ function clampEnemyRot(n) {
   const r = n | 0;
   if (!Number.isFinite(r)) return 0;
   return ((r % 8) + 8) % 8;
+}
+
+function cycleEnemyRot(n, delta = 1) {
+  return clampEnemyRot((n | 0) + delta);
+}
+
+/** (z,+1) → (z,−1) → (x,+1) → (x,−1) → … */
+function cycleSlopeOrient(obj) {
+  if (!obj || obj.kind !== "slope") return obj;
+  if (obj.axis === "z" && obj.dir === 1) obj.dir = -1;
+  else if (obj.axis === "z") {
+    obj.axis = "x";
+    obj.dir = 1;
+  } else if (obj.dir === 1) obj.dir = -1;
+  else {
+    obj.axis = "z";
+    obj.dir = 1;
+  }
+  return obj;
 }
 
 const PALETTE_ORDER = [
@@ -5485,9 +5565,16 @@ class LayoutView {
     const objs = activeMap(doc).objects;
     for (const orig of d.origs) {
       const obj = objs.find((o) => o.id === orig.id);
-      if (!obj || obj.kind !== "doorway") continue;
-      const other = inferDoorOtherRoom(doc, obj);
-      if (other) obj.otherRoomId = other.id;
+      if (!obj) continue;
+      if (obj.kind === "doorway") {
+        const other = inferDoorOtherRoom(doc, obj);
+        if (other) obj.otherRoomId = other.id;
+        snapDoorBetweenRooms(obj, roomById(doc, obj.roomId), roomById(doc, obj.otherRoomId));
+        clampObject(obj);
+      } else if (obj.kind === "switch") {
+        snapSwitchToRoom(obj, roomById(doc, obj.roomId));
+        clampObject(obj);
+      }
     }
   }
 
@@ -5750,23 +5837,15 @@ class LayoutView {
 
   #glyphSegments(obj) {
     const segs = [];
-    if (obj.kind === "crate") {
-      const f = faceCorners(obj.face || "+z");
-      segs.push({ a: cornerWorld(obj, f[0]), b: cornerWorld(obj, f[2]) });
-      segs.push({ a: cornerWorld(obj, f[1]), b: cornerWorld(obj, f[3]) });
-    }
     if (obj.kind === "doorway") {
-      const doc = this.opts.getDoc();
-      const place = this.opts.getPlaceRoom?.();
-      let room = roomById(doc, obj.roomId);
-      if (place && (place.id === obj.roomId || place.id === obj.otherRoomId)) room = place;
-      const f = faceCorners(doorNearFaceId(obj, room));
-      const c0 = cornerWorld(obj, f[0]);
-      const c1 = cornerWorld(obj, f[1]);
-      const c2 = cornerWorld(obj, f[2]);
-      const c3 = cornerWorld(obj, f[3]);
-      segs.push({ a: c0, b: c1 }, { a: c1, b: c2 }, { a: c2, b: c3 }, { a: c3, b: c0 });
-      segs.push({ a: c0, b: c2 }, { a: c1, b: c3 });
+      const zThin = (obj.sz | 0) <= (obj.sx | 0);
+      if (zThin) {
+        segs.push({ a: cornerWorld(obj, 0), b: cornerWorld(obj, 2) });
+        segs.push({ a: cornerWorld(obj, 4), b: cornerWorld(obj, 6) });
+      } else {
+        segs.push({ a: cornerWorld(obj, 0), b: cornerWorld(obj, 7) });
+        segs.push({ a: cornerWorld(obj, 1), b: cornerWorld(obj, 6) });
+      }
     }
     if (obj.kind === "switch") {
       const f = faceCorners(obj.face);
@@ -8004,7 +8083,13 @@ function finishPaletteDrop(e) {
   }
   clampObject(obj);
   activeMap(doc).objects.push(obj);
-  if (kind === "doorway") assignDoorRooms(obj, owner);
+  if (kind === "doorway") {
+    assignDoorRooms(obj, owner);
+    clampObject(obj);
+  } else if (kind === "switch" && owner) {
+    snapSwitchToRoom(obj, owner);
+    clampObject(obj);
+  }
   if (kind === "room") lastRoomId = obj.id;
   selectedIds = [obj.id];
   rememberSelectedRoom();
@@ -8049,6 +8134,7 @@ function assignDoorRooms(door, owner) {
   const other = inferDoorOtherRoom(doc, door);
   door.otherRoomId = other && other.id !== door.roomId ? other.id : door.otherRoomId || null;
   if (door.otherRoomId === door.roomId) door.otherRoomId = null;
+  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
 }
 
 function deleteSelected() {
@@ -8628,6 +8714,20 @@ function field(label, input) {
   return row;
 }
 
+function rotateRow(labelText, onClick) {
+  const wrap = document.createElement("div");
+  wrap.className = "vec3-inputs";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "Rotate";
+  btn.addEventListener("click", onClick);
+  const lbl = document.createElement("span");
+  lbl.className = "rot-label";
+  lbl.textContent = labelText;
+  wrap.append(btn, lbl);
+  return field("Rotate", wrap);
+}
+
 function vec3Field(label, specs) {
   const row = document.createElement("label");
   row.className = "field vec3";
@@ -8821,14 +8921,11 @@ function renderInspector() {
       root.appendChild(field("Patrol", chk));
     }
     if (isFigureObject(obj) || obj.kind === "teleporter_dest") {
-      const rotWrap = document.createElement("div");
-      rotWrap.className = "vec3-inputs";
-      const rotInp = numInput(obj.rot ?? 0, (v) => apply(() => (obj.rot = v)), 0, 7);
-      const rotLbl = document.createElement("span");
-      rotLbl.className = "rot-label";
-      rotLbl.textContent = ENEMY_FACINGS[clampEnemyRot(obj.rot ?? 0)];
-      rotWrap.append(rotInp, rotLbl);
-      root.appendChild(field("Rot", rotWrap));
+      root.appendChild(
+        rotateRow(ENEMY_FACINGS[clampEnemyRot(obj.rot ?? 0)], () =>
+          apply(() => (obj.rot = cycleEnemyRot(obj.rot ?? 0)))
+        )
+      );
     }
     if (obj.kind === "trigger") {
       const sel = document.createElement("select");
@@ -8924,6 +9021,7 @@ function renderInspector() {
         apply(() => {
           obj.roomId = sel.value || null;
           if (obj.kind === "doorway") assignDoorRooms(obj, roomById(doc, obj.roomId));
+          if (obj.kind === "switch") snapSwitchToRoom(obj, roomById(doc, obj.roomId));
         })
       );
       root.appendChild(field("Room", sel));
@@ -8941,7 +9039,12 @@ function renderInspector() {
         if (r.id === obj.otherRoomId) opt.selected = true;
         sel.appendChild(opt);
       }
-      sel.addEventListener("change", () => apply(() => (obj.otherRoomId = sel.value || null)));
+      sel.addEventListener("change", () =>
+        apply(() => {
+          obj.otherRoomId = sel.value || null;
+          snapDoorBetweenRooms(obj, roomById(doc, obj.roomId), roomById(doc, obj.otherRoomId));
+        })
+      );
       root.appendChild(field("Other room", sel));
       const lock = document.createElement("input");
       lock.type = "checkbox";
@@ -8963,39 +9066,9 @@ function renderInspector() {
       ? `Fixed size ${obj.sx}×${obj.sy}×${obj.sz}`
       : `Size ${obj.sx}×${obj.sy}×${obj.sz}`;
     root.appendChild(sizeP);
-    if (obj.kind === "doorway" || obj.kind === "switch" || obj.kind === "crate") {
-      const sel = document.createElement("select");
-      for (const f of ["+z", "-z", "+x", "-x"]) {
-        const opt = document.createElement("option");
-        opt.value = f;
-        opt.textContent = f;
-        if (obj.face === f) opt.selected = true;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener("change", () => apply(() => (obj.face = sel.value)));
-      root.appendChild(field("Face", sel));
-    }
     if (obj.kind === "slope") {
-      const axis = document.createElement("select");
-      for (const a of ["x", "z"]) {
-        const opt = document.createElement("option");
-        opt.value = a;
-        opt.textContent = a.toUpperCase();
-        if (obj.axis === a) opt.selected = true;
-        axis.appendChild(opt);
-      }
-      axis.addEventListener("change", () => apply(() => (obj.axis = axis.value)));
-      root.appendChild(field("Axis", axis));
-      const dir = document.createElement("select");
-      for (const d of [1, -1]) {
-        const opt = document.createElement("option");
-        opt.value = String(d);
-        opt.textContent = d === 1 ? "+ run" : "− run";
-        if (obj.dir === d) opt.selected = true;
-        dir.appendChild(opt);
-      }
-      dir.addEventListener("change", () => apply(() => (obj.dir = Number(dir.value))));
-      root.appendChild(field("Dir", dir));
+      const axis = (obj.axis === "x" ? "X" : "Z") + (obj.dir === 1 ? "+" : "−");
+      root.appendChild(rotateRow(axis, () => apply(() => cycleSlopeOrient(obj))));
     }
     const row = document.createElement("div");
     row.className = "btn-row";
@@ -9754,33 +9827,17 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key.toLowerCase() === "r" && editorMode === "layout") {
     const obj = selectedObject();
-    if (obj && isFigureObject(obj)) {
+    if (obj && (isFigureObject(obj) || obj.kind === "teleporter_dest")) {
       e.preventDefault();
       pushUndo();
-      obj.rot = clampEnemyRot((obj.rot ?? 0) + 1);
-      markDirty();
-      refreshAll();
-    }
-    if (obj && (obj.kind === "doorway" || obj.kind === "switch" || obj.kind === "crate")) {
-      e.preventDefault();
-      pushUndo();
-      obj.face = cycleFace(obj.face, 1);
-      clampObject(obj);
+      obj.rot = cycleEnemyRot(obj.rot ?? 0);
       markDirty();
       refreshAll();
     }
     if (obj && obj.kind === "slope") {
       e.preventDefault();
       pushUndo();
-      if (obj.axis === "z" && obj.dir === 1) obj.dir = -1;
-      else if (obj.axis === "z") {
-        obj.axis = "x";
-        obj.dir = 1;
-      } else if (obj.dir === 1) obj.dir = -1;
-      else {
-        obj.axis = "z";
-        obj.dir = 1;
-      }
+      cycleSlopeOrient(obj);
       clampObject(obj);
       markDirty();
       refreshAll();

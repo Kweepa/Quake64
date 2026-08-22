@@ -503,7 +503,7 @@ button:disabled {
 }
 
 .rot-label {
-  flex: 0 0 2.2rem;
+  flex: 0 0 2.6rem;
   color: var(--text);
   font-size: 0.85rem;
   align-self: center;

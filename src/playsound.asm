@@ -10,7 +10,7 @@ SFX_VOL		= $0f
 SFX_NCH		= 3
 SFX_QMAX	= 4
 
-; Per-channel queue (abs — visible at $01=$34/$35). Index $ff = idle.
+; Per-channel queue (abs — RAM). Index $ff = idle.
 sfx_index
 	!byte $ff, $ff, $ff
 sfx_priority

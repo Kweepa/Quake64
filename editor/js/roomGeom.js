@@ -967,22 +967,49 @@ export function roomFloorY(room, x, z) {
 
 const DOOR_FACE_IDS = ["+x", "-x", "+z", "-z"];
 
-function bestDoorHullFace(door, room) {
+function faceYRange(f) {
+  if (f.axis === "x") return [f.a0, f.a1];
+  return [f.b0, f.b1];
+}
+
+function hullFaceScore(obj, f) {
+  const cx = obj.x + obj.sx / 2;
+  const cy = obj.y + obj.sy / 2;
+  const cz = obj.z + obj.sz / 2;
+  const planeDist = f.axis === "x" ? Math.abs(cx - f.plane) : Math.abs(cz - f.plane);
+  const [fy0, fy1] = faceYRange(f);
+  const yOverlap = obj.y + obj.sy > fy0 && obj.y < fy1;
+  let lat;
+  let lat0;
+  let lat1;
+  if (f.axis === "x") {
+    lat = cz;
+    lat0 = f.b0;
+    lat1 = f.b1;
+  } else {
+    lat = cx;
+    lat0 = f.a0;
+    lat1 = f.a1;
+  }
+  const latOverlap = lat >= lat0 - 1 && lat <= lat1 + 1;
+  let score = planeDist;
+  if (!yOverlap) {
+    score += 1000 + Math.min(Math.abs(cy - fy0), Math.abs(cy - fy1));
+  }
+  if (!latOverlap) {
+    score += 50 + Math.min(Math.abs(lat - lat0), Math.abs(lat - lat1));
+  }
+  return score;
+}
+
+function bestDoorHullFace(obj, room) {
   const geom = roomGeometry(room);
   const faces = geom.hullFaces || [];
-  const cx = door.x + door.sx / 2;
-  const cy = door.y + door.sy / 2;
-  const cz = door.z + door.sz / 2;
   let best = null;
   for (const f of faces) {
     if (f.axis === "y") continue;
     if (!DOOR_FACE_IDS.includes(f.faceId)) continue;
-    const dist = f.axis === "x" ? Math.abs(cx - f.plane) : Math.abs(cz - f.plane);
-    const a = f.axis === "x" ? cy : cx;
-    const b = f.axis === "x" ? cz : cy;
-    const inA = a >= f.a0 - 1 && a <= f.a1 + 1;
-    const inB = b >= f.b0 - 1 && b <= f.b1 + 1;
-    const score = dist + (inA && inB ? 0 : 8);
+    const score = hullFaceScore(obj, f);
     if (!best || score < best.score) best = { f, score };
   }
   return best?.f || null;
@@ -1042,41 +1069,75 @@ export function nudgeDoorOutside(door, room) {
   return door;
 }
 
+const DOOR_SIZE = [4, 5, 1];
+const SWITCH_SIZE = [2, 3, 1];
+
+function wallDims(size, face) {
+  const [a, b, thick] = size;
+  if (face.axis === "x") return { sx: thick, sy: b, sz: a };
+  return { sx: a, sy: b, sz: thick };
+}
+
+/** Flush AABB onto hull face. `inside` puts the box in the room (switch); doors sit outside.
+ * Keep Y (and off-face lateral) so a door at the bottom of a shaft does not jump to another fragment. */
+function snapBoxToHullFace(obj, f, size, inside) {
+  const cx = obj.x + obj.sx / 2;
+  const cy = obj.y + obj.sy / 2;
+  const cz = obj.z + obj.sz / 2;
+  const dims = wallDims(size, f);
+  obj.face = f.faceId;
+  obj.sx = dims.sx;
+  obj.sy = dims.sy;
+  obj.sz = dims.sz;
+  const along = (sign, plane, thick) => {
+    if (inside) return sign > 0 ? plane - thick : plane;
+    return sign > 0 ? plane : plane - thick;
+  };
+  obj.y = Math.round(cy - obj.sy / 2);
+  if (f.axis === "x") {
+    obj.x = along(f.sign, f.plane, obj.sx);
+    obj.z = Math.round(cz - obj.sz / 2);
+    if (cz >= f.b0 - 2 && cz <= f.b1 + 2) {
+      obj.z = Math.max(f.b0, Math.min(f.b1 - obj.sz, obj.z));
+    }
+  } else {
+    obj.z = along(f.sign, f.plane, obj.sz);
+    obj.x = Math.round(cx - obj.sx / 2);
+    if (cx >= f.a0 - 2 && cx <= f.a1 + 2) {
+      obj.x = Math.max(f.a0, Math.min(f.a1 - obj.sx, obj.x));
+    }
+  }
+  if (obj.x < 0) obj.x = 0;
+  if (obj.y < 0) obj.y = 0;
+  if (obj.z < 0) obj.z = 0;
+  return obj;
+}
+
 export function snapDoorToRoom(door, room) {
   const f = bestDoorHullFace(door, room);
   if (!f) return door;
-  const cx = door.x + door.sx / 2;
-  const cy = door.y + door.sy / 2;
-  const cz = door.z + door.sz / 2;
-  door.face = f.faceId;
-  const [fw, fh, thick] = [4, 5, 1];
-  if (f.axis === "x") {
-    door.sx = thick;
-    door.sy = fh;
-    door.sz = fw;
-    door.x = f.sign > 0 ? f.plane : f.plane - door.sx;
-    const z0 = f.b0;
-    const z1 = f.b1;
-    door.z = Math.round(cz - door.sz / 2);
-    door.z = Math.max(z0, Math.min(z1 - door.sz, door.z));
-    door.y = Math.round(cy - door.sy / 2);
-    door.y = Math.max(f.a0, Math.min(f.a1 - door.sy, door.y));
-  } else {
-    door.sx = fw;
-    door.sy = fh;
-    door.sz = thick;
-    door.z = f.sign > 0 ? f.plane : f.plane - door.sz;
-    const x0 = f.a0;
-    const x1 = f.a1;
-    door.x = Math.round(cx - door.sx / 2);
-    door.x = Math.max(x0, Math.min(x1 - door.sx, door.x));
-    door.y = Math.round(cy - door.sy / 2);
-    door.y = Math.max(f.b0, Math.min(f.b1 - door.sy, door.y));
+  return snapBoxToHullFace(door, f, DOOR_SIZE, false);
+}
+
+export function snapDoorBetweenRooms(door, roomA, roomB) {
+  if (!door) return door;
+  let best = null;
+  for (const room of [roomA, roomB]) {
+    if (!room) continue;
+    const f = bestDoorHullFace(door, room);
+    if (!f) continue;
+    const score = hullFaceScore(door, f);
+    if (!best || score < best.score) best = { f, score };
   }
-  if (door.x < 0) door.x = 0;
-  if (door.y < 0) door.y = 0;
-  if (door.z < 0) door.z = 0;
-  return door;
+  if (!best) return door;
+  return snapBoxToHullFace(door, best.f, DOOR_SIZE, false);
+}
+
+export function snapSwitchToRoom(sw, room) {
+  if (!sw || !room) return sw;
+  const f = bestDoorHullFace(sw, room);
+  if (!f) return sw;
+  return snapBoxToHullFace(sw, f, SWITCH_SIZE, true);
 }
 
 export function rotateRoom(room, axis, delta) {

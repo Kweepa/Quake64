@@ -84,7 +84,7 @@ irq_entry
 	pha
 	lda $01
 	pha
-	lda #$35
+	lda #BANK_IO				; I/O + KERNAL, BASIC out
 	sta $01
 
 	lda $d019
@@ -134,6 +134,7 @@ irq_entry
 	jsr accum_keys
 	jsr flush_sfx
 	jsr update_sfx
+	jsr irq_elev_noise
 	pla
 	tay
 	pla
@@ -202,6 +203,8 @@ irq_entry
 	lda #0
 	sta irq_phase
 	inc frame_flag
+	jsr prof_read_casc
+	jsr irq_publish_vic
 	pla
 	tay
 	pla
@@ -371,6 +374,19 @@ snapshot_input
 	sta key_use
 	lda #0
 	sta in_use
+	rts
+
+; V3 rumble from elev_noise_n (main only touches the counter).
+irq_elev_noise
+	lda elev_noise_n
+	beq .iene_off
+	jmp elev_noise_restore
+.iene_off
+	lda sfx_index+2
+	bpl .iene_rts
+	lda #0
+	sta $d412
+.iene_rts
 	rts
 
 ; Snapshot then build turn + wish from hold_*.

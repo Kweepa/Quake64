@@ -15,11 +15,13 @@ init_vic
 	sta $d018
 	lda #COL_BORDER
 	sta $d020
+	sta vic_border
 	lda #COL_HUD_BG
 	sta $d021
 
 	lda #0
 	sta $d015				; sprites off until init_weapon
+	sta palette_dirty
 	sta draw_buf
 	sta show_buf
 	lda #D018_A_BOT
@@ -91,7 +93,7 @@ fill_viewport_colour
 	bne .vrow
 	rts
 
-; room_idx → col_bg/line/fx/wpn, viewport colour RAM, live $d021 / weapon if safe
+; room_idx → col_bg/line/fx/wpn; IRQ publishes colour RAM / weapon sprites
 apply_room_palette
 	ldx room_idx
 	lda room_bg,x
@@ -102,17 +104,8 @@ apply_room_palette
 	sta col_fx
 	lda room_wpn,x
 	sta col_wpn
-	sta $d027
-	sta $d028
-	sta $d029
-	sta $d02a
-	jsr fill_viewport_colour
-	; irq_phase: 0=HUD band (leave black $d021), 1/2=viewport/below → room bg
-	lda irq_phase
-	beq .ardone
-	lda col_bg
-	sta $d021
-.ardone
+	lda #1
+	sta palette_dirty
 	lda room_idx
 	sta palette_room
 	rts
@@ -280,10 +273,8 @@ stamp_margins
 	bcc .mr
 	rts
 
-; $FF in unused col 24 / char 192, all four charset halves. $01=$34.
+; $FF in unused col 24 / char 192, all four charset halves. Call at $01=$30.
 fill_margin_glyph
-	lda #$34
-	sta $01
 	lda #$ff
 	ldx #7
 -
@@ -293,13 +284,9 @@ fill_margin_glyph
 	sta CH_B_BOT + 24 * 64,x
 	dex
 	bpl -
-	lda #$35
-	sta $01
 	rts
 
 clear_charsets
-	lda #$34
-	sta $01
 	lda #0
 	sta init_ptr
 	lda #>CH_A_TOP
@@ -314,8 +301,6 @@ clear_charsets
 	inc init_ptr+1
 	dex
 	bne .cl
-	lda #$35
-	sta $01
 	rts
 
 ; Wipe 24 live columns (6 pages/half). Skip cols 24–31 (decoration/buffers).
@@ -366,28 +351,11 @@ clear_draw
 	bne .clp
 	rts
 
-; $01 must be $35. Publish show_buf's $d018 for the current band.
-; Wait (IRQs on) until irq_phase is HUD (0) or post mid-split (2) so we never
-; mask a split line or tear mid-viewport.
+; Publish show_d018_bot for the mid-split IRQ. No $d018 poke (IRQ owns I/O).
 apply_show
--
-	lda irq_phase
-	beq .do				; 0 = HUD
-	cmp #2
-	bne -				; 1 = view top — wait
-.do
 	ldx show_buf
 	lda show_bot_tab,x
 	sta show_d018_bot
-	lda irq_phase
-	beq .ui
-	; phase 2 — bottom half charset live
-	lda show_d018_bot
-	sta $d018
-	rts
-.ui
-	lda #D018_A_UI			; HUD always matrix A (viewport still flips)
-	sta $d018
 	rts
 
 set_draw_ptrs
@@ -404,6 +372,27 @@ set_draw_ptrs
 	lda #>CH_B_BOT
 	sta draw_bot_hi
 	rts
+
+; Flyback: border, colour RAM if dirty, sprites. $01 already BANK_IO.
+irq_publish_vic
+	lda vic_border
+	sta $d020
+	lda palette_dirty
+	beq .ipv_spr
+	lda #0
+	sta palette_dirty
+	jsr fill_viewport_colour
+.ipv_spr
+	lda col_wpn
+	sta $d027
+	sta $d028
+	sta $d029
+	sta $d02a
+	lda flash4_col
+	sta $d02b
+	lda flash5_col
+	sta $d02c
+	jmp apply_xy
 
 show_top_tab
 	!byte D018_A_TOP, D018_B_TOP

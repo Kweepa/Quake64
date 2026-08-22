@@ -884,7 +884,6 @@ enemy_bite
 	rts
 
 ; Grunt fire frame: recheck LOS, distance-scaled hit roll, 8–15 HP.
-; $01=$35 context (take_damage pokes $d020); enemy_shot_clear self-banks.
 enemy_gunshot
 	jsr enemy_shot_clear	; player may have reached cover mid-anim
 	bcc .eg_rts
@@ -930,7 +929,7 @@ take_damage
 +
 	sta player_hp
 	lda #COL_HURT
-	sta $d020
+	sta vic_border
 	lda #<HURT_FLASH_MS
 	sta hurt_flash_l
 	lda #>HURT_FLASH_MS
@@ -946,7 +945,7 @@ take_damage
 .td_rts
 	rts
 
-; Tick red $d020 flash; restore COL_BORDER when remaining ms underflows.
+; Tick red border; IRQ publishes vic_border.
 update_hurt_flash
 	lda hurt_flash_l
 	ora hurt_flash_h
@@ -963,7 +962,7 @@ update_hurt_flash
 	sta hurt_flash_l
 	sta hurt_flash_h
 	lda #COL_BORDER
-	sta $d020
+	sta vic_border
 .uhf_rts
 	rts
 
@@ -1126,7 +1125,7 @@ enemy_patrol_pick
 	clc
 	rts
 
-; Clamp en_x/z: cutout top → that rb inset; else matching-Y collider, not lid-over-shaft.
+; Clamp en_x/z: matching-top rb (standing, else nearest), not lid union.
 enemy_clamp_room
 	ldx enemy_idx
 	lda en_x,x
@@ -1134,9 +1133,13 @@ enemy_clamp_room
 	lda en_z,x
 	sta col_z
 	jsr enemy_cutout_idx
-	bcc .ecr_ncut
-	jsr rb_inset1
-	bcs .ecr_rts
+	bcs .ecr_this
+	jsr enemy_nearest_cutout
+	cpx #$ff
+	beq .ecr_ncut
+	lda rb_sx,x
+	beq .ecr_ncut
+.ecr_this
 	jsr load_box_rb
 	jmp clamp_to_box_inset1
 .ecr_ncut
@@ -1149,6 +1152,61 @@ enemy_clamp_room
 	jsr load_box_rc
 	jmp clamp_to_box_inset1
 .ecr_rts
+	rts
+
+; X = nearest matching-top rb for en_room, or $ff if none.
+enemy_nearest_cutout
+	lda #$ff
+	sta proc_tmp1
+	sta proc_tmp2
+	ldx enemy_idx
+	lda en_room,x
+	asl
+	sta proc_tmp0
+	tax
+	jsr .enc_cand
+	ldx proc_tmp0
+	inx
+	jsr .enc_cand
+	ldx proc_tmp2
+	rts
+.enc_cand
+	jsr enemy_rb_top_ok
+	bcc .enc_cno
+	jsr .enc_dist
+	cmp proc_tmp1
+	bcs .enc_cno
+	sta proc_tmp1
+	stx proc_tmp2
+.enc_cno
+	rts
+.enc_dist
+	lda rb_sx,x
+	lsr
+	clc
+	adc rb_x,x
+	ldy enemy_idx
+	sec
+	sbc en_x,y
+	bcs .enc_ax
+	eor #$ff
+	clc
+	adc #1
+.enc_ax
+	sta proc_tmp3
+	lda rb_sz,x
+	lsr
+	clc
+	adc rb_z,x
+	sec
+	sbc en_z,y
+	bcs .enc_az
+	eor #$ff
+	clc
+	adc #1
+.enc_az
+	clc
+	adc proc_tmp3
 	rts
 
 ; X = matching-Y collider of en_room. C=1 found.
@@ -1295,30 +1353,82 @@ enemy_floor_ok
 	sec
 	rts
 
-; If current pos is on a matching cutout top, dest must stay in that rb inset 1.
+; If the room has a matching-top rb, dest must lie in one (inset 1).
 enemy_cutout_ok
 	lda col_x
 	sta proc_tmp4
 	lda col_z
 	sta proc_tmp5
-	ldx enemy_idx
-	lda en_x,x
-	sta col_x
-	lda en_z,x
-	sta col_z
-	jsr enemy_cutout_idx
+	jsr enemy_any_cutout_top
 	bcc .eco_free
+	ldx enemy_idx
+	lda en_room,x
+	asl
+	tax
+	jsr .eco_try
+	bcs .eco_yes
+	inx
+	jsr .eco_try
+.eco_yes
+	rts
+.eco_try
+	jsr enemy_rb_top_ok
+	bcc .eco_no
 	lda proc_tmp4
 	sta col_x
 	lda proc_tmp5
 	sta col_z
 	jmp rb_inset1
+.eco_no
+	rts
 .eco_free
 	lda proc_tmp4
 	sta col_x
 	lda proc_tmp5
 	sta col_z
 	sec
+	rts
+
+; C=1 if any rb_* for en_room has |top − en_y| ≤ FALL_LEDGE.
+enemy_any_cutout_top
+	ldx enemy_idx
+	lda en_room,x
+	asl
+	tax
+	jsr enemy_rb_top_ok
+	bcs .eact_yes
+	inx
+	jmp enemy_rb_top_ok
+.eact_yes
+	rts
+
+; X = rb_*. C=1 if occupied and |top − en_y| ≤ FALL_LEDGE.
+enemy_rb_top_ok
+	lda rb_sx,x
+	beq .erto_no
+	clc
+	lda rb_y,x
+	adc rb_sy,x
+	ldy enemy_idx
+	cmp en_y,y
+	beq .erto_yes
+	bcs .erto_hi
+	sta proc_tmp3
+	lda en_y,y
+	sec
+	sbc proc_tmp3
+	jmp .erto_d
+.erto_hi
+	sec
+	sbc en_y,y
+.erto_d
+	cmp #FALL_LEDGE + 1
+	bcs .erto_no
+.erto_yes
+	sec
+	rts
+.erto_no
+	clc
 	rts
 
 ; Current col_x/z vs en_room rb_*. C=1 and X = rb index if top matches en_y.
@@ -1334,34 +1444,11 @@ enemy_cutout_idx
 .eci_yes
 	rts
 .eci_one
-	lda rb_sx,x
-	beq .eci_no
-	jsr load_box_rb
-	jsr point_in_box_xz
+	jsr enemy_rb_top_ok
 	bcc .eci_no
-	clc
-	lda rb_y,x
-	adc rb_sy,x			; top
-	ldy enemy_idx
-	cmp en_y,y
-	beq .eci_ok
-	bcs .eci_hi
-	sta proc_tmp3
-	lda en_y,y
-	sec
-	sbc proc_tmp3
-	jmp .eci_d
-.eci_hi
-	sec
-	sbc en_y,y
-.eci_d
-	cmp #FALL_LEDGE + 1
-	bcs .eci_no
-.eci_ok
-	sec
-	rts
+	jsr load_box_rb
+	jmp point_in_box_xz
 .eci_no
-	clc
 	rts
 
 ; X = rb index. C=1 if col_x/z inside inset 1.
@@ -1398,12 +1485,8 @@ rb_inset1
 	clc
 	rts
 
-; C=1 clear LOS (no 3D hit on room cutout boxes). $01 bank-switched.
+; C=1 clear LOS (no 3D hit on room cutout boxes).
 enemy_shot_clear
-	lda $01
-	pha
-	lda #$34
-	sta $01
 	ldx enemy_idx
 	lda en_x,x
 	sta ln_ax
@@ -1423,15 +1506,9 @@ enemy_shot_clear
 	jsr line_cutouts_hit
 	bcc .esc_clear
 	clc
-	jmp .esc_out
+	rts
 .esc_clear
 	sec
-.esc_out
-	ror rot0				; C → bit7
-	pla
-	sta $01
-	lda rot0
-	asl					; restore C
 	rts
 
 ; ------------------------------------------------------------------
@@ -1530,10 +1607,6 @@ axe_try_kill
 ; damage = SHOT_DMG_MAX − (z>>2), min 1, for z in 0..SHOT_Z_MAX-1.
 ; Blood splat on closest hit; col_line wall splat on miss.
 shotgun_hitscan
-	lda $01
-	pha
-	lda #$34
-	sta $01
 	lda #$ff
 	sta shot_hit_i
 	sta shot_hit_z
@@ -1654,11 +1727,9 @@ shotgun_hitscan
 .sh_miss
 	jsr shotgun_miss_splat
 .sh_out
-	pla
-	sta $01
 	rts
 
-; Mid-body blood splat on shot_hit_i (expects $01=$34, view trig loaded).
+; Mid-body blood splat on shot_hit_i (view trig loaded).
 shotgun_hit_splat
 	ldx shot_hit_i
 	lda en_x,x
@@ -1690,7 +1761,7 @@ shotgun_hit_splat
 	rts
 
 ; Miss splat at nearest cutout hit, else outer-room wall.
-; Expects $01=$34 and view trig loaded.
+; View trig loaded.
 shotgun_miss_splat
 	lda cam_xh
 	sta ln_ax

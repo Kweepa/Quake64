@@ -4,6 +4,11 @@
 ; $D000/$D800 charset A top/bot  $E000/$E800 charset B top/bot
 ; $F000 UI charset  $F800 log/alog/sin/cos (copied at init).
 ; Judd sqlo/sqhi live in the PRG.
+;
+; $01: $30 = 64K RAM (game). $36 = I/O + KERNAL, BASIC out (init/IRQ).
+; $34 is not I/O — PLA gives RAM at $D000 when LORAM=HIRAM=0.
+BANK_RAM	= $30
+BANK_IO		= $36
 
 COL_BORDER	= 0
 COL_HURT	= 2			; red $d020 flash on damage
@@ -220,7 +225,10 @@ floor_slope	= $CBA8			; 1 if this frame's floor is a ramp
 trig_inside	= $CBA9			; trigger SoA index or $ff
 hurt_ms_l	= $CBAA			; hurt-trigger cooldown remaining
 hurt_ms_h	= $CBAB
-; $CBAC–$CBAF unused (door_open moved to $CE22, 16 slots)
+vic_border	= $CBAC			; staged $d020 (IRQ)
+palette_dirty	= $CBAD			; 1 = IRQ refill viewport colour RAM
+flash4_col	= $CBAE			; staged sprite 4 colour
+flash5_col	= $CBAF			; staged sprite 5 colour
 HURT_MS		= 2000			; hurt trigger period
 HURT_HP		= 10			; 10% of PLAYER_HP_MAX
 
@@ -427,7 +435,7 @@ gunshot_wake	= $CE06			; 1 = gun fired this frame (room wake)
 ai_dirtry	= $CE07			; 5 bytes dodge dir candidates
 ai_turn		= $CE0C			; turnaround dir or $ff
 ai_probe	= $CE0D			; dir under test (probe must not clobber)
-emuz_vx		= $CE0E			; VIC X lo staged (poke in apply_en; draw is $01=$34)
+emuz_vx		= $CE0E			; VIC X lo staged (IRQ apply_en)
 emuz_vy		= $CE0F			; VIC Y staged
 emuz_col		= $CE10			; sprite colour staged from col_fx
 emuz_pending	= $CE11			; enemy idx waiting to muzzle, $ff = none

@@ -5,6 +5,8 @@ import {
   ENEMY_FACINGS,
   JOINT_NAMES,
   clampEnemyRot,
+  cycleEnemyRot,
+  cycleSlopeOrient,
   clampObject,
   clampTriggerText,
   clampName,
@@ -29,7 +31,6 @@ import {
   createObject,
   createDefaultDocument,
   currentRoom,
-  cycleFace,
   normalizeDocument,
   uid,
   LEVEL_NAMES,
@@ -45,6 +46,8 @@ import {
   roomById,
   roomsOf,
   inferDoorOtherRoom,
+  snapDoorBetweenRooms,
+  snapSwitchToRoom,
   usesLinkTag,
   triggerUsesTag,
   emptyMdlRig,
@@ -757,7 +760,13 @@ function finishPaletteDrop(e) {
   }
   clampObject(obj);
   activeMap(doc).objects.push(obj);
-  if (kind === "doorway") assignDoorRooms(obj, owner);
+  if (kind === "doorway") {
+    assignDoorRooms(obj, owner);
+    clampObject(obj);
+  } else if (kind === "switch" && owner) {
+    snapSwitchToRoom(obj, owner);
+    clampObject(obj);
+  }
   if (kind === "room") lastRoomId = obj.id;
   selectedIds = [obj.id];
   rememberSelectedRoom();
@@ -802,6 +811,7 @@ function assignDoorRooms(door, owner) {
   const other = inferDoorOtherRoom(doc, door);
   door.otherRoomId = other && other.id !== door.roomId ? other.id : door.otherRoomId || null;
   if (door.otherRoomId === door.roomId) door.otherRoomId = null;
+  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
 }
 
 function deleteSelected() {
@@ -1381,6 +1391,20 @@ function field(label, input) {
   return row;
 }
 
+function rotateRow(labelText, onClick) {
+  const wrap = document.createElement("div");
+  wrap.className = "vec3-inputs";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = "Rotate";
+  btn.addEventListener("click", onClick);
+  const lbl = document.createElement("span");
+  lbl.className = "rot-label";
+  lbl.textContent = labelText;
+  wrap.append(btn, lbl);
+  return field("Rotate", wrap);
+}
+
 function vec3Field(label, specs) {
   const row = document.createElement("label");
   row.className = "field vec3";
@@ -1574,14 +1598,11 @@ function renderInspector() {
       root.appendChild(field("Patrol", chk));
     }
     if (isFigureObject(obj) || obj.kind === "teleporter_dest") {
-      const rotWrap = document.createElement("div");
-      rotWrap.className = "vec3-inputs";
-      const rotInp = numInput(obj.rot ?? 0, (v) => apply(() => (obj.rot = v)), 0, 7);
-      const rotLbl = document.createElement("span");
-      rotLbl.className = "rot-label";
-      rotLbl.textContent = ENEMY_FACINGS[clampEnemyRot(obj.rot ?? 0)];
-      rotWrap.append(rotInp, rotLbl);
-      root.appendChild(field("Rot", rotWrap));
+      root.appendChild(
+        rotateRow(ENEMY_FACINGS[clampEnemyRot(obj.rot ?? 0)], () =>
+          apply(() => (obj.rot = cycleEnemyRot(obj.rot ?? 0)))
+        )
+      );
     }
     if (obj.kind === "trigger") {
       const sel = document.createElement("select");
@@ -1677,6 +1698,7 @@ function renderInspector() {
         apply(() => {
           obj.roomId = sel.value || null;
           if (obj.kind === "doorway") assignDoorRooms(obj, roomById(doc, obj.roomId));
+          if (obj.kind === "switch") snapSwitchToRoom(obj, roomById(doc, obj.roomId));
         })
       );
       root.appendChild(field("Room", sel));
@@ -1694,7 +1716,12 @@ function renderInspector() {
         if (r.id === obj.otherRoomId) opt.selected = true;
         sel.appendChild(opt);
       }
-      sel.addEventListener("change", () => apply(() => (obj.otherRoomId = sel.value || null)));
+      sel.addEventListener("change", () =>
+        apply(() => {
+          obj.otherRoomId = sel.value || null;
+          snapDoorBetweenRooms(obj, roomById(doc, obj.roomId), roomById(doc, obj.otherRoomId));
+        })
+      );
       root.appendChild(field("Other room", sel));
       const lock = document.createElement("input");
       lock.type = "checkbox";
@@ -1716,39 +1743,9 @@ function renderInspector() {
       ? `Fixed size ${obj.sx}×${obj.sy}×${obj.sz}`
       : `Size ${obj.sx}×${obj.sy}×${obj.sz}`;
     root.appendChild(sizeP);
-    if (obj.kind === "doorway" || obj.kind === "switch" || obj.kind === "crate") {
-      const sel = document.createElement("select");
-      for (const f of ["+z", "-z", "+x", "-x"]) {
-        const opt = document.createElement("option");
-        opt.value = f;
-        opt.textContent = f;
-        if (obj.face === f) opt.selected = true;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener("change", () => apply(() => (obj.face = sel.value)));
-      root.appendChild(field("Face", sel));
-    }
     if (obj.kind === "slope") {
-      const axis = document.createElement("select");
-      for (const a of ["x", "z"]) {
-        const opt = document.createElement("option");
-        opt.value = a;
-        opt.textContent = a.toUpperCase();
-        if (obj.axis === a) opt.selected = true;
-        axis.appendChild(opt);
-      }
-      axis.addEventListener("change", () => apply(() => (obj.axis = axis.value)));
-      root.appendChild(field("Axis", axis));
-      const dir = document.createElement("select");
-      for (const d of [1, -1]) {
-        const opt = document.createElement("option");
-        opt.value = String(d);
-        opt.textContent = d === 1 ? "+ run" : "− run";
-        if (obj.dir === d) opt.selected = true;
-        dir.appendChild(opt);
-      }
-      dir.addEventListener("change", () => apply(() => (obj.dir = Number(dir.value))));
-      root.appendChild(field("Dir", dir));
+      const axis = (obj.axis === "x" ? "X" : "Z") + (obj.dir === 1 ? "+" : "−");
+      root.appendChild(rotateRow(axis, () => apply(() => cycleSlopeOrient(obj))));
     }
     const row = document.createElement("div");
     row.className = "btn-row";
@@ -2507,33 +2504,17 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key.toLowerCase() === "r" && editorMode === "layout") {
     const obj = selectedObject();
-    if (obj && isFigureObject(obj)) {
+    if (obj && (isFigureObject(obj) || obj.kind === "teleporter_dest")) {
       e.preventDefault();
       pushUndo();
-      obj.rot = clampEnemyRot((obj.rot ?? 0) + 1);
-      markDirty();
-      refreshAll();
-    }
-    if (obj && (obj.kind === "doorway" || obj.kind === "switch" || obj.kind === "crate")) {
-      e.preventDefault();
-      pushUndo();
-      obj.face = cycleFace(obj.face, 1);
-      clampObject(obj);
+      obj.rot = cycleEnemyRot(obj.rot ?? 0);
       markDirty();
       refreshAll();
     }
     if (obj && obj.kind === "slope") {
       e.preventDefault();
       pushUndo();
-      if (obj.axis === "z" && obj.dir === 1) obj.dir = -1;
-      else if (obj.axis === "z") {
-        obj.axis = "x";
-        obj.dir = 1;
-      } else if (obj.dir === 1) obj.dir = -1;
-      else {
-        obj.axis = "z";
-        obj.dir = 1;
-      }
+      cycleSlopeOrient(obj);
       clampObject(obj);
       markDirty();
       refreshAll();

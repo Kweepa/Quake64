@@ -1,4 +1,4 @@
-; 3D line-vs-AABB: hit solid boxes / room cutouts. $01=$34 (lerpdv).
+; 3D line-vs-AABB: hit solid boxes / room cutouts. RAM LUTs ($01=$30).
 !zone util
 
 ; Exclusive max of box_* → ln_mx/my/mz

@@ -18,9 +18,10 @@ import {
   preserveRoomSplits,
   applyRoomSplitDelta,
   inferDoorOtherRoom,
+  snapDoorBetweenRooms,
+  snapSwitchToRoom,
   roomFloorY,
   roomById,
-  doorNearFaceId,
 } from "./model.js";
 import {
   BOX_CORNERS,
@@ -430,9 +431,16 @@ export class LayoutView {
     const objs = activeMap(doc).objects;
     for (const orig of d.origs) {
       const obj = objs.find((o) => o.id === orig.id);
-      if (!obj || obj.kind !== "doorway") continue;
-      const other = inferDoorOtherRoom(doc, obj);
-      if (other) obj.otherRoomId = other.id;
+      if (!obj) continue;
+      if (obj.kind === "doorway") {
+        const other = inferDoorOtherRoom(doc, obj);
+        if (other) obj.otherRoomId = other.id;
+        snapDoorBetweenRooms(obj, roomById(doc, obj.roomId), roomById(doc, obj.otherRoomId));
+        clampObject(obj);
+      } else if (obj.kind === "switch") {
+        snapSwitchToRoom(obj, roomById(doc, obj.roomId));
+        clampObject(obj);
+      }
     }
   }
 
@@ -695,23 +703,15 @@ export class LayoutView {
 
   #glyphSegments(obj) {
     const segs = [];
-    if (obj.kind === "crate") {
-      const f = faceCorners(obj.face || "+z");
-      segs.push({ a: cornerWorld(obj, f[0]), b: cornerWorld(obj, f[2]) });
-      segs.push({ a: cornerWorld(obj, f[1]), b: cornerWorld(obj, f[3]) });
-    }
     if (obj.kind === "doorway") {
-      const doc = this.opts.getDoc();
-      const place = this.opts.getPlaceRoom?.();
-      let room = roomById(doc, obj.roomId);
-      if (place && (place.id === obj.roomId || place.id === obj.otherRoomId)) room = place;
-      const f = faceCorners(doorNearFaceId(obj, room));
-      const c0 = cornerWorld(obj, f[0]);
-      const c1 = cornerWorld(obj, f[1]);
-      const c2 = cornerWorld(obj, f[2]);
-      const c3 = cornerWorld(obj, f[3]);
-      segs.push({ a: c0, b: c1 }, { a: c1, b: c2 }, { a: c2, b: c3 }, { a: c3, b: c0 });
-      segs.push({ a: c0, b: c2 }, { a: c1, b: c3 });
+      const zThin = (obj.sz | 0) <= (obj.sx | 0);
+      if (zThin) {
+        segs.push({ a: cornerWorld(obj, 0), b: cornerWorld(obj, 2) });
+        segs.push({ a: cornerWorld(obj, 4), b: cornerWorld(obj, 6) });
+      } else {
+        segs.push({ a: cornerWorld(obj, 0), b: cornerWorld(obj, 7) });
+        segs.push({ a: cornerWorld(obj, 1), b: cornerWorld(obj, 6) });
+      }
     }
     if (obj.kind === "switch") {
       const f = faceCorners(obj.face);

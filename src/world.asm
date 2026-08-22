@@ -1032,10 +1032,6 @@ apply_move_world
 	beq .am_go
 	rts
 .am_go
-	lda $01
-	pha
-	lda #$34
-	sta $01
 	ldy yaw
 	lda SINTAB,y
 	sta rot0
@@ -1152,8 +1148,6 @@ apply_move_world
 	lda save_zh
 	sta cam_zh
 .am_done
-	pla
-	sta $01
 	lda wish_dx
 	ora wish_dxh
 	ora wish_dz

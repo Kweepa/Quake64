@@ -8,6 +8,8 @@ import {
   aabbOverlapsRoom,
   roomFloorY,
   snapDoorToRoom,
+  snapDoorBetweenRooms,
+  snapSwitchToRoom,
   doorNearFaceId,
   nudgeDoorOutside,
   rotateRoom,
@@ -27,6 +29,8 @@ export {
   aabbOverlapsRoom,
   roomFloorY,
   snapDoorToRoom,
+  snapDoorBetweenRooms,
+  snapSwitchToRoom,
   doorNearFaceId,
   nudgeDoorOutside,
   rotateRoom,
@@ -299,6 +303,25 @@ export function clampEnemyRot(n) {
   const r = n | 0;
   if (!Number.isFinite(r)) return 0;
   return ((r % 8) + 8) % 8;
+}
+
+export function cycleEnemyRot(n, delta = 1) {
+  return clampEnemyRot((n | 0) + delta);
+}
+
+/** (z,+1) → (z,−1) → (x,+1) → (x,−1) → … */
+export function cycleSlopeOrient(obj) {
+  if (!obj || obj.kind !== "slope") return obj;
+  if (obj.axis === "z" && obj.dir === 1) obj.dir = -1;
+  else if (obj.axis === "z") {
+    obj.axis = "x";
+    obj.dir = 1;
+  } else if (obj.dir === 1) obj.dir = -1;
+  else {
+    obj.axis = "z";
+    obj.dir = 1;
+  }
+  return obj;
 }
 
 export const PALETTE_ORDER = [

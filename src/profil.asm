@@ -78,11 +78,8 @@ calc_frame_dt
 .ok
 	rts
 
+; IRQ / SEI init only — CIA2 I/O. Main uses casc_now via prof_frame_sample.
 prof_read_casc
-	lda $01
-	pha
-	lda #$35
-	sta $01
 .retry
 	lda CIA2_TB_HI
 	sta casc_now + 3
@@ -98,8 +95,6 @@ prof_read_casc
 	lda CIA2_TB_LO
 	cmp casc_now + 2
 	bne .retry
-	pla
-	sta $01
 	rts
 
 prof_store_t0
@@ -113,9 +108,9 @@ prof_store_t0
 	sta frame_t0 + 3
 	rts
 
-; Period since last call → frame_cy (countdown timers: t0 − now)
+; Period since last main-loop call → frame_cy (countdown: t0 − casc_now).
+; casc_now is latched from CIA in the IRQ; do not read $dd04 here.
 prof_frame_sample
-	jsr prof_read_casc
 	sec
 	lda frame_t0
 	sbc casc_now

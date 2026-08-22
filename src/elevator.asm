@@ -258,17 +258,8 @@ elev_try_auto
 	rts
 
 ; ------------------------------------------------------------------
-; elev_noise_on / elev_noise_off — SID voice 3 low rumble while moving
-; Caller has $01=$35 (main loop after draw). Refcounted via elev_noise_n.
-; Skips SID writes while world SFX (ch2) owns V3; restore after SFX ends.
-; ------------------------------------------------------------------
+; elev_noise_on / elev_noise_off — refcount only. IRQ programs SID V3.
 elev_noise_on
-	lda elev_noise_n
-	bne .eno_inc			; already rumbling
-	lda sfx_index+2
-	bpl .eno_inc			; world envelope owns V3
-	jsr elev_noise_program
-.eno_inc
 	inc elev_noise_n
 	rts
 
@@ -276,10 +267,5 @@ elev_noise_off
 	lda elev_noise_n
 	beq .enoff_rts
 	dec elev_noise_n
-	bne .enoff_rts			; others still moving
-	lda sfx_index+2
-	bpl .enoff_rts			; world SFX still using V3
-	lda #0
-	sta $d412			; V3 gate off
 .enoff_rts
 	rts

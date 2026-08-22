@@ -21,7 +21,7 @@ start
 	cld
 	ldx #$ff
 	txs
-	lda #$35
+	lda #BANK_IO				; I/O + KERNAL, BASIC out (SEI)
 	sta $01
 
 	lda #0
@@ -43,18 +43,20 @@ start
 
 	jsr fill_colour
 	jsr init_vic
+	jsr init_irq
+	jsr play_sound_init
+	jsr init_weapon
+	jsr init_hud
+	jsr prof_init
+	lda #BANK_RAM				; all RAM; I/O only in IRQ
+	sta $01
 	jsr fill_screens
 	jsr stamp_viewport
 	jsr stamp_margins
 	jsr clear_charsets
 	jsr fill_margin_glyph
 	jsr copy_luts
-	jsr init_hud
-	jsr init_irq
-	jsr play_sound_init
-	jsr init_weapon
 	jsr hud_ammo
-	jsr prof_init
 	jsr mulset_init
 	jsr world_init
 	cli
@@ -66,8 +68,6 @@ main
 	lda #$ff
 	sta mesh_vmask
 }
-	lda #$34
-	sta $01
 	jsr clear_draw
 !if PROFILE = 1 {
 	ldy #PROF_CLEAR
@@ -75,14 +75,6 @@ main
 }
 	jsr draw_world
 	jsr draw_enemies
-	lda #$35
-	sta $01
-	; muzzle/splat staged under $01=$34 — poke VIC now so it shows this frame
-	lda emuz_on
-	ora splat_on
-	beq .main_no_fx
-	jsr apply_en
-.main_no_fx
 
 	lda draw_buf
 	sta show_buf
@@ -175,10 +167,6 @@ camsbcz
 	jmp camaddz
 
 apply_move
-	lda $01
-	pha
-	lda #$34
-	sta $01
 	ldy yaw
 	lda SINTAB,y
 	sta rot0
@@ -240,15 +228,9 @@ apply_move
 	lda rot0
 	jsr camaddz
 .noa
-	pla
-	sta $01
 	rts
 
 copy_luts
-	lda $01
-	pha
-	lda #$34
-	sta $01
 	lda #<lut_src
 	sta src_ptr
 	lda #>lut_src
@@ -268,8 +250,6 @@ copy_luts
 	inc dst_ptr+1
 	dex
 	bne .copy
-	pla
-	sta $01
 	rts
 
 !source "vic.asm"

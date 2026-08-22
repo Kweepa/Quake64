@@ -1,7 +1,7 @@
 ; Signed (A*Y)>>7 and perspective via log/antilog LUTs ($F800)
 !zone math
 
-; A, Y signed. A = (A*Y)/128, clamp ±127. $01=$34 (RAM LUTs).
+; A, Y signed. A = (A*Y)/128, clamp ±127. RAM LUTs ($01=$30).
 ; idx = log|A|+log|Y|-224 as 8-bit with carry, no 16-bit subtract.
 smul7
 	sta mul_a
@@ -507,7 +507,7 @@ logadd7
 	lda #0
 	rts
 
-; A = (A * Y) / div_c, all signed. Clamp ±127. $01=$34.
+; A = (A * Y) / div_c, all signed. Clamp ±127. RAM LUTs ($01=$30).
 lerpdv
 	sta mul_a
 	sty mul_b

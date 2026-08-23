@@ -140,7 +140,8 @@ let selectedVerts = [];
 let dirty = false;
 let saving = false;
 let autosaveTimer = null;
-let editorSaveTimer = null;
+let editorSaveRaf = 0;
+let editorSettingsReady = false;
 let applyingEditor = false;
 let undoStack = [];
 let redoStack = [];
@@ -414,7 +415,7 @@ document.addEventListener("focusout", () => {
 });
 
 function markUi() {
-  if (applyingEditor) return;
+  if (applyingEditor || !editorSettingsReady) return;
   schedulePersistEditor();
 }
 
@@ -459,15 +460,21 @@ function collectEditorState() {
 }
 
 function persistEditorSettings() {
+  if (!editorSettingsReady) return;
+  if (editorSaveRaf) {
+    cancelAnimationFrame(editorSaveRaf);
+    editorSaveRaf = 0;
+  }
   saveEditorSettings(docFileName(), collectEditorState());
 }
 
 function schedulePersistEditor() {
-  if (editorSaveTimer) clearTimeout(editorSaveTimer);
-  editorSaveTimer = setTimeout(() => {
-    editorSaveTimer = null;
+  if (!editorSettingsReady || applyingEditor) return;
+  if (editorSaveRaf) return;
+  editorSaveRaf = requestAnimationFrame(() => {
+    editorSaveRaf = 0;
     persistEditorSettings();
-  }, 250);
+  });
 }
 
 function applyEditorState(ed) {
@@ -1179,7 +1186,7 @@ function renderItemList() {
       itemMeshKey = key;
       if (!doc.items[key]) doc.items[key] = { verts: [], lines: [] };
       itemView.clearSelection();
-      markUi();
+      persistEditorSettings();
       refreshAll();
     });
     li.appendChild(btn);
@@ -2651,6 +2658,7 @@ function applyLoadedDoc(loaded) {
   const stored = loadEditorSettings(docFileName());
   applyEditorState(stored || loaded.editor || doc.editor);
   if (doc.editor) delete doc.editor;
+  editorSettingsReady = true;
   persistEditorSettings();
   clearUndoHistory();
   markClean();

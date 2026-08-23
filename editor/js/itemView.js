@@ -572,6 +572,7 @@ export class ItemView {
       this.drag.last = p;
       this.orbit.yaw += dx * 0.01;
       this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch - dy * 0.01));
+      this.opts.onViewChanged?.();
       this.draw();
       return;
     }
@@ -586,6 +587,7 @@ export class ItemView {
       t.x += (-right.x * dx + up.x * dy) * scale;
       t.y += (-right.y * dx + up.y * dy) * scale;
       t.z += (-right.z * dx + up.z * dy) * scale;
+      this.opts.onViewChanged?.();
       this.draw();
       return;
     }
@@ -595,6 +597,7 @@ export class ItemView {
       this.drag.last = p;
       const delta = dx + dy;
       if (delta) this.orbit.dist = clampItemDist(this.orbit.dist * Math.exp(-delta * ITEM_ZOOM_K));
+      this.opts.onViewChanged?.();
       this.draw();
       return;
     }

@@ -2,7 +2,6 @@
 !zone cube
 
 !source "enemy_data.asm"
-!source "enemylod.asm"
 
 ; A = signed editor byte → nlo:nhi = A/8 as 8.8 (ASL×5)
 scale_s8_88
@@ -2106,19 +2105,6 @@ draw_enemies
 	ldx obj_i
 	+lda_mx en_type
 	sta ent_type
-	lda en_state,x
-	cmp #EN_DYING
-	beq .de_mesh			; dying/dead: always full stick mesh
-	cmp #EN_DEAD
-	beq .de_mesh
-	lda CAM_ZH
-	bmi .de_mesh
-	cmp #ENEMY_LOD2_Z
-	bcc .de_mesh
-	jsr ent_lod2_draw
-	jmp .de_one_rts
-.de_mesh
-	ldx obj_i
 	+lda_mx en_rot
 	sta ent_rot
 	lda #NVERTS
@@ -2228,35 +2214,6 @@ try_enemy_muzzle
 .temz_rts
 	rts
 
-; LOD2: A = feet sy, x0 = feet sx → flash at (sx−2, sy−5), depth = origin Z.
-try_enemy_muzzle_lod2
-	sta rot1				; feet sy
-	jsr enemy_muzzle_want
-	bcc .teml_rts
-	lda CAM_ZH
-	bmi .teml_rts
-	sta CAM_ZH+12			; LOD bands read tip slot
-	lda rot1
-	sec
-	sbc #5
-	bcs +
-	lda #0
-+
-	tay
-	lda x0
-	sec
-	sbc #2
-	bcs +
-	lda #0
-+
-	sta rot2
-	lda #$ff
-	sta emuz_pending
-	lda rot2
-	jmp start_enemy_muzzle
-.teml_rts
-	rts
-
 ; C=1 if this enemy should show a muzzle this draw.
 enemy_muzzle_want
 	ldx obj_i
@@ -2278,130 +2235,6 @@ enemy_muzzle_want
 	rts
 .emw_no
 	clc
-	rts
-
-; Far LOD2: project CAM[0] origin, OR 8×8 enemy_lod[ent_type] into charset.
-ent_lod2_draw
-	lda CAM_Z
-	sta z_eye
-	lda CAM_ZH
-	sta z_eye_h
-	lda CAM_X
-	sta ylo
-	lda CAM_XH
-	sta yhi
-	jsr persp88
-	sta ox0l
-	ldy #0
-	ora #0
-	bpl +
-	ldy #$ff
-+
-	sty ox0h
-	lda ox0l
-	ldy ox0h
-	jsr .to_sx
-	sta x0
-	lda CAM_Y
-	sta ylo
-	lda CAM_YH
-	sta yhi
-	jsr persp88
-	sta oy0l
-	ldy #0
-	ora #0
-	bpl +
-	ldy #$ff
-+
-	sty oy0h
-	lda oy0l
-	ldy oy0h
-	jsr .to_sy
-	; A = feet sy, x0 = feet sx
-	pha
-	jsr try_enemy_muzzle_lod2
-	pla
-	; place glyph above feet: top = sy - 8 (no Y snap — &$f8 floated them up)
-	sec
-	sbc #8
-	bcs +
-	lda #0
-+
-	sta rot2				; pixel top
-	lda x0
-	cmp #192
-	bcs .eld_rts
-	; center 8px glyph on projected origin
-	sec
-	sbc #4
-	bcs +
-	lda #0
-+
-	sta ox0l				; pixel left (no X snap)
-	and #7
-	sta bitpos
-	lda rot2
-	cmp #121				; need room for 8 rows
-	bcs .eld_rts
-	; src = enemy_lod + ent_type*8
-	lda ent_type
-	asl
-	asl
-	asl
-	clc
-	adc #<enemy_lod
-	sta src_ptr
-	lda #0
-	adc #>enemy_lod
-	sta src_ptr+1
-	ldx #0
-.eld_row
-	stx vindex
-	txa
-	clc
-	adc rot2
-	sta y0
-	; shift glyph row into left (rot1) / right (ox0h) for bitpos
-	ldy vindex
-	lda (src_ptr),y
-	sta rot1
-	lda #0
-	sta ox0h
-	ldx bitpos
-	beq .eld_blit
-.eld_sh
-	lsr rot1
-	ror ox0h
-	dex
-	bne .eld_sh
-.eld_blit
-	lda ox0l
-	sta x0
-	jsr line_setup			; left column; Y = dest row
-	tya
-	sta rot0				; dest Y (line_setup clobbers X)
-	lda (colptr),y
-	ora rot1
-	sta (colptr),y
-	lda ox0h
-	beq .eld_next
-	lda ox0l
-	clc
-	adc #8
-	cmp #192
-	bcs .eld_next
-	sta x0
-	jsr line_setup
-	ldy rot0
-	lda (colptr),y
-	ora ox0h
-	sta (colptr),y
-.eld_next
-	ldx vindex
-	inx
-	cpx #8
-	bcc .eld_row
-.eld_rts
 	rts
 
 ; X = enemy index → EN_DYING, frame 0, death SFX

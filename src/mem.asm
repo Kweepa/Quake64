@@ -236,7 +236,6 @@ HURT_FLASH_MS	= 300			; red border duration
 ENEMY_CULL_R	= 2			; view-space |x| vs z+R (8.8 high)
 ENEMY_CULL_H	= 6			; view-space |y| vs z+H (figure height)
 ENEMY_LOD_Z	= 4			; mid: cheap stick projection (shared)
-ENEMY_LOD2_Z	= 40			; far: 8×8 LOD char (shared, grunt ~8px)
 ENEMY_MAX		= 16		; MAP_NENEMIES ≤ this
 EN_IDLE		= 0
 EN_PATROL		= 1

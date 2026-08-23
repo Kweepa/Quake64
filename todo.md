@@ -15,5 +15,5 @@
 - [ ] Fix shotgun damage vs range. It's too easy to kill someone at a distance.
 - [x] Remember to save item selection and camera position for the items tab.
 - [ ] An arrow showing which way is forward in the items viewport.
-- [ ] Get rid of the static bitmap at a distance optimization. It doesn't look good and it's not optimizing for the worst case anyway.
+- [x] Get rid of the static bitmap at a distance optimization. It doesn't look good and it's not optimizing for the worst case anyway.
 - [ ] Fill the IRQ trampoline hole at $0903–$093E (~60 bytes of NOPs after `jmp start` at $0900). Park some small unaligned table or constants there so that padding isn’t wasted; trampoline at $093F must stay.

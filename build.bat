@@ -38,6 +38,8 @@ python tools\gen_menu_text.py
 if errorlevel 1 exit /b 1
 python tools\gen_menu_cursor_sprites.py
 if errorlevel 1 exit /b 1
+python tools\gen_menu_title.py
+if errorlevel 1 exit /b 1
 
 pushd src
 "%ACME%" tables.asm

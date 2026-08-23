@@ -19,13 +19,17 @@ BAR_ROWS	= 3
 BADGE_TOP	= BAR_TOP - 1		; content still starts below old logo band
 MENU_LOGO_ROWS	= 5			; layout gap (logo not drawn)
 BRAND_KEEP_ROWS	= 6			; rows 0..5 fixed (bar); skip on repaint
+MENU_LOGO_ROWS	= 5			; layout gap below title bar
+BRAND_KEEP_ROWS	= 6			; rows 0..5 fixed (bar + title); skip on repaint
 HINT_ROW	= 23
 HINT_COL	= 0			; help text column (ink is TEXT_COL)
 HINT_GAP	= 8			; px between key sprite and label
 HINT_SPR_Y	= 228			; 21px sprite centered on row 23
 MUX_LOGO_RASTER	= 30
 MUX_HINT_RASTER	= 90
-HINT_SPR_RAM	= $4800			; hint + cursor sprites in VIC bank 1
+LOGO_SPR_RAM	= $4800			; 5×64 title highlights in VIC bank 1
+LOGO_SPR_PTR0	= (LOGO_SPR_RAM - SCREEN) / 64
+HINT_SPR_RAM	= LOGO_SPR_RAM + TITLE_SPR_COUNT * 64
 HINT_SPR_PTR0	= (HINT_SPR_RAM - SCREEN) / 64
 CURSOR_SPR_RAM	= HINT_SPR_RAM + HINT_SPR_COUNT * 64
 CURSOR_SPR_PTR0	= (CURSOR_SPR_RAM - SCREEN) / 64
@@ -35,11 +39,12 @@ HILITE_COL	= 1			; white selected
 TITLE_COL	= 7			; yellow titles
 MENU_BORDER	= 8			; orange
 COL_MAIN	= 8			; orange surround
-COL_BAR		= 9			; brown bar
+COL_BAR		= 0			; black title strip
 COL_BOX		= 9			; brown option box
+COL_TITLE_INK	= 11			; dark grey QUAKE letters in the bar
 STORY_BG	= 8			; orange around story panel
-STORY_BOX	= 9			; brown story panel
-STORY_TEXT	= 7			; yellow story text
+STORY_BOX	= 15			; light grey story panel
+STORY_TEXT	= 0			; black story text
 STORY_GREY_TOP	= BRAND_KEEP_ROWS + 1	; panel area starts one row below brand
 MARK_CARET	= $1e			; !scr "^" — toggle monospaced span, not drawn
 FONT_GAP	= 1			; pixels after each glyph
@@ -221,12 +226,7 @@ run_menu
 	bne .rm_menu
 	lda #0
 	sta game_complete
-	lda #<ending1_text
-	ldy #>ending1_text
-	jsr show_story_screen
-	lda #<ending2_text
-	ldy #>ending2_text
-	jsr show_story_screen
+	jsr show_ending_pages
 .rm_menu
 	jsr draw_menu
 .rm_loop
@@ -569,12 +569,7 @@ menu_select
 .ms_hlp
 	jsr sfx_shoot
 !if MENU_HELP_ENDINGS {
-	lda #<ending1_text
-	ldy #>ending1_text
-	jsr show_story_screen
-	lda #<ending2_text
-	ldy #>ending2_text
-	jsr show_story_screen
+	jsr show_ending_pages
 } else {
 	ldx #0
 .ms_rt
@@ -969,7 +964,22 @@ show_text_screen
 	sta pr_setcol
 	jmp .sts_body
 
-; Read This! / endings: orange surround, brown panel, yellow text. Restores COL_MAIN.
+; Read This! / endings: orange surround, light-grey panel, black text. Restores COL_MAIN.
+show_ending_pages
+	ldx #0
+.sep
+	txa
+	pha
+	lda ending_lo,x
+	ldy ending_hi,x
+	jsr show_story_screen
+	pla
+	tax
+	inx
+	cpx #ENDING_PAGES
+	bne .sep
+	rts
+
 show_story_screen
 	sta txt_ptr_l
 	sty txt_ptr_h
@@ -981,7 +991,7 @@ show_story_screen
 	lda #STORY_TEXT
 	sta ui_text_col
 	lda #0
-	sta pr_setcol				; panel already yellow-on-brown
+	sta pr_setcol				; panel already black-on-ltgrey
 	jsr .sts_body
 	lda #1
 	sta pr_setcol
@@ -1264,11 +1274,81 @@ fill_top_bar
 	bcc .ftb_r
 	rts
 
-; 3-row bar only (no Wolf logo)
+; Dark-grey QUAKE into the black bar (white highlights are sprites).
+blit_menu_title
+	lda #<menu_title_data
+	sta .bld + 1
+	lda #>menu_title_data
+	sta .bld + 2
+	ldx #0
+.blr
+	stx tmp4
+	txa
+	clc
+	adc #BAR_TOP
+	tax
+	lda #MENU_TITLE_LEFT
+	jsr bmp_cell_addr
+	ldx #0
+.blc
+	stx tmp5
+	txa
+	asl
+	asl
+	asl
+	tay
+	ldx #0
+.blb
+.bld	lda $ffff,x
+	sta (ptr_l),y
+	iny
+	inx
+	cpx #8
+	bne .blb
+	lda .bld + 1
+	clc
+	adc #8
+	sta .bld + 1
+	bcc .bln
+	inc .bld + 2
+.bln
+	lda #COL_TITLE_INK
+	asl
+	asl
+	asl
+	asl
+	ora #COL_BAR
+	ldy tmp5
+	sta (aux_l),y
+	ldx tmp5
+	inx
+	cpx #MENU_TITLE_COLS
+	bcc .blc
+	ldx tmp4
+	inx
+	cpx #MENU_TITLE_ROWS
+	bcc .blr
+	rts
+
+; Black bar + dark-grey QUAKE bitmap + 5 white highlight sprites
 draw_brand
-	jmp fill_top_bar
+	jsr fill_top_bar
+	jmp blit_menu_title
 
 copy_menu_sprites
+	ldx #0
+.cms0
+	lda menu_title_spr,x
+	sta LOGO_SPR_RAM,x
+	inx
+	bne .cms0
+	ldx #0
+.cms1
+	lda menu_title_spr + $100,x
+	sta LOGO_SPR_RAM + $100,x
+	inx
+	cpx #$40
+	bne .cms1
 	ldx #0
 .cms2
 	lda menu_hint_spr,x
@@ -1300,9 +1380,47 @@ copy_menu_sprites
 	bne .cms4
 	rts
 
-; Raster IRQ A — sprites off until cursor/hint mux (no logo fill).
+; Raster IRQ A — white QUAKE highlights (sprites 0–4) until cursor/hint mux.
 mux_logo_spr
-	lda #0
+	ldx #0
+	lda #LOGO_SPR_PTR0
+.mlp
+	sta SCREEN + $3f8,x
+	clc
+	adc #1
+	inx
+	cpx #TITLE_SPR_COUNT
+	bne .mlp
+	lda #HILITE_COL
+	ldx #0
+.mlcol
+	sta $d027,x
+	inx
+	cpx #TITLE_SPR_COUNT
+	bne .mlcol
+	ldx #0
+	ldy #0
+.mlx
+	lda title_spr_x,x
+	sta $d000,y
+	iny
+	iny
+	inx
+	cpx #TITLE_SPR_COUNT
+	bne .mlx
+	lda title_spr_xmsb
+	sta $d010
+	lda #50 + BAR_TOP * 8 + MENU_TITLE_PAD_Y
+	ldx #0
+	ldy #1
+.mly
+	sta $d000,y
+	iny
+	iny
+	inx
+	cpx #TITLE_SPR_COUNT
+	bne .mly
+	lda #%00011111
 	sta $d015
 	rts
 
@@ -2443,6 +2561,7 @@ menu_str_hi
 	!byte >str_fx_vol, >str_mouse, >str_back, 0
 	!byte 0, 0, 0, 0
 
+!source "menu_title.asm"
 !source "menu_hint_spr.asm"
 !source "menu_cursor_spr.asm"
 !source "uifont_data.asm"

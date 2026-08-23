@@ -1,10 +1,6 @@
 ; Doors — room-relative orientation, collision, portals, proximity
 !zone door
 
-!if MAP_NDOORS > DOOR_MAX {
-	!error "MAP_NDOORS exceeds DOOR_MAX"
-}
-
 ; ------------------------------------------------------------------
 ; set_room_idx — A = room; orients connected doors toward this room
 ; ------------------------------------------------------------------
@@ -13,36 +9,37 @@ set_room_idx
 orient_doors_for_room
 	ldx #0
 .odf
-	cpx #MAP_NDOORS
-	bcs .odf_rts
+	cpx	map_ndoors
+	+bcs_far .odf_rts
 	jsr orient_one_door
 	inx
-	bne .odf
+	beq .odf_rts
+	jmp .odf
 .odf_rts
 	rts
 
 ; X = door index; copy canonical AABB, face = nearer plane to room_idx
 orient_one_door
-	lda door_x,x
+	+lda_mx door_x
 	sta door_vx,x
-	lda door_z,x
+	+lda_mx door_z
 	sta door_vz,x
-	lda door_sx,x
+	+lda_mx door_sx
 	sta door_vsx,x
-	lda door_sz,x
+	+lda_mx door_sz
 	sta door_vsz,x
-	lda door_face,x
+	+lda_mx door_face
 	sta door_vface,x
-	lda door_ra,x
+	+lda_mx door_ra
 	cmp room_idx
 	beq .oo_go
-	lda door_rb,x
+	+lda_mx door_rb
 	cmp room_idx
 	beq .oo_go
 	rts
 .oo_go
-	lda door_sz,x
-	cmp door_sx,x
+	+lda_mx door_sz
+	+cmp_mx door_sx
 	bcc .oo_z			; sz < sx → Z slab
 	beq .oo_z
 	jmp .oo_x
@@ -51,19 +48,19 @@ orient_one_door
 	jsr room_mul3
 	tay
 	jsr .oo_pickz
-	lda rc_sz,y
+	+lda_my rc_sz
 	lsr
 	clc
-	adc rc_z,y
+	+adc_my rc_z
 	sta pv0				; collider Z centre
 	lda pv0
 	sec
-	sbc door_z,x
+	+sbc_mx door_z
 	jsr .oo_abs
 	sta pv1				; dist to z0
 	clc
-	lda door_z,x
-	adc door_sz,x
+	+lda_mx door_z
+	+adc_mx door_sz
 	sta pv2				; z1
 	lda pv0
 	sec
@@ -83,19 +80,19 @@ orient_one_door
 	jsr room_mul3
 	tay
 	jsr .oo_pickx
-	lda rc_sx,y
+	+lda_my rc_sx
 	lsr
 	clc
-	adc rc_x,y
+	+adc_my rc_x
 	sta pv0
 	lda pv0
 	sec
-	sbc door_x,x
+	+sbc_mx door_x
 	jsr .oo_abs
 	sta pv1
 	clc
-	lda door_x,x
-	adc door_sx,x
+	+lda_mx door_x
+	+adc_mx door_sx
 	sta pv2
 	lda pv0
 	sec
@@ -131,10 +128,10 @@ orient_one_door
 	bcs .oo_pr
 .oo_first
 	ldy proc_tmp5
-	lda rc_sx,y
+	+lda_my rc_sx
 	bne .oo_pr
 	iny
-	lda rc_sx,y
+	+lda_my rc_sx
 	bne .oo_pr
 	iny
 .oo_pr
@@ -149,7 +146,7 @@ orient_one_door
 	bcs .oo_th
 	iny
 .oo_z1
-	lda rc_sx,y
+	+lda_my rc_sx
 	beq .oo_tn
 	jsr .oo_ovx
 	rts
@@ -162,7 +159,7 @@ orient_one_door
 	bcs .oo_th
 	iny
 .oo_x1
-	lda rc_sx,y
+	+lda_my rc_sx
 	beq .oo_tn
 	jsr .oo_ovz
 	rts
@@ -174,35 +171,38 @@ orient_one_door
 ; C=1 door X overlaps collider Y
 .oo_ovx
 	clc
-	lda rc_x,y
-	adc rc_sx,y
-	cmp door_x,x
-	beq .oo_ov_no
-	bcc .oo_ov_no
+	+lda_my rc_x
+	+adc_my rc_sx
+	+cmp_mx door_x
+	beq .oo_ovx_no
+	bcc .oo_ovx_no
 	clc
-	lda door_x,x
-	adc door_sx,x
-	cmp rc_x,y
-	beq .oo_ov_no
-	bcc .oo_ov_no
+	+lda_mx door_x
+	+adc_mx door_sx
+	+cmp_my rc_x
+	beq .oo_ovx_no
+	bcc .oo_ovx_no
 	sec
+	rts
+.oo_ovx_no
+	clc
 	rts
 .oo_ovz
 	clc
-	lda rc_z,y
-	adc rc_sz,y
-	cmp door_z,x
-	beq .oo_ov_no
-	bcc .oo_ov_no
+	+lda_my rc_z
+	+adc_my rc_sz
+	+cmp_mx door_z
+	beq .oo_ovz_no
+	bcc .oo_ovz_no
 	clc
-	lda door_z,x
-	adc door_sz,x
-	cmp rc_z,y
-	beq .oo_ov_no
-	bcc .oo_ov_no
+	+lda_mx door_z
+	+adc_mx door_sz
+	+cmp_my rc_z
+	beq .oo_ovz_no
+	bcc .oo_ovz_no
 	sec
 	rts
-.oo_ov_no
+.oo_ovz_no
 	clc
 	rts
 
@@ -238,10 +238,10 @@ player_in_door_y
 ; door_other_room — X=door; A=linked room that isn't room_idx ($ff none)
 ; ------------------------------------------------------------------
 door_other_room
-	lda door_ra,x
+	+lda_mx door_ra
 	cmp room_idx
 	bne .dor_a
-	lda door_rb,x
+	+lda_mx door_rb
 	rts
 .dor_a
 	rts
@@ -291,14 +291,14 @@ door_front
 door_blocks
 	ldx #0
 .db
-	cpx #MAP_NDOORS
-	bcs .db_no
+	cpx	map_ndoors
+	+bcs_far .db_no
 	lda door_open,x
 	bne .db_n			; any open — not solid
-	lda door_ra,x
+	+lda_mx door_ra
 	cmp room_idx
 	beq .db_chk
-	lda door_rb,x
+	+lda_mx door_rb
 	cmp room_idx
 	bne .db_n
 .db_chk
@@ -383,14 +383,14 @@ door_hole_hit
 door_portal_ok
 	ldx #0
 .dpo
-	cpx #MAP_NDOORS
-	bcs .dpo_no
+	cpx	map_ndoors
+	+bcs_far .dpo_no
 	lda door_open,x
 	beq .dpo_n
-	lda door_ra,x
+	+lda_mx door_ra
 	cmp room_idx
 	beq .dpo_chk
-	lda door_rb,x
+	+lda_mx door_rb
 	cmp room_idx
 	bne .dpo_n
 .dpo_chk
@@ -412,19 +412,20 @@ door_portal_ok
 try_room_switch
 	ldx #0
 .trs
-	cpx #MAP_NDOORS
-	bcs .trs_rts
+	cpx	map_ndoors
+	+bcs_far .trs_rts
 	lda door_open,x
 	beq .trs_n
-	ldy door_ra,x
+	+ldy_mx door_ra
 	jsr .trs_inside
 	bcs .trs_rts
-	ldy door_rb,x
+	+ldy_mx door_rb
 	jsr .trs_inside
 	bcs .trs_rts
 .trs_n
 	inx
-	bne .trs
+	beq .trs_rts
+	jmp .trs
 .trs_rts
 	rts
 .trs_inside
@@ -450,12 +451,12 @@ try_room_switch
 try_door_proximity
 	ldx #0
 .tdp
-	cpx #MAP_NDOORS
-	bcs .tdp_rts
-	lda door_ra,x
+	cpx	map_ndoors
+	+bcs_far .tdp_rts
+	+lda_mx door_ra
 	cmp room_idx
 	beq .tdp_near
-	lda door_rb,x
+	+lda_mx door_rb
 	cmp room_idx
 	bne .tdp_n
 .tdp_near
@@ -465,7 +466,8 @@ try_door_proximity
 	ldx obj_i
 .tdp_n
 	inx
-	bne .tdp
+	beq .tdp_rts
+	jmp .tdp
 .tdp_rts
 	rts
 
@@ -543,9 +545,9 @@ prox_door
 	jsr point_in_box_xz
 	bcc .pd_no
 	ldx obj_i
-	lda door_y,x
+	+lda_mx door_y
 	sta box_y
-	lda door_sy,x
+	+lda_mx door_sy
 	sta box_sy
 	jsr player_overlaps_y
 	ldx obj_i

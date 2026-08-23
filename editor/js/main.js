@@ -43,6 +43,8 @@ import {
   activeMap,
   mapStats,
   formatMapStats,
+  MAP_MAX_TYPES,
+  canAddEnemyType,
   clipForFrame,
   dummyFrameFor,
   isFigureObject,
@@ -419,6 +421,7 @@ function markUi() {
 function collectEditorState() {
   const cam = layoutView.camera;
   const orb = animView.orbit;
+  const iorb = itemView.orbit;
   const enemy = doc.enemies[enemyIndex];
   return parseEditorState({
     mode: editorMode,
@@ -445,6 +448,13 @@ function collectEditorState() {
     orthoMode: overheadView.mode,
     collapsedRooms: [...collapsedRooms],
     activeLevel: doc.activeLevel,
+    item: itemMeshKey,
+    itemOrbit: {
+      yaw: iorb.yaw,
+      pitch: iorb.pitch,
+      dist: iorb.dist,
+      target: { x: iorb.target.x, y: iorb.target.y, z: iorb.target.z },
+    },
   });
 }
 
@@ -492,6 +502,14 @@ function applyEditorState(ed) {
     collapsedRooms.clear();
     for (const id of ed.collapsedRooms) collapsedRooms.add(id);
     if (ed.activeLevel && LEVEL_NAMES.includes(ed.activeLevel)) doc.activeLevel = ed.activeLevel;
+    itemMeshKey = ITEM_MESH_KEYS.includes(ed.item) ? ed.item : "backpack";
+    const iorb = itemView.orbit;
+    iorb.yaw = ed.itemOrbit.yaw;
+    iorb.pitch = ed.itemOrbit.pitch;
+    iorb.dist = ed.itemOrbit.dist;
+    iorb.target.x = ed.itemOrbit.target.x;
+    iorb.target.y = ed.itemOrbit.target.y;
+    iorb.target.z = ed.itemOrbit.target.z;
     setDrawMode(ed.localDraw);
     setMode(ed.mode);
   } finally {
@@ -827,6 +845,10 @@ function finishPaletteDrop(e) {
   const p = layoutView.placeAtScreen(mx, my, kind);
   pushUndo();
   const owner = kind === "room" ? null : placementRoom();
+  if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy)) {
+    setStatus(`Max ${MAP_MAX_TYPES} enemy types per map`, true);
+    return;
+  }
   const extra = place.enemy ? { enemy: place.enemy } : {};
   if (owner) extra.roomId = owner.id;
   const obj = createObject(kind, p.x, p.y, p.z, extra);
@@ -973,8 +995,10 @@ function updateCenterChrome() {
       ? `Map ${doc.activeLevel} — ${map.name}`
       : `Map ${doc.activeLevel}`;
     if (statsEl) {
+      const stats = mapStats(doc);
       statsEl.hidden = false;
-      statsEl.textContent = formatMapStats(mapStats(doc));
+      statsEl.textContent = formatMapStats(stats);
+      statsEl.classList.toggle("error", !!stats.overBudget);
     }
     return;
   }
@@ -989,6 +1013,7 @@ function updateCenterChrome() {
   if (statsEl) {
     statsEl.hidden = true;
     statsEl.textContent = "";
+    statsEl.classList.remove("error");
   }
 }
 
@@ -1750,7 +1775,15 @@ function renderInspector() {
         if (obj.enemy === t.name) opt.selected = true;
         sel.appendChild(opt);
       }
-      sel.addEventListener("change", () => apply(() => (obj.enemy = sel.value)));
+      sel.addEventListener("change", () => {
+        const next = sel.value;
+        if (next !== obj.enemy && !canAddEnemyType(activeMap(doc), next)) {
+          sel.value = obj.enemy || "Grunt";
+          setStatus(`Max ${MAP_MAX_TYPES} enemy types per map`, true);
+          return;
+        }
+        apply(() => (obj.enemy = next));
+      });
       root.appendChild(field("Type", sel));
       const chk = document.createElement("input");
       chk.type = "checkbox";

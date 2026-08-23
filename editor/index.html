@@ -287,6 +287,10 @@ h2 {
   text-align: right;
 }
 
+#map-stats.error {
+  color: #f88;
+}
+
 .map-stage {
   flex: 1;
   min-height: 0;
@@ -2046,6 +2050,8 @@ const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
 const ANIM_ORBIT_DIST_MIN = 16;
 const ANIM_ORBIT_DIST_MAX = 400;
+const ITEM_ORBIT_DIST_MIN = 8;
+const ITEM_ORBIT_DIST_MAX = 80;
 const DOC_VERSION = 9;
 const DEFAULT_WEAPON_SCALE = 0.4;
 const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
@@ -2323,6 +2329,7 @@ const PICKUP_TYPES = [
   "ring of shadows",
   "silver key",
   "gold key",
+  "rune of earth magic",
 ];
 /** @deprecated Use PICKUP_TYPES */
 const BACKPACK_TYPES = PICKUP_TYPES;
@@ -2399,6 +2406,54 @@ function defaultItemMeshes() {
         [3, 0],
         [3, 1],
         [3, 2],
+      ]
+    ),
+    "health 25%": meshOf(
+      [
+        [0, 2, 0],
+        [-1, 1, 0],
+        [0, 1, 1],
+        [1, 1, 0],
+        [0, 1, -1],
+        [0, 0, 0],
+      ],
+      [
+        [4, 5],
+        [3, 5],
+        [1, 5],
+        [2, 5],
+        [1, 4],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [0, 1],
+        [0, 2],
+        [0, 4],
+        [0, 3],
+      ]
+    ),
+    "health 50%": meshOf(
+      [
+        [0, 4, 0],
+        [-2, 2, 0],
+        [0, 2, 2],
+        [2, 2, 0],
+        [0, 2, -2],
+        [0, 0, 0],
+      ],
+      [
+        [4, 5],
+        [3, 5],
+        [1, 5],
+        [2, 5],
+        [1, 4],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [0, 1],
+        [0, 2],
+        [0, 4],
+        [0, 3],
       ]
     ),
     "quad damage": meshOf(
@@ -2493,6 +2548,31 @@ function defaultItemMeshes() {
         [3, 4],
         [4, 5],
         [4, 6],
+      ]
+    ),
+    "rune of earth magic": meshOf(
+      [
+        [0, 0, 0],
+        [-2, 1, 0],
+        [-2, 3, 0],
+        [0, 4, 0],
+        [2, 3, 0],
+        [2, 1, 0],
+        [0, 2, 0],
+        [-1, 1, 0],
+        [1, 1, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [5, 0],
+        [3, 6],
+        [6, 0],
+        [6, 7],
+        [6, 8],
       ]
     ),
   };
@@ -3060,6 +3140,32 @@ function mapDisplayName(map, key) {
 
 /** Soft cap: 8-bit object indices / editor budget. */
 const MAX_MAP_OBJECTS = 255;
+const MAP_MAX_TYPES = 3;
+const MAP_MAX_BYTES = 3072;
+const ENEMY_POSE_MAX = 4096;
+/** Packed map header: 11 counts + 3 type ids + 6 spawn + 4 mesh lens. */
+const MAP_HDR_BYTES = 24;
+
+/** Unique enemy type names placed on a map (unknown names count as Grunt). */
+function mapEnemyTypeNames(map) {
+  const names = [];
+  for (const obj of map?.objects || []) {
+    if (obj.kind !== "enemy") continue;
+    const raw = obj.enemy || "Grunt";
+    const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/** True if placing/changing to typeName would stay within MAP_MAX_TYPES. */
+function canAddEnemyType(map, typeName) {
+  const names = mapEnemyTypeNames(map);
+  const raw = typeName || "Grunt";
+  const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
+  if (names.includes(name)) return true;
+  return names.length < MAP_MAX_TYPES;
+}
 
 /**
  * Bytes per instance in the cooked C64 SoA (tools/genmap.py).
@@ -3085,7 +3191,8 @@ function mapStats(doc) {
   const map = activeMap(doc);
   const byKind = {};
   let total = 0;
-  let c64Bytes = 5; // spawn_x/y/z/rot/room always present once cooked
+  let c64Bytes = MAP_HDR_BYTES;
+  c64Bytes += clampName(map.name).length + 1; // map_name + NUL
   let hasSpawn = false;
   for (const obj of map.objects) {
     const kind = obj.kind;
@@ -3093,9 +3200,9 @@ function mapStats(doc) {
     total += 1;
     byKind[kind] = (byKind[kind] || 0) + 1;
     if (kind === "spawn") {
-      if (hasSpawn) continue; // engine keeps one spawn record
+      if (hasSpawn) continue; // engine keeps one spawn record in the header
       hasSpawn = true;
-      continue; // already counted in the fixed 5
+      continue;
     }
     c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
     if (kind === "room") {
@@ -3115,7 +3222,21 @@ function mapStats(doc) {
       c64Bytes += text.length + 1; // chars + NUL in map_text
     }
   }
-  return { total, byKind, c64Bytes, max: MAX_MAP_OBJECTS };
+  const enemyTypes = mapEnemyTypeNames(map);
+  const enemyTypeCount = enemyTypes.length;
+  const overTypes = enemyTypeCount > MAP_MAX_TYPES;
+  const overBytes = c64Bytes > MAP_MAX_BYTES;
+  return {
+    total,
+    byKind,
+    c64Bytes,
+    max: MAX_MAP_OBJECTS,
+    enemyTypes,
+    enemyTypeCount,
+    overTypes,
+    overBytes,
+    overBudget: overTypes || overBytes,
+  };
 }
 
 function formatMapStats(stats) {
@@ -3154,8 +3275,10 @@ function formatMapStats(stats) {
     const one = KINDS[kind]?.label?.toLowerCase() || kind;
     parts.push(`${n} ${n === 1 ? one : plurals[kind] || `${one}s`}`);
   }
-  const kb = stats.c64Bytes >= 1024 ? `${(stats.c64Bytes / 1024).toFixed(1)}K` : `${stats.c64Bytes} B`;
-  parts.push(`~${kb} C64`);
+  parts.push(`${stats.enemyTypeCount}/${MAP_MAX_TYPES} types`);
+  const kb =
+    stats.c64Bytes >= 1024 ? `${(stats.c64Bytes / 1024).toFixed(1)}K` : `${stats.c64Bytes} B`;
+  parts.push(`~${kb} / ${MAP_MAX_BYTES} B`);
   return parts.join(" · ");
 }
 
@@ -3560,6 +3683,8 @@ function defaultEditorState() {
     orthoMode: "top",
     collapsedRooms: [],
     activeLevel: null,
+    item: "backpack",
+    itemOrbit: { yaw: 0.6, pitch: 0.35, dist: 16, target: { x: 0, y: 0, z: 0 } },
   };
 }
 
@@ -3663,6 +3788,19 @@ function parseEditorState(raw) {
   } else {
     d.activeLevel = null;
   }
+  if (typeof raw.item === "string" && ITEM_MESH_KEYS.includes(raw.item)) d.item = raw.item;
+  const io = raw.itemOrbit || {};
+  const tgt = io.target || {};
+  d.itemOrbit = {
+    yaw: num(io.yaw, d.itemOrbit.yaw),
+    pitch: Math.max(-1.2, Math.min(1.2, num(io.pitch, d.itemOrbit.pitch))),
+    dist: Math.max(ITEM_ORBIT_DIST_MIN, Math.min(ITEM_ORBIT_DIST_MAX, num(io.dist, d.itemOrbit.dist))),
+    target: {
+      x: num(tgt.x, d.itemOrbit.target.x),
+      y: num(tgt.y, d.itemOrbit.target.y),
+      z: num(tgt.z, d.itemOrbit.target.z),
+    },
+  };
   return d;
 }
 
@@ -7775,8 +7913,6 @@ class WeaponView {
 // ---- js/itemView.js ----
 const ITEM_VERT_HIT = 10;
 const ITEM_LINE_HIT = 6;
-const ITEM_DIST_MIN = 8;
-const ITEM_DIST_MAX = 80;
 const ITEM_BOX_CLICK = 4;
 const ITEM_ZOOM_K = 0.008;
 const ITEM_AXIS_LEN = 2;
@@ -7784,7 +7920,7 @@ const ITEM_AXIS_HIT = 9;
 const ITEM_AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 function clampItemDist(d) {
-  return Math.max(ITEM_DIST_MIN, Math.min(ITEM_DIST_MAX, d));
+  return Math.max(ITEM_ORBIT_DIST_MIN, Math.min(ITEM_ORBIT_DIST_MAX, d));
 }
 
 /** { verts: [{x,y,z}], lines: [[i,j]] } in local indices. Survives mesh-type switches. */
@@ -8890,6 +9026,7 @@ function markUi() {
 function collectEditorState() {
   const cam = layoutView.camera;
   const orb = animView.orbit;
+  const iorb = itemView.orbit;
   const enemy = doc.enemies[enemyIndex];
   return parseEditorState({
     mode: editorMode,
@@ -8916,6 +9053,13 @@ function collectEditorState() {
     orthoMode: overheadView.mode,
     collapsedRooms: [...collapsedRooms],
     activeLevel: doc.activeLevel,
+    item: itemMeshKey,
+    itemOrbit: {
+      yaw: iorb.yaw,
+      pitch: iorb.pitch,
+      dist: iorb.dist,
+      target: { x: iorb.target.x, y: iorb.target.y, z: iorb.target.z },
+    },
   });
 }
 
@@ -8963,6 +9107,14 @@ function applyEditorState(ed) {
     collapsedRooms.clear();
     for (const id of ed.collapsedRooms) collapsedRooms.add(id);
     if (ed.activeLevel && LEVEL_NAMES.includes(ed.activeLevel)) doc.activeLevel = ed.activeLevel;
+    itemMeshKey = ITEM_MESH_KEYS.includes(ed.item) ? ed.item : "backpack";
+    const iorb = itemView.orbit;
+    iorb.yaw = ed.itemOrbit.yaw;
+    iorb.pitch = ed.itemOrbit.pitch;
+    iorb.dist = ed.itemOrbit.dist;
+    iorb.target.x = ed.itemOrbit.target.x;
+    iorb.target.y = ed.itemOrbit.target.y;
+    iorb.target.z = ed.itemOrbit.target.z;
     setDrawMode(ed.localDraw);
     setMode(ed.mode);
   } finally {
@@ -9298,6 +9450,10 @@ function finishPaletteDrop(e) {
   const p = layoutView.placeAtScreen(mx, my, kind);
   pushUndo();
   const owner = kind === "room" ? null : placementRoom();
+  if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy)) {
+    setStatus(`Max ${MAP_MAX_TYPES} enemy types per map`, true);
+    return;
+  }
   const extra = place.enemy ? { enemy: place.enemy } : {};
   if (owner) extra.roomId = owner.id;
   const obj = createObject(kind, p.x, p.y, p.z, extra);
@@ -9444,8 +9600,10 @@ function updateCenterChrome() {
       ? `Map ${doc.activeLevel} — ${map.name}`
       : `Map ${doc.activeLevel}`;
     if (statsEl) {
+      const stats = mapStats(doc);
       statsEl.hidden = false;
-      statsEl.textContent = formatMapStats(mapStats(doc));
+      statsEl.textContent = formatMapStats(stats);
+      statsEl.classList.toggle("error", !!stats.overBudget);
     }
     return;
   }
@@ -9460,6 +9618,7 @@ function updateCenterChrome() {
   if (statsEl) {
     statsEl.hidden = true;
     statsEl.textContent = "";
+    statsEl.classList.remove("error");
   }
 }
 
@@ -10221,7 +10380,15 @@ function renderInspector() {
         if (obj.enemy === t.name) opt.selected = true;
         sel.appendChild(opt);
       }
-      sel.addEventListener("change", () => apply(() => (obj.enemy = sel.value)));
+      sel.addEventListener("change", () => {
+        const next = sel.value;
+        if (next !== obj.enemy && !canAddEnemyType(activeMap(doc), next)) {
+          sel.value = obj.enemy || "Grunt";
+          setStatus(`Max ${MAP_MAX_TYPES} enemy types per map`, true);
+          return;
+        }
+        apply(() => (obj.enemy = next));
+      });
       root.appendChild(field("Type", sel));
       const chk = document.createElement("input");
       chk.type = "checkbox";

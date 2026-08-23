@@ -5,6 +5,8 @@ import {
   ITEM_MAX_VERTS,
   ITEM_MAX_LINES,
   ITEM_MAX_UNIQUE,
+  ITEM_ORBIT_DIST_MIN,
+  ITEM_ORBIT_DIST_MAX,
   clampItemCoord,
   itemUniqueXZ,
 } from "./model.js";
@@ -17,8 +19,6 @@ import {
 
 const ITEM_VERT_HIT = 10;
 const ITEM_LINE_HIT = 6;
-const ITEM_DIST_MIN = 8;
-const ITEM_DIST_MAX = 80;
 const ITEM_BOX_CLICK = 4;
 const ITEM_ZOOM_K = 0.008;
 const ITEM_AXIS_LEN = 2;
@@ -26,7 +26,7 @@ const ITEM_AXIS_HIT = 9;
 const ITEM_AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 function clampItemDist(d) {
-  return Math.max(ITEM_DIST_MIN, Math.min(ITEM_DIST_MAX, d));
+  return Math.max(ITEM_ORBIT_DIST_MIN, Math.min(ITEM_ORBIT_DIST_MAX, d));
 }
 
 /** { verts: [{x,y,z}], lines: [[i,j]] } in local indices. Survives mesh-type switches. */

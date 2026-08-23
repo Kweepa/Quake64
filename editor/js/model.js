@@ -73,6 +73,8 @@ export const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
 export const ANIM_ORBIT_DIST_MIN = 16;
 export const ANIM_ORBIT_DIST_MAX = 400;
+export const ITEM_ORBIT_DIST_MIN = 8;
+export const ITEM_ORBIT_DIST_MAX = 80;
 export const DOC_VERSION = 9;
 export const DEFAULT_WEAPON_SCALE = 0.4;
 export const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
@@ -350,6 +352,7 @@ export const PICKUP_TYPES = [
   "ring of shadows",
   "silver key",
   "gold key",
+  "rune of earth magic",
 ];
 /** @deprecated Use PICKUP_TYPES */
 export const BACKPACK_TYPES = PICKUP_TYPES;
@@ -426,6 +429,54 @@ export function defaultItemMeshes() {
         [3, 0],
         [3, 1],
         [3, 2],
+      ]
+    ),
+    "health 25%": meshOf(
+      [
+        [0, 2, 0],
+        [-1, 1, 0],
+        [0, 1, 1],
+        [1, 1, 0],
+        [0, 1, -1],
+        [0, 0, 0],
+      ],
+      [
+        [4, 5],
+        [3, 5],
+        [1, 5],
+        [2, 5],
+        [1, 4],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [0, 1],
+        [0, 2],
+        [0, 4],
+        [0, 3],
+      ]
+    ),
+    "health 50%": meshOf(
+      [
+        [0, 4, 0],
+        [-2, 2, 0],
+        [0, 2, 2],
+        [2, 2, 0],
+        [0, 2, -2],
+        [0, 0, 0],
+      ],
+      [
+        [4, 5],
+        [3, 5],
+        [1, 5],
+        [2, 5],
+        [1, 4],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [0, 1],
+        [0, 2],
+        [0, 4],
+        [0, 3],
       ]
     ),
     "quad damage": meshOf(
@@ -520,6 +571,31 @@ export function defaultItemMeshes() {
         [3, 4],
         [4, 5],
         [4, 6],
+      ]
+    ),
+    "rune of earth magic": meshOf(
+      [
+        [0, 0, 0],
+        [-2, 1, 0],
+        [-2, 3, 0],
+        [0, 4, 0],
+        [2, 3, 0],
+        [2, 1, 0],
+        [0, 2, 0],
+        [-1, 1, 0],
+        [1, 1, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [5, 0],
+        [3, 6],
+        [6, 0],
+        [6, 7],
+        [6, 8],
       ]
     ),
   };
@@ -1087,6 +1163,32 @@ export function mapDisplayName(map, key) {
 
 /** Soft cap: 8-bit object indices / editor budget. */
 export const MAX_MAP_OBJECTS = 255;
+export const MAP_MAX_TYPES = 3;
+export const MAP_MAX_BYTES = 3072;
+export const ENEMY_POSE_MAX = 4096;
+/** Packed map header: 11 counts + 3 type ids + 6 spawn + 4 mesh lens. */
+export const MAP_HDR_BYTES = 24;
+
+/** Unique enemy type names placed on a map (unknown names count as Grunt). */
+export function mapEnemyTypeNames(map) {
+  const names = [];
+  for (const obj of map?.objects || []) {
+    if (obj.kind !== "enemy") continue;
+    const raw = obj.enemy || "Grunt";
+    const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+/** True if placing/changing to typeName would stay within MAP_MAX_TYPES. */
+export function canAddEnemyType(map, typeName) {
+  const names = mapEnemyTypeNames(map);
+  const raw = typeName || "Grunt";
+  const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
+  if (names.includes(name)) return true;
+  return names.length < MAP_MAX_TYPES;
+}
 
 /**
  * Bytes per instance in the cooked C64 SoA (tools/genmap.py).
@@ -1112,7 +1214,8 @@ export function mapStats(doc) {
   const map = activeMap(doc);
   const byKind = {};
   let total = 0;
-  let c64Bytes = 5; // spawn_x/y/z/rot/room always present once cooked
+  let c64Bytes = MAP_HDR_BYTES;
+  c64Bytes += clampName(map.name).length + 1; // map_name + NUL
   let hasSpawn = false;
   for (const obj of map.objects) {
     const kind = obj.kind;
@@ -1120,9 +1223,9 @@ export function mapStats(doc) {
     total += 1;
     byKind[kind] = (byKind[kind] || 0) + 1;
     if (kind === "spawn") {
-      if (hasSpawn) continue; // engine keeps one spawn record
+      if (hasSpawn) continue; // engine keeps one spawn record in the header
       hasSpawn = true;
-      continue; // already counted in the fixed 5
+      continue;
     }
     c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
     if (kind === "room") {
@@ -1142,7 +1245,21 @@ export function mapStats(doc) {
       c64Bytes += text.length + 1; // chars + NUL in map_text
     }
   }
-  return { total, byKind, c64Bytes, max: MAX_MAP_OBJECTS };
+  const enemyTypes = mapEnemyTypeNames(map);
+  const enemyTypeCount = enemyTypes.length;
+  const overTypes = enemyTypeCount > MAP_MAX_TYPES;
+  const overBytes = c64Bytes > MAP_MAX_BYTES;
+  return {
+    total,
+    byKind,
+    c64Bytes,
+    max: MAX_MAP_OBJECTS,
+    enemyTypes,
+    enemyTypeCount,
+    overTypes,
+    overBytes,
+    overBudget: overTypes || overBytes,
+  };
 }
 
 export function formatMapStats(stats) {
@@ -1181,8 +1298,10 @@ export function formatMapStats(stats) {
     const one = KINDS[kind]?.label?.toLowerCase() || kind;
     parts.push(`${n} ${n === 1 ? one : plurals[kind] || `${one}s`}`);
   }
-  const kb = stats.c64Bytes >= 1024 ? `${(stats.c64Bytes / 1024).toFixed(1)}K` : `${stats.c64Bytes} B`;
-  parts.push(`~${kb} C64`);
+  parts.push(`${stats.enemyTypeCount}/${MAP_MAX_TYPES} types`);
+  const kb =
+    stats.c64Bytes >= 1024 ? `${(stats.c64Bytes / 1024).toFixed(1)}K` : `${stats.c64Bytes} B`;
+  parts.push(`~${kb} / ${MAP_MAX_BYTES} B`);
   return parts.join(" · ");
 }
 
@@ -1587,6 +1706,8 @@ export function defaultEditorState() {
     orthoMode: "top",
     collapsedRooms: [],
     activeLevel: null,
+    item: "backpack",
+    itemOrbit: { yaw: 0.6, pitch: 0.35, dist: 16, target: { x: 0, y: 0, z: 0 } },
   };
 }
 
@@ -1690,6 +1811,19 @@ export function parseEditorState(raw) {
   } else {
     d.activeLevel = null;
   }
+  if (typeof raw.item === "string" && ITEM_MESH_KEYS.includes(raw.item)) d.item = raw.item;
+  const io = raw.itemOrbit || {};
+  const tgt = io.target || {};
+  d.itemOrbit = {
+    yaw: num(io.yaw, d.itemOrbit.yaw),
+    pitch: Math.max(-1.2, Math.min(1.2, num(io.pitch, d.itemOrbit.pitch))),
+    dist: Math.max(ITEM_ORBIT_DIST_MIN, Math.min(ITEM_ORBIT_DIST_MAX, num(io.dist, d.itemOrbit.dist))),
+    target: {
+      x: num(tgt.x, d.itemOrbit.target.x),
+      y: num(tgt.y, d.itemOrbit.target.y),
+      z: num(tgt.z, d.itemOrbit.target.z),
+    },
+  };
   return d;
 }
 

@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
-"""Export Grunt + Rottweiler poses + clips → src/enemy_data.asm."""
+"""Export per-type pose PRGs + slim enemy_data.asm metadata."""
 
 from __future__ import annotations
 
 import json
 import re
+import struct
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "editor" / "quake64.json"
 OUT = ROOT / "src" / "enemy_data.asm"
+SIZES_OUT = ROOT / "src" / "enemy_sizes.asm"
+ENEMY_DIR = ROOT / "enemies"
 
 NVERTS = 13
-TYPES = ["Grunt", "Rottweiler"]
-PREFIX = ["grunt", "rott"]
+TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon"]
+DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon"]
+ENEMY_POSE_MAX = 4096
 PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
 DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 
-# Original Quake HP; ROM stores Quake // 5 (byte-sized, Shambler 120 fits).
 HP_QUAKE = {
     "Grunt": 30,
     "Rottweiler": 25,
@@ -26,9 +29,9 @@ HP_QUAKE = {
     "Scrag": 80,
     "Ogre": 200,
     "Shambler": 600,
+    "Chthon": 400,
 }
 
-# Role clip names (and optional len override). Pain/death are variant lists.
 ROLE_CLIPS = {
     "Grunt": {
         "stand": ("stand", None),
@@ -37,6 +40,13 @@ ROLE_CLIPS = {
         "walk": ("prowl", None),
         "attack": ("shoot", None),
     },
+    "Knight": {
+        "stand": ("stand", None),
+        "alert": ("standing", None),
+        "run": ("runb", None),
+        "walk": ("walk", None),
+        "attack": ("attackb", None),
+    },
     "Rottweiler": {
         "stand": ("stand", None),
         "alert": ("stand", 2),
@@ -44,20 +54,39 @@ ROLE_CLIPS = {
         "walk": ("walk", None),
         "attack": ("leap", None),
     },
+    "Scrag": {
+        "stand": ("hover", None),
+        "alert": ("hover", 4),
+        "run": ("fly", None),
+        "walk": ("fly", None),
+        "attack": ("magatt", None),
+    },
+    "Ogre": {
+        "stand": ("stand", None),
+        "alert": ("stand", 4),
+        "run": ("run", None),
+        "walk": ("walk", None),
+        "attack": ("smash", None),
+    },
+    "Shambler": {
+        "stand": ("stand", None),
+        "alert": ("stand", 4),
+        "run": ("run", None),
+        "walk": ("walk", None),
+        "attack": ("smash", None),
+    },
+    "Chthon": {
+        "stand": ("walk", 8),
+        "alert": ("walk", 4),
+        "run": ("walk", None),
+        "walk": ("walk", None),
+        "attack": ("attack", None),
+    },
 }
-
-# Facing folds into the runtime rotate angle (ent_rotate: a = yaw − rot),
-# so no pre-baked 45° tables are needed.
 
 
 def clip_key(name: str) -> str:
     return str(name).rstrip("_").lower()
-
-
-def clip_const(prefix: str, name: str) -> str:
-    key = clip_key(name).upper()
-    key = re.sub(r"[^A-Z0-9]+", "_", key).strip("_")
-    return f"{prefix.upper()}_CLIP_{key}"
 
 
 def find_clip(enemy: dict, *names: str) -> tuple[int, int] | None:
@@ -91,7 +120,10 @@ def find_variant_clips(enemy: dict, key_re: re.Pattern, what: str) -> list[tuple
             if len(out) >= PAIN_MAX:
                 break
     if not out:
-        raise SystemExit(f"{enemy['name']}: no {what} clip")
+        stand = find_clip(enemy, "stand", "walk", "hover")
+        if stand is None:
+            raise SystemExit(f"{enemy['name']}: no {what} clip")
+        out.append((stand[0], 1))
     return out
 
 
@@ -115,14 +147,6 @@ def s8(n: int) -> int:
     return n & 0xFF
 
 
-def bchunk(data: list[int], w: int = 13) -> str:
-    lines = []
-    for i in range(0, len(data), w):
-        chunk = data[i : i + w]
-        lines.append("\t!byte " + ",".join(f"${b:02x}" for b in chunk))
-    return "\n".join(lines) + "\n"
-
-
 def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list[int]], list[dict]]:
     lines = enemy["lines"]
     frames = enemy["frames"]
@@ -144,16 +168,40 @@ def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list
     return gx, gy, gz, lines, clips
 
 
+def trim_to_budget(gx: list[int], gy: list[int], gz: list[int], enemy: dict) -> int:
+    nframes = len(gx) // NVERTS
+    max_frames = (ENEMY_POSE_MAX - 1) // (NVERTS * 3)
+    if nframes <= max_frames:
+        return nframes
+    print(f"warning: {enemy['name']} {nframes} frames > {max_frames}; truncating")
+    nframes = max_frames
+    n = nframes * NVERTS
+    gx[:] = gx[:n]
+    gy[:] = gy[:n]
+    gz[:] = gz[:n]
+    kept = []
+    for c in enemy.get("clips") or []:
+        start = int(c["start"])
+        if start >= nframes:
+            continue
+        length = min(int(c["len"]), nframes - start)
+        if length <= 0:
+            continue
+        nc = dict(c)
+        nc["start"] = start
+        nc["len"] = length
+        kept.append(nc)
+    enemy["clips"] = kept
+    return nframes
+
+
 def main() -> None:
     doc = json.loads(DOC.read_text(encoding="utf-8"))
     by_name = {e["name"]: e for e in doc["enemies"]}
+    ENEMY_DIR.mkdir(exist_ok=True)
     parts = [
-        "; Generated by tools/genenemies.py — do not edit",
-        "; All clips as signed bytes (runtime (g*trig)>>2 → 8.8)",
-        "; Facing folds into ent_rotate (a = yaw − rot) — no 45° bake",
-        "ENEMY_NTYPES\t= 2",
-        "ENT_GRUNT\t= 0",
-        "ENT_ROTT\t= 1",
+        "; Generated by tools/genenemies.py — metadata only; poses load from disk",
+        "PAIN_MAX	= 4		; variants per type; pain_var_off uses ASL×2",
         "",
     ]
     all_edges = None
@@ -175,15 +223,27 @@ def main() -> None:
     death_n: list[int] = []
     death_start: list[int] = []
     death_len: list[int] = []
+    pose_sizes: list[int] = []
     max_nframes = 0
+    nframes_list: list[int] = []
 
     for ti, name in enumerate(TYPES):
         if name not in by_name:
             raise SystemExit(f"missing enemy {name}")
         enemy = by_name[name]
-        gx, gy, gz, lines, clips = export_type(enemy)
+        gx, gy, gz, lines, _clips = export_type(enemy)
+        nframes = trim_to_budget(gx, gy, gz, enemy)
+        payload = bytes([nframes]) + bytes(gx) + bytes(gy) + bytes(gz)
+        if len(payload) > ENEMY_POSE_MAX:
+            raise SystemExit(f"{name} pose {len(payload)} exceeds {ENEMY_POSE_MAX}")
+        dos = DOS_NAME[ti]
+        (ENEMY_DIR / f"{dos}.prg").write_bytes(struct.pack("<H", 0) + payload)
+        pose_sizes.append(len(payload))
+        nframes_list.append(nframes)
         for role in ("stand", "alert", "run", "walk", "attack"):
             start, length = find_role(enemy, role)
+            if start + length > nframes:
+                length = max(1, nframes - start)
             roles[f"{role}_start"].append(start)
             roles[f"{role}_len"].append(length)
         n, starts, lens = pad_variants(find_variant_clips(enemy, PAIN_KEY, "pain"))
@@ -198,26 +258,8 @@ def main() -> None:
             all_edges = lines
         elif lines != all_edges:
             print(f"warning: {name} edges differ from Grunt; using Grunt edges")
-        prefix = PREFIX[ti]
-        nframes = len(gx) // NVERTS
         if nframes > max_nframes:
             max_nframes = nframes
-        parts.append(f"; --- {name} ({nframes} frames) ---")
-        for ci, c in enumerate(clips):
-            parts.append(f"{clip_const(prefix, c['name'])}\t= {ci}\t; start {c['start']} len {c['len']}")
-        parts.append(f"{prefix}_nclips\t= {len(clips)}")
-        parts.append(f"{prefix}_nframes\t= {nframes}")
-        parts.append(f"{prefix}_clip_start")
-        parts.append("\t!byte " + ",".join(str(int(c["start"])) for c in clips))
-        parts.append(f"{prefix}_clip_len")
-        parts.append("\t!byte " + ",".join(str(int(c["len"])) for c in clips))
-        parts.append(f"{prefix}_gx")
-        parts.append(bchunk(gx).rstrip())
-        parts.append(f"{prefix}_gy")
-        parts.append(bchunk(gy).rstrip())
-        parts.append(f"{prefix}_gz")
-        parts.append(bchunk(gz).rstrip())
-        parts.append("")
 
     edge_bytes: list[int] = []
     assert all_edges is not None
@@ -229,76 +271,60 @@ def main() -> None:
     parts.append("enemy_edge_vert")
     parts.append("\t!byte " + ",".join("0" for _ in all_edges))
     parts.append("")
-    parts.append("enemy_gx_lo\t!byte <grunt_gx, <rott_gx")
-    parts.append("enemy_gx_hi\t!byte >grunt_gx, >rott_gx")
-    parts.append("enemy_gy_lo\t!byte <grunt_gy, <rott_gy")
-    parts.append("enemy_gy_hi\t!byte >grunt_gy, >rott_gy")
-    parts.append("enemy_gz_lo\t!byte <grunt_gz, <rott_gz")
-    parts.append("enemy_gz_hi\t!byte >grunt_gz, >rott_gz")
-    parts.append("PAIN_MAX\t= 4\t\t; variants per type; pain_var_off uses ASL×2")
-    parts.append("; Role clips — looked up by name from editor JSON")
-    parts.append("enemy_stand_start\t!byte " + ", ".join(str(n) for n in roles["stand_start"]))
-    parts.append("enemy_stand_len\t\t!byte " + ", ".join(str(n) for n in roles["stand_len"]))
-    parts.append("enemy_alert_start\t!byte " + ", ".join(str(n) for n in roles["alert_start"]))
-    parts.append(
-        "enemy_alert_len\t\t!byte "
-        + ", ".join(str(n) for n in roles["alert_len"])
-        + "\t\t; Rott first 2 of stand"
-    )
-    parts.append("enemy_run_start\t\t!byte " + ", ".join(str(n) for n in roles["run_start"]))
-    parts.append("enemy_run_len\t\t!byte " + ", ".join(str(n) for n in roles["run_len"]))
-    parts.append(
-        "enemy_walk_start\t\t!byte "
-        + ", ".join(str(n) for n in roles["walk_start"])
-        + "\t\t; Grunt prowl, Rott walk"
-    )
-    parts.append("enemy_walk_len\t\t!byte " + ", ".join(str(n) for n in roles["walk_len"]))
-    parts.append(
-        "enemy_attack_start\t!byte "
-        + ", ".join(str(n) for n in roles["attack_start"])
-        + "\t\t; Grunt shoot, Rott leap"
-    )
-    parts.append("enemy_attack_len\t!byte " + ", ".join(str(n) for n in roles["attack_len"]))
-    parts.append("enemy_pain_n\t\t!byte " + ", ".join(str(n) for n in pain_n))
-    parts.append(
-        "enemy_pain_start\t!byte " + ", ".join(str(n) for n in pain_start)
-        + "\t; type * PAIN_MAX + variant"
-    )
-    parts.append("enemy_pain_len\t\t!byte " + ", ".join(str(n) for n in pain_len))
-    parts.append("enemy_death_n\t\t!byte " + ", ".join(str(n) for n in death_n))
-    parts.append(
-        "enemy_death_start\t!byte " + ", ".join(str(n) for n in death_start)
-        + "\t; type * PAIN_MAX + variant"
-    )
-    parts.append("enemy_death_len\t\t!byte " + ", ".join(str(n) for n in death_len))
-    parts.append("enemy_range\t\t!byte 30, 4\t\t; approach stop (Chebyshev XZ)")
-    hp_bytes = ", ".join(str(HP_QUAKE[t] // 5) for t in TYPES)
-    hp_note = ", ".join(f"{t} {HP_QUAKE[t]}→{HP_QUAKE[t] // 5}" for t in TYPES)
-    parts.append(f"; Quake HP÷5: {hp_note}")
-    parts.append(f"enemy_hp_init\t\t!byte {hp_bytes}")
-    parts.append("enemy_pain_chance\t!byte $80, $c0\t\t; rnd8 < chance → pain")
-    # BP_SHELLS5=7; $FF = no drop. Index = ent_type.
-    parts.append("enemy_drop_type\t!byte 7, $ff\t\t; Grunt 5 shells, Rott none")
-    parts.append("enemy_fire_frame\t!byte 2, 4\t\t; grunt muzzle / rott leap hit frame")
+    z = ",".join("0" for _ in TYPES)
+    parts.append(f"enemy_gx_lo	!byte {z}")
+    parts.append(f"enemy_gx_hi	!byte {z}")
+    parts.append(f"enemy_gy_lo	!byte {z}")
+    parts.append(f"enemy_gy_hi	!byte {z}")
+    parts.append(f"enemy_gz_lo	!byte {z}")
+    parts.append(f"enemy_gz_hi	!byte {z}")
+    parts.append("; Role clips")
+    parts.append("enemy_stand_start	!byte " + ", ".join(str(n) for n in roles["stand_start"]))
+    parts.append("enemy_stand_len		!byte " + ", ".join(str(n) for n in roles["stand_len"]))
+    parts.append("enemy_alert_start	!byte " + ", ".join(str(n) for n in roles["alert_start"]))
+    parts.append("enemy_alert_len		!byte " + ", ".join(str(n) for n in roles["alert_len"]))
+    parts.append("enemy_run_start		!byte " + ", ".join(str(n) for n in roles["run_start"]))
+    parts.append("enemy_run_len		!byte " + ", ".join(str(n) for n in roles["run_len"]))
+    parts.append("enemy_walk_start		!byte " + ", ".join(str(n) for n in roles["walk_start"]))
+    parts.append("enemy_walk_len		!byte " + ", ".join(str(n) for n in roles["walk_len"]))
+    parts.append("enemy_attack_start	!byte " + ", ".join(str(n) for n in roles["attack_start"]))
+    parts.append("enemy_attack_len	!byte " + ", ".join(str(n) for n in roles["attack_len"]))
+    parts.append("enemy_pain_n		!byte " + ", ".join(str(n) for n in pain_n))
+    parts.append("enemy_pain_start	!byte " + ", ".join(str(n) for n in pain_start))
+    parts.append("enemy_pain_len		!byte " + ", ".join(str(n) for n in pain_len))
+    parts.append("enemy_death_n		!byte " + ", ".join(str(n) for n in death_n))
+    parts.append("enemy_death_start	!byte " + ", ".join(str(n) for n in death_start))
+    parts.append("enemy_death_len		!byte " + ", ".join(str(n) for n in death_len))
+    parts.append("enemy_range		!byte 30, 30, 4, 24, 20, 16, 40")
+    hp_bytes = ", ".join(str(min(255, HP_QUAKE[t] // 5)) for t in TYPES)
+    parts.append(f"enemy_hp_init		!byte {hp_bytes}")
+    parts.append("enemy_pain_chance	!byte $80, $80, $c0, $80, $80, $80, $80")
+    parts.append("enemy_drop_type	!byte 7, $ff, $ff, $ff, 4, $ff, $ff")
+    parts.append("enemy_fire_frame	!byte 2, 4, 4, 6, 4, 4, 8")
+    parts.append("enemy_class		!byte 0, 0, 1, 0, 0, 0, 0")
+    parts.append("enemy_nframes	!byte " + ", ".join(str(n) for n in nframes_list))
     parts.append("")
-    # Absolute frame → byte offset into *_gx/gy/gz (frame * NVERTS)
-    parts.append(f"; frame * {NVERTS} as 16-bit offset (0..{max_nframes - 1})")
+    parts.append(f"; frame * {NVERTS} as 16-bit offset (0..{max_nframes})")
     parts.append("frame13_lo")
     parts.append(
-        "\t!byte " + ",".join(f"${((i * NVERTS) & 0xFF):02x}" for i in range(max_nframes))
+        "\t!byte " + ",".join(f"${((i * NVERTS) & 0xFF):02x}" for i in range(max_nframes + 1))
     )
     parts.append("frame13_hi")
     parts.append(
-        "\t!byte " + ",".join(f"${((i * NVERTS) >> 8):02x}" for i in range(max_nframes))
+        "\t!byte " + ",".join(f"${((i * NVERTS) >> 8):02x}" for i in range(max_nframes + 1))
     )
     parts.append("")
 
     OUT.write_text("\n".join(parts) + "\n", encoding="utf-8")
-    print(
-        f"Wrote {OUT.relative_to(ROOT)} "
-        f"(walk start={roles['walk_start']} len={roles['walk_len']} "
-        f"pain n={pain_n} death n={death_n})"
+    size_lo = ",".join(str(s & 0xFF) for s in pose_sizes)
+    size_hi = ",".join(str((s >> 8) & 0xFF) for s in pose_sizes)
+    SIZES_OUT.write_text(
+        "; Generated by tools/genenemies.py — pose payload bytes per type 0..6\n"
+        f"enemy_size_lo	!byte {size_lo}\n"
+        f"enemy_size_hi	!byte {size_hi}\n",
+        encoding="utf-8",
     )
+    print(f"Wrote {OUT.relative_to(ROOT)} + enemy PRGs sizes={pose_sizes} nframes={nframes_list}")
 
 
 if __name__ == "__main__":

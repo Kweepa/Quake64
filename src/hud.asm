@@ -36,7 +36,7 @@ init_hud
 	bne -
 +
 	ldy #0
--	lda map_name,y
+-	+lda_my map_name
 	beq +
 	iny
 	cpy #HUD_MSG_W
@@ -49,7 +49,7 @@ init_hud
 	tax
 	ldy #0
 .imap
-	lda map_name,y
+	+lda_my map_name
 	beq .imap_done
 	sta SCR_A + HUD_OFF_MAP,x
 	lda #COL_HUD_DIM
@@ -296,7 +296,8 @@ hud_ammo
 	pla
 	inx
 	stx pp_col
-	; fall through
+	jmp .u8_3
+}
 
 ; A unsigned 0–255 → 3 ASCII digits at HUD_OFF2+X (also pp_col)
 .u8_3
@@ -335,7 +336,6 @@ hud_ammo
 	ora #$30
 	sta SCR_A + HUD_OFF2,x
 	rts
-}
 
 !if PROFILE = 1 {
 ; A:Y = cy[2]:cy[1] → ms (>>2) then 4 digits at HUD_OFF+X
@@ -544,10 +544,10 @@ hud_message
 .hm_show
 	jsr hud_msg_blank
 	clc
-	lda #<map_text
+	lda	map_text
 	adc msg_off
 	sta src_ptr
-	lda #>map_text
+	lda	map_text+1
 	adc #0
 	sta src_ptr+1
 	jmp hud_msg_center
@@ -739,14 +739,15 @@ bpn_pent	!byte 112,101,110,116,97,103,114,97,109,32,111,102,32,112,114,111,116,1
 bpn_ring	!byte 114,105,110,103,32,111,102,32,115,104,97,100,111,119,115,0	; ring of shadows
 bpn_silver	!byte 115,105,108,118,101,114,32,107,101,121,0	; silver key
 bpn_gold	!byte 103,111,108,100,32,107,101,121,0		; gold key
+bpn_rune	!byte 114,117,110,101,32,111,102,32,101,97,114,116,104,32,109,97,103,105,99,0	; rune of earth magic
 bp_name_lo
 	!byte <bpn_shells, <bpn_nailgun, <bpn_nails, <bpn_gl
 	!byte <bpn_grenades, <bpn_health, <bpn_health, <bpn_shells, <bpn_armour
-	!byte <bpn_quad, <bpn_pent, <bpn_ring, <bpn_silver, <bpn_gold
+	!byte <bpn_quad, <bpn_pent, <bpn_ring, <bpn_silver, <bpn_gold, <bpn_rune
 bp_name_hi
 	!byte >bpn_shells, >bpn_nailgun, >bpn_nails, >bpn_gl
 	!byte >bpn_grenades, >bpn_health, >bpn_health, >bpn_shells, >bpn_armour
-	!byte >bpn_quad, >bpn_pent, >bpn_ring, >bpn_silver, >bpn_gold
+	!byte >bpn_quad, >bpn_pent, >bpn_ring, >bpn_silver, >bpn_gold, >bpn_rune
 
 ; ASCII (UI charset), not PETSCII
 hud_str_title	!byte 81,117,97,107,101,54,52,0	; Quake64

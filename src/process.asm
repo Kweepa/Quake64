@@ -12,11 +12,12 @@ proc_init
 	ldx #0
 	lda #0
 .pd
-	cpx #MAP_NDOORS
-	beq .psw0
+	cpx	map_ndoors
+	+beq_far .psw0
 	sta door_open,x
 	inx
-	bne .pd
+	beq .psw0
+	jmp .pd
 .psw0
 	jsr elev_init
 	lda #0
@@ -98,45 +99,51 @@ proc_count_free
 ; ------------------------------------------------------------------
 door_activate
 	stx proc_tmp5			; local SoA
-	lda door_id,x
+	jmp .da_body
+.da_fail
+	sec
+	ldx proc_tmp5
+	rts
+.da_body
+	+lda_mx door_id
 	sta proc_tmp1			; world id for busy / PROC_A
 	jsr proc_target_busy
 	bcc .da_free
 	jmp .da_fail
 .da_free
 	ldx proc_tmp5
-	lda door_key,x
+	+lda_mx door_key
 	beq .da_unlocked
 	cmp #DOOR_KEY_GOLD
 	beq .da_gold
 	lda have_keys
 	and #HAVE_SILVER
-	beq .da_fail
+	+beq_far .da_fail
 	bne .da_unlocked
 .da_gold
 	lda have_keys
 	and #HAVE_GOLD
-	beq .da_fail
+	+beq_far .da_fail
 .da_unlocked
 	ldx proc_tmp5
 	lda door_open,x
-	cmp door_sy,x
-	bcs .da_fail
+	+cmp_mx door_sy
+	+bcs_far .da_fail
 	jsr proc_count_free
 	cmp #2
-	bcc .da_fail
+	+bcc_far .da_fail
 	ldx proc_tmp5
 	lda #PROC_OPEN_DOOR
 	sta proc_tmp0
-	lda door_id,x
+	+lda_mx door_id
 	sta proc_tmp1
-	lda door_sy,x
+	+lda_mx door_sy
 	sta proc_tmp2
 	lda #0
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .da_fail
+	+bcs_far .da_fail
 	lda proc_tmp5
 	sta PROC_L,y
 	lda #SOUND_OPENDOOR
@@ -144,7 +151,7 @@ door_activate
 	ldx proc_tmp5
 	lda #PROC_TIMER
 	sta proc_tmp0
-	lda door_id,x
+	+lda_mx door_id
 	sta proc_tmp1
 	lda #PROC_LOWER_DOOR
 	sta proc_tmp2
@@ -153,14 +160,10 @@ door_activate
 	lda #>DOOR_RECLOSE_MS
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .da_fail
+	+bcs_far .da_fail
 	lda proc_tmp5
 	sta PROC_L,y
 	clc
-	ldx proc_tmp5
-	rts
-.da_fail
-	sec
 	ldx proc_tmp5
 	rts
 

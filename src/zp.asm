@@ -64,7 +64,9 @@ pp_col		= $49
 
 draw_buf	= $1e			; 0 = A, 1 = B
 show_buf	= $1f
-draw_top_hi	= $21
+mp_l		= $20			; packed-map field pointer; (mp_l),y uses $20/$21
+mp_h		= $21
+draw_top_hi	= $3f
 draw_bot_hi	= $22
 tile_half	= $24			; 0 top charset, 1 bottom
 show_d018_bot	= $2a

@@ -1,4 +1,4 @@
-; Quake64 — Step 2 portal-room E1M1
+; Quake64 — portal-room maps + enemy poses loaded from disk
 !cpu 6510
 !to "game.prg", cbm
 
@@ -11,9 +11,20 @@ INF_AMMO		= 1				; 1 = guns fire without spending ammo
 !source "mem.asm"
 !source "zp.asm"
 !source "map_counts.asm"
+!source "mapacc.asm"
 
 *= LOCODE_BASE
 start
+	jmp .start_real
+
+; RAM IRQ vector target. With $01=$30 the CPU fetches $FFFE/$FFFF, which are
+; negsqhi[510]/[511]: [510]=$3F is live table data, [511] is unreachable and
+; holds >IRQ_TRAMP (init_irq). So the handler must sit at $xx3F exactly.
+	!fill IRQ_TRAMP - *, $ea
+!if * != IRQ_TRAMP { !error "IRQ_TRAMP misplaced" }
+	jmp irq_entry
+
+.start_real
 	sei
 	cld
 	ldx #$ff
@@ -22,21 +33,18 @@ start
 	sta $01
 
 	lda #0
-	sta keys
-	sta anim_acc_l
-	sta anim_acc_h
-	lda #NVERTS
-	sta mesh_nv
-	lda #NEDGES
-	sta mesh_ne
-	lda #<enemy_edges
-	sta edge_ptr
-	lda #>enemy_edges
-	sta edge_ptr+1
-	lda #<enemy_edge_vert
-	sta edge_vert_ptr
-	lda #>enemy_edge_vert
-	sta edge_vert_ptr+1
+	sta load_in_play
+	jsr install_reboot_stub
+	lda #1
+	sta level_num
+	jsr LoadLevel
+	bcc .start_ok
+	jmp load_fail_hang
+.start_ok
+	sei
+	lda #BANK_IO
+	sta $01
+	jsr game_zp_init
 
 	jsr fill_colour
 	jsr init_vic
@@ -254,8 +262,10 @@ apply_move
 !source "mesh.asm"
 !source "cube.asm"
 !source "enemy.asm"
+!source "mapacc_rt.asm"
+!source "loader.asm"
 
-!source "map_e1m1.asm"
+!source "map_bss.asm"
 
 !if PROFILE = 1 {
 casc_snap

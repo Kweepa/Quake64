@@ -46,7 +46,7 @@ enemies_update
 .eu_think
 	ldx #0
 .eu_lp
-	cpx #MAP_NENEMIES
+	cpx	map_nenemies
 	bcc .eu_cont
 	jmp .eu_done
 .eu_cont
@@ -56,7 +56,7 @@ enemies_update
 	beq .eu_skip
 	cmp #EN_PAIN
 	bcs .eu_do			; pain/dying always tick
-	lda en_room,x
+	+lda_mx en_room
 	cmp room_idx
 	bne .eu_skip
 .eu_do
@@ -220,7 +220,7 @@ eu_approach
 	sta en_timer_h,x
 .eu_ap_step
 	; Rottweiler: stand in melee range; repath when chase timer expires
-	lda en_type,x
+	jsr enemy_get_class
 	beq .eu_ap_acc			; grunt — keep strafing
 	jsr enemy_same_floor
 	bcs .eu_ap_same
@@ -232,7 +232,7 @@ eu_approach
 .eu_ap_same
 	ldx enemy_idx
 	jsr enemy_chebyshev
-	ldy en_type,x
+	+ldy_mx en_type
 	cmp enemy_range,y
 	beq .eu_ap_stand
 	bcc .eu_ap_stand
@@ -278,7 +278,7 @@ eu_approach
 	jmp .eu_ap_slp
 .eu_ap_rng
 	jsr enemy_chebyshev
-	ldy en_type,x
+	+ldy_mx en_type
 	cmp enemy_range,y
 	beq .eu_ap_atk
 	bcc .eu_ap_atk
@@ -287,7 +287,7 @@ eu_approach
 	lda en_timer,x
 	ora en_timer_h,x
 	bne eu_next
-	lda en_type,x
+	jsr enemy_get_class
 	beq .eu_ap_glos
 	jsr enemy_same_floor
 	bcc eu_next			; dog — no bite through a hole
@@ -341,8 +341,8 @@ eu_dead
 eu_next
 	ldx enemy_idx
 	inx
-	cpx #MAP_NENEMIES
-	bcs .eu_done
+	cpx	map_nenemies
+	+bcs_far .eu_done
 	jmp .eu_lp
 .eu_done
 	lda #0
@@ -354,7 +354,7 @@ eu_next
 enemy_anim_step
 	ldx #0
 .eas_lp
-	cpx #MAP_NENEMIES
+	cpx	map_nenemies
 	bcc .eas_go
 	rts
 .eas_go
@@ -373,11 +373,11 @@ enemy_anim_step
 	jmp .eas_run
 +
 	cmp #EN_ALERT
-	beq .eas_oneshot
+	+beq_far .eas_oneshot
 	cmp #EN_ATTACK
-	beq .eas_oneshot
+	+beq_far .eas_oneshot
 	cmp #EN_PAIN
-	beq .eas_oneshot
+	+beq_far .eas_oneshot
 	cmp #EN_DYING
 	bne .eas_n
 	jmp .eas_die
@@ -389,7 +389,7 @@ enemy_anim_step
 	jmp .eas_lp
 
 .eas_loop
-	ldy en_type,x
+	+ldy_mx en_type
 	inc en_frame,x
 	lda en_frame,x
 	cmp enemy_stand_len,y
@@ -400,7 +400,7 @@ enemy_anim_step
 	sta en_frame,x
 	jmp .eas_n
 .eas_run
-	ldy en_type,x
+	+ldy_mx en_type
 	inc en_frame,x
 	lda en_frame,x
 	cmp enemy_run_len,y
@@ -410,7 +410,7 @@ enemy_anim_step
 +
 	jmp .eas_n
 .eas_walk
-	ldy en_type,x
+	+ldy_mx en_type
 	inc en_frame,x
 	lda en_frame,x
 	cmp enemy_walk_len,y
@@ -420,7 +420,7 @@ enemy_anim_step
 +
 	jmp .eas_n
 .eas_oneshot
-	ldy en_type,x
+	+ldy_mx en_type
 	lda en_frame,x
 	sta rot2				; old local frame (detect fire-frame skip)
 	inc en_frame,x
@@ -458,18 +458,18 @@ enemy_anim_step
 	pha
 	cmp enemy_fire_frame,y
 	bcc .eas_atlen_go			; new < fire → not yet
-	lda en_type,x
+	jsr enemy_get_class
 	bne .eas_bite			; Rottweiler — leap bite
 	lda enemy_idx
 	sta emuz_pending
 	jsr enemy_gunshot
 	ldx enemy_idx
-	ldy en_type,x
+	+ldy_mx en_type
 	jmp .eas_atlen_go
 .eas_bite
 	jsr enemy_bite
 	ldx enemy_idx
-	ldy en_type,x
+	+ldy_mx en_type
 .eas_atlen_go
 	pla
 	cmp enemy_attack_len,y
@@ -478,14 +478,14 @@ enemy_anim_step
 +
 	; Grunt 50% re-shoot; Rott always re-bite if still in range
 	ldx enemy_idx
-	lda en_type,x
+	jsr enemy_get_class
 	bne .eas_rng_chk
 	jsr rnd8
 	bmi .eas_to_ap
 .eas_rng_chk
 	ldx enemy_idx
 	jsr enemy_chebyshev
-	ldy en_type,x
+	+ldy_mx en_type
 	cmp enemy_range,y
 	beq .eas_again
 	bcc .eas_again
@@ -494,7 +494,7 @@ enemy_anim_step
 	jmp .eas_n
 .eas_again
 	ldx enemy_idx
-	lda en_type,x
+	jsr enemy_get_class
 	bne .eas_dog_again
 	jsr enemy_shot_clear
 	bcc .eas_to_ap
@@ -535,7 +535,7 @@ enemy_anim_step
 ; A = Chebyshev |dx|,|dz| max vs player (cam_xh/zh). X = enemy_idx
 enemy_chebyshev
 	ldx enemy_idx
-	lda en_x,x
+	+lda_mx en_x
 	sec
 	sbc cam_xh
 	bcs +
@@ -544,7 +544,7 @@ enemy_chebyshev
 	adc #1
 +
 	sta rot0
-	lda en_z,x
+	+lda_mx en_z
 	sec
 	sbc cam_zh
 	bcs +
@@ -566,11 +566,11 @@ enemy_facing_ok
 	bcc .efo_yes			; adjacent — skip facing
 	lda cam_xh
 	sec
-	sbc en_x,x
+	+sbc_mx en_x
 	sta rot0				; dx toward player
 	lda cam_zh
 	sec
-	sbc en_z,x
+	+sbc_mx en_z
 	sta rot1				; dz
 	ldy en_dir,x
 	lda cs_need_dx,y
@@ -611,7 +611,7 @@ enemy_facing_ok
 ; Rottweiler: nodir turnaround (may 180°); grunt: forbid reverse while walking
 select_dodge_dir
 	ldx enemy_idx
-	lda en_type,x
+	jsr enemy_get_class
 	bne .sdd_nodir
 	lda en_dir,x
 	tay
@@ -624,11 +624,11 @@ select_dodge_dir
 .sdd_dlt
 	lda cam_xh
 	sec
-	sbc en_x,x
+	+sbc_mx en_x
 	sta rot0				; dx
 	lda cam_zh
 	sec
-	sbc en_z,x
+	+sbc_mx en_z
 	sta rot1				; dz
 	lda rot0
 	bmi .sdd_wx
@@ -704,7 +704,7 @@ select_dodge_dir
 .sdd_ord
 	; Grunt too close: prefer away (swap toward↔away, rebuild diag)
 	ldx enemy_idx
-	lda en_type,x
+	jsr enemy_get_class
 	bne .sdd_zig
 	jsr enemy_chebyshev
 	cmp #GRUNT_BACKOFF + 1
@@ -789,7 +789,7 @@ enemy_set_geom
 	asl
 	asl
 	asl
-	sta en_rot,x
+	+sta_mx en_rot
 	rts
 
 ; Face player: analog yaw → en_rot only (leave en_dir for dodge).
@@ -797,15 +797,15 @@ enemy_face_player
 	ldx enemy_idx
 	lda cam_xh
 	sec
-	sbc en_x,x
+	+sbc_mx en_x
 	sta rot0
 	lda cam_zh
 	sec
-	sbc en_z,x
+	+sbc_mx en_z
 	sta rot1
 	jsr atan2_yaw
 	ldx enemy_idx
-	sta en_rot,x
+	+sta_mx en_rot
 	rts
 
 ; Enter alert one-shot (Halt / bark).
@@ -815,7 +815,7 @@ enemy_enter_alert
 	sta en_state,x
 	lda #0
 	sta en_frame,x
-	lda en_type,x
+	jsr enemy_get_class
 	bne .eeal_bark
 	lda #SOUND_HALT
 	jmp play_sound
@@ -832,7 +832,7 @@ enemy_enter_approach
 	sta en_frame,x
 	sta en_step,x
 	sta en_step_h,x
-	lda en_type,x
+	jsr enemy_get_class
 	bne .eea_dog
 	lda #<APPROACH_MIN_MS
 	sta en_timer,x
@@ -865,15 +865,15 @@ enemy_dog_wait
 enemy_same_floor
 	ldx enemy_idx
 	lda floor_y
-	cmp en_y,x
+	+cmp_mx en_y
 	bcs .esf_pl
-	lda en_y,x
+	+lda_mx en_y
 	sec
 	sbc floor_y
 	jmp .esf_cmp
 .esf_pl
 	sec
-	sbc en_y,x
+	+sbc_mx en_y
 .esf_cmp
 	cmp #FALL_LEDGE + 1
 	bcc .esf_yes
@@ -889,7 +889,7 @@ enemy_bite
 	jsr enemy_same_floor
 	bcc .eb_rts
 	jsr enemy_chebyshev
-	ldy en_type,x
+	+ldy_mx en_type
 	cmp enemy_range,y
 	beq .eb_roll
 	bcc .eb_roll
@@ -1025,11 +1025,11 @@ enemy_probe_dir
 	tay
 	ldx enemy_idx
 	clc
-	lda en_x,x
+	+lda_mx en_x
 	adc en_dx,y
 	sta col_x
 	clc
-	lda en_z,x
+	+lda_mx en_z
 	adc en_dz,y
 	sta col_z
 	jsr enemy_pos_ok
@@ -1049,9 +1049,9 @@ enemy_try_step
 .ets_ok
 	ldx enemy_idx
 	lda col_x
-	sta en_x,x
+	+sta_mx en_x
 	lda col_z
-	sta en_z,x
+	+sta_mx en_z
 	lda en_dir,x
 	jsr enemy_set_geom
 	jsr enemy_clamp_room
@@ -1066,9 +1066,9 @@ enemy_patrol_step
 	bcc .eps_no
 	ldx enemy_idx
 	lda col_x
-	sta en_x,x
+	+sta_mx en_x
 	lda col_z
-	sta en_z,x
+	+sta_mx en_z
 	lda en_dir,x
 	jsr enemy_set_geom
 	jsr enemy_clamp_room
@@ -1109,7 +1109,7 @@ enemy_patrol_pause
 ; If this enemy patrols, try one cardinal this frame.
 enemy_idle_try_patrol
 	ldx enemy_idx
-	lda en_patrol,x
+	+lda_mx en_patrol
 	beq .eitp_no
 	jsr enemy_patrol_pick
 .eitp_no
@@ -1119,10 +1119,10 @@ enemy_idle_try_patrol
 ; C ignored — enter EN_PATROL if ≥ PATROL_MIN clear cells.
 enemy_patrol_pick
 	ldx enemy_idx
-	lda en_patrol,x
+	+lda_mx en_patrol
 	bpl .epp_rand
 	and #$7f				; consume first-patrol flag
-	sta en_patrol,x
+	+sta_mx en_patrol
 	lda en_dir,x
 	and #7
 	sta ai_probe
@@ -1134,9 +1134,9 @@ enemy_patrol_pick
 	sta ai_probe
 .epp_have
 	ldx enemy_idx
-	lda en_x,x
+	+lda_mx en_x
 	sta col_x
-	lda en_z,x
+	+lda_mx en_z
 	sta col_z
 	lda #0
 	sta rot0				; clear count
@@ -1193,23 +1193,23 @@ enemy_patrol_pick
 ; Clamp en_x/z: matching-top rb (standing, else nearest), not lid union.
 enemy_clamp_room
 	ldx enemy_idx
-	lda en_x,x
+	+lda_mx en_x
 	sta col_x
-	lda en_z,x
+	+lda_mx en_z
 	sta col_z
 	jsr enemy_cutout_idx
 	bcs .ecr_this
 	jsr enemy_nearest_cutout
 	cpx #$ff
 	beq .ecr_ncut
-	lda rb_sx,x
+	+lda_mx rb_sx
 	beq .ecr_ncut
 .ecr_this
 	jsr load_box_rb
 	jmp clamp_to_box_inset1
 .ecr_ncut
 	ldx enemy_idx
-	ldy en_room,x
+	+ldy_mx en_room
 	jsr room_cols_inset1
 	bcs .ecr_rts
 	jsr enemy_match_rc
@@ -1225,7 +1225,7 @@ enemy_nearest_cutout
 	sta proc_tmp1
 	sta proc_tmp2
 	ldx enemy_idx
-	lda en_room,x
+	+lda_mx en_room
 	asl
 	sta proc_tmp0
 	tax
@@ -1246,25 +1246,25 @@ enemy_nearest_cutout
 .enc_cno
 	rts
 .enc_dist
-	lda rb_sx,x
+	+lda_mx rb_sx
 	lsr
 	clc
-	adc rb_x,x
+	+adc_mx rb_x
 	ldy enemy_idx
 	sec
-	sbc en_x,y
+	+sbc_my en_x
 	bcs .enc_ax
 	eor #$ff
 	clc
 	adc #1
 .enc_ax
 	sta proc_tmp3
-	lda rb_sz,x
+	+lda_mx rb_sz
 	lsr
 	clc
-	adc rb_z,x
+	+adc_mx rb_z
 	sec
-	sbc en_z,y
+	+sbc_my en_z
 	bcs .enc_az
 	eor #$ff
 	clc
@@ -1277,7 +1277,7 @@ enemy_nearest_cutout
 ; X = matching-Y collider of en_room. C=1 found.
 enemy_match_rc
 	ldx enemy_idx
-	lda en_room,x
+	+lda_mx en_room
 	jsr room_mul3
 	tax
 	jsr .emr_one
@@ -1290,20 +1290,20 @@ enemy_match_rc
 .emr_yes
 	rts
 .emr_one
-	lda rc_sx,x
+	+lda_mx rc_sx
 	beq .emr_no
 	ldy enemy_idx
-	lda rc_y,x
-	cmp en_y,y
+	+lda_mx rc_y
+	+cmp_my en_y
 	beq .emr_ok
 	bcs .emr_hi
-	lda en_y,y
+	+lda_my en_y
 	sec
-	sbc rc_y,x
+	+sbc_mx rc_y
 	jmp .emr_d
 .emr_hi
 	sec
-	sbc en_y,y
+	+sbc_my en_y
 .emr_d
 	cmp #FALL_LEDGE + 1
 	bcs .emr_no
@@ -1321,11 +1321,11 @@ clamp_to_box_inset1
 	lda box_x
 	adc #1
 	sta rot0
-	lda en_x,x
+	+lda_mx en_x
 	cmp rot0
 	bcs +
 	lda rot0
-	sta en_x,x
+	+sta_mx en_x
 +
 	clc
 	lda box_x
@@ -1333,23 +1333,23 @@ clamp_to_box_inset1
 	sec
 	sbc #1
 	sta rot1
-	lda en_x,x
+	+lda_mx en_x
 	cmp rot1
 	bcc +
 	lda rot1
 	sec
 	sbc #1
-	sta en_x,x
+	+sta_mx en_x
 +
 	clc
 	lda box_z
 	adc #1
 	sta rot0
-	lda en_z,x
+	+lda_mx en_z
 	cmp rot0
 	bcs +
 	lda rot0
-	sta en_z,x
+	+sta_mx en_z
 +
 	clc
 	lda box_z
@@ -1357,13 +1357,13 @@ clamp_to_box_inset1
 	sec
 	sbc #1
 	sta rot1
-	lda en_z,x
+	+lda_mx en_z
 	cmp rot1
 	bcc .cbi_rts
 	lda rot1
 	sec
 	sbc #1
-	sta en_z,x
+	+sta_mx en_z
 .cbi_rts
 	rts
 
@@ -1371,12 +1371,12 @@ clamp_to_box_inset1
 ; Uses enemy Y via cam hack for solid_at.
 enemy_pos_ok
 	ldx enemy_idx
-	ldy en_room,x
+	+ldy_mx en_room
 	jsr room_cols_inset1
 	bcc .epo_no
 	lda cam_yh
 	pha
-	lda en_y,x
+	+lda_mx en_y
 	clc
 	adc #EYE_HEIGHT
 	sta cam_yh
@@ -1394,20 +1394,20 @@ enemy_pos_ok
 ; Dest lowest rc_y vs en_y. C=1 if |floor − en_y| ≤ FALL_LEDGE.
 enemy_floor_ok
 	ldx enemy_idx
-	ldy en_room,x
+	+ldy_mx en_room
 	jsr peek_rc_floor
 	bcc .efl_no
 	ldx enemy_idx
 	lda proc_tmp2
-	cmp en_y,x
+	+cmp_mx en_y
 	bcs .efl_pl
-	lda en_y,x
+	+lda_mx en_y
 	sec
 	sbc proc_tmp2
 	jmp .efl_cmp
 .efl_pl
 	sec
-	sbc en_y,x
+	+sbc_mx en_y
 .efl_cmp
 	cmp #FALL_LEDGE + 1
 	bcc .efl_yes
@@ -1427,7 +1427,7 @@ enemy_cutout_ok
 	jsr enemy_any_cutout_top
 	bcc .eco_free
 	ldx enemy_idx
-	lda en_room,x
+	+lda_mx en_room
 	asl
 	tax
 	jsr .eco_try
@@ -1457,7 +1457,7 @@ enemy_cutout_ok
 ; C=1 if any rb_* for en_room has |top − en_y| ≤ FALL_LEDGE.
 enemy_any_cutout_top
 	ldx enemy_idx
-	lda en_room,x
+	+lda_mx en_room
 	asl
 	tax
 	jsr enemy_rb_top_ok
@@ -1469,23 +1469,23 @@ enemy_any_cutout_top
 
 ; X = rb_*. C=1 if occupied and |top − en_y| ≤ FALL_LEDGE.
 enemy_rb_top_ok
-	lda rb_sx,x
+	+lda_mx rb_sx
 	beq .erto_no
 	clc
-	lda rb_y,x
-	adc rb_sy,x
+	+lda_mx rb_y
+	+adc_mx rb_sy
 	ldy enemy_idx
-	cmp en_y,y
+	+cmp_my en_y
 	beq .erto_yes
 	bcs .erto_hi
 	sta proc_tmp3
-	lda en_y,y
+	+lda_my en_y
 	sec
 	sbc proc_tmp3
 	jmp .erto_d
 .erto_hi
 	sec
-	sbc en_y,y
+	+sbc_my en_y
 .erto_d
 	cmp #FALL_LEDGE + 1
 	bcs .erto_no
@@ -1499,7 +1499,7 @@ enemy_rb_top_ok
 ; Current col_x/z vs en_room rb_*. C=1 and X = rb index if top matches en_y.
 enemy_cutout_idx
 	ldx enemy_idx
-	lda en_room,x
+	+lda_mx en_room
 	asl
 	tax
 	jsr .eci_one
@@ -1518,32 +1518,32 @@ enemy_cutout_idx
 
 ; X = rb index. C=1 if col_x/z inside inset 1.
 rb_inset1
-	lda rb_sx,x
-	beq .rbi_no
+	+lda_mx rb_sx
+	+beq_far .rbi_no
 	lda col_x
-	cmp rb_x,x
-	bcc .rbi_no
-	beq .rbi_no
+	+cmp_mx rb_x
+	+bcc_far .rbi_no
+	+beq_far .rbi_no
 	clc
-	lda rb_x,x
-	adc rb_sx,x
+	+lda_mx rb_x
+	+adc_mx rb_sx
 	sec
 	sbc #1
 	cmp col_x
-	bcc .rbi_no
-	beq .rbi_no
+	+bcc_far .rbi_no
+	+beq_far .rbi_no
 	lda col_z
-	cmp rb_z,x
-	bcc .rbi_no
-	beq .rbi_no
+	+cmp_mx rb_z
+	+bcc_far .rbi_no
+	+beq_far .rbi_no
 	clc
-	lda rb_z,x
-	adc rb_sz,x
+	+lda_mx rb_z
+	+adc_mx rb_sz
 	sec
 	sbc #1
 	cmp col_z
-	bcc .rbi_no
-	beq .rbi_no
+	+bcc_far .rbi_no
+	+beq_far .rbi_no
 	sec
 	rts
 .rbi_no
@@ -1553,13 +1553,13 @@ rb_inset1
 ; C=1 clear LOS (no 3D hit on room cutout boxes).
 enemy_shot_clear
 	ldx enemy_idx
-	lda en_x,x
+	+lda_mx en_x
 	sta ln_ax
-	lda en_y,x
+	+lda_mx en_y
 	clc
 	adc #SHOT_MID_H
 	sta ln_ay
-	lda en_z,x
+	+lda_mx en_z
 	sta ln_az
 	lda cam_xh
 	sta ln_bx
@@ -1567,7 +1567,7 @@ enemy_shot_clear
 	sta ln_by
 	lda cam_zh
 	sta ln_bz
-	ldy en_room,x
+	+ldy_mx en_room
 	jsr line_cutouts_hit
 	bcc .esc_clear
 	clc
@@ -1598,13 +1598,13 @@ pick_var_n
 
 ; X = enemy. Pick en_pain_i = rnd8 % enemy_pain_n[type].
 pick_pain_var
-	ldy en_type,x
+	+ldy_mx en_type
 	lda enemy_pain_n,y
 	jmp pick_var_n
 
 ; X = enemy. Pick en_pain_i = rnd8 % enemy_death_n[type].
 pick_death_var
-	ldy en_type,x
+	+ldy_mx en_type
 	lda enemy_death_n,y
 	jmp pick_var_n
 
@@ -1635,7 +1635,7 @@ damage_enemy
 	ldx enemy_idx
 .de_roll
 	jsr rnd8
-	ldy en_type,x
+	+ldy_mx en_type
 	cmp enemy_pain_chance,y
 	bcs .de_rts
 	lda #EN_PAIN
@@ -1643,7 +1643,7 @@ damage_enemy
 	lda #0
 	sta en_frame,x
 	jsr pick_pain_var
-	lda en_type,x
+	jsr enemy_get_class
 	bne .de_dpain
 	lda #SOUND_POPAIN
 	jmp play_sound
@@ -1659,15 +1659,15 @@ damage_enemy
 axe_try_kill
 	ldx #0
 .atk_lp
-	cpx #MAP_NENEMIES
-	bcs .atk_no
+	cpx	map_nenemies
+	+bcs_far .atk_no
 	lda en_state,x
 	cmp #EN_DYING
 	bcs .atk_n
-	lda en_room,x
+	+lda_mx en_room
 	cmp room_idx
 	bne .atk_n
-	lda en_x,x
+	+lda_mx en_x
 	sec
 	sbc cam_xh
 	bcs +
@@ -1677,7 +1677,7 @@ axe_try_kill
 +
 	cmp #AXE_HIT_R + 1
 	bcs .atk_n
-	lda en_z,x
+	+lda_mx en_z
 	sec
 	sbc cam_zh
 	bcs +
@@ -1687,7 +1687,7 @@ axe_try_kill
 +
 	cmp #AXE_HIT_R + 1
 	bcs .atk_n
-	lda en_y,x
+	+lda_mx en_y
 	sta box_y
 	lda #ENEMY_CULL_H
 	sta box_sy
@@ -1701,7 +1701,8 @@ axe_try_kill
 	rts
 .atk_n
 	inx
-	bne .atk_lp
+	beq .atk_no
+	jmp .atk_lp
 .atk_no
 	clc
 	rts
@@ -1717,7 +1718,7 @@ shotgun_hitscan
 	jsr load_view_trig
 	ldx #0
 .sh_lp
-	cpx #MAP_NENEMIES
+	cpx	map_nenemies
 	bcc .sh_cont
 	jmp .sh_done
 .sh_cont
@@ -1727,7 +1728,7 @@ shotgun_hitscan
 	bcc .sh_alive
 	jmp .sh_n
 .sh_alive
-	lda en_room,x
+	+lda_mx en_room
 	cmp room_idx
 	beq .sh_room
 	jmp .sh_n
@@ -1739,27 +1740,27 @@ shotgun_hitscan
 	lda cam_zh
 	sta ln_az
 	ldx enemy_idx
-	lda en_x,x
+	+lda_mx en_x
 	sta ln_bx
-	lda en_y,x
+	+lda_mx en_y
 	clc
 	adc #SHOT_MID_H
 	sta ln_by
-	lda en_z,x
+	+lda_mx en_z
 	sta ln_bz
-	ldy en_room,x
+	+ldy_mx en_room
 	jsr line_cutouts_hit
 	bcc .sh_vis
 	jmp .sh_n				; cutout solid (L/T/S notch)
 .sh_vis
 	ldx enemy_idx
-	lda en_x,x
+	+lda_mx en_x
 	sta ent_wx
-	lda en_y,x
+	+lda_mx en_y
 	clc
 	adc #SHOT_MID_H
 	sta ent_wy
-	lda en_z,x
+	+lda_mx en_z
 	sta ent_wz
 	lda cs_b
 	jsr mulset_a
@@ -1836,13 +1837,13 @@ shotgun_hitscan
 ; Mid-body blood splat on shot_hit_i (view trig loaded).
 shotgun_hit_splat
 	ldx shot_hit_i
-	lda en_x,x
+	+lda_mx en_x
 	sta ent_wx
-	lda en_y,x
+	+lda_mx en_y
 	clc
 	adc #SHOT_MID_H
 	sta ent_wy
-	lda en_z,x
+	+lda_mx en_z
 	sta ent_wz
 	lda cs_b
 	jsr mulset_a

@@ -1,4 +1,4 @@
-; Quake64 disposable boot — fits LOADER_BASE..LOCODE_BASE-1.
+; Quake64 disposable boot — fits LOADER_BASE..REBOOT_STUB-1.
 ; MENU @ $0900 → JSR menu → TAB stage + JSR copy_tab (+3) → file_tab → JMP $0900.
 ; Per file: SETNAM / SETLFS / LOAD / CLOSE only.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
@@ -126,6 +126,6 @@ name_tab
 	!text "TAB"
 
 end_boot = *
-!if end_boot > effects_vol {
-	!error "Boot overlaps effects_vol/difficulty; end=$", end_boot
+!if end_boot > REBOOT_STUB {
+	!error "Boot overlaps REBOOT_STUB; end=$", end_boot
 }

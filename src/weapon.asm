@@ -89,7 +89,8 @@ recoil_step_ms_hi
 	!byte 0, 0, 0
 
 ; ------------------------------------------------------------------
-init_weapon
+; VIC sprite slots / flash state. Does not touch HP, ammo, or weapons.
+init_weapon_hw
 	lda #0
 	sta $d015
 	sta spr_en
@@ -160,7 +161,11 @@ init_weapon
 	lda #<spr_nail_fr
 	ldy #>spr_nail_fr
 	jsr blit_flash2
+	rts
 
+; First start: hardware + starting inventory.
+init_weapon
+	jsr init_weapon_hw
 	lda #HAVE_START
 	sta have_wpn
 	lda #AMMO_SHELLS_START

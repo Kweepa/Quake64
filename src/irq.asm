@@ -27,17 +27,30 @@ init_irq
 	lda $dd0d
 
 	lda #<nmi_rti
-	sta $fffa
 	sta $0318
 	lda #>nmi_rti
-	sta $fffb
 	sta $0319
 
-	lda #<irq_entry
+	; $FFFA-$FFFF are negsqhi[506..511]. Writing IRQ/NMI handler addresses
+	; here poisoned far-project multiplies (limb stretch). Put the true
+	; table bytes back; menu_sfx clobbers them, so repair every init.
+	; IRQ: $FFFE/$FFFF = $3F + >IRQ_TRAMP → jmp irq_entry at $093F
+	; (negsq[511] is unreachable as data). Restore/NMI fetches $FFFA/B
+	; as $3D,$3E — that is table data, not a handler. Leave it; Page Up
+	; is undefined (no extra CIA/NMI machinery).
+	lda #$3d				; negsqhi[506] = hi(251*251/4)
+	sta $fffa
+	lda #$3e				; negsqhi[507] = hi(252*252/4)
+	sta $fffb
+	lda #$3f				; negsqhi[510] = hi(255*255/4)
 	sta $fffe
+	lda #>IRQ_TRAMP
+	sta $ffff				; negsqhi[511]: unreachable, vector hi
+!if <IRQ_TRAMP != $3f { !error "IRQ_TRAMP lo must be $3F (negsqhi[510])" }
+
+	lda #<irq_entry
 	sta $0314
 	lda #>irq_entry
-	sta $ffff
 	sta $0315
 
 	lda #0

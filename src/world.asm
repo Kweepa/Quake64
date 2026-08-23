@@ -54,6 +54,8 @@ world_init
 	jsr init_backpacks
 	jsr init_enemies
 	jsr init_drops
+	lda spawn_y
+	sta floor_y
 	jsr update_floor
 	jsr sync_eye
 	lda #$ff
@@ -65,12 +67,13 @@ world_init
 init_backpacks
 	ldx #0
 .ib_lp
-	cpx #MAP_NBACKPACKS
-	bcs .ib_rts
+	cpx	map_nbackpacks
+	+bcs_far .ib_rts
 	lda #0
 	sta bp_taken,x
 	inx
-	bne .ib_lp
+	beq .ib_rts
+	jmp .ib_lp
 .ib_rts
 	rts
 
@@ -82,8 +85,8 @@ init_enemies
 	sta gunshot_wake
 	ldx #0
 .ie_lp
-	cpx #MAP_NENEMIES
-	bcs .ie_rts
+	cpx	map_nenemies
+	+bcs_far .ie_rts
 	lda #EN_IDLE
 	sta en_state,x
 	lda #0
@@ -94,25 +97,26 @@ init_enemies
 	sta en_step_h,x
 	sta en_pat_n,x
 	sta en_pain_i,x
-	lda en_rot,x			; map rot = editor octant (0=+Z)
+	+lda_mx en_rot			; map rot = editor octant (0=+Z)
 	sta en_dir,x
 	asl
 	asl
 	asl
 	asl
 	asl
-	sta en_rot,x
-	lda en_patrol,x
+	+sta_mx en_rot
+	+lda_mx en_patrol
 	and #1
 	beq .ie_hp
 	ora #$80			; first patrol uses spawn dir
-	sta en_patrol,x
+	+sta_mx en_patrol
 .ie_hp
-	ldy en_type,x
+	+ldy_mx en_type
 	lda enemy_hp_init,y
 	sta en_hp,x
 	inx
-	bne .ie_lp
+	beq .ie_rts
+	jmp .ie_lp
 .ie_rts
 	rts
 
@@ -121,11 +125,12 @@ init_drops
 	ldx #0
 	lda #1
 .id_lp
-	cpx #MAP_NENEMIES
-	bcs .id_rts
+	cpx	map_nenemies
+	+bcs_far .id_rts
 	sta drop_taken,x
 	inx
-	bne .id_lp
+	beq .id_rts
+	jmp .id_lp
 .id_rts
 	rts
 
@@ -189,19 +194,19 @@ player_overlaps_y
 ; arm is vertical (lid over a shaft). The union hull leaves a hole;
 ; use the lowest floor so you drop, not the lid.
 uf_rc_floor
-	lda rc_sx,x
+	+lda_mx rc_sx
 	beq .urf_rts
 	jsr point_in_rc_xz
 	bcc .urf_rts
 	lda proc_tmp0
 	bne .urf_min
-	lda rc_y,x
+	+lda_mx rc_y
 	sta proc_tmp2
 	lda #1
 	sta proc_tmp0
 	rts
 .urf_min
-	lda rc_y,x
+	+lda_mx rc_y
 	cmp proc_tmp2
 	bcs .urf_rts
 	sta proc_tmp2
@@ -250,103 +255,105 @@ update_floor
 	ldx #0
 	; crate tops (walkable)
 .uf_c
-	cpx #MAP_NCRATES
-	bcs .uf_p
-	lda crate_room,x
+	cpx	map_ncrates
+	+bcs_far .uf_p
+	+lda_mx crate_room
 	cmp room_idx
-	bne .uf_cn
-	lda crate_x,x
+	+bne_far .uf_cn
+	+lda_mx crate_x
 	sta box_x
-	lda crate_z,x
+	+lda_mx crate_z
 	sta box_z
-	lda crate_sx,x
+	+lda_mx crate_sx
 	sta box_sx
-	lda crate_sz,x
+	+lda_mx crate_sz
 	sta box_sz
 	lda cam_xh
 	sta col_x
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	bcc .uf_cn
+	+bcc_far .uf_cn
 	clc
-	lda crate_y,x
-	adc crate_sy,x
+	+lda_mx crate_y
+	+adc_mx crate_sy
 	cmp floor_y
-	bcc .uf_cn
-	beq .uf_cn
+	+bcc_far .uf_cn
+	+beq_far .uf_cn
 	sta col_y			; crate_top
 	sec
 	lda cam_yh
 	sbc #EYE_HEIGHT			; feet
 	cmp col_y
-	bcc .uf_cn			; feet < top — overhead
+	+bcc_far .uf_cn			; feet < top — overhead
 	lda col_y
 	sta floor_y
 .uf_cn
 	inx
-	bne .uf_c
+	beq .uf_p
+	jmp .uf_c
 .uf_p
 	; platforms (walkable if solid)
 	ldx #0
 .uf_pl
-	cpx #MAP_NPLATS
-	bcs .uf_plats_done
-	lda plat_solid,x
-	beq .uf_pn
-	lda plat_room,x
+	cpx	map_nplats
+	+bcs_far .uf_plats_done
+	+lda_mx plat_solid
+	+beq_far .uf_pn
+	+lda_mx plat_room
 	cmp room_idx
-	bne .uf_pn
-	lda plat_x,x
+	+bne_far .uf_pn
+	+lda_mx plat_x
 	sta box_x
-	lda plat_z,x
+	+lda_mx plat_z
 	sta box_z
-	lda plat_sx,x
+	+lda_mx plat_sx
 	sta box_sx
-	lda plat_sz,x
+	+lda_mx plat_sz
 	sta box_sz
 	lda cam_xh
 	sta col_x
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	bcc .uf_pn
-	lda plat_y,x
+	+bcc_far .uf_pn
+	+lda_mx plat_y
 	cmp floor_y
-	bcc .uf_pn
-	beq .uf_pn
+	+bcc_far .uf_pn
+	+beq_far .uf_pn
 	sta col_y			; plat plane
 	sec
 	lda cam_yh
 	sbc #EYE_HEIGHT			; feet
 	cmp col_y
-	bcc .uf_pn			; feet < plane — overhead
+	+bcc_far .uf_pn			; feet < plane — overhead
 	lda col_y
 	sta floor_y
 .uf_pn
 	inx
-	bne .uf_pl
+	beq .uf_plats_done
+	jmp .uf_pl
 .uf_plats_done
 	jsr elev_update_floor
 .uf_slope
 	ldx #0
 .uf_s
-	cpx #MAP_NSLOPES
+	cpx	map_nslopes
 	bcc .uf_sgo
 	jmp .uf_done
 .uf_sgo
-	lda slope_room,x
+	+lda_mx slope_room
 	cmp room_idx
 	beq .uf_sroom
 	jmp .uf_sn
 .uf_sroom
-	lda slope_x,x
+	+lda_mx slope_x
 	sta box_x
-	lda slope_z,x
+	+lda_mx slope_z
 	sta box_z
-	lda slope_sx,x
+	+lda_mx slope_sx
 	sta box_sx
-	lda slope_sz,x
+	+lda_mx slope_sz
 	sta box_sz
 	lda cam_xh
 	sta col_x
@@ -359,49 +366,49 @@ update_floor
 	; height = slope_y + (local_8.8 * sy) / run
 	lda #1
 	sta floor_slope
-	lda slope_axis,x
+	+lda_mx slope_axis
 	bne .uf_sz
 	lda cam_xl
 	sta ylo
 	sec
 	lda cam_xh
-	sbc slope_x,x
+	+sbc_mx slope_x
 	sta yhi
-	lda slope_dir,x
+	+lda_mx slope_dir
 	bne .uf_sx_go
 	lda #0
 	sec
 	sbc ylo
 	sta ylo
-	lda slope_sx,x
+	+lda_mx slope_sx
 	sbc yhi
 	sta yhi
 .uf_sx_go
-	lda slope_sx,x
+	+lda_mx slope_sx
 	jmp .uf_sinterp
 .uf_sz
 	lda cam_zl
 	sta ylo
 	sec
 	lda cam_zh
-	sbc slope_z,x
+	+sbc_mx slope_z
 	sta yhi
-	lda slope_dir,x
+	+lda_mx slope_dir
 	bne .uf_sz_go
 	lda #0
 	sec
 	sbc ylo
 	sta ylo
-	lda slope_sz,x
+	+lda_mx slope_sz
 	sbc yhi
 	sta yhi
 .uf_sz_go
-	lda slope_sz,x
+	+lda_mx slope_sz
 .uf_sinterp
 	sta dlo				; run
 	beq .uf_sflat
 	stx obj_i
-	ldy slope_sy,x
+	+ldy_mx slope_sy
 	lda ylo
 	jsr umul8j			; local_l * sy
 	lda prod_l
@@ -411,7 +418,7 @@ update_floor
 	lda #0
 	sta rot2
 	ldx obj_i
-	ldy slope_sy,x
+	+ldy_mx slope_sy
 	lda yhi
 	jsr umul8j			; local_h * sy → bits 8–23
 	clc
@@ -424,14 +431,14 @@ update_floor
 	jsr div24u8			; rot0:rot1 = 8.8 rise
 	ldx obj_i
 	clc
-	lda slope_y,x
+	+lda_mx slope_y
 	adc rot1
 	sta floor_y
 	lda rot0
 	sta floor_yl
 	jmp .uf_done
 .uf_sflat
-	lda slope_y,x
+	+lda_mx slope_y
 	sta floor_y
 	jmp .uf_done
 .uf_sn
@@ -585,60 +592,62 @@ solid_at
 	; crates — solid on Y overlap (not when on/above top or under)
 	ldx #0
 .sa_c
-	cpx #MAP_NCRATES
-	bcs .sa_p
-	lda crate_room,x
+	cpx	map_ncrates
+	+bcs_far .sa_p
+	+lda_mx crate_room
 	cmp room_idx
-	bne .sa_cn
-	lda crate_y,x
+	+bne_far .sa_cn
+	+lda_mx crate_y
 	sta box_y
-	lda crate_sy,x
+	+lda_mx crate_sy
 	sta box_sy
 	jsr player_overlaps_y
-	bcc .sa_cn
-	lda crate_x,x
+	+bcc_far .sa_cn
+	+lda_mx crate_x
 	sta box_x
-	lda crate_z,x
+	+lda_mx crate_z
 	sta box_z
-	lda crate_sx,x
+	+lda_mx crate_sx
 	sta box_sx
-	lda crate_sz,x
+	+lda_mx crate_sz
 	sta box_sz
 	jsr point_in_box_xz
-	bcs .sa_yes
+	+bcs_far .sa_yes
 .sa_cn
 	inx
-	bne .sa_c
+	beq .sa_p
+	jmp .sa_c
 .sa_p
 	; platforms — solid on Y overlap (plane as sy=0)
 	ldx #0
 .sa_pl
-	cpx #MAP_NPLATS
-	bcs .sa_d
-	lda plat_solid,x
-	beq .sa_pn
-	lda plat_room,x
+	cpx	map_nplats
+	+bcs_far .sa_d
+	+lda_mx plat_solid
+	+beq_far .sa_pn
+	+lda_mx plat_room
 	cmp room_idx
-	bne .sa_pn
-	lda plat_y,x
+	+bne_far .sa_pn
+	+lda_mx plat_y
 	sta box_y
 	lda #0
 	sta box_sy
 	jsr player_overlaps_y
-	bcc .sa_pn
-	lda plat_x,x
+	+bcc_far .sa_pn
+	+lda_mx plat_x
 	sta box_x
-	lda plat_z,x
+	+lda_mx plat_z
 	sta box_z
-	lda plat_sx,x
+	+lda_mx plat_sx
 	sta box_sx
-	lda plat_sz,x
+	+lda_mx plat_sz
 	sta box_sz
 	jsr point_in_box_xz
-	bcs .sa_yes
+	+bcs_far .sa_yes
 .sa_pn
 	inx
-	bne .sa_pl
+	beq .sa_d
+	jmp .sa_pl
 .sa_d
 	jmp door_blocks
 .sa_yes
@@ -649,26 +658,26 @@ solid_at
 ; point_in_rc_xz — col_x/col_z vs collider X (exclusive max). C=1 inside
 ; ------------------------------------------------------------------
 point_in_rc_xz
-	lda rc_sx,x
-	beq .prc_no
+	+lda_mx rc_sx
+	+beq_far .prc_no
 	lda col_x
-	cmp rc_x,x
-	bcc .prc_no
+	+cmp_mx rc_x
+	+bcc_far .prc_no
 	clc
-	lda rc_x,x
-	adc rc_sx,x
+	+lda_mx rc_x
+	+adc_mx rc_sx
 	cmp col_x
-	bcc .prc_no
-	beq .prc_no
+	+bcc_far .prc_no
+	+beq_far .prc_no
 	lda col_z
-	cmp rc_z,x
-	bcc .prc_no
+	+cmp_mx rc_z
+	+bcc_far .prc_no
 	clc
-	lda rc_z,x
-	adc rc_sz,x
+	+lda_mx rc_z
+	+adc_mx rc_sz
 	cmp col_z
-	bcc .prc_no
-	beq .prc_no
+	+bcc_far .prc_no
+	+beq_far .prc_no
 	sec
 	rts
 .prc_no
@@ -679,7 +688,7 @@ point_in_rc_xz
 ; Faces shared with another collider in this room are not inset, so L/T/S joins stay walkable.
 ; proc_tmp5 = room*3 (group base).
 rc_inset_ok
-	lda rc_sx,x
+	+lda_mx rc_sx
 	bne .rio_go
 	jmp .rio_no
 .rio_go
@@ -689,41 +698,41 @@ rc_inset_ok
 	bcs .rio_x0
 	sec
 	sbc #PLAYER_R
-	bcc .rio_no
+	+bcc_far .rio_no
 .rio_x0
-	cmp rc_x,x
-	bcc .rio_no
+	+cmp_mx rc_x
+	+bcc_far .rio_no
 	clc
-	lda rc_x,x
-	adc rc_sx,x
+	+lda_mx rc_x
+	+adc_mx rc_sx
 	jsr .rio_join_xmax
 	bcs .rio_x1
 	sec
 	sbc #PLAYER_R
 .rio_x1
 	cmp col_x
-	bcc .rio_no
-	beq .rio_no
+	+bcc_far .rio_no
+	+beq_far .rio_no
 	lda col_z
 	jsr .rio_join_zmin
 	bcs .rio_z0
 	sec
 	sbc #PLAYER_R
-	bcc .rio_no
+	+bcc_far .rio_no
 .rio_z0
-	cmp rc_z,x
-	bcc .rio_no
+	+cmp_mx rc_z
+	+bcc_far .rio_no
 	clc
-	lda rc_z,x
-	adc rc_sz,x
+	+lda_mx rc_z
+	+adc_mx rc_sz
 	jsr .rio_join_zmax
 	bcs .rio_z1
 	sec
 	sbc #PLAYER_R
 .rio_z1
 	cmp col_z
-	bcc .rio_no
-	beq .rio_no
+	+bcc_far .rio_no
+	+beq_far .rio_no
 	sec
 	rts
 .rio_no
@@ -753,12 +762,12 @@ rc_inset_ok
 	tya
 	cmp proc_tmp3
 	beq .rio_xmin_n
-	lda rc_sx,y
+	+lda_my rc_sx
 	beq .rio_xmin_n
 	clc
-	lda rc_x,y
-	adc rc_sx,y
-	cmp rc_x,x
+	+lda_my rc_x
+	+adc_my rc_sx
+	+cmp_mx rc_x
 	bne .rio_xmin_n
 	jmp .rio_ovz
 .rio_xmin_n
@@ -786,12 +795,12 @@ rc_inset_ok
 	tya
 	cmp proc_tmp3
 	beq .rio_xmax_n
-	lda rc_sx,y
+	+lda_my rc_sx
 	beq .rio_xmax_n
 	clc
-	lda rc_x,x
-	adc rc_sx,x
-	cmp rc_x,y
+	+lda_mx rc_x
+	+adc_mx rc_sx
+	+cmp_my rc_x
 	bne .rio_xmax_n
 	jmp .rio_ovz
 .rio_xmax_n
@@ -819,12 +828,12 @@ rc_inset_ok
 	tya
 	cmp proc_tmp3
 	beq .rio_zmin_n
-	lda rc_sx,y
+	+lda_my rc_sx
 	beq .rio_zmin_n
 	clc
-	lda rc_z,y
-	adc rc_sz,y
-	cmp rc_z,x
+	+lda_my rc_z
+	+adc_my rc_sz
+	+cmp_mx rc_z
 	bne .rio_zmin_n
 	jmp .rio_ovx
 .rio_zmin_n
@@ -852,12 +861,12 @@ rc_inset_ok
 	tya
 	cmp proc_tmp3
 	beq .rio_zmax_n
-	lda rc_sx,y
+	+lda_my rc_sx
 	beq .rio_zmax_n
 	clc
-	lda rc_z,x
-	adc rc_sz,x
-	cmp rc_z,y
+	+lda_mx rc_z
+	+adc_mx rc_sz
+	+cmp_my rc_z
 	bne .rio_zmax_n
 	jmp .rio_ovx
 .rio_zmax_n
@@ -866,35 +875,38 @@ rc_inset_ok
 
 .rio_ovx
 	clc
-	lda rc_x,y
-	adc rc_sx,y
-	cmp rc_x,x
-	beq .rov_no
-	bcc .rov_no
+	+lda_my rc_x
+	+adc_my rc_sx
+	+cmp_mx rc_x
+	beq .rovx_no
+	bcc .rovx_no
 	clc
-	lda rc_x,x
-	adc rc_sx,x
-	cmp rc_x,y
-	beq .rov_no
-	bcc .rov_no
+	+lda_mx rc_x
+	+adc_mx rc_sx
+	+cmp_my rc_x
+	beq .rovx_no
+	bcc .rovx_no
 	sec
+	rts
+.rovx_no
+	clc
 	rts
 .rio_ovz
 	clc
-	lda rc_z,y
-	adc rc_sz,y
-	cmp rc_z,x
-	beq .rov_no
-	bcc .rov_no
+	+lda_my rc_z
+	+adc_my rc_sz
+	+cmp_mx rc_z
+	beq .rovz_no
+	bcc .rovz_no
 	clc
-	lda rc_z,x
-	adc rc_sz,x
-	cmp rc_z,y
-	beq .rov_no
-	bcc .rov_no
+	+lda_mx rc_z
+	+adc_mx rc_sz
+	+cmp_my rc_z
+	beq .rovz_no
+	bcc .rovz_no
 	sec
 	rts
-.rov_no
+.rovz_no
 	clc
 	rts
 
@@ -943,32 +955,32 @@ room_cols_inset1
 	plp
 	rts
 .rci1
-	lda rc_sx,x
-	beq .rci_no
+	+lda_mx rc_sx
+	+beq_far .rci_no
 	lda col_x
-	cmp rc_x,x
-	bcc .rci_no
-	beq .rci_no			; inset lo: >
+	+cmp_mx rc_x
+	+bcc_far .rci_no
+	+beq_far .rci_no			; inset lo: >
 	clc
-	lda rc_x,x
-	adc rc_sx,x
+	+lda_mx rc_x
+	+adc_mx rc_sx
 	sec
 	sbc #1
 	cmp col_x
-	bcc .rci_no
-	beq .rci_no
+	+bcc_far .rci_no
+	+beq_far .rci_no
 	lda col_z
-	cmp rc_z,x
-	bcc .rci_no
-	beq .rci_no
+	+cmp_mx rc_z
+	+bcc_far .rci_no
+	+beq_far .rci_no
 	clc
-	lda rc_z,x
-	adc rc_sz,x
+	+lda_mx rc_z
+	+adc_mx rc_sz
 	sec
 	sbc #1
 	cmp col_z
-	bcc .rci_no
-	beq .rci_no
+	+bcc_far .rci_no
+	+beq_far .rci_no
 	sec
 	rts
 .rci_no
@@ -1285,15 +1297,15 @@ try_proximity
 	sta key_use_was
 	ldx #0
 .tp_s
-	cpx #MAP_NSWITCHES
-	bcs .tp_el
+	cpx	map_nswitches
+	+bcs_far .tp_el
 	stx obj_i
-	lda sw_room,x
+	+lda_mx sw_room
 	cmp room_idx
 	bne .tp_sn
 	jsr .prox_switch
 	bcc .tp_sn
-	ldy sw_elev,x
+	+ldy_mx sw_elev
 	tya
 	tax
 	jsr elev_activate
@@ -1315,19 +1327,19 @@ try_proximity
 try_backpack_pickup
 	ldx #0
 .tbp_lp
-	cpx #MAP_NBACKPACKS
-	bcs .tbp_rts
+	cpx	map_nbackpacks
+	+bcs_far .tbp_rts
 	stx obj_i
 	lda bp_taken,x
-	bne .tbp_n
-	lda bp_room,x
+	+bne_far .tbp_n
+	+lda_mx bp_room
 	cmp room_idx
-	bne .tbp_n
-	lda bp_x,x
+	+bne_far .tbp_n
+	+lda_mx bp_x
 	sta box_x
-	lda bp_y,x
+	+lda_mx bp_y
 	sta box_y
-	lda bp_z,x
+	+lda_mx bp_z
 	sta box_z
 	lda #BP_FOOT_SX
 	sta box_sx
@@ -1340,18 +1352,18 @@ try_backpack_pickup
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	bcc .tbp_n
+	+bcc_far .tbp_n
 	jsr player_overlaps_y
-	bcc .tbp_n
+	+bcc_far .tbp_n
 	ldx obj_i
 	jsr grant_backpack
-	bcc .tbp_n
+	+bcc_far .tbp_n
 	jsr hud_ammo
 	ldx obj_i
-	lda bp_type,x
+	+lda_mx bp_type
 	jsr hud_got
 	ldx obj_i
-	lda bp_type,x
+	+lda_mx bp_type
 	jsr pickup_sound
 	ldx obj_i
 	lda #1
@@ -1359,13 +1371,14 @@ try_backpack_pickup
 .tbp_n
 	ldx obj_i
 	inx
-	bne .tbp_lp
+	beq .tbp_rts
+	jmp .tbp_lp
 .tbp_rts
 	; death-drop backpacks
 	ldx #0
 .tdp_lp
-	cpx #MAP_NENEMIES
-	bcs .tdp_rts
+	cpx	map_nenemies
+	+bcs_far .tdp_rts
 	stx obj_i
 	lda drop_taken,x
 	bne .tdp_n
@@ -1408,13 +1421,14 @@ try_backpack_pickup
 .tdp_n
 	ldx obj_i
 	inx
-	bne .tdp_lp
+	beq .tdp_rts
+	jmp .tdp_lp
 .tdp_rts
 	rts
 
 ; X = backpack index; C=1 granted
 grant_backpack
-	lda bp_type,x
+	+lda_mx bp_type
 ; A = BP_* type; C=1 granted
 grant_bp_type
 	cmp #BP_NTYPES
@@ -1432,11 +1446,11 @@ grant_bp_type
 gb_lo
 	!byte <gb_shells, <gb_nailgun, <gb_nails, <gb_grenlaunch
 	!byte <gb_grenades, <gb_hp25, <gb_hp50, <gb_shells5, <gb_armour
-	!byte <gb_quad, <gb_pent, <gb_ring, <gb_silver, <gb_gold
+	!byte <gb_quad, <gb_pent, <gb_ring, <gb_silver, <gb_gold, <gb_rune
 gb_hi
 	!byte >gb_shells, >gb_nailgun, >gb_nails, >gb_grenlaunch
 	!byte >gb_grenades, >gb_hp25, >gb_hp50, >gb_shells5, >gb_armour
-	!byte >gb_quad, >gb_pent, >gb_ring, >gb_silver, >gb_gold
+	!byte >gb_quad, >gb_pent, >gb_ring, >gb_silver, >gb_gold, >gb_rune
 
 gb_hp25
 	lda player_hp
@@ -1617,6 +1631,15 @@ gb_gold
 	sta have_keys
 	sec
 	rts
+gb_rune
+	lda have_keys
+	and #HAVE_EARTH
+	bne gb_no
+	lda have_keys
+	ora #HAVE_EARTH
+	sta have_keys
+	sec
+	rts
 gb_no
 	clc
 	rts
@@ -1651,13 +1674,13 @@ pickup_sound
 ; X=switch; C=1 if within SW_USE_RANGE of pad XZ, Y overlaps, facing the face
 .prox_switch
 	stx obj_i
-	lda sw_x,x
+	+lda_mx sw_x
 	sta box_x
-	lda sw_z,x
+	+lda_mx sw_z
 	sta box_z
-	lda sw_sx,x
+	+lda_mx sw_sx
 	sta box_sx
-	lda sw_sz,x
+	+lda_mx sw_sz
 	sta box_sz
 	lda cam_xh
 	sta col_x
@@ -1666,9 +1689,9 @@ pickup_sound
 	jsr near_box_xz
 	bcc .ps_no
 	ldx obj_i
-	lda sw_y,x
+	+lda_mx sw_y
 	sta box_y
-	lda sw_sy,x
+	+lda_mx sw_sy
 	sta box_sy
 	jsr player_overlaps_y
 	bcc .ps_no
@@ -1740,7 +1763,7 @@ near_box_xz
 
 ; X=switch; C=1 if yaw within ±90° of sw_face (0=+Z, 64=+X, 128=-Z, 192=-X)
 .switch_facing
-	lda sw_face,x
+	+lda_mx sw_face
 	cmp #FACE_PX
 	bcs .sf_x
 	cmp #FACE_MZ
@@ -1789,46 +1812,47 @@ near_box_xz
 update_triggers
 	ldx #0
 .ut
-	cpx #MAP_NTRIGS
-	bcs .ut_miss
-	lda tr_room,x
+	cpx	map_ntrigs
+	+bcs_far .ut_miss
+	+lda_mx tr_room
 	cmp room_idx
-	bne .ut_n
-	lda tr_x,x
+	+bne_far .ut_n
+	+lda_mx tr_x
 	sta box_x
-	lda tr_y,x
+	+lda_mx tr_y
 	sta box_y
-	lda tr_z,x
+	+lda_mx tr_z
 	sta box_z
-	lda tr_sx,x
+	+lda_mx tr_sx
 	sta box_sx
-	lda tr_sy,x
+	+lda_mx tr_sy
 	sta box_sy
-	lda tr_sz,x
+	+lda_mx tr_sz
 	sta box_sz
 	lda cam_xh
 	cmp box_x
-	bcc .ut_n
+	+bcc_far .ut_n
 	clc
 	lda box_x
 	adc box_sx
 	cmp cam_xh
-	bcc .ut_n
-	beq .ut_n
+	+bcc_far .ut_n
+	+beq_far .ut_n
 	lda cam_zh
 	cmp box_z
-	bcc .ut_n
+	+bcc_far .ut_n
 	clc
 	lda box_z
 	adc box_sz
 	cmp cam_zh
-	bcc .ut_n
-	beq .ut_n
+	+bcc_far .ut_n
+	+beq_far .ut_n
 	stx pv0				; hit index
 	jmp .ut_apply
 .ut_n
 	inx
-	bne .ut
+	beq .ut_miss
+	jmp .ut
 .ut_miss
 	lda #$ff
 	sta pv0
@@ -1852,7 +1876,7 @@ update_triggers
 	cmp #$ff
 	beq .ut_done
 	tax
-	lda tr_purpose,x
+	+lda_mx tr_purpose
 	cmp #TRIG_MSG
 	beq .ut_msghold
 	cmp #TRIG_HURT
@@ -1863,13 +1887,13 @@ update_triggers
 	lda msg_on
 	cmp #1
 	bne .ut_msgdraw
-	lda tr_arg,x
+	+lda_mx tr_arg
 	cmp msg_off
 	beq .ut_done
 .ut_msgdraw
 	lda #1
 	sta msg_on
-	lda tr_arg,x
+	+lda_mx tr_arg
 	sta msg_off
 	jmp hud_message
 .ut_hurttick
@@ -1890,7 +1914,7 @@ update_triggers
 
 ; X = trigger SoA. On-entry dispatch.
 trig_enter
-	lda tr_purpose,x
+	+lda_mx tr_purpose
 	cmp #TRIG_MSG
 	beq .te_msg
 	lda msg_on
@@ -1901,18 +1925,22 @@ trig_enter
 	jsr hud_msg_blank
 	ldx obj_i
 .te_act
-	lda tr_purpose,x
+	+lda_mx tr_purpose
 	cmp #TRIG_HURT
 	beq .te_hurt
 	cmp #TRIG_TELE
 	beq .te_tele
 	cmp #TRIG_ELEV
 	beq .te_elev
-	rts				; TRIG_END stub
+	cmp #TRIG_END
+	bne .te_rts
+	jmp next_level
+.te_rts
+	rts
 .te_msg
 	lda #1
 	sta msg_on
-	lda tr_arg,x
+	+lda_mx tr_arg
 	sta msg_off
 	jmp hud_message
 .te_hurt
@@ -1923,32 +1951,33 @@ trig_enter
 	lda #HURT_HP
 	jmp take_damage
 .te_elev
-	lda tr_arg,x
+	+lda_mx tr_arg
 	tax
 	jmp elev_activate
 .te_tele
-!if MAP_NDESTS > 0 {
-	ldy tr_arg,x
+	lda map_ndests
+	+beq_far .te_tele_rts
+	+ldy_mx tr_arg
 	lda #0
 	sta cam_xl
 	sta cam_zl
 	sta cam_yl
-	lda td_x,y
+	+lda_my td_x
 	sta cam_xh
-	lda td_z,y
+	+lda_my td_z
 	sta cam_zh
 	clc
-	lda td_y,y
+	+lda_my td_y
 	adc #EYE_HEIGHT
 	sta cam_yh
-	lda td_rot,y
+	+lda_my td_rot
 	asl
 	asl
 	asl
 	asl
 	asl
 	sta yaw
-	lda td_room,y
+	+lda_my td_room
 	jsr set_room_idx
 	lda #$ff
 	sta pl_on_elev
@@ -1958,5 +1987,5 @@ trig_enter
 	sta fall_vh
 	jsr update_floor
 	jmp sync_eye
-}
+.te_tele_rts
 	rts

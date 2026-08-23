@@ -19,17 +19,17 @@ line_box_max
 
 ; X = rc_* index. Copy collider into box_*.
 load_box_rc
-	lda rc_x,x
+	+lda_mx rc_x
 	sta box_x
-	lda rc_y,x
+	+lda_mx rc_y
 	sta box_y
-	lda rc_z,x
+	+lda_mx rc_z
 	sta box_z
-	lda rc_sx,x
+	+lda_mx rc_sx
 	sta box_sx
-	lda rc_sy,x
+	+lda_mx rc_sy
 	sta box_sy
-	lda rc_sz,x
+	+lda_mx rc_sz
 	sta box_sz
 	rts
 
@@ -44,33 +44,33 @@ room_mul3
 
 ; Y = room. Outer AABB → box_*.
 load_box_room
-	lda room_x,y
+	+lda_my room_x
 	sta box_x
-	lda room_y,y
+	+lda_my room_y
 	sta box_y
-	lda room_z,y
+	+lda_my room_z
 	sta box_z
-	lda room_sx,y
+	+lda_my room_sx
 	sta box_sx
-	lda room_sy,y
+	+lda_my room_sy
 	sta box_sy
-	lda room_sz,y
+	+lda_my room_sz
 	sta box_sz
 	rts
 
 ; X = rb_* index. Copy cutout solid into box_*.
 load_box_rb
-	lda rb_x,x
+	+lda_mx rb_x
 	sta box_x
-	lda rb_y,x
+	+lda_mx rb_y
 	sta box_y
-	lda rb_z,x
+	+lda_mx rb_z
 	sta box_z
-	lda rb_sx,x
+	+lda_mx rb_sx
 	sta box_sx
-	lda rb_sy,x
+	+lda_mx rb_sy
 	sta box_sy
-	lda rb_sz,x
+	+lda_mx rb_sz
 	sta box_sz
 	rts
 
@@ -331,7 +331,7 @@ line_cutouts_hit
 	rts
 
 .lch_slot
-	lda rb_sx,x
+	+lda_mx rb_sx
 	beq .lch_skip
 	txa
 	pha

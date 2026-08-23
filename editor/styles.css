@@ -279,6 +279,10 @@ h2 {
   text-align: right;
 }
 
+#map-stats.error {
+  color: #f88;
+}
+
 .map-stage {
   flex: 1;
   min-height: 0;

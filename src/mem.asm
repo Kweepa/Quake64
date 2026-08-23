@@ -7,7 +7,8 @@
 ; $F000 UI charset (disk fnt). Judd sqlo..negsqhi at $F800 (disk sqt).
 ; Game PRG $0900–<$C000.
 ;
-; Boot $0801, menu overlay then game at $0900. Selectors $08FD–$08FF survive.
+; Boot $0801, menu overlay then game at $0900.
+; Survives GAME load: reboot stub $08F9, level_num $08FC, selectors $08FD–$08FF.
 ; $01: $30 = 64K RAM (game / copy_tab). $36 = I/O + KERNAL, BASIC out (init/IRQ).
 ; $34 is not I/O — PLA gives RAM at $D000 when LORAM=HIRAM=0.
 BANK_RAM	= $30
@@ -15,6 +16,8 @@ BANK_IO		= $36
 
 LOADER_BASE	= $0801
 LOCODE_BASE	= $0900			; MENU overlay, then game
+REBOOT_STUB	= $08F9			; 3-byte JMP reboot_game (installed at start)
+level_num	= $08FC			; 1..8 → e1m1..e1m8
 effects_vol	= $08FD			; menu SFX level 0..15 → SID $d418
 game_complete	= $08FE
 difficulty	= $08FF			; menu skill 0..3
@@ -128,10 +131,16 @@ COL_HUD_DIM	= 2			; dark red stage letters
 
 ; Judd quarter-square (disk sqt @ $F800, page-aligned; mulset_* stores lo only)
 ; Under KERNAL — multiply only with $01=$30 (same as A-side LUTs).
+; negsqhi[506..511] sits on the CPU vectors $FFFA-$FFFF. Indices 506..510
+; are REACHABLE data (a-m = 251..255 in umul8a/b), so those bytes must stay
+; true table values. IRQ uses $FFFE=$3F plus free hi $FFFF (negsq[511] is
+; unreachable) → trampoline at IRQ_TRAMP. Restore/NMI is undefined (table
+; bytes, not a handler). init_irq restores the table after menu_sfx.
 sqlo		= $F800
 sqhi		= $FA00
 negsqlo		= $FC00
 negsqhi		= $FE00
+IRQ_TRAMP	= $093F			; jmp irq_entry; lo byte must be $3F
 
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
@@ -409,7 +418,19 @@ emuz_on		= $CC4A			; 1 = sprite 6 enabled
 emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
 item_spin	= $CC4C			; world powerup yaw (0..255)
 item_spin_l	= $CC4D			; 8.8 fraction
-; $CC4E–$CC5F unused (door view SoA moved to $CE32, 16 slots)
+map_sv_a	= $CC4E			; map accessor A save
+map_sv_y	= $CC4F			; map accessor Y save
+bind_cur	= $CC50			; word: bind_map cursor
+heap_top	= $CC52			; word: next LOAD dest (grows down from SCR_A)
+map_base	= $CC54			; word: packed map payload
+load_dest	= $CC56			; word: current LOAD dest
+load_in_play	= $CC58
+load_namelen	= $CC59
+load_name_l	= $CC5A
+load_name_h	= $CC5B
+load_type	= $CC5C
+bind_n		= $CC5D
+; $CC5E–$CC5F unused
 
 ; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
 VOC		= $CC60			; Cohen–Sutherland outcode (front verts)
@@ -513,7 +534,7 @@ door_vsx	= $CE52
 door_vsz	= $CE62
 door_vface	= $CE72			; last byte $CE81
 en_pat_n	= $CE82			; ENEMY_MAX: patrol remaining cells
-have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD
+have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD / HAVE_EARTH
 pu_kind		= $CE93			; 0 or BP_QUAD / BP_PENT / BP_RING
 pu_ms_l		= $CE94
 pu_ms_h		= $CE95
@@ -527,4 +548,5 @@ fx_skip		= $CE9C			; 1 = skip next tick (spawn frame)
 en_pain_i	= $CE9D			; ENEMY_MAX: pain/death variant index
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
+HAVE_EARTH	= 4
 POWERUP_MS	= 30000

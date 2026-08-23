@@ -96,13 +96,13 @@ fill_viewport_colour
 ; room_idx → col_bg/line/fx/wpn; IRQ publishes colour RAM / weapon sprites
 apply_room_palette
 	ldx room_idx
-	lda room_bg,x
+	+lda_mx room_bg
 	sta col_bg
-	lda room_line,x
+	+lda_mx room_line
 	sta col_line
-	lda room_fx,x
+	+lda_mx room_fx
 	sta col_fx
-	lda room_wpn,x
+	+lda_mx room_wpn
 	sta col_wpn
 	lda #1
 	sta palette_dirty

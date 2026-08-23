@@ -697,7 +697,7 @@ draw_plat_mesh
 ; Pickup mesh: type in A (BP_*). nv=0 → backpack fallback slot BP_NTYPES.
 draw_backpack_mesh
 	ldx obj_i
-	lda bp_type,x
+	+lda_mx bp_type
 draw_pickup_mesh
 	pha
 	jsr load_view_trig
@@ -1062,7 +1062,7 @@ fill_switch_verts
 	lda #>box_col
 	sta col_ptr+1
 	ldx obj_i
-	lda sw_face,x
+	+lda_mx sw_face
 	cmp #FACE_PX
 	bcc .fsz
 	jmp .fsx
@@ -1164,9 +1164,9 @@ fill_switch_verts
 ; Four ramp corners; stroke uses the two hypotenuses only
 fill_slope_verts
 	ldx obj_i
-	lda slope_axis,x
+	+lda_mx slope_axis
 	bne .slz
-	lda slope_dir,x
+	+lda_mx slope_dir
 	beq .slxn
 	lda box_x
 	sta pv0
@@ -1207,7 +1207,7 @@ fill_slope_verts
 	jmp .sl_emit
 .slz
 	ldx obj_i
-	lda slope_dir,x
+	+lda_mx slope_dir
 	beq .slzn
 	lda box_z
 	sta pv0
@@ -1265,25 +1265,25 @@ draw_room_mesh
 	lda #$ff
 	sta mesh_vmask
 	ldx room_idx
-	lda room_x,x
+	+lda_mx room_x
 	sta box_x
-	lda room_y,x
+	+lda_mx room_y
 	sta box_y
-	lda room_z,x
+	+lda_mx room_z
 	sta box_z
-	lda room_sx,x
+	+lda_mx room_sx
 	sta box_sx
-	lda room_sy,x
+	+lda_mx room_sy
 	sta box_sy
-	lda room_sz,x
+	+lda_mx room_sz
 	sta box_sz
 	lda #1
 	sta box_inside
 	jsr cull_box_faces
 	ldx room_idx
-	lda room_ne,x
+	+lda_mx room_ne
 	sta pv0
-	lda room_eo,x
+	+lda_mx room_eo
 	sta pv1
 	lda #0
 	sta pv2
@@ -1292,21 +1292,21 @@ draw_room_mesh
 	lda pv0
 	beq .drm_pkd
 	ldx pv1
-	lda room_efaces,x
+	+lda_mx room_efaces
 	beq .drm_keep
 	and face_bits
 	beq .drm_pkn
 .drm_keep
 	ldy pv2
-	lda room_e0,x
+	+lda_mx room_e0
 	sta room_pack_edges,y
 	iny
-	lda room_e1,x
+	+lda_mx room_e1
 	sta room_pack_edges,y
 	iny
 	sty pv2
 	ldy pv3
-	lda room_evert,x
+	+lda_mx room_evert
 	sta room_pack_vert,y
 	inc pv3
 .drm_pkn
@@ -1319,17 +1319,17 @@ draw_room_mesh
 	rts
 .drm_xf
 	ldx room_idx
-	lda room_nv,x
+	+lda_mx room_nv
 	sta mesh_nv
-	lda room_nx,x
+	+lda_mx room_nx
 	sta mesh_nx
-	lda room_nz,x
+	+lda_mx room_nz
 	sta mesh_nz
-	lda room_uo,x
+	+lda_mx room_uo
 	sta pv0
-	lda room_zo,x
+	+lda_mx room_zo
 	sta pv1
-	lda room_vo,x
+	+lda_mx room_vo
 	sta pv2
 	ldy #0
 .drm_ux
@@ -1339,7 +1339,7 @@ draw_room_mesh
 	clc
 	adc pv0
 	tax
-	lda room_ux,x
+	+lda_mx room_ux
 	sta UX,y
 	iny
 	bne .drm_ux
@@ -1352,7 +1352,7 @@ draw_room_mesh
 	clc
 	adc pv1
 	tax
-	lda room_uz,x
+	+lda_mx room_uz
 	sta UZ,y
 	iny
 	bne .drm_uzl
@@ -1365,30 +1365,30 @@ draw_room_mesh
 	clc
 	adc pv2
 	tax
-	lda room_vy,x
+	+lda_mx room_vy
 	sta VY,y
 	iny
 	bne .drm_vyl
 .drm_ptr
 	clc
-	lda #<room_xid
+	lda	room_xid
 	adc pv2
 	sta xid_ptr
-	lda #>room_xid
+	lda	room_xid+1
 	adc #0
 	sta xid_ptr+1
 	clc
-	lda #<room_zid
+	lda	room_zid
 	adc pv2
 	sta zid_ptr
-	lda #>room_zid
+	lda	room_zid+1
 	adc #0
 	sta zid_ptr+1
 	clc
-	lda #<room_col
+	lda	room_col
 	adc pv2
 	sta col_ptr
-	lda #>room_col
+	lda	room_col+1
 	adc #0
 	sta col_ptr+1
 	jsr xform_mesh_xz
@@ -1408,24 +1408,24 @@ draw_room_mesh
 draw_world
 	jsr update_frustum
 	ldx room_idx
-	lda room_nv,x
+	+lda_mx room_nv
 	beq .dw_box
 	jsr draw_room_mesh
 	jmp .dw_items
 .dw_box
 	; active room (inside cull) — not frustum-culled
 	ldx room_idx
-	lda room_x,x
+	+lda_mx room_x
 	sta box_x
-	lda room_y,x
+	+lda_mx room_y
 	sta box_y
-	lda room_z,x
+	+lda_mx room_z
 	sta box_z
-	lda room_sx,x
+	+lda_mx room_sx
 	sta box_sx
-	lda room_sy,x
+	+lda_mx room_sy
 	sta box_sy
-	lda room_sz,x
+	+lda_mx room_sz
 	sta box_sz
 	lda #1
 	sta box_inside
@@ -1434,23 +1434,23 @@ draw_world
 .dw_items
 	ldx #0
 .dw_c
-	cpx #MAP_NCRATES
-	bcs .dw_d
-	lda crate_room,x
+	cpx	map_ncrates
+	+bcs_far .dw_d
+	+lda_mx crate_room
 	cmp room_idx
 	bne .dw_cn
 	stx obj_i
-	lda crate_x,x
+	+lda_mx crate_x
 	sta box_x
-	lda crate_y,x
+	+lda_mx crate_y
 	sta box_y
-	lda crate_z,x
+	+lda_mx crate_z
 	sta box_z
-	lda crate_sx,x
+	+lda_mx crate_sx
 	sta box_sx
-	lda crate_sy,x
+	+lda_mx crate_sy
 	sta box_sy
-	lda crate_sz,x
+	+lda_mx crate_sz
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_cr
@@ -1461,17 +1461,18 @@ draw_world
 	ldx obj_i
 .dw_cn
 	inx
-	bne .dw_c
+	beq .dw_d
+	jmp .dw_c
 .dw_d
 	; doors: closed 4-vert face; open full-width leaves slide open/2
 	ldx #0
 .dw_door
-	cpx #MAP_NDOORS
-	bcs .dw_sw
-	lda door_ra,x
+	cpx	map_ndoors
+	+bcs_far .dw_sw
+	+lda_mx door_ra
 	cmp room_idx
 	beq .dw_doku
-	lda door_rb,x
+	+lda_mx door_rb
 	cmp room_idx
 	bne .dw_dn
 .dw_doku
@@ -1480,13 +1481,13 @@ draw_world
 	bcc .dw_dn0
 	lda door_vx,x
 	sta box_x
-	lda door_y,x
+	+lda_mx door_y
 	sta box_y
 	lda door_vz,x
 	sta box_z
 	lda door_vsx,x
 	sta box_sx
-	lda door_sy,x
+	+lda_mx door_sy
 	sta box_sy
 	lda door_vsz,x
 	sta box_sz
@@ -1497,27 +1498,28 @@ draw_world
 	ldx obj_i
 .dw_dn
 	inx
-	bne .dw_door
+	beq .dw_sw
+	jmp .dw_door
 .dw_sw
 	ldx #0
 .dw_s
-	cpx #MAP_NSWITCHES
-	bcs .dw_e
-	lda sw_room,x
+	cpx	map_nswitches
+	+bcs_far .dw_e
+	+lda_mx sw_room
 	cmp room_idx
 	bne .dw_sn
 	stx obj_i
-	lda sw_x,x
+	+lda_mx sw_x
 	sta box_x
-	lda sw_y,x
+	+lda_mx sw_y
 	sta box_y
-	lda sw_z,x
+	+lda_mx sw_z
 	sta box_z
-	lda sw_sx,x
+	+lda_mx sw_sx
 	sta box_sx
-	lda sw_sy,x
+	+lda_mx sw_sy
 	sta box_sy
-	lda sw_sz,x
+	+lda_mx sw_sz
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_sr
@@ -1526,27 +1528,28 @@ draw_world
 	ldx obj_i
 .dw_sn
 	inx
-	bne .dw_s
+	beq .dw_e
+	jmp .dw_s
 .dw_e
 	ldx #0
 .dw_el
-	cpx #MAP_NELEVS
-	bcs .dw_sl
-	lda elev_room,x
+	cpx	map_nelevs
+	+bcs_far .dw_sl
+	+lda_mx elev_room
 	cmp room_idx
 	bne .dw_eln
 	stx obj_i
-	lda elev_x,x
+	+lda_mx elev_x
 	sta box_x
 	lda elev_y,x
 	sta box_y
-	lda elev_z,x
+	+lda_mx elev_z
 	sta box_z
-	lda elev_sx,x
+	+lda_mx elev_sx
 	sta box_sx
-	lda elev_sy,x
+	+lda_mx elev_sy
 	sta box_sy
-	lda elev_sz,x
+	+lda_mx elev_sz
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_er
@@ -1557,27 +1560,28 @@ draw_world
 	ldx obj_i
 .dw_eln
 	inx
-	bne .dw_el
+	beq .dw_sl
+	jmp .dw_el
 .dw_sl
 	ldx #0
 .dw_slope
-	cpx #MAP_NSLOPES
-	bcs .dw_pl
-	lda slope_room,x
+	cpx	map_nslopes
+	+bcs_far .dw_pl
+	+lda_mx slope_room
 	cmp room_idx
 	bne .dw_sln
 	stx obj_i
-	lda slope_x,x
+	+lda_mx slope_x
 	sta box_x
-	lda slope_y,x
+	+lda_mx slope_y
 	sta box_y
-	lda slope_z,x
+	+lda_mx slope_z
 	sta box_z
-	lda slope_sx,x
+	+lda_mx slope_sx
 	sta box_sx
-	lda slope_sy,x
+	+lda_mx slope_sy
 	sta box_sy
-	lda slope_sz,x
+	+lda_mx slope_sz
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_slr
@@ -1586,27 +1590,28 @@ draw_world
 	ldx obj_i
 .dw_sln
 	inx
-	bne .dw_slope
+	beq .dw_pl
+	jmp .dw_slope
 .dw_pl
 	ldx #0
 .dw_plat
-	cpx #MAP_NPLATS
-	bcs .dw_bp
-	lda plat_room,x
+	cpx	map_nplats
+	+bcs_far .dw_bp
+	+lda_mx plat_room
 	cmp room_idx
 	bne .dw_pln
 	stx obj_i
-	lda plat_x,x
+	+lda_mx plat_x
 	sta box_x
-	lda plat_y,x
+	+lda_mx plat_y
 	sta box_y
-	lda plat_z,x
+	+lda_mx plat_z
 	sta box_z
-	lda plat_sx,x
+	+lda_mx plat_sx
 	sta box_sx
 	lda #1
 	sta box_sy
-	lda plat_sz,x
+	+lda_mx plat_sz
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_plr
@@ -1615,24 +1620,25 @@ draw_world
 	ldx obj_i
 .dw_pln
 	inx
-	bne .dw_plat
+	beq .dw_bp
+	jmp .dw_plat
 	; backpacks
 .dw_bp
 	ldx #0
 .dw_bpl
-	cpx #MAP_NBACKPACKS
-	bcs .dw_drops
+	cpx	map_nbackpacks
+	+bcs_far .dw_drops
 	lda bp_taken,x
 	bne .dw_bpn
-	lda bp_room,x
+	+lda_mx bp_room
 	cmp room_idx
 	bne .dw_bpn
 	stx obj_i
-	lda bp_x,x
+	+lda_mx bp_x
 	sta box_x
-	lda bp_y,x
+	+lda_mx bp_y
 	sta box_y
-	lda bp_z,x
+	+lda_mx bp_z
 	sta box_z
 	lda #BP_FOOT_SX
 	sta box_sx
@@ -1647,13 +1653,14 @@ draw_world
 	ldx obj_i
 .dw_bpn
 	inx
-	bne .dw_bpl
+	beq .dw_drops
+	jmp .dw_bpl
 	; death drops
 .dw_drops
 	ldx #0
 .dw_dpl
-	cpx #MAP_NENEMIES
-	bcs .dw_rts
+	cpx	map_nenemies
+	+bcs_far .dw_rts
 	lda drop_taken,x
 	bne .dw_dpn
 	lda drop_room,x
@@ -1681,6 +1688,7 @@ draw_world
 	ldx obj_i
 .dw_dpn
 	inx
-	bne .dw_dpl
+	beq .dw_rts
+	jmp .dw_dpl
 .dw_rts
 	rts

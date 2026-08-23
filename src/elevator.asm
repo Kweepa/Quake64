@@ -9,12 +9,13 @@ elev_init
 	lda #0
 	sta elev_noise_n
 .ei
-	cpx #MAP_NELEVS
-	beq .ei_rts
-	lda elev_y0,x
+	cpx	map_nelevs
+	+beq_far .ei_rts
+	+lda_mx elev_y0
 	sta elev_y,x
 	inx
-	bne .ei
+	beq .ei_rts
+	jmp .ei
 .ei_rts
 	rts
 
@@ -24,34 +25,44 @@ elev_init
 ; ------------------------------------------------------------------
 elev_activate
 	stx proc_tmp5			; local SoA
-	lda elev_id,x
+	jmp .ea_body
+.ea_fail_pl
+	pla
+.ea_fail
+	sec
+	ldx proc_tmp5
+	rts
+.ea_body
+	+lda_mx elev_id
 	sta proc_tmp1			; world id for busy / PROC_A
 	jsr proc_target_busy
-	bcs .ea_fail
+	+bcs_far .ea_fail
 	ldx proc_tmp5
-	lda elev_type,x
+	+lda_mx elev_type
 	cmp #ELEV_TYPE_TOGGLE
-	beq .ea_toggle
+	bne .ea_not_tog
+	jmp .ea_toggle
+.ea_not_tog
 	jsr proc_count_free
 	cmp #2
-	bcc .ea_fail
+	+bcc_far .ea_fail
 	ldx proc_tmp5
 	lda elev_y,x
-	cmp elev_home,x
-	bne .ea_fail			; only start from home (top)
-	lda elev_home,x
+	+cmp_mx elev_home
+	+bne_far .ea_fail			; only start from home (top)
+	+lda_mx elev_home
 	pha				; return height
-	lda elev_id,x
+	+lda_mx elev_id
 	sta proc_tmp1
 	lda #PROC_LOWER_ELEV
 	sta proc_tmp0
-	lda elev_dest,x
+	+lda_mx elev_dest
 	sta proc_tmp2
 	lda #0
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .ea_fail_pl
+	+bcs_far .ea_fail_pl
 	lda proc_tmp5
 	sta PROC_L,y
 	lda #PROC_TIMER
@@ -63,44 +74,38 @@ elev_activate
 	lda #>ELEV_WAIT_MS
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .ea_fail_pl
+	+bcs_far .ea_fail_pl
 	lda proc_tmp5
 	sta PROC_L,y
 	pla
 	sta PROC_E,y
 	jmp .ea_snd
-.ea_fail_pl
-	pla
-.ea_fail
-	sec
-	ldx proc_tmp5
-	rts
 .ea_toggle
 	jsr proc_count_free
 	cmp #1
-	bcc .ea_fail
+	+bcc_far .ea_fail
 	ldx proc_tmp5
 	lda elev_y,x
-	cmp elev_home,x
+	+cmp_mx elev_home
 	bne .ea_tog_up
 	lda #PROC_LOWER_ELEV
 	sta proc_tmp0
-	lda elev_dest,x
+	+lda_mx elev_dest
 	sta proc_tmp2
 	jmp .ea_tog_go
 .ea_tog_up
 	lda #PROC_RAISE_ELEV
 	sta proc_tmp0
-	lda elev_home,x
+	+lda_mx elev_home
 	sta proc_tmp2
 .ea_tog_go
-	lda elev_id,x
+	+lda_mx elev_id
 	sta proc_tmp1
 	lda #0
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .ea_fail
+	+bcs_far .ea_fail
 	lda proc_tmp5
 	sta PROC_L,y
 .ea_snd
@@ -189,31 +194,33 @@ elev_pu_re
 elev_update_floor
 	ldx #0
 .euf
-	cpx #MAP_NELEVS
-	bcs .euf_rts
-	lda elev_room,x
+	cpx	map_nelevs
+	bcc .euf_go
+	jmp .euf_rts
+.euf_go
+	+lda_mx elev_room
 	cmp room_idx
-	bne .euf_n
-	lda elev_x,x
+	+bne_far .euf_n
+	+lda_mx elev_x
 	sta box_x
-	lda elev_z,x
+	+lda_mx elev_z
 	sta box_z
-	lda elev_sx,x
+	+lda_mx elev_sx
 	sta box_sx
-	lda elev_sz,x
+	+lda_mx elev_sz
 	sta box_sz
 	lda cam_xh
 	sta col_x
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	bcc .euf_n
+	+bcc_far .euf_n
 	; on elevator footprint — floor = elev_y + sy
 	; reject only if under the car (feet < elev_y); top is sy above elev_y
 	; so feet>=top would block boarding from a flush room floor
 	clc
 	lda elev_y,x
-	adc elev_sy,x
+	+adc_mx elev_sy
 	cmp floor_y
 	bcc .euf_n			; below current floor
 	sta col_y			; elev_top
@@ -230,7 +237,8 @@ elev_update_floor
 	stx pl_on_elev
 .euf_n
 	inx
-	bne .euf
+	beq .euf_rts
+	jmp .euf
 .euf_rts
 	rts
 
@@ -240,12 +248,12 @@ elev_update_floor
 elev_try_auto
 	ldx #0
 .eta
-	cpx #MAP_NELEVS
-	bcs .eta_rts
-	lda elev_type,x
+	cpx	map_nelevs
+	+bcs_far .eta_rts
+	+lda_mx elev_type
 	cmp #ELEV_TYPE_AUTO
 	bne .eta_n
-	lda elev_room,x
+	+lda_mx elev_room
 	cmp room_idx
 	bne .eta_n
 	cpx pl_on_elev
@@ -253,7 +261,8 @@ elev_try_auto
 	jsr elev_activate
 .eta_n
 	inx
-	bne .eta
+	beq .eta_rts
+	jmp .eta
 .eta_rts
 	rts
 

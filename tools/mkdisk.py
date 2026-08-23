@@ -21,6 +21,17 @@ FILES = (
     ("game.prg", "game,p"),
 )
 
+MAP_FILES = [(f"maps/e1m{i}.prg", f"e1m{i},p") for i in range(1, 9)]
+ENEMY_FILES = [
+    ("enemies/grunt.prg", "grunt,p"),
+    ("enemies/knight.prg", "knight,p"),
+    ("enemies/rott.prg", "rott,p"),
+    ("enemies/scrag.prg", "scrag,p"),
+    ("enemies/ogre.prg", "ogre,p"),
+    ("enemies/shambl.prg", "shambl,p"),
+    ("enemies/chthon.prg", "chthon,p"),
+]
+
 
 def find_c1541(explicit: Optional[Path] = None) -> Optional[Path]:
     if explicit is not None:
@@ -55,6 +66,12 @@ def main() -> None:
             print(f"missing: {p}", file=sys.stderr)
             sys.exit(1)
 
+    extra: list[tuple[str, str]] = []
+    for src, dos in MAP_FILES + ENEMY_FILES:
+        p = Path(src)
+        if p.is_file() and p.stat().st_size > 2:
+            extra.append((src, dos))
+
     d64 = Path(args.out)
     cmd = [
         str(c1541),
@@ -66,6 +83,8 @@ def main() -> None:
         str(d64),
     ]
     for src, dos in FILES:
+        cmd.extend(["-write", str(Path(src).resolve()), dos])
+    for src, dos in extra:
         cmd.extend(["-write", str(Path(src).resolve()), dos])
     subprocess.check_call(cmd)
     print(f"Wrote {d64} via {c1541}")

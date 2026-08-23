@@ -52,13 +52,19 @@ ent_set_ptrs
 }
 pain_var_off
 	sta rot0
-	lda en_type,x
+	+lda_mx en_type
 	asl
 	asl
 	clc
 	adc en_pain_i,x
 	tay
 	lda rot0
+	rts
+
+; X = enemy. A = enemy_class[type]. Y = type. X preserved.
+enemy_get_class
+	+ldy_mx en_type
+	lda enemy_class,y
 	rts
 
 ; Point gx/gy/gz at the current pose for ent_type / obj_i.
@@ -1344,13 +1350,13 @@ cube_clip
 	bne .sxh
 	lda nlo
 	cmp #192
-	bcc +
+	bcc .sxok
 .sxh
 	lda #191
 	rts
 .sx0
 	lda #0
-+
+.sxok
 	rts
 
 ; A=oy lo Y=oy hi → screen y 0..127 (Y-down: screen = 64 - oy)
@@ -1373,13 +1379,13 @@ cube_clip
 	bne .syh
 	lda nlo
 	cmp #128
-	bcc +
+	bcc .syok
 .syh
 	lda #127
 	rts
 .sy0
 	lda #0
-+
+.syok
 	rts
 
 mesh_draw
@@ -2065,12 +2071,12 @@ draw_enemies
 	jsr load_view_trig
 	ldx #0
 .de
-	cpx #MAP_NENEMIES
-	bcs .de_rts
+	cpx	map_nenemies
+	+bcs_far .de_rts
 	lda en_state,x
 	cmp #EN_GONE
 	beq .de_n
-	lda en_room,x
+	+lda_mx en_room
 	cmp room_idx
 	bne .de_n
 	jsr .de_one
@@ -2082,11 +2088,11 @@ draw_enemies
 
 .de_one
 	stx obj_i
-	lda en_x,x
+	+lda_mx en_x
 	sta ent_wx
-	lda en_y,x
+	+lda_mx en_y
 	sta ent_wy
-	lda en_z,x
+	+lda_mx en_z
 	sta ent_wz
 	lda cs_b			; re-prime view sets (prev enemy clobbered)
 	jsr mulset_a
@@ -2095,10 +2101,10 @@ draw_enemies
 	ldx #0
 	jsr xform_world_vert
 	jsr enemy_in_view
-	bcc .de_one_rts
+	+bcc_far .de_one_rts
 	jsr try_bite_splat			; CAM[0] still feet origin
 	ldx obj_i
-	lda en_type,x
+	+lda_mx en_type
 	sta ent_type
 	lda en_state,x
 	cmp #EN_DYING
@@ -2113,7 +2119,7 @@ draw_enemies
 	jmp .de_one_rts
 .de_mesh
 	ldx obj_i
-	lda en_rot,x
+	+lda_mx en_rot
 	sta ent_rot
 	lda #NVERTS
 	sta mesh_nv
@@ -2257,7 +2263,7 @@ enemy_muzzle_want
 	lda en_state,x
 	cmp #EN_ATTACK
 	bne .emw_no
-	ldy en_type,x
+	jsr enemy_get_class
 	bne .emw_no			; Rottweiler — leap bite, no muzzle
 	lda enemy_fire_frame,y
 	bmi .emw_no			; $ff = none
@@ -2407,7 +2413,7 @@ kill_enemy
 	sta en_timer,x
 	sta en_timer_h,x
 	jsr pick_death_var
-	lda en_type,x
+	jsr enemy_get_class
 	bne .ke_dog
 	lda #SOUND_DEATHSCREAM1
 	jmp play_sound
@@ -2420,7 +2426,7 @@ finish_enemy_death
 	stx obj_i
 	lda #EN_GONE
 	sta en_state,x
-	lda en_type,x
+	+lda_mx en_type
 	tay
 	lda enemy_drop_type,y
 	cmp #$ff
@@ -2430,19 +2436,19 @@ finish_enemy_death
 	sta rot2			; BP_* type
 	ldx #0
 .fed_slot
-	cpx #MAP_NENEMIES
-	bcs .fed_rts
+	cpx	map_nenemies
+	+bcs_far .fed_rts
 	lda drop_taken,x
 	beq .fed_n
 	; free slot (taken=1 inactive)
 	ldy obj_i
-	lda en_x,y
+	+lda_my en_x
 	sta drop_x,x
-	lda en_y,y
+	+lda_my en_y
 	sta drop_y,x
-	lda en_z,y
+	+lda_my en_z
 	sta drop_z,x
-	lda en_room,y
+	+lda_my en_room
 	sta drop_room,x
 	lda rot2
 	sta drop_type,x

@@ -1,0 +1,171 @@
+; Runtime map header + SoA pointers (filled by bind_map)
+!zone map_bss
+
+; Packed header bytes 0..23 — must stay contiguous (bind_map copies 24 bytes).
+map_nrooms	!byte 0
+map_ndoors	!byte 0
+map_ncrates	!byte 0
+map_nslopes	!byte 0
+map_nplats	!byte 0
+map_nswitches	!byte 0
+map_nelevs	!byte 0
+map_nenemies	!byte 0
+map_ntrigs	!byte 0
+map_ndests	!byte 0
+map_nbackpacks	!byte 0
+map_type0	!byte $ff
+map_type1	!byte $ff
+map_type2	!byte $ff
+map_nux		!byte 0
+map_nuz		!byte 0
+map_nvert	!byte 0
+map_nedge	!byte 0
+
+spawn_x		!byte 0
+spawn_y		!byte 0
+spawn_z		!byte 0
+spawn_rot	!byte 0
+spawn_room	!byte 0
+spawn_id	!byte 0
+!if spawn_id - map_nrooms != 23 {
+	!error "map header BSS is not 24 packed bytes"
+}
+
+; 16-bit pointers into the packed map blob
+room_x		!word 0
+room_y		!word 0
+room_z		!word 0
+room_sx		!word 0
+room_sy		!word 0
+room_sz		!word 0
+room_bg		!word 0
+room_line	!word 0
+room_fx		!word 0
+room_wpn	!word 0
+room_id		!word 0
+rc_x		!word 0
+rc_y		!word 0
+rc_z		!word 0
+rc_sx		!word 0
+rc_sy		!word 0
+rc_sz		!word 0
+rb_x		!word 0
+rb_y		!word 0
+rb_z		!word 0
+rb_sx		!word 0
+rb_sy		!word 0
+rb_sz		!word 0
+room_nv		!word 0
+room_ne		!word 0
+room_vo		!word 0
+room_eo		!word 0
+room_nx		!word 0
+room_nz		!word 0
+room_uo		!word 0
+room_zo		!word 0
+room_ux		!word 0
+room_uz		!word 0
+room_vy		!word 0
+room_xid	!word 0
+room_zid	!word 0
+room_col	!word 0
+room_e0		!word 0
+room_e1		!word 0
+room_evert	!word 0
+room_efaces	!word 0
+door_x		!word 0
+door_y		!word 0
+door_z		!word 0
+door_sx		!word 0
+door_sy		!word 0
+door_sz		!word 0
+door_ra		!word 0
+door_rb		!word 0
+door_home_y	!word 0
+door_face	!word 0
+door_key	!word 0
+door_id		!word 0
+crate_x		!word 0
+crate_y		!word 0
+crate_z		!word 0
+crate_sx	!word 0
+crate_sy	!word 0
+crate_sz	!word 0
+crate_room	!word 0
+crate_id	!word 0
+slope_x		!word 0
+slope_y		!word 0
+slope_z		!word 0
+slope_sx	!word 0
+slope_sy	!word 0
+slope_sz	!word 0
+slope_axis	!word 0
+slope_dir	!word 0
+slope_room	!word 0
+slope_id	!word 0
+plat_x		!word 0
+plat_y		!word 0
+plat_z		!word 0
+plat_sx		!word 0
+plat_sz		!word 0
+plat_room	!word 0
+plat_solid	!word 0
+plat_id		!word 0
+elev_x		!word 0
+elev_y0		!word 0
+elev_z		!word 0
+elev_sx		!word 0
+elev_sy		!word 0
+elev_sz		!word 0
+elev_type	!word 0
+elev_home	!word 0
+elev_dest	!word 0
+elev_room	!word 0
+elev_id		!word 0
+sw_x		!word 0
+sw_y		!word 0
+sw_z		!word 0
+sw_sx		!word 0
+sw_sy		!word 0
+sw_sz		!word 0
+sw_elev		!word 0
+sw_room		!word 0
+sw_face		!word 0
+sw_id		!word 0
+en_x		!word 0
+en_y		!word 0
+en_z		!word 0
+en_type		!word 0
+en_rot		!word 0
+en_room		!word 0
+en_patrol	!word 0
+en_id		!word 0
+tr_x		!word 0
+tr_y		!word 0
+tr_z		!word 0
+tr_sx		!word 0
+tr_sy		!word 0
+tr_sz		!word 0
+tr_room		!word 0
+tr_purpose	!word 0
+tr_arg		!word 0
+tr_id		!word 0
+td_x		!word 0
+td_y		!word 0
+td_z		!word 0
+td_rot		!word 0
+td_room		!word 0
+bp_x		!word 0
+bp_y		!word 0
+bp_z		!word 0
+bp_type		!word 0
+bp_room		!word 0
+bp_id		!word 0
+map_name	!word 0
+map_text	!word 0
+!if (map_text - room_x) & 1 {
+	!error "map pointer table is not aligned words"
+}
+!if (map_text - room_x) / 2 > 255 {
+	!error "map pointer table exceeds 256 fields"
+}

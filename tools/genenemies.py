@@ -169,6 +169,8 @@ def main() -> None:
     parts.append("enemy_alert_len\t\t!byte 11, 2")
     parts.append("enemy_run_start\t\t!byte 35, 23")
     parts.append("enemy_run_len\t\t!byte 8, 12")
+    parts.append("enemy_walk_start\t\t!byte 52, 53\t\t; Grunt prowl, Rott walk")
+    parts.append("enemy_walk_len\t\t!byte 24, 8")
     parts.append("enemy_attack_start\t!byte 43, 35\t\t; Grunt shoot, Rott leap")
     parts.append("enemy_attack_len\t!byte 9, 9")
     parts.append("enemy_pain_start\t\t!byte 29, 17")

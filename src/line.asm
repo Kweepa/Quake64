@@ -81,6 +81,17 @@ line_setup
 	sta colptr
 	rts
 
+; x0 = sx 0..191, y0 = sy 0..127. ORA one bit into the draw charset.
+plot_pixel
+	jsr line_setup
+	lda x0
+	and #7
+	tax
+	lda (colptr),y
+	ora vbits,x
+	sta (colptr),y
+	rts
+
 draw_line
 	lda x0
 	cmp #192

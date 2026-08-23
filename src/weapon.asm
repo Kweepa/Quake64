@@ -116,6 +116,10 @@ init_weapon
 	sta splat_vy
 	sta splat_col
 	sta splat_skip
+	sta fx_on
+	sta fx_ms_l
+	sta fx_ms_h
+	sta fx_skip
 	lda #$ff
 	sta emuz_pending
 	sta bite_splat_i
@@ -430,6 +434,7 @@ update_weapon
 	jsr tick_flash
 	jsr tick_enemy_muzzle
 	jsr tick_splat
+	jsr tick_explosion
 	jsr tick_anim
 
 	lda fire_rpt_l

@@ -65,7 +65,7 @@ ent_set_pose
 	cmp #EN_APPROACH
 	beq .esp_run
 	cmp #EN_PATROL
-	beq .esp_run
+	beq .esp_walk
 	; idle (and fallback)
 	jmp .esp_idle
 .esp_idle
@@ -81,6 +81,13 @@ ent_set_pose
 	ldx ent_type
 	clc
 	adc enemy_run_start,x
+	tay
+	jmp .esp_off
+.esp_walk
+	lda en_frame,x
+	ldx ent_type
+	clc
+	adc enemy_walk_start,x
 	tay
 	jmp .esp_off
 .esp_alert
@@ -429,6 +436,7 @@ cube_project
 
 ; inv = (FOCAL<<16) / (z>>k), k = unsigned 8-bit fit of z_eye (always ≥128 here).
 ; z >= ZCLIP guarantees z_eye_h >= 1, so dlo lands in [128,255] → invzl/h LUT.
+proj_invz
 .invz
 	lda z_eye
 	sta dlo
@@ -454,6 +462,7 @@ cube_project
 	rts
 
 ; nlo:nhi * inv >> (16+k) → nlo:nhi. Full coord (no pre-shift) so 8.8 LSBs survive.
+proj_cam_to_proj
 .cam_to_proj
 	lda inv_l
 	sta ylo

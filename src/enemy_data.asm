@@ -470,6 +470,8 @@ enemy_alert_start	!byte 18, 44
 enemy_alert_len		!byte 11, 2
 enemy_run_start		!byte 35, 23
 enemy_run_len		!byte 8, 12
+enemy_walk_start		!byte 52, 53		; Grunt prowl, Rott walk
+enemy_walk_len		!byte 24, 8
 enemy_attack_start	!byte 43, 35		; Grunt shoot, Rott leap
 enemy_attack_len	!byte 9, 9
 enemy_pain_start		!byte 29, 17

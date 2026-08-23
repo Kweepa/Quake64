@@ -101,6 +101,12 @@ init_enemies
 	asl
 	asl
 	sta en_rot,x
+	lda en_patrol,x
+	and #1
+	beq .ie_hp
+	ora #$80			; first patrol uses spawn dir
+	sta en_patrol,x
+.ie_hp
 	ldy en_type,x
 	lda enemy_hp_init,y
 	sta en_hp,x

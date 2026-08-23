@@ -171,17 +171,19 @@ eu_patrol
 	sta en_step_h,x
 .eu_pt_slp
 	lda en_step_h,x
+	cmp #>PATROL_STEP_MS
+	bcc .eu_pt_done
 	bne .eu_pt_go
 	lda en_step,x
-	cmp #ENEMY_STEP_MS
+	cmp #<PATROL_STEP_MS
 	bcc .eu_pt_done
 .eu_pt_go
 	sec
 	lda en_step,x
-	sbc #ENEMY_STEP_MS
+	sbc #<PATROL_STEP_MS
 	sta en_step,x
 	lda en_step_h,x
-	sbc #0
+	sbc #>PATROL_STEP_MS
 	sta en_step_h,x
 	jsr enemy_patrol_step
 	bcc .eu_pt_stuck
@@ -365,10 +367,9 @@ enemy_anim_step
 	jmp .eas_loop
 +
 	cmp #EN_PATROL
-	beq .eas_run_go
+	beq .eas_walk_go
 	cmp #EN_APPROACH
 	bne +
-.eas_run_go
 	jmp .eas_run
 +
 	cmp #EN_ALERT
@@ -380,6 +381,8 @@ enemy_anim_step
 	cmp #EN_DYING
 	bne .eas_n
 	jmp .eas_die
+.eas_walk_go
+	jmp .eas_walk
 .eas_n
 	ldx enemy_idx
 	inx
@@ -401,6 +404,16 @@ enemy_anim_step
 	inc en_frame,x
 	lda en_frame,x
 	cmp enemy_run_len,y
+	bcc +
+	lda #0
+	sta en_frame,x
++
+	jmp .eas_n
+.eas_walk
+	ldy en_type,x
+	inc en_frame,x
+	lda en_frame,x
+	cmp enemy_walk_len,y
 	bcc +
 	lda #0
 	sta en_frame,x
@@ -1101,12 +1114,24 @@ enemy_idle_try_patrol
 .eitp_no
 	jmp eu_next
 
-; One random cardinal. C ignored — enter EN_PATROL if ≥ PATROL_MIN clear cells.
+; First pick: spawn octant (en_dir). Later: random cardinal.
+; C ignored — enter EN_PATROL if ≥ PATROL_MIN clear cells.
 enemy_patrol_pick
+	ldx enemy_idx
+	lda en_patrol,x
+	bpl .epp_rand
+	and #$7f				; consume first-patrol flag
+	sta en_patrol,x
+	lda en_dir,x
+	and #7
+	sta ai_probe
+	jmp .epp_have
+.epp_rand
 	jsr rnd8
 	and #3
 	asl					; 0,2,4,6
 	sta ai_probe
+.epp_have
 	ldx enemy_idx
 	lda en_x,x
 	sta col_x

@@ -80,6 +80,7 @@ main
 }
 	jsr draw_world
 	jsr draw_enemies
+	jsr draw_explosion
 
 	lda draw_buf
 	sta show_buf
@@ -266,6 +267,7 @@ copy_luts
 !source "math.asm"
 !source "util.asm"
 !source "line.asm"
+!source "fx.asm"
 !source "playsound.asm"
 !source "pcsounds.asm"
 !source "pcsfreq.asm"

@@ -1,20 +1,16 @@
 ; One-at-a-time half-dome explosion: 24 charset pixels, no gravity.
-; Parametric: p = origin + dir[i] * elapsed / EXPLODE_MS (dir=127 → ~4 units).
+; 6 unique +X+Z dirs × 90° Y rotates (C4, not XZ mirrors). Parametric:
+; origin + dir * elapsed (dir=127 → ~4 units). Yaw then permute view XZ
+; (Y-rots commute). Still 24 project/plot.
 !zone fx
 
-; Fibonacci hemisphere, +Y up, lengths ~40–100% of radius.
+; Open quadrant (dx>0, dz>0, dy>=0), lengths ~40–100% of radius.
 fx_dx
-	!byte 51,-79,7,37,-114,77,-18,-56
-	!byte 91,-69,22,30,-67,54,-56,-10
-	!byte 42,-36,49,-2,-20,49,-23,0
+	!byte 37,91,30,42,77,56
 fx_dy
-	!byte 0,5,7,8,20,20,18,39
-	!byte 36,32,25,54,47,38,75,66
-	!byte 54,40,86,72,56,110,93,74
+	!byte 8,36,54,54,20,75
 fx_dz
-	!byte 0,72,-83,48,-20,-49,66,-107
-	!byte 33,28,-47,95,-39,-12,80,-76
-	!byte 36,2,-48,49,-24,7,16,0
+	!byte 48,33,95,36,49,80
 
 ; ent_wx/wy/wz already set. Restarts if one is already live.
 ; Grenade launcher will call this at the blast origin.
@@ -116,41 +112,41 @@ draw_explosion
 	ldx #0
 .de_lp
 	stx enemy_idx
-	; x' = dx*cs − dz*sn (umul8, mulset still yaw from load_view_trig)
+	; x' = dx*cs − dz*sn (mulset still yaw from load_view_trig)
 	lda fx_dx,x
 	jsr fx_mul_a
-	sta rot0
+	sta e0x
 	ldx enemy_idx
 	lda fx_dz,x
 	jsr fx_mul_b
-	sta rot1
+	sta e1x
 	sec
-	lda rot0
-	sbc rot1
+	lda e0x
+	sbc e1x
 	jsr fx_sclamp
 	jsr fx_scale
 	lda nlo
-	sta e0x
+	sta e0z
 	lda nhi
-	sta e0xh
+	sta e0zh
 	; z' = dx*sn + dz*cs
 	ldx enemy_idx
 	lda fx_dx,x
 	jsr fx_mul_b
-	sta rot0
+	sta e0x
 	ldx enemy_idx
 	lda fx_dz,x
 	jsr fx_mul_a
-	sta rot1
+	sta e1x
 	clc
-	lda rot0
-	adc rot1
+	lda e0x
+	adc e1x
 	jsr fx_sclamp
 	jsr fx_scale
 	lda nlo
-	sta e1z
+	sta e1y
 	lda nhi
-	sta e1zh
+	sta e1yh
 	ldx enemy_idx
 	lda fx_dy,x
 	jsr fx_scale
@@ -161,32 +157,87 @@ draw_explosion
 	lda nhi
 	adc oy0h
 	sta CAM_YH
-	clc
-	lda e0x
-	adc ox0l
-	sta CAM_X
-	lda e0xh
-	adc ox0h
-	sta CAM_XH
-	clc
-	lda e1z
-	adc ox1l
-	sta CAM_Z
-	lda e1zh
-	adc ox1h
-	sta CAM_ZH
-	jsr fx_project
-	bcc .de_n
-	sta x0
-	sty y0
-	jsr plot_pixel
-.de_n
+	jsr fx_emit_quad
 	ldx enemy_idx
 	inx
-	cpx #FX_N
+	cpx #6
 	beq .de_rts
 	jmp .de_lp
 .de_rts
+	rts
+
+; e0z:e0zh = x', e1y:e1yh = z' (8.8). CAM_Y already origin+scaled dy.
+; 0:(x',z')  90:(−z',x')  180:(−x',−z')  270:(z',−x')
+fx_emit_quad
+	clc
+	lda e0z
+	adc ox0l
+	sta CAM_X
+	lda e0zh
+	adc ox0h
+	sta CAM_XH
+	clc
+	lda e1y
+	adc ox1l
+	sta CAM_Z
+	lda e1yh
+	adc ox1h
+	sta CAM_ZH
+	jsr fx_plot
+	sec
+	lda ox0l
+	sbc e0z
+	sta CAM_X
+	lda ox0h
+	sbc e0zh
+	sta CAM_XH
+	sec
+	lda ox1l
+	sbc e1y
+	sta CAM_Z
+	lda ox1h
+	sbc e1yh
+	sta CAM_ZH
+	jsr fx_plot
+	sec
+	lda ox0l
+	sbc e1y
+	sta CAM_X
+	lda ox0h
+	sbc e1yh
+	sta CAM_XH
+	clc
+	lda e0z
+	adc ox1l
+	sta CAM_Z
+	lda e0zh
+	adc ox1h
+	sta CAM_ZH
+	jsr fx_plot
+	clc
+	lda e1y
+	adc ox0l
+	sta CAM_X
+	lda e1yh
+	adc ox0h
+	sta CAM_XH
+	sec
+	lda ox1l
+	sbc e0z
+	sta CAM_Z
+	lda ox1h
+	sbc e0zh
+	sta CAM_ZH
+	jsr fx_plot
+	rts
+
+fx_plot
+	jsr fx_project
+	bcc .pl_n
+	sta x0
+	sty y0
+	jsr plot_pixel
+.pl_n
 	rts
 
 ; A = signed 8-bit adc/sbc result. If V set, clamp to ±127.

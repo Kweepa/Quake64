@@ -1880,23 +1880,20 @@ shotgun_miss_splat
 	tay
 	lda sn_b
 	jsr smul7
-	clc
-	adc cam_xh
-	sta ln_bx
+	sta ln_bx				; dx
 	lda rot2
 	tay
 	lda cs_b
 	jsr smul7
-	clc
-	adc cam_zh
-	sta ln_bz
+	sta ln_bz				; dz
 	ldy pitch
 	lda SINTAB,y
-	sta rot0
-	lda cam_yh
-	sec
-	sbc rot0
-	sta ln_by
+	eor #$ff
+	clc
+	adc #1
+	sta ln_by				; dy = −sin pitch
+	ldy room_idx
+	jsr line_fit_b
 	ldy room_idx
 	jsr line_cutouts_hit
 	bcs .sms_proj			; nearest cutout
@@ -1917,12 +1914,18 @@ shotgun_miss_splat
 	jsr mulset_b
 	ldx #0
 	jsr xform_world_vert
-	jsr project_cam0_screen
-	bcc .sms_rts
-	sta rot2				; sx (Y = sy)
 	ldx CAM_ZH
+	bpl .sms_z
+	ldx #0
+.sms_z
+	stx rot0				; view depth → EMUZ_Z* LOD
+	lda #SCREEN_CX
+	ldy #64				; viewport centre = look
+	jsr splat_aim_jitter			; A/Y = centre ±8/±4
+	sta rot2
 	lda col_line
 	sta splat_col
+	ldx rot0
 	lda rot2
 	jmp start_splat
 .sms_rts

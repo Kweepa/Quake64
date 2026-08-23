@@ -74,6 +74,69 @@ load_box_rb
 	sta box_sz
 	rts
 
+; Y = room. ln_a* = origin, ln_b* = signed dir.
+; B = origin except on the dominant look axis, where B sits just outside
+; the room AABB (min−1 or exclusive max). rot0/1/2 scratch. X clobbered.
+line_fit_b
+	jsr load_box_room
+	jsr line_box_max
+	lda ln_bx
+	jsr .lfb_abs
+	sta rot0				; best |d|
+	ldx #0
+	stx rot1				; best axis
+	lda ln_bx
+	sta rot2				; signed d on best
+	lda ln_by
+	jsr .lfb_abs
+	cmp rot0
+	bcc .lfb_ny
+	sta rot0
+	ldx #1
+	stx rot1
+	lda ln_by
+	sta rot2
+.lfb_ny
+	lda ln_bz
+	jsr .lfb_abs
+	cmp rot0
+	bcc .lfb_nz
+	ldx #2
+	stx rot1
+	lda ln_bz
+	sta rot2
+.lfb_nz
+	lda ln_ax
+	sta ln_bx
+	lda ln_ay
+	sta ln_by
+	lda ln_az
+	sta ln_bz
+	lda rot2
+	beq .lfb_rts
+	ldx rot1
+	lda rot2
+	bpl .lfb_pos
+	lda box_x,x
+	beq .lfb_st
+	sec
+	sbc #1
+	jmp .lfb_st
+.lfb_pos
+	lda ln_mx,x
+.lfb_st
+	sta ln_bx,x
+.lfb_rts
+	rts
+
+.lfb_abs
+	bpl .lfb_ap
+	eor #$ff
+	clc
+	adc #1
+.lfb_ap
+	rts
+
 ; Line AABB vs box_*. C=1 overlap.
 line_aabb_overlap
 	jsr line_box_max

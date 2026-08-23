@@ -1,5 +1,8 @@
 ; Mike's 30k px/s drawer (Denial): 8× unrolled ORA #imm, DEX/BEQ end,
 ; cached (colptr),Y, always LTR, SMC jump into starting bit.
+; Same-half and all steep strokes use chained-C bodies (no per-pixel CPY).
+; Steep lines that cross y=64 continue via rest_cnt + split_down/up.
+; Flat lines that cross y=64 keep the CPY/y_cross bodies.
 ; dx=0 uses draw_vline (no error term; two runs at the y=64 charset split).
 !zone line
 
@@ -48,6 +51,28 @@ y_cross_up
 .yuclamp
 	ldy #0
 	ldx save_x
+	sec
+	rts
+
+; One-shot charset join for steep split. Preserve X (remaining pixel count) and
+; leave C=1 for the following SBC. Not used while rest_cnt is still live.
+split_down
+	inc tile_half
+	clc
+	lda colptr+1
+	adc #8
+	sta colptr+1
+	ldy #0
+	sec
+	rts
+
+split_up
+	dec tile_half
+	sec
+	lda colptr+1
+	sbc #8
+	sta colptr+1
+	ldy #63
 	sec
 	rts
 
@@ -164,6 +189,10 @@ draw_line
 	lda dx
 	lsr
 	sta err_l
+	lda y0
+	eor y1
+	and #$40
+	bne .flat_slow
 	lda sy
 	bpl .dn
 	lda sup_l,x
@@ -184,6 +213,27 @@ draw_line
 	sec
 .jd	jmp sd0
 
+.flat_slow
+	lda sy
+	bpl .dns
+	lda sus_l,x
+	sta .jus+1
+	lda sus_h,x
+	sta .jus+2
+	ldx dx
+	inx
+	sec
+.jus	jmp sus0
+.dns
+	lda sds_l,x
+	sta .jds+1
+	lda sds_h,x
+	sta .jds+2
+	ldx dx
+	inx
+	sec
+.jds	jmp sds0
+
 .steep
 	lda dy
 	lsr
@@ -194,19 +244,54 @@ draw_line
 	sta .jt+1
 	lda stu_h,x
 	sta .jt+2
+	lda y0
+	eor y1
+	and #$40
+	bne .tu_cross
+	lda #0
+	sta rest_cnt
 	ldx dy
 	inx
 	sec
 .jt	jmp tu0
+.tu_cross
+	lda #64
+	sec
+	sbc y1
+	sta rest_cnt
+	lda y0
+	sec
+	sbc #63
+	tax
+	sec
+	jmp .jt
+
 .stdn
 	lda std_l,x
 	sta .js+1
 	lda std_h,x
 	sta .js+2
+	lda y0
+	eor y1
+	and #$40
+	bne .td_cross
+	lda #0
+	sta rest_cnt
 	ldx dy
 	inx
 	sec
 .js	jmp td0
+.td_cross
+	lda y1
+	sec
+	sbc #63
+	sta rest_cnt
+	lda #64
+	sec
+	sbc y0
+	tax
+	sec
+	jmp .js
 
 ; dx=0: same column, no Bresenham. At most two runs split at y=64.
 draw_vline

@@ -42,6 +42,7 @@ dy		= $17
 sy		= $19
 err_l		= $1a
 save_x		= $18			; y_cross only (pixel countdown)
+rest_cnt	= save_x		; Bresenham: remaining pixels after y=64 split (not live during y_cross)
 bitpos		= $10			; x0&7 for SMC jump
 colptr		= $4e			; + $4f  64-byte charset column
 

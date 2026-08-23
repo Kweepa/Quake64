@@ -82,7 +82,31 @@ load_cia2_quiet
 	lda $dd0d
 	rts
 
-; A=size lo, Y=size hi → load_dest = heap_top = heap_top - size
+; Fill frame13_lo/hi[i] = i*13 (pose gx/gy/gz stride). Called each LoadLevel.
+init_frame13
+	ldx #0
+	lda #0
+	sta nlo
+	sta nhi
+.f13
+	lda nlo
+	sta frame13_lo,x
+	lda nhi
+	sta frame13_hi,x
+	clc
+	lda nlo
+	adc #13
+	sta nlo
+	lda nhi
+	adc #0
+	sta nhi
+	inx
+	cpx #FRAME13_N
+	bcc .f13
+	rts
+
+; A=size lo, Y=size hi → load_dest = heap_top = heap_top - size.
+; C=0 ok; C=1 would overlap GAME (new top <= end_game). heap_top unchanged on fail.
 heap_alloc
 	sta bind_n
 	sty map_sv_a
@@ -93,10 +117,19 @@ heap_alloc
 	lda heap_top+1
 	sbc map_sv_a
 	sta load_dest+1
+	lda #<end_game
+	cmp load_dest
+	lda #>end_game
+	sbc load_dest+1
+	bcs .ha_fail				; end_game >= new top
 	lda load_dest
 	sta heap_top
 	lda load_dest+1
 	sta heap_top+1
+	clc
+	rts
+.ha_fail
+	sec
 	rts
 
 ; LoadLevel — IOINIT + blank + map + reloc overlay + enemies.
@@ -139,6 +172,7 @@ LoadLevel
 	sta heap_top
 	lda #>SCR_A
 	sta heap_top+1
+	jsr init_frame13
 
 	jsr FormatDosName
 	ldx level_num
@@ -151,6 +185,7 @@ LoadLevel
 	lda map_size_lo,x
 	ldy map_size_hi,x
 	jsr heap_alloc
+	bcs .ll_fail
 	lda #4
 	ldx #<level_dos_name
 	ldy #>level_dos_name
@@ -165,6 +200,7 @@ LoadLevel
 	lda #<RELOC_MAX
 	ldy #>RELOC_MAX
 	jsr heap_alloc
+	bcs .ll_fail
 	lda load_dest
 	sta reloc_base
 	lda load_dest+1
@@ -228,6 +264,7 @@ load_map_enemies
 	tay
 	pla
 	jsr heap_alloc
+	bcs .lme_err
 	ldy load_type
 	lda en_name_len,y
 	pha

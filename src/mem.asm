@@ -152,6 +152,23 @@ RELOC_MAX	= $0800			; heap reserve for reloc overlay
 	!error "MAP_SMC_BASE hi must equal MAP_SMC_HI"
 }
 
+; Play BSS: default VIC matrix / leftover boot. VIC matrix in play is $C000.
+; map_bss.asm occupies $0400–$051D. $08F9–$08FF is reboot stub + selectors.
+FRAME13_N	= 106			; offsets 0..105
+frame13_lo	= $051E
+frame13_hi	= $0588
+enemy_gx_lo	= $05F2
+enemy_gx_hi	= $05F9
+enemy_gy_lo	= $0600
+enemy_gy_hi	= $0607
+enemy_gz_lo	= $060E
+enemy_gz_hi	= $0615
+box_vis_edges	= $061C			; 24
+box_vis_vert	= $0634			; 12
+room_pack_edges	= $0640			; 64
+room_pack_vert	= $0680			; 32
+; next free $06A0
+
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
 SINTAB		= $D608			; 320 bytes (extra quadrant for COS)
@@ -381,6 +398,22 @@ FLASH_RED_MS	= 60
 SPLAT_MS		= FLASH_YEL_MS + FLASH_RED_MS	; same total as muzzle flash
 FX_N			= 24			; one explosion, 24 pixels
 EXPLODE_MS		= 768			; 3×; elapsed/3 then dir>>5 → ~4 units at end
+GREN_MAX		= 4
+GREN_OWN_PL		= 0
+GREN_OWN_EN		= 1
+GREN_F_BOUNCE		= 1			; fuse running
+GREN_F_PEND		= 2			; waiting on fx_on
+GREN_TICK_MS		= 32
+GREN_GRAV		= $0148			; 40 u/s² × 32ms as 8.8
+GREN_SPEED		= 20			; 45° launch, range 20
+GREN_FUSE_MS		= 2000
+GREN_LIFE_MS		= 5000
+GREN_DMG_MAX		= 24			; Quake 120 ÷ 5
+GREN_RAD		= 6
+GREN_HIT_R		= 1
+GREN_WRIST_L		= 5			; skeleton "Wrist L"
+GREN_HW			= $40			; tail half-width 0.25
+GREN_VEL_ASR		= 5			; tip = view-vel >> 5
 VIEW_SPR_X0	= 24 + VIEW_COL * 8	; 88 — viewport (0,0) → VIC
 VIEW_SPR_Y0	= 50 + VIEW_ROW * 8	; 122
 EMUZ_OX		= 12			; tip −12 X (center 24px)
@@ -557,6 +590,30 @@ fx_skip		= $CE9C			; 1 = skip next tick (spawn frame)
 en_pain_i	= $CE9D			; ENEMY_MAX: pain/death variant index
 sample_ms_chk	= $CEAD			; shadow of sample_ms (init_irq); tripwire restore
 spd_trip	= $CEAE			; sample_ms corruption count (IRQ .top)
+; Grenade SoA — 4 slots × 27 bytes + 1 scratch, $CEAF–$CF1B
+gr_on		= $CEAF
+gr_room		= $CEB3
+gr_owner	= $CEB7
+gr_flags	= $CEBB
+gr_acc		= $CEBF
+gr_xl		= $CEC3
+gr_xh		= $CEC7
+gr_yl		= $CECB
+gr_yh		= $CECF
+gr_zl		= $CED3
+gr_zh		= $CED7
+gr_vxl		= $CEDB
+gr_vxh		= $CEDF
+gr_vyl		= $CEE3
+gr_vyh		= $CEE7
+gr_vzl		= $CEEB
+gr_vzh		= $CEEF
+gr_fuse_l	= $CEF3
+gr_fuse_h	= $CEF7
+gr_life_l	= $CEFB
+gr_life_h	= $CEFF
+gren_save_room	= $CF03
+; $CF04–$CF1B free (was last-vel draw tip)
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

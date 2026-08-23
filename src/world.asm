@@ -53,6 +53,7 @@ world_init
 	jsr proc_init
 	jsr init_backpacks
 	jsr init_enemies
+	jsr init_grenades
 	jsr init_drops
 	lda spawn_y
 	sta floor_y
@@ -233,6 +234,93 @@ peek_rc_floor
 	clc
 	rts
 
+; col_x/col_z/room_idx set. rot2 = probe Y inclusive.
+; C=1, proc_tmp2 = highest walkable ≤ rot2 (rc floor, crate top, solid plat).
+floor_below
+	ldy room_idx
+	jsr peek_rc_floor
+	bcc .fb_surf
+	lda proc_tmp2
+	cmp rot2
+	beq .fb_surf
+	bcc .fb_surf
+	lda #0
+	sta proc_tmp0
+.fb_surf
+	ldx #0
+.fb_c
+	cpx	map_ncrates
+	bcs .fb_p
+	+lda_mx crate_room
+	cmp room_idx
+	bne .fb_cn
+	+lda_mx crate_x
+	sta box_x
+	+lda_mx crate_z
+	sta box_z
+	+lda_mx crate_sx
+	sta box_sx
+	+lda_mx crate_sz
+	sta box_sz
+	jsr point_in_box_xz
+	bcc .fb_cn
+	clc
+	+lda_mx crate_y
+	+adc_mx crate_sy
+	jsr .fb_cand
+.fb_cn
+	inx
+	bne .fb_c
+.fb_p
+	ldx #0
+.fb_pl
+	cpx	map_nplats
+	bcs .fb_done
+	+lda_mx plat_solid
+	beq .fb_pn
+	+lda_mx plat_room
+	cmp room_idx
+	bne .fb_pn
+	+lda_mx plat_x
+	sta box_x
+	+lda_mx plat_z
+	sta box_z
+	+lda_mx plat_sx
+	sta box_sx
+	+lda_mx plat_sz
+	sta box_sz
+	jsr point_in_box_xz
+	bcc .fb_pn
+	+lda_mx plat_y
+	jsr .fb_cand
+.fb_pn
+	inx
+	bne .fb_pl
+.fb_done
+	lda proc_tmp0
+	beq .fb_no
+	sec
+	rts
+.fb_no
+	clc
+	rts
+.fb_cand
+	cmp rot2
+	beq .fb_ok
+	bcs .fb_skip
+.fb_ok
+	ldy proc_tmp0
+	beq .fb_take
+	cmp proc_tmp2
+	bcc .fb_skip
+	beq .fb_skip
+.fb_take
+	sta proc_tmp2
+	lda #1
+	sta proc_tmp0
+.fb_skip
+	rts
+
 ; ------------------------------------------------------------------
 update_floor
 	lda pl_on_elev
@@ -364,8 +452,6 @@ update_floor
 	jmp .uf_sn
 .uf_sxz
 	; height = slope_y + (local_8.8 * sy) / run
-	lda #1
-	sta floor_slope
 	+lda_mx slope_axis
 	bne .uf_sz
 	lda cam_xl
@@ -433,13 +519,42 @@ update_floor
 	clc
 	+lda_mx slope_y
 	adc rot1
+	sta col_y			; candidate integer; rot0 = fraction
+	jmp .uf_scheck
+.uf_sflat
+	+lda_mx slope_y
+	sta col_y
+	lda #0
+	sta rot0
+.uf_scheck
+	lda col_y
+	cmp floor_y
+	bcc .uf_sn			; below current floor
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	sta proc_tmp0
+	lda col_y
+	cmp proc_tmp0
+	beq .uf_sadopt			; same height
+	bcc .uf_sadopt			; ramp below — landing / walk down
+	sec
+	sbc proc_tmp0			; rise
+	cmp #STEP_UP + 1
+	bcs .uf_sn			; too high — walk under
+.uf_sadopt
+	lda col_y
 	sta floor_y
 	lda rot0
 	sta floor_yl
-	jmp .uf_done
-.uf_sflat
-	+lda_mx slope_y
-	sta floor_y
+	lda proc_tmp0
+	cmp col_y
+	bcc .uf_done			; step-up — .ufl_up snaps
+	sbc col_y			; downward gap (C=1)
+	cmp #FALL_LEDGE + 1
+	bcs .uf_done			; start fall; .ufl_air lands
+	lda #1
+	sta floor_slope
 	jmp .uf_done
 .uf_sn
 	inx

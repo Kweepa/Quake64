@@ -33,7 +33,7 @@ credits_text
 	!scr "Kevin Cloud, Paul Steed,",0
 	!scr "Trent Reznor & Nine Inch Nails.",0
 	!scr " ",0
-	!scr "v1.0",0
+	!scr "quake64 v1.00.0",0
 	!byte 0
 
 order_text

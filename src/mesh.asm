@@ -87,14 +87,6 @@ box_edge_faces
 	!byte $18,$0a,$28,$09		; top 4-5,5-6,6-7,7-4
 	!byte $11,$12,$22,$21		; verts 0-4,1-5,2-6,3-7
 
-box_vis_edges
-	!fill 24, 0
-box_vis_vert
-	!fill 12, 0
-room_pack_edges
-	!fill 64, 0
-room_pack_vert
-	!fill 32, 0
 box_vbit
 	!byte $01,$02,$04,$08,$10,$20,$40,$80
 
@@ -643,12 +635,9 @@ draw_door_mesh
 	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
-draw_switch_mesh
-	jsr load_view_trig
-	jsr fill_switch_verts
+stroke_tri
 	lda #3
 	sta mesh_nv
-	lda #3
 	sta mesh_ne
 	lda #<tri_edges
 	sta edge_ptr
@@ -658,7 +647,18 @@ draw_switch_mesh
 	sta edge_vert_ptr
 	lda #>tri_vert
 	sta edge_vert_ptr+1
+	lda #<ident_col
+	sta col_ptr
+	lda #>ident_col
+	sta col_ptr+1
+	lda #$ff
+	sta mesh_vmask
 	jmp stroke_mesh
+
+draw_switch_mesh
+	jsr load_view_trig
+	jsr fill_switch_verts
+	jmp stroke_tri
 
 draw_slope_mesh
 	jsr load_view_trig

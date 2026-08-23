@@ -1441,7 +1441,34 @@ xform_world_vert
 	lda ent_wy
 	sbc cam_yh
 	sta e1xh
+	jmp xform_view_from_delta
 
+; X = CAM slot; world 8.8 in org_xl/xh, org_yl/yh, org_zl/zh → view CAM[X]
+xform_world_vert88
+	stx vindex
+	lda org_xl
+	sec
+	sbc cam_xl
+	sta e0x
+	lda org_xh
+	sbc cam_xh
+	sta e0xh
+	lda org_zl
+	sec
+	sbc cam_zl
+	sta e1z
+	lda org_zh
+	sbc cam_zh
+	sta e1zh
+	lda org_yl
+	sec
+	sbc cam_yl
+	sta e1x
+	lda org_yh
+	sbc cam_yh
+	sta e1xh
+
+xform_view_from_delta
 	; z' = dx*sn + dz*cs
 	lda e0x
 	sta nlo

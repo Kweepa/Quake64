@@ -462,6 +462,14 @@ enemy_anim_step
 	bne .eas_bite			; Rottweiler — leap bite
 	lda enemy_idx
 	sta emuz_pending
+	+ldy_mx en_type
+	cpy #ENT_OGRE
+	bne .eas_gun
+	jsr spawn_ogre_grenade
+	ldx enemy_idx
+	+ldy_mx en_type
+	jmp .eas_atlen_go
+.eas_gun
 	jsr enemy_gunshot
 	ldx enemy_idx
 	+ldy_mx en_type

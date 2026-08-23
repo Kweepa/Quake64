@@ -1,6 +1,6 @@
 {
   "version": 9,
-  "activeLevel": "E1M2",
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -1030,6 +1030,55 @@
           "axis": "x",
           "dir": 1,
           "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
+        },
+        {
+          "id": "6de16972-0cd1-4f8e-8339-1fee688e1d08",
+          "kind": "trigger",
+          "x": 91,
+          "y": 48,
+          "z": 48,
+          "sx": 30,
+          "sy": 4,
+          "sz": 30,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "hurt",
+          "text": "",
+          "tag": "",
+          "roomId": "b569290e-9dbc-4322-9838-ff8bdf565a1d"
+        },
+        {
+          "id": "f251933c-fc28-4179-8a24-e383d0dcfeb1",
+          "kind": "trigger",
+          "x": 64,
+          "y": 53,
+          "z": 112,
+          "sx": 8,
+          "sy": 4,
+          "sz": 32,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "message",
+          "text": "",
+          "tag": "",
+          "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
+        },
+        {
+          "id": "f2a61676-2874-468d-b801-68a01c037ed3",
+          "kind": "pickup",
+          "x": 12,
+          "y": 104,
+          "z": 119,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434",
+          "pickup": "grenade launcher"
         }
       ]
     },

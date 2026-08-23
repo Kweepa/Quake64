@@ -20,12 +20,12 @@ wpn_have_bit
 	!byte HAVE_AXE, HAVE_SHOT, HAVE_NAIL, HAVE_GREN
 
 wpn_fire_ms_lo
-	!byte <0, <600, <100, <900
+	!byte <0, <600, <100, <1000
 wpn_fire_ms_hi
-	!byte >0, >600, >100, >900
+	!byte >0, >600, >100, >1000
 
 wpn_sound
-	!byte 0, SOUND_SHOTGN, SOUND_ATKMACHINEGUN, SOUND_BAREXP
+	!byte 0, SOUND_SHOTGN, SOUND_ATKMACHINEGUN, SOUND_SHOOT
 
 wpn_idle_x
 	!byte WPN_X0, WPN_X0, WPN_X0, WPN_X0
@@ -166,6 +166,7 @@ init_weapon_hw
 ; First start: hardware + starting inventory.
 init_weapon
 	jsr init_weapon_hw
+	jsr init_grenades
 	lda #HAVE_START
 	sta have_wpn
 	lda #AMMO_SHELLS_START
@@ -513,6 +514,10 @@ fire_shot
 .fs_notshot
 	cpx #WPN_NAIL
 	beq .fs_nail
+	cpx #WPN_GREN
+	bne .fs_flash
+	jsr spawn_player_grenade
+.fs_flash
 	lda #$10
 	jsr start_flash
 	jmp start_recoil

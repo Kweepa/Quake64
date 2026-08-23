@@ -2,18 +2,8 @@
 src/grunt_data.asm
 src/weapon_spr.asm
 
-# Cooked map / enemy pose PRGs
-maps/*.prg
-enemies/*.prg
-
 # Intermediate PRGs — playable disk is quake64.d64
-boot.prg
-menu.prg
-game.prg
-tab.prg
-fnt.prg
-scr.prg
-sqt.prg
+*.prg
 
 # Build outputs
 *.lbl
@@ -21,6 +11,7 @@ sqt.prg
 *.sym
 __pycache__/
 *.pyc
+*.log
 
 # Quake shareware (PAK / id1)
 shareware/

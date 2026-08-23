@@ -1,9 +1,15 @@
-# Generated tables
-src/tables.asm
-src/sqtab.asm
-src/uifont.asm
+# Generated tables (listings are kept in the tree)
 src/grunt_data.asm
 src/weapon_spr.asm
+
+# Intermediate PRGs — playable disk is quake64.d64
+boot.prg
+menu.prg
+game.prg
+tab.prg
+fnt.prg
+scr.prg
+sqt.prg
 
 # Build outputs
 *.lbl

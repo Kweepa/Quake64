@@ -1,4 +1,4 @@
-; Signed (A*Y)>>7 and perspective via log/antilog LUTs ($F800)
+; Signed (A*Y)>>7 and perspective via log/antilog LUTs (charset tails)
 !zone math
 
 ; A, Y signed. A = (A*Y)/128, clamp ±127. RAM LUTs ($01=$30).
@@ -32,7 +32,7 @@ smul7
 	bcc .chi
 	sbc #224
 	tax
-	lda ALOGTAB + $100,x
+	lda ALOGHI,x
 	jmp .got
 .chi
 	adc #32
@@ -478,7 +478,7 @@ logadd7
 	bcc .lchi
 	sbc #224
 	tax
-	lda ALOGTAB + $100,x
+	lda ALOGHI,x
 	jmp .lgot
 .lchi
 	adc #32
@@ -1003,7 +1003,7 @@ alog_fetch
 	rts
 .p1
 	ldx prod_l
-	lda ALOGTAB + $100,x
+	lda ALOGHI,x
 	rts
 .p0
 	ldx prod_l
@@ -1135,5 +1135,3 @@ rnd8
 	adc #193
 	sta random8
 	rts
-
-!source "sqtab.asm"

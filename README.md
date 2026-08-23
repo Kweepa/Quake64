@@ -2,7 +2,7 @@
 
 A Commodore 64 *Quake* demake: a 3D line-drawn world in custom character graphics, with portal rooms, stick-figure enemies, and sprite weapons.
 
-This is an early prototype. The running program is the **core line engine** — a double-buffered Bresenham line drawn world in VIC Bank 3 — plus a HUD font, frame profiler, and sprite weapons (axe, super shotgun, nailgun, grenade launcher).
+This is an early prototype. The playable binary is **`quake64.d64`** (download from the repo). Autostart it in VICE: skill/options menu, then the core line engine — a double-buffered Bresenham line drawn world in VIC Bank 3 — plus a HUD font, frame profiler, and sprite weapons (axe, super shotgun, nailgun, grenade launcher).
 
 ## Display
 
@@ -33,8 +33,8 @@ The view-model is **four hardware sprites** in a 2×2 grid. Unplotted sprite pix
 6502 (ACME) plus Python table generators. Copy `setup-env.example.bat` to `setup-env.bat` and point `ACME` / `VICE` at your installs.
 
 ```bat
-build.bat          :: generate tables, assemble quake64.prg
-make.bat           :: build and autostart in VICE
+build.bat          :: generate listings, assemble PRGs, write quake64.d64
+make.bat           :: build and autostart quake64.d64 in VICE
 run-editor.bat     :: local map / skeleton editor
 ```
 

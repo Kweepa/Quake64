@@ -12,6 +12,8 @@ exit /b 1
 :run
 python tools\gentables.py
 if errorlevel 1 exit /b 1
+python tools\genscreens.py
+if errorlevel 1 exit /b 1
 python tools\genlinebodies.py
 if errorlevel 1 exit /b 1
 python tools\genrotate.py
@@ -32,16 +34,57 @@ python tools\genitems.py
 if errorlevel 1 exit /b 1
 python tools\genweapons.py
 if errorlevel 1 exit /b 1
+python tools\gen_menu_text.py
+if errorlevel 1 exit /b 1
 
 pushd src
-"%ACME%" -v3 --vicelabels ..\quake64.lbl quake64.asm
+"%ACME%" tables.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" sqtab.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" uifont.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" screens.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" -v3 --vicelabels ..\game.lbl quake64.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" menu.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" boot.asm
 if errorlevel 1 (
   popd
   exit /b 1
 )
 popd
 
-if exist src\quake64.prg move /y src\quake64.prg quake64.prg >nul
+if exist src\tab.prg move /y src\tab.prg tab.prg >nul
+if exist src\sqt.prg move /y src\sqt.prg sqt.prg >nul
+if exist src\fnt.prg move /y src\fnt.prg fnt.prg >nul
+if exist src\scr.prg move /y src\scr.prg scr.prg >nul
+if exist src\game.prg move /y src\game.prg game.prg >nul
+if exist src\menu.prg move /y src\menu.prg menu.prg >nul
+if exist src\boot.prg move /y src\boot.prg boot.prg >nul
 
-echo Built quake64.prg
-dir quake64.prg
+python tools\mkdisk.py
+if errorlevel 1 exit /b 1
+
+echo Built quake64.d64
+dir quake64.d64

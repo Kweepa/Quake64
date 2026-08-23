@@ -1,0 +1,12 @@
+^WASD....^ Forward/backward/strafe
+^IJKL....^ Forward/backward/turn
+^Space...^ Fire
+^1234....^ Change weapon
+
+If you have a mouse in port 1 and
+you have enabled it in the Options,
+you can turn and shoot with it.
+
+Walk into doors to open them.
+Walk into secret walls to push them.
+Walk over items to pick them up.

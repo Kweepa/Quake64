@@ -119,159 +119,7 @@ maybe_room_palette
 .mrpdone
 	rts
 
-; Unique 0–255 char codes in both matrices (top 8 rows + bottom 8 rows)
-fill_screens
-	lda #<SCR_A
-	sta init_ptr
-	lda #>SCR_A
-	sta init_ptr+1
-	jsr .fill_one
-	lda #<SCR_B
-	sta init_ptr
-	lda #>SCR_B
-	sta init_ptr+1
-.fill_one
-	lda #0
-	sta init_row				; row 0..24
-.sr
-	lda init_row
-	cmp #25
-	bcs .srdone
-	ldy #0
-	lda #0
-.sc
-	sta (init_ptr),y
-	iny
-	cpy #40
-	bne .sc
-	clc
-	lda init_ptr
-	adc #40
-	sta init_ptr
-	bcc +
-	inc init_ptr+1
-+
-	inc init_row
-	jmp .sr
-.srdone
-	rts
-
-; After zero fill, stamp viewport char codes on A and B
-stamp_viewport
-	lda #<SCR_A
-	sta src_ptr
-	lda #>SCR_A
-	sta src_ptr+1
-	jsr .stamp
-	lda #<SCR_B
-	sta src_ptr
-	lda #>SCR_B
-	sta src_ptr+1
-.stamp
-	lda #0
-	sta stamp_row
-.strow
-	lda stamp_row
-	cmp #VIEW_H
-	bcs .stdone
-	; dest = base + VIEW_OFF + stamp_row*40
-	lda src_ptr
-	sta init_ptr
-	lda src_ptr+1
-	sta init_ptr+1
-	ldx stamp_row
-	beq .addcol
-.add40
-	clc
-	lda init_ptr
-	adc #40
-	sta init_ptr
-	bcc +
-	inc init_ptr+1
-+
-	dex
-	bne .add40
-.addcol
-	clc
-	lda init_ptr
-	adc #<VIEW_OFF
-	sta init_ptr
-	lda init_ptr+1
-	adc #>VIEW_OFF
-	sta init_ptr+1
-	lda stamp_row
-	and #7
-	sta stamp_in
-	ldy #0
-.stcol
-	tya
-	asl
-	asl
-	asl
-	clc
-	adc stamp_in
-	sta (init_ptr),y
-	iny
-	cpy #VIEW_W
-	bne .stcol
-	inc stamp_row
-	jmp .strow
-.stdone
-	rts
-
-; Viewport rows, cols 0–7 and 32–39: solid MARGIN_CH (black over $d021 brown)
-stamp_margins
-	lda #<SCR_A
-	sta src_ptr
-	lda #>SCR_A
-	sta src_ptr+1
-	jsr .one
-	lda #<SCR_B
-	sta src_ptr
-	lda #>SCR_B
-	sta src_ptr+1
-.one
-	lda #0
-	sta stamp_row
-.mr
-	lda src_ptr
-	sta init_ptr
-	lda src_ptr+1
-	sta init_ptr+1
-	lda stamp_row
-	clc
-	adc #VIEW_ROW
-	tax
-	beq .cols
-.add
-	clc
-	lda init_ptr
-	adc #40
-	sta init_ptr
-	bcc +
-	inc init_ptr+1
-+
-	dex
-	bne .add
-.cols
-	lda #MARGIN_CH
-	ldy #0
--
-	sta (init_ptr),y
-	iny
-	cpy #VIEW_COL
-	bne -
-	ldy #VIEW_COL + VIEW_W
--
-	sta (init_ptr),y
-	iny
-	cpy #40
-	bne -
-	inc stamp_row
-	lda stamp_row
-	cmp #VIEW_H
-	bcc .mr
-	rts
+; Unique viewport codes + HUD spaces live in scr.prg (tools/genscreens.py).
 
 ; $FF in unused col 24 / char 192, all four charset halves. Call at $01=$30.
 fill_margin_glyph
@@ -287,13 +135,19 @@ fill_margin_glyph
 	rts
 
 clear_charsets
+	lda #>CH_A_TOP
+	jsr .six
+	lda #>CH_A_BOT
+	jsr .six
+	lda #>CH_B_TOP
+	jsr .six
+	lda #>CH_B_BOT
+.six
+	sta init_ptr+1
 	lda #0
 	sta init_ptr
-	lda #>CH_A_TOP
-	sta init_ptr+1
-	ldx #$20				; 8K = 32 pages
-	ldy #0
-	tya
+	tay
+	ldx #6				; 24 cols = 6 pages; skip tail LUTs
 .cl
 	sta (init_ptr),y
 	iny

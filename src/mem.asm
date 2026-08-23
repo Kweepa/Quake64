@@ -2,13 +2,38 @@
 ; $C000 screen A  $C400 screen B  $C800 weapon sprites
 ; $CA00 projected verts / clip / game scratch (not displayed)
 ; $D000/$D800 charset A top/bot  $E000/$E800 charset B top/bot
-; $F000 UI charset  $F800 log/alog/sin/cos (copied at init).
-; Judd sqlo/sqhi live in the PRG.
+; Viewport uses charset cols 0–23; col 24 (char 192) is $FF×8 margins.
+; Tails (cols 24–31) hold unique log/sin/invz LUTs — not mirrored.
+; $F000 UI charset (disk fnt). Judd sqlo..negsqhi at $F800 (disk sqt).
+; Game PRG $0900–<$C000.
 ;
-; $01: $30 = 64K RAM (game). $36 = I/O + KERNAL, BASIC out (init/IRQ).
+; Boot $0801, menu overlay then game at $0900. Selectors $08FD–$08FF survive.
+; $01: $30 = 64K RAM (game / copy_tab). $36 = I/O + KERNAL, BASIC out (init/IRQ).
 ; $34 is not I/O — PLA gives RAM at $D000 when LORAM=HIRAM=0.
 BANK_RAM	= $30
 BANK_IO		= $36
+
+LOADER_BASE	= $0801
+LOCODE_BASE	= $0900			; MENU overlay, then game
+effects_vol	= $08FD			; menu SFX level 0..15 → SID $d418
+game_complete	= $08FE
+difficulty	= $08FF			; menu skill 0..3
+MENU_COPY_TAB	= LOCODE_BASE + 3
+
+; Menu overlay (VIC bank 1). Unused by the game image.
+SCREEN		= $4000
+SCREEN_B	= $4400
+BITMAP		= $6000
+BITMAP_SIZE	= 8000
+BITMAP_END	= BITMAP + BITMAP_SIZE
+
+TAB_STAGING	= $8000			; tab.prg load; copy_tab unpacks tails
+TAB_ALOG	= TAB_STAGING		; 512
+TAB_LOG		= TAB_STAGING + 512	; 256
+TAB_SIN		= TAB_STAGING + 768	; 320
+TAB_INVZL	= TAB_STAGING + 1088	; 128
+TAB_INVZH	= TAB_STAGING + 1216	; 128
+TAB_BYTES	= 1344
 
 COL_BORDER	= 0
 COL_HURT	= 2			; red $d020 flash on damage
@@ -101,11 +126,22 @@ HUD_CH_RING	= $88
 COL_HUD		= 8			; orange digits
 COL_HUD_DIM	= 2			; dark red stage letters
 
-LOGTAB		= $F800
-ALOGTAB		= $F900			; 512 bytes
-SINTAB		= $FB00
-COSTAB		= $FC00
-LUT_PAGES	= 5			; 1280 bytes
+; Judd quarter-square (disk sqt @ $F800, page-aligned; mulset_* stores lo only)
+; Under KERNAL — multiply only with $01=$30 (same as A-side LUTs).
+sqlo		= $F800
+sqhi		= $FA00
+negsqlo		= $FC00
+negsqhi		= $FE00
+
+; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
+; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
+SINTAB		= $D608			; 320 bytes (extra quadrant for COS)
+COSTAB		= SINTAB + 64		; $D648
+invzl		= $DE08			; 128
+ALOGTAB		= $DF00			; 256
+invzh		= $E608			; 128
+ALOGHI		= $E700			; 256
+LOGTAB		= $EF00			; 256
 
 SCR_A		= $C000
 SCR_B		= $C400
@@ -113,6 +149,7 @@ CH_A_TOP	= $D000
 CH_A_BOT	= $D800
 CH_B_TOP	= $E000
 CH_B_BOT	= $E800
+MARGIN_GLYPH	= CH_A_TOP + 24 * 64	; $D600 — char 192, A top
 
 PROJ_X		= $CA00			; 16 view/proj slots (NVERTS=13 used)
 PROJ_Y		= $CA10

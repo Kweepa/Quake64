@@ -1,6 +1,8 @@
 # VIC Bank 3 memory map
 
-Source of truth for addresses is [`src/mem.asm`](src/mem.asm). Engine code lives in the PRG (loaded at `$0801`); this bank is screens, charsets, sprites, LUTs, and game scratch. Accessing `$D000–$FFFF` as RAM requires `$01` to unmap I/O and the KERNAL. Colour RAM (`$D800`) is the I/O overlay of charset A bottom.
+Source of truth for addresses is [`src/mem.asm`](src/mem.asm). Engine code is the `game` PRG (load `$0900`); this bank is screens, charsets, sprites, LUTs, and game scratch. Accessing `$D000–$FFFF` as RAM requires `$01` to unmap I/O and the KERNAL. Colour RAM (`$D800`) is the I/O overlay of charset A bottom.
+
+The playable disk is [`quake64.d64`](quake64.d64): boot loads `menu`, stages `tab` into charset tails, then `fnt` / `scr` / `sqt` / `game`.
 
 Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and **6 unique world Z** (rooms still cook at 4 unique).
 
@@ -21,18 +23,33 @@ Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and
 | `$C9C0`–`$C9FF` | 64 | Sprite 7 impact splat (`WPN_SPLAT`) |
 | `$CA00`–`$CE81` | 642 | Project / clip / game scratch (table below) |
 | `$CE82`–`$CFFF` | 382 | Unused (before charset A) |
-| `$D000`–`$D7FF` | 2048 | Charset A top (`CH_A_TOP`) |
-| `$D800`–`$DFFF` | 2048 | Charset A bottom (`CH_A_BOT`) |
-| `$E000`–`$E7FF` | 2048 | Charset B top (`CH_B_TOP`) |
-| `$E800`–`$EFFF` | 2048 | Charset B bottom (`CH_B_BOT`) |
-| `$F000`–`$F7FF` | 2048 | UI charset (`UI_CHARSET`, ASCII-indexed) |
-| `$F800`–`$F8FF` | 256 | `LOGTAB` |
-| `$F900`–`$FAFF` | 512 | `ALOGTAB` |
-| `$FB00`–`$FBFF` | 256 | `SINTAB` |
-| `$FC00`–`$FCFF` | 256 | `COSTAB` |
-| `$FD00`–`$FFFF` | 768 | Unused |
+| `$D000`–`$D5FF` | 1536 | Charset A top cols 0–23 (viewport) |
+| `$D600`–`$D607` | 8 | Char 192 `$FF` margin glyph |
+| `$D608`–`$D747` | 320 | `SINTAB` (COSTAB = SINTAB+64 at `$D648`) |
+| `$D748`–`$D7FF` | 184 | Unused tail pad |
+| `$D800`–`$DDFF` | 1536 | Charset A bottom cols 0–23 |
+| `$DE00`–`$DE07` | 8 | Char 192 `$FF` |
+| `$DE08`–`$DE87` | 128 | `invzl` |
+| `$DE88`–`$DEFF` | 120 | Unused |
+| `$DF00`–`$DFFF` | 256 | `ALOGTAB` |
+| `$E000`–`$E5FF` | 1536 | Charset B top cols 0–23 |
+| `$E600`–`$E607` | 8 | Char 192 `$FF` |
+| `$E608`–`$E687` | 128 | `invzh` |
+| `$E688`–`$E6FF` | 120 | Unused |
+| `$E700`–`$E7FF` | 256 | `ALOGHI` |
+| `$E800`–`$EDFF` | 1536 | Charset B bottom cols 0–23 |
+| `$EE00`–`$EE07` | 8 | Char 192 `$FF` |
+| `$EE08`–`$EEFF` | 248 | Unused |
+| `$EF00`–`$EFFF` | 256 | `LOGTAB` |
+| `$F000`–`$F7FF` | 2048 | UI charset (`UI_CHARSET`, disk `fnt`) |
+| `$F800`–`$F9FF` | 512 | `sqlo` (disk `sqt`) |
+| `$FA00`–`$FBFF` | 512 | `sqhi` |
+| `$FC00`–`$FDFF` | 512 | `negsqlo` |
+| `$FE00`–`$FFFF` | 512 | `negsqhi` |
 
-`$D018` pointers: matrix A `$C000` / B `$C400`; viewport charsets `$D000`/`$D800` vs `$E000`/`$E800` (mid-screen split); HUD uses `$F000`. Quarter-square multiply tables (`sqlo` / `sqhi`) stay in the PRG.
+`$D018` pointers: matrix A `$C000` / B `$C400`; viewport charsets `$D000`/`$D800` vs `$E000`/`$E800` (mid-screen split); HUD uses `$F000`. Quarter-square tables (`sqlo` / `sqhi` / `negsqlo` / `negsqhi`) load at `$F800` (disk `sqt`, under KERNAL). Game PRG is `$0900`–`< $C000`. `$B000–$BFFF` is free. Boot is `$0801`; menu overlay is overwritten by game. Selectors `effects_vol` / `game_complete` / `difficulty` sit at `$08FD–$08FF`.
+
+A-side LUTs (`SINTAB`, `invzl`, `ALOGTAB`) sit under I/O; math runs with `$01=$30`.
 
 ## `$CA00+` scratch
 

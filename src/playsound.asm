@@ -59,7 +59,8 @@ play_sound_init
 	dex
 	bpl .psi_clr
 	jsr sfx_voice_adsr_all
-	lda #SFX_VOL
+	lda effects_vol
+	and #SFX_VOL
 	sta $d418
 	rts
 
@@ -200,7 +201,8 @@ update_sfx
 	bne .us_stop_vol
 	jsr elev_noise_restore
 .us_stop_vol
-	lda #SFX_VOL
+	lda effects_vol
+	and #SFX_VOL
 	sta $d418
 	jmp .us_next
 

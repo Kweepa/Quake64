@@ -4,26 +4,6 @@
 !zone hud
 
 init_hud
-	lda #<ui_font
-	sta src_ptr
-	lda #>ui_font
-	sta src_ptr+1
-	lda #<UI_CHARSET
-	sta dst_ptr
-	lda #>UI_CHARSET
-	sta dst_ptr+1
-	ldx #UI_FONT_PAGES
-	ldy #0
-.copy
-	lda (src_ptr),y
-	sta (dst_ptr),y
-	iny
-	bne .copy
-	inc src_ptr+1
-	inc dst_ptr+1
-	dex
-	bne .copy
-
 	; rows 0–8 (360 bytes): spaces + orange colour (matrix A only)
 	ldx #0
 	lda #HUD_CH_SP
@@ -775,10 +755,3 @@ hud_str_armour	!byte 65,114,109,111,117,114,0		; Armour
 hud_str_pu	!byte 68,97,109,97,103,101			; Damage
 		!byte 83,104,105,101,108,100			; Shield
 		!byte 83,104,97,100,111,119			; Shadow
-
-ui_font
-	!source "uifont.asm"
-ui_font_end
-!if ui_font_end - ui_font != 2048 {
-	!error "UI font blob must be 2048 bytes"
-}

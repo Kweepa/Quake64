@@ -49,8 +49,8 @@ def main():
     print("PROJ_X", hd(0xCA00, 8))
     print("PROJ_Y", hd(0xCA08, 8))
     print("PROJ_Z", hd(0xCA20, 8))
-    print("COSTAB", hd(0xFC00, 8))
-    print("SINTAB", hd(0xFB00, 8))
+    print("COSTAB", hd(0xD648, 8))
+    print("SINTAB", hd(0xD608, 8))
     hud = 18 * 40 + 4
     print("HUD A", mem[0xC000 + hud : 0xC000 + hud + 6].hex())
     print("HUD B", mem[0xC400 + hud : 0xC400 + hud + 6].hex())

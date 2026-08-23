@@ -1,6 +1,6 @@
 ; Quake64 — Step 2 portal-room E1M1
 !cpu 6510
-!to "quake64.prg", cbm
+!to "game.prg", cbm
 
 ; --- build flags (Wolf64-style) -------------------------------------------
 PROFILE		= 0				; 1 = R/P/K/D bucket HUD + CIA samples
@@ -12,10 +12,7 @@ INF_AMMO		= 1				; 1 = guns fire without spending ammo
 !source "zp.asm"
 !source "map_counts.asm"
 
-*= $0801
-!byte $0b, $08, $0a, $00, $9e, $32, $30, $36, $31, $00, $00, $00	; SYS 2061
-
-*= $080d
+*= LOCODE_BASE
 start
 	sei
 	cld
@@ -49,13 +46,9 @@ start
 	jsr prof_init
 	lda #BANK_RAM				; all RAM; I/O only in IRQ
 	sta $01
-	jsr fill_screens
-	jsr stamp_viewport
-	jsr stamp_margins
 	jsr clear_charsets
 	jsr fill_margin_glyph
-	jsr copy_luts
-	lda #BANK_IO				; colour RAM + HUD after screen wipe
+	lda #BANK_IO				; colour RAM + HUD after charset wipe
 	sta $01
 	jsr init_hud
 	jsr hud_ammo
@@ -238,28 +231,6 @@ apply_move
 .noa
 	rts
 
-copy_luts
-	lda #<lut_src
-	sta src_ptr
-	lda #>lut_src
-	sta src_ptr+1
-	lda #<LOGTAB
-	sta dst_ptr
-	lda #>LOGTAB
-	sta dst_ptr+1
-	ldx #LUT_PAGES
-	ldy #0
-.copy
-	lda (src_ptr),y
-	sta (dst_ptr),y
-	iny
-	bne .copy
-	inc src_ptr+1
-	inc dst_ptr+1
-	dex
-	bne .copy
-	rts
-
 !source "vic.asm"
 !source "irq.asm"
 !source "profil.asm"
@@ -286,13 +257,6 @@ copy_luts
 
 !source "map_e1m1.asm"
 
-lut_src
-	!source "tables.asm"
-lut_end
-!if lut_end - lut_src != 1280 {
-	!error "LUT blob must be 1280 bytes"
-}
-
 !if PROFILE = 1 {
 casc_snap
 	!fill 4, 0
@@ -308,4 +272,9 @@ nv_proj
 	!fill 2, 0
 nv_clip
 	!fill 2, 0
+}
+
+end_game = *
+!if end_game > SCR_A {
+	!error "game overlaps screen A at $C000; end=$", end_game
 }

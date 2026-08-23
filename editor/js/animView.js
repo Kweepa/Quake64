@@ -64,6 +64,10 @@ export class AnimView {
     return this.opts.getMeshOverlay?.() || null;
   }
 
+  #hasStick() {
+    return this.opts.hasStickFrame?.() !== false;
+  }
+
   #binding() {
     const overlay = this.#overlay();
     return overlay && overlay.bindJoint >= 0;
@@ -98,6 +102,7 @@ export class AnimView {
   }
 
   #selectionAnchor() {
+    if (!this.#hasStick()) return null;
     const selected = this.#selectedIndices();
     if (!selected.length) return null;
     const enemy = this.opts.getEnemy();
@@ -146,6 +151,7 @@ export class AnimView {
   #hitVert(mx, my) {
     const overlay = this.#overlay();
     if (overlay && overlay.bindJoint >= 0) return this.#hitAmong(overlay.verts, mx, my, 8);
+    if (!this.#hasStick()) return -1;
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
     return this.#hitAmong(enemy.frames[frame], mx, my, 10);
@@ -391,7 +397,9 @@ export class AnimView {
     const verts =
       overlay && overlay.bindJoint >= 0
         ? overlay.verts
-        : this.opts.getEnemy().frames[this.opts.getFrame()];
+        : this.#hasStick()
+          ? this.opts.getEnemy().frames[this.opts.getFrame()]
+          : [];
     const cam = this.#cam();
     const hits = [];
     verts.forEach((v, i) => {
@@ -486,9 +494,10 @@ export class AnimView {
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
     const selected = this.opts.getSelectedVerts?.() || [];
-    const verts = enemy.frames[frame] || enemy.frames[0];
     const overlay = this.#overlay();
     const binding = overlay && overlay.bindJoint >= 0;
+    const stickOn = this.#hasStick();
+    const verts = stickOn ? enemy.frames[frame] || enemy.frames[0] : null;
     let shown = selected;
     let meshShown = overlay ? [...(overlay.jointVerts[overlay.bindJoint] || [])] : [];
     if (this.drag?.kind === "box") {
@@ -538,22 +547,24 @@ export class AnimView {
       }
     }
 
-    ctx.lineWidth = 1.5;
-    for (const [i, j] of enemy.lines) {
-      this.#strokeSeg(ctx, cam, w, h, verts[i], verts[j], "#c8ccd4", 1.5);
-    }
+    if (stickOn && verts) {
+      ctx.lineWidth = 1.5;
+      for (const [i, j] of enemy.lines) {
+        this.#strokeSeg(ctx, cam, w, h, verts[i], verts[j], "#c8ccd4", 1.5);
+      }
 
-    verts.forEach((v, i) => {
-      const p = projectPoint(v, cam, w, h);
-      if (!p.ok) return;
-      const sel = !binding && shown.includes(i);
-      const hover = !binding && i === this.hover;
-      ctx.fillStyle = sel ? "#d4a017" : hover ? "#fff" : "#8b91a0";
-      const r = sel ? 5 : 4;
-      ctx.beginPath();
-      ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
-      ctx.fill();
-    });
+      verts.forEach((v, i) => {
+        const p = projectPoint(v, cam, w, h);
+        if (!p.ok) return;
+        const sel = !binding && shown.includes(i);
+        const hover = !binding && i === this.hover;
+        ctx.fillStyle = sel ? "#d4a017" : hover ? "#fff" : "#8b91a0";
+        const r = sel ? 5 : 4;
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
 
     if (binding) {
       const assignedOther = new Set();
@@ -576,7 +587,7 @@ export class AnimView {
     }
 
     const prim = this.#selectionAnchor();
-    if (prim && !binding) this.#drawGizmo(ctx, cam, w, h, prim.v);
+    if (prim && !binding && stickOn) this.#drawGizmo(ctx, cam, w, h, prim.v);
 
     if (this.drag?.kind === "box") {
       const r = this.#boxRect();
@@ -593,14 +604,14 @@ export class AnimView {
     ctx.font = "11px Segoe UI, sans-serif";
     const clip = clipForFrame(enemy.clips, frame);
     let label;
-    if (enemy.clips?.length && clip) {
-      label = `${clip.name} ${frame - clip.start}`;
-    } else if (overlay?.frameName) {
+    if (overlay?.frameName) {
       label = overlay.frameName;
+    } else if (stickOn && enemy.clips?.length && clip) {
+      label = `${clip.name} ${frame - clip.start}`;
     } else {
       label = "rest";
     }
-    const frameTotal = enemy.clips?.length ? enemy.frames.length : overlay ? "MDL" : enemy.frames.length;
+    const frameTotal = stickOn && enemy.clips?.length ? enemy.frames.length : overlay ? "MDL" : enemy.frames.length;
     ctx.fillText(`${enemy.name} · ${label} · 13 verts · ${frameTotal} frames`, 8, 16);
   }
 }

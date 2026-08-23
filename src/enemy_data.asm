@@ -463,21 +463,24 @@ enemy_gy_lo	!byte <grunt_gy, <rott_gy
 enemy_gy_hi	!byte >grunt_gy, >rott_gy
 enemy_gz_lo	!byte <grunt_gz, <rott_gz
 enemy_gz_hi	!byte >grunt_gz, >rott_gz
-; Role clips — hand-tuned; keep in sync with enemy.asm AI
+PAIN_MAX	= 4		; variants per type; pain_var_off uses ASL×2
+; Role clips — looked up by name from editor JSON
 enemy_stand_start	!byte 0, 44
 enemy_stand_len		!byte 8, 9
 enemy_alert_start	!byte 18, 44
-enemy_alert_len		!byte 11, 2
+enemy_alert_len		!byte 11, 2		; Rott first 2 of stand
 enemy_run_start		!byte 35, 23
 enemy_run_len		!byte 8, 12
 enemy_walk_start		!byte 52, 53		; Grunt prowl, Rott walk
 enemy_walk_len		!byte 24, 8
 enemy_attack_start	!byte 43, 35		; Grunt shoot, Rott leap
 enemy_attack_len	!byte 9, 9
-enemy_pain_start		!byte 29, 17
-enemy_pain_len		!byte 6, 6
-enemy_death_start	!byte 8, 8
-enemy_death_len		!byte 10, 9
+enemy_pain_n		!byte 1, 1
+enemy_pain_start	!byte 29, 0, 0, 0, 17, 0, 0, 0	; type * PAIN_MAX + variant
+enemy_pain_len		!byte 6, 0, 0, 0, 6, 0, 0, 0
+enemy_death_n		!byte 1, 1
+enemy_death_start	!byte 8, 0, 0, 0, 8, 0, 0, 0	; type * PAIN_MAX + variant
+enemy_death_len		!byte 10, 0, 0, 0, 9, 0, 0, 0
 enemy_range		!byte 30, 4		; approach stop (Chebyshev XZ)
 ; Quake HP÷5: Grunt 30→6, Rottweiler 25→5
 enemy_hp_init		!byte 6, 5

@@ -432,6 +432,7 @@ enemy_anim_step
 	cmp #EN_ATTACK
 	beq .eas_atlen
 	pla
+	jsr pain_var_off
 	cmp enemy_pain_len,y
 	bcs +
 	jmp .eas_n
@@ -512,7 +513,7 @@ enemy_anim_step
 .eas_die
 	inc en_frame,x
 	lda en_frame,x
-	ldy en_type,x
+	jsr pain_var_off
 	cmp enemy_death_len,y
 	bcs +
 	jmp .eas_n
@@ -1575,6 +1576,38 @@ enemy_shot_clear
 	sec
 	rts
 
+; X = enemy. Pick en_pain_i = rnd8 % n. A = n.
+pick_var_n
+	beq .pvn_one
+	cmp #1
+	beq .pvn_one
+	sta rot1
+	jsr rnd8
+.pvn_mod
+	cmp rot1
+	bcc .pvn_store
+	sbc rot1
+	jmp .pvn_mod
+.pvn_store
+	sta en_pain_i,x
+	rts
+.pvn_one
+	lda #0
+	sta en_pain_i,x
+	rts
+
+; X = enemy. Pick en_pain_i = rnd8 % enemy_pain_n[type].
+pick_pain_var
+	ldy en_type,x
+	lda enemy_pain_n,y
+	jmp pick_var_n
+
+; X = enemy. Pick en_pain_i = rnd8 % enemy_death_n[type].
+pick_death_var
+	ldy en_type,x
+	lda enemy_death_n,y
+	jmp pick_var_n
+
 ; ------------------------------------------------------------------
 ; X = enemy. A = damage. Pain chance if survives.
 damage_enemy
@@ -1609,6 +1642,7 @@ damage_enemy
 	sta en_state,x
 	lda #0
 	sta en_frame,x
+	jsr pick_pain_var
 	lda en_type,x
 	bne .de_dpain
 	lda #SOUND_POPAIN

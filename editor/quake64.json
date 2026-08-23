@@ -432,7 +432,7 @@
           "id": "0060c2f4-f669-470d-8159-ab47285693a6",
           "kind": "switch",
           "x": 121,
-          "y": 67,
+          "y": 66,
           "z": 175,
           "sx": 2,
           "sy": 3,
@@ -1030,21 +1030,6 @@
           "axis": "x",
           "dir": 1,
           "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
-        },
-        {
-          "id": "f966fa25-2e0d-433e-8974-8cc2eb8cc4e9",
-          "kind": "pickup",
-          "x": 31,
-          "y": 104,
-          "z": 112,
-          "sx": 0.9270509831248422,
-          "sy": 1.5,
-          "sz": 0.8028497019894523,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434",
-          "pickup": "ring of shadows"
         }
       ]
     },
@@ -6476,7 +6461,18 @@
             20
           ]
         ]
-      }
+      },
+      "exportClips": [
+        "stand",
+        "death",
+        "deathc",
+        "load",
+        "pain",
+        "painb",
+        "run",
+        "shoot",
+        "prowl_"
+      ]
     },
     {
       "id": "4c473f10-44c6-471e-83fc-7a9473c5c32e",
@@ -11683,7 +11679,19 @@
             96
           ]
         ]
-      }
+      },
+      "exportClips": [
+        "stand",
+        "runb",
+        "runattack",
+        "painb",
+        "attackb",
+        "walk",
+        "kneel",
+        "standing",
+        "death",
+        "deathb"
+      ]
     },
     {
       "id": "434449a6-5a8f-4904-bf4a-89565d3c6e73",
@@ -15934,7 +15942,18 @@
             184
           ]
         ]
-      }
+      },
+      "exportClips": [
+        "attack",
+        "death",
+        "deathb",
+        "pain",
+        "painb",
+        "run",
+        "leap",
+        "stand",
+        "walk"
+      ]
     },
     {
       "id": "64fd73ef-3464-44bd-bdfe-8ed138660f18",
@@ -40572,6 +40591,10 @@
       "verts": [],
       "lines": []
     },
+    "health 50%": {
+      "verts": [],
+      "lines": []
+    },
     "armour": {
       "verts": [
         {
@@ -40634,10 +40657,6 @@
           4
         ]
       ]
-    },
-    "health 50%": {
-      "verts": [],
-      "lines": []
     }
   }
 }

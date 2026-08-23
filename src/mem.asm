@@ -524,6 +524,7 @@ fx_ox		= $CE99			; world origin (int)
 fx_oy		= $CE9A
 fx_oz		= $CE9B
 fx_skip		= $CE9C			; 1 = skip next tick (spawn frame)
+en_pain_i	= $CE9D			; ENEMY_MAX: pain/death variant index
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 POWERUP_MS	= 30000

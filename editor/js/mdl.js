@@ -38,6 +38,15 @@ export function filterMdlClips(clips) {
   return (clips || []).filter((c) => shouldKeepMdlClip(c.name));
 }
 
+/** Clips named in `names`, in MDL order. Missing/undefined names → default kept set. */
+export function selectMdlClips(mdl, names) {
+  const clips = mdl?.clips || [];
+  if (!clips.length) return [];
+  if (!Array.isArray(names)) return filterMdlClips(clips);
+  const want = new Set(names);
+  return clips.filter((c) => want.has(c.name));
+}
+
 /** Global stick index → MDL frame index (same order as filterMdlClips). */
 export function mdlFrameIndexAt(mdl, globalIndex) {
   const kept = filterMdlClips(mdl.clips);
@@ -249,9 +258,9 @@ export function mdlEditorVerts(mdl, frameIndex, scale) {
   return raw.map((v) => ({ x: v.x * s, y: (v.y + HULL_FLOOR) * s, z: v.z * s }));
 }
 
-/** Build stick poses + clip table from bound MDL clips (kept list). */
-export function buildStickFramesFromMdl(mdl, rig, scale, restFrame, clampVert) {
-  const kept = filterMdlClips(mdl.clips);
+/** Build stick poses + clip table from bound MDL clips (selected names, or default kept set). */
+export function buildStickFramesFromMdl(mdl, rig, scale, restFrame, clampVert, clipNames) {
+  const kept = selectMdlClips(mdl, clipNames);
   const frames = [];
   const clips = [];
   let start = 0;

@@ -99,7 +99,6 @@ import {
   mdlEditorVerts,
   averageJointPositions,
   filterMdlClips,
-  mdlFrameIndexAt,
   buildStickFramesFromMdl,
   resolveWeaponFrames,
   rasterWeaponFrame,
@@ -216,9 +215,12 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
   getEnemy: () => doc.enemies[enemyIndex],
   getFrame: () => {
     const e = doc.enemies[enemyIndex];
+    const stick = stickClipFor(e, activeTimelineClip());
+    if (stick) return stick.start + frameLocal;
     if (!e?.clips?.length) return 0;
     return frameIndex;
   },
+  hasStickFrame: () => !!stickClipFor(doc.enemies[enemyIndex], activeTimelineClip()),
   getSelectedVerts: () => selectedVerts,
   onSelectVert: (i, additive) => {
     if (i < 0) selectedVerts = [];
@@ -257,9 +259,7 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     if (!clip) return null;
     const local = Math.max(0, Math.min(frameLocal, clip.len - 1));
     const frameName = clip.frameNames?.[local] || `${clip.name}${local}`;
-    const mdlFi = e.clips?.length
-      ? mdlFrameIndexAt(mdl, e.clips[clipIndex].start + local)
-      : clip.mdlFrames[local]?.index ?? 0;
+    const mdlFi = clip.mdlFrames[local]?.index ?? 0;
     const verts = mdlEditorVerts(mdl, mdlFi, mdlScale);
     const rig = e.mdlRig || emptyMdlRig();
     return {
@@ -595,34 +595,67 @@ function activeEnemy() {
   return doc.enemies[enemyIndex];
 }
 
+function stickClipFor(e, clip) {
+  if (!clip || !e?.clips?.length) return null;
+  return e.clips.find((c) => c.name === clip.name) || null;
+}
+
+function exportClipNames(e, mdl) {
+  const mdlNames = new Set((mdl?.clips || []).map((c) => c.name));
+  if (Array.isArray(e?.exportClips)) {
+    return e.exportClips.filter((n) => !mdlNames.size || mdlNames.has(n));
+  }
+  if (e?.clips?.length) {
+    return e.clips.map((c) => c.name).filter((n) => !mdlNames.size || mdlNames.has(n));
+  }
+  return filterMdlClips(mdl?.clips).map((c) => c.name);
+}
+
+/** ROM gx/gy/gz signed bytes + clip start/len. Shared LUTs omitted. */
+const STICK_POSE_BYTES = 13 * 3;
+const STICK_CLIP_BYTES = 2;
+
+function stickRomBytes(frames, clips) {
+  return frames * STICK_POSE_BYTES + clips * STICK_CLIP_BYTES;
+}
+
+function formatStickRomMem(frames, clips) {
+  const bytes = stickRomBytes(frames, clips);
+  const size =
+    bytes >= 1024
+      ? `${bytes / 1024 < 10 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)} KB`
+      : `${bytes} bytes`;
+  const f = frames === 1 ? "frame" : "frames";
+  return `≈ ${size} in-game (${frames} ${f})`;
+}
+
 function getTimeline(e) {
-  if (e.clips?.length) {
-    const mdl = sharewareModels[e.name];
-    const kept = mdl ? filterMdlClips(mdl.clips) : [];
-    let ki = 0;
-    return e.clips.map((c) => {
-      const mdlClip = kept[ki];
-      const frameNames = [];
-      const mdlFrames = [];
-      if (mdlClip && mdlClip.name === c.name) {
-        for (const fr of mdlClip.frames) {
-          frameNames.push(fr.name);
-          mdlFrames.push(fr);
-        }
-        ki++;
-      }
-      return { name: c.name, len: c.len, start: c.start, frameNames, mdlFrames };
+  const mdl = sharewareModels[e?.name];
+  if (mdl?.clips?.length) {
+    const byName = new Map((e.clips || []).map((c) => [c.name, c]));
+    return mdl.clips.map((c) => {
+      const stick = byName.get(c.name);
+      return {
+        name: c.name,
+        len: c.frames.length,
+        start: stick ? stick.start : 0,
+        frameNames: c.frames.map((fr) => fr.name),
+        mdlFrames: c.frames,
+        hasStick: !!stick,
+      };
     });
   }
-  const mdl = sharewareModels[e.name];
-  if (!mdl) return [];
-  return filterMdlClips(mdl.clips).map((c) => ({
-    name: c.name,
-    len: c.frames.length,
-    start: 0,
-    frameNames: c.frames.map((fr) => fr.name),
-    mdlFrames: c.frames,
-  }));
+  if (e?.clips?.length) {
+    return e.clips.map((c) => ({
+      name: c.name,
+      len: c.len,
+      start: c.start,
+      frameNames: [],
+      mdlFrames: [],
+      hasStick: true,
+    }));
+  }
+  return [];
 }
 
 function clampFrameIndex(e) {
@@ -642,12 +675,21 @@ function syncClipFromFrameIndex(e) {
     frameLocal = 0;
     return;
   }
-  if (e.clips?.length) {
-    const clip = clipForFrame(e.clips, frameIndex);
-    if (clip) {
-      clipIndex = Math.max(0, e.clips.indexOf(clip));
-      frameLocal = frameIndex - clip.start;
-      return;
+  const mdl = sharewareModels[e?.name];
+  if (e?.clips?.length) {
+    const stick = clipForFrame(e.clips, frameIndex);
+    if (stick) {
+      const idx = timeline.findIndex((c) => c.name === stick.name);
+      if (idx >= 0) {
+        clipIndex = idx;
+        frameLocal = frameIndex - stick.start;
+        return;
+      }
+      if (!mdl) {
+        clipIndex = Math.max(0, e.clips.indexOf(stick));
+        frameLocal = frameIndex - stick.start;
+        return;
+      }
     }
   }
   if (clipIndex >= timeline.length) clipIndex = 0;
@@ -1088,7 +1130,7 @@ function renderEnemyList() {
         clipIndex = idx >= 0 ? idx : 0;
       } else clipIndex = 0;
       frameLocal = 0;
-      syncClipFromFrameIndex(activeEnemy());
+      applyFrameLocal();
       markUi();
       refreshAll();
     });
@@ -1891,29 +1933,76 @@ function renderInspector() {
   root.appendChild(field("Name", name));
 
   const timeline = getTimeline(e);
+  const mdl = sharewareModels[e.name];
+  const hasStick = !!stickClipFor(e, activeTimelineClip());
   if (timeline.length) {
     const clip = activeTimelineClip() || timeline[0];
     if (clipIndex >= timeline.length) clipIndex = 0;
     frameLocal = Math.max(0, Math.min(frameLocal, clip.len - 1));
 
-    const clipSel = document.createElement("select");
-    timeline.forEach((c, i) => {
-      const opt = document.createElement("option");
-      opt.value = String(i);
-      opt.textContent = `${c.name} (${c.len})`;
-      if (i === clipIndex) opt.selected = true;
-      clipSel.appendChild(opt);
-    });
-    clipSel.addEventListener("change", () => {
-      clipIndex = Number(clipSel.value) | 0;
-      frameLocal = 0;
-      if (e.clips?.length) {
-        frameIndex = e.clips[clipIndex].start;
+    if (mdl?.clips?.length) {
+      const selected = new Set(exportClipNames(e, mdl));
+      const listLbl = document.createElement("h2");
+      listLbl.textContent = "Export clips";
+      root.appendChild(listLbl);
+      const ul = document.createElement("ul");
+      ul.className = "weapon-frame-list";
+      timeline.forEach((c, i) => {
+        const li = document.createElement("li");
+        const chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.checked = selected.has(c.name);
+        chk.addEventListener("change", () => {
+          pushUndo();
+          const next = new Set(exportClipNames(e, mdl));
+          if (chk.checked) next.add(c.name);
+          else next.delete(c.name);
+          e.exportClips = timeline.map((cl) => cl.name).filter((n) => next.has(n));
+          markDirty();
+          refreshAll();
+        });
+        const nameBtn = document.createElement("button");
+        nameBtn.type = "button";
+        nameBtn.className = "frame-name" + (i === clipIndex ? " current" : "");
+        nameBtn.textContent = `${c.name} (${c.len})`;
+        nameBtn.addEventListener("click", () => {
+          clipIndex = i;
+          frameLocal = 0;
+          applyFrameLocal();
+          markUi();
+          refreshAll();
+        });
+        li.append(chk, nameBtn);
+        ul.appendChild(li);
+      });
+      root.appendChild(ul);
+      let selFrames = 0;
+      for (const c of timeline) {
+        if (selected.has(c.name)) selFrames += c.len;
       }
-      markUi();
-      refreshAll();
-    });
-    root.appendChild(field("Clip", clipSel));
+      const mem = document.createElement("p");
+      mem.className = "muted anim-mem";
+      mem.title = "gx/gy/gz signed bytes (13 verts × 3) plus clip start/len";
+      mem.textContent = formatStickRomMem(selFrames, selected.size);
+      root.appendChild(mem);
+    } else {
+      const clipSel = document.createElement("select");
+      timeline.forEach((c, i) => {
+        const opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = `${c.name} (${c.len})`;
+        if (i === clipIndex) opt.selected = true;
+        clipSel.appendChild(opt);
+      });
+      clipSel.addEventListener("change", () => {
+        clipIndex = Number(clipSel.value) | 0;
+        frameLocal = 0;
+        applyFrameLocal();
+        markUi();
+        refreshAll();
+      });
+      root.appendChild(field("Clip", clipSel));
+    }
 
     const frameName = clip.frameNames?.[frameLocal] || `${clip.name}${frameLocal}`;
     const sliderRow = document.createElement("label");
@@ -1930,9 +2019,7 @@ function renderInspector() {
     slider.addEventListener("input", () => {
       frameLocal = Number(slider.value) | 0;
       sliderLbl.textContent = clip.frameNames?.[frameLocal] || `${clip.name}${frameLocal}`;
-      if (e.clips?.length) {
-        frameIndex = e.clips[clipIndex].start + frameLocal;
-      }
+      applyFrameLocal();
       markUi();
       animView.draw();
     });
@@ -1963,8 +2050,9 @@ function renderInspector() {
 
   const counts = document.createElement("p");
   counts.className = "muted";
-  const clip = e.clips?.length ? clipForFrame(e.clips, frameIndex) : activeTimelineClip();
-  const stickFrame = e.clips?.length ? frameIndex : 0;
+  const clip = activeTimelineClip() || (e.clips?.length ? clipForFrame(e.clips, frameIndex) : null);
+  const stick = stickClipFor(e, clip);
+  const stickFrame = stick ? stick.start + frameLocal : 0;
   const height = frameHeight(e.frames[stickFrame] || e.frames[0]);
   const frameTotal = e.clips?.length ? e.frames.length : timeline.length ? "MDL preview" : 1;
   counts.textContent = `13 verts · 13 lines · ${clip?.name || "rest"} · height ${height} · ${frameTotal} frames`;
@@ -1975,19 +2063,19 @@ function renderInspector() {
   const copyBtn = document.createElement("button");
   copyBtn.type = "button";
   copyBtn.textContent = "Copy frame";
+  copyBtn.disabled = !hasStick;
   copyBtn.addEventListener("click", copyFrame);
   const pasteBtn = document.createElement("button");
   pasteBtn.type = "button";
   pasteBtn.textContent = "Paste frame";
-  pasteBtn.disabled = !frameClipboard;
+  pasteBtn.disabled = !frameClipboard || !hasStick;
   pasteBtn.addEventListener("click", pasteFrame);
   editRow.append(copyBtn, pasteBtn);
   root.appendChild(editRow);
 
-  if (selectedVerts.length === 1) {
+  if (hasStick && selectedVerts.length === 1) {
     const vi = selectedVerts[0];
-    const stickFi = e.clips?.length ? frameIndex : 0;
-    const v = e.frames[stickFi][vi];
+    const v = e.frames[stickFrame][vi];
     const setC = (k, val) => {
       pushUndo();
       v[k] = clampVert(val);
@@ -2120,18 +2208,31 @@ function copyAllMdlFrames() {
     setStatus("Assign mesh verts to at least one joint first", true);
     return;
   }
+  const names = exportClipNames(e, mdl);
+  if (!names.length) {
+    setStatus("No clips selected to copy", true);
+    return;
+  }
   const rest = e.frames[0] || dummyFrameFor(e.name);
-  const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVert);
+  const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVert, names);
   if (!frames.length) {
     setStatus("No Quake frames to copy", true);
     return;
   }
   pushUndo();
+  const keepName = activeTimelineClip()?.name;
   e.frames = frames;
   e.clips = clips;
-  frameIndex = 0;
-  clipIndex = 0;
+  e.exportClips = clips.map((c) => c.name);
   frameLocal = 0;
+  if (keepName) {
+    const timeline = getTimeline(e);
+    const idx = timeline.findIndex((c) => c.name === keepName);
+    clipIndex = idx >= 0 ? idx : 0;
+  } else {
+    clipIndex = 0;
+  }
+  applyFrameLocal();
   markDirty();
   refreshAll();
   setStatus(`Copied ${frames.length} frames from Quake MDL`);
@@ -2148,12 +2249,17 @@ function renderQuakeSource(root, e) {
   status.className = "muted";
   const mdl = sharewareModels[e.name];
   const folder = sharewareFolderName();
-  const kept = mdl ? filterMdlClips(mdl.clips) : [];
-  const keptCount = kept.reduce((n, c) => n + c.frames.length, 0);
+  const names = mdl ? exportClipNames(e, mdl) : [];
+  const selCount = names.length;
+  const totalClips = mdl?.clips?.length || 0;
+  const selFrames = names.reduce((n, name) => {
+    const c = mdl?.clips?.find((cl) => cl.name === name);
+    return n + (c?.frames.length || 0);
+  }, 0);
   if (mdl) {
     status.textContent = folder
-      ? `${folder} · ${mdl.numVerts} mesh verts · ${keptCount} kept frames`
-      : `${mdl.numVerts} mesh verts · ${keptCount} kept frames`;
+      ? `${folder} · ${mdl.numVerts} mesh verts · ${selCount}/${totalClips} clips · ${selFrames} frames`
+      : `${mdl.numVerts} mesh verts · ${selCount}/${totalClips} clips · ${selFrames} frames`;
   } else if (sharewareMissing.includes(e.name)) {
     status.textContent = folder
       ? `${e.name} is not in ${folder}`
@@ -2174,11 +2280,12 @@ function renderQuakeSource(root, e) {
   openRow.appendChild(openBtn);
   wrap.appendChild(openRow);
 
-  if (mdl && kept.length) {
+  if (mdl && mdl.clips?.length) {
     const copyAllBtn = document.createElement("button");
     copyAllBtn.type = "button";
-    copyAllBtn.textContent = "Copy all frames";
-    copyAllBtn.title = "Write all kept Quake poses onto stick frames using current joint bindings";
+    copyAllBtn.textContent = "Copy selected frames";
+    copyAllBtn.title = "Write checked Quake poses onto stick frames using current joint bindings";
+    copyAllBtn.disabled = !selCount;
     copyAllBtn.addEventListener("click", copyAllMdlFrames);
     const copyRow = document.createElement("div");
     copyRow.className = "btn-row";
@@ -2237,10 +2344,8 @@ function frameHeight(verts) {
 
 function applyFrameLocal() {
   const e = activeEnemy();
-  if (e?.clips?.length) {
-    const clip = e.clips[clipIndex];
-    if (clip) frameIndex = clip.start + frameLocal;
-  }
+  const stick = stickClipFor(e, activeTimelineClip());
+  if (stick) frameIndex = stick.start + frameLocal;
 }
 
 function advanceFrame(d) {
@@ -2282,10 +2387,12 @@ function stepWeaponFrame(d) {
 
 function copyFrame() {
   const e = activeEnemy();
-  if (!e.clips?.length) {
+  const stick = stickClipFor(e, activeTimelineClip());
+  if (!stick) {
     setStatus("Copy frames from Quake MDL first", true);
     return;
   }
+  applyFrameLocal();
   const fr = e.frames[frameIndex];
   frameClipboard = fr.map((v) => ({ x: v.x, y: v.y, z: v.z }));
   setStatus(`Copied ${frameLabel(e, frameIndex)}`);
@@ -2298,10 +2405,12 @@ function pasteFrame() {
     return;
   }
   const e = activeEnemy();
-  if (!e.clips?.length) {
+  const stick = stickClipFor(e, activeTimelineClip());
+  if (!stick) {
     setStatus("Copy frames from Quake MDL first", true);
     return;
   }
+  applyFrameLocal();
   const fr = e.frames[frameIndex];
   pushUndo();
   for (let i = 0; i < fr.length; i++) {

@@ -12,8 +12,8 @@ MENU_HELP_ENDINGS = 0			; 1 = Read This! shows ending1/2 (spacing)
 MENU_SLOTS	= 8
 BOX_PAD		= 2
 BOX_VGAP	= 1			; empty rows inside box top/bottom
-CURSOR_GAP	= 1			; blank cols between pistol and text
-CURSOR_CELLS	= 3			; 24px pistol cursor (was 1 for '@' glyph)
+CURSOR_GAP	= 1			; blank cols between Q cursor and text
+CURSOR_CELLS	= 3			; 24px sprite slot (Q is 16px, left-aligned)
 BAR_TOP		= 2			; leave 2 rows of main bg above bar
 BAR_ROWS	= 3
 BADGE_TOP	= BAR_TOP - 1		; content still starts below old logo band
@@ -203,6 +203,8 @@ run_menu
 	sta menu_can_ret
 	sta hint_spr_en
 	sta cursor_spr_en
+	sta cursor_frame
+	sta cursor_tick
 	sta menu_mux_phase
 	sta menu_raster_en
 	lda #15
@@ -574,18 +576,18 @@ menu_select
 	ldy #>ending2_text
 	jsr show_story_screen
 } else {
-	lda #<readthis1_text
-	ldy #>readthis1_text
+	ldx #0
+.ms_rt
+	txa
+	pha
+	lda readthis_lo,x
+	ldy readthis_hi,x
 	jsr show_story_screen
-	lda #<readthis2a_text
-	ldy #>readthis2a_text
-	jsr show_story_screen
-	lda #<readthis2b_text
-	ldy #>readthis2b_text
-	jsr show_story_screen
-	lda #<readthis3_text
-	ldy #>readthis3_text
-	jsr show_story_screen
+	pla
+	tax
+	inx
+	cpx #READTHIS_PAGES
+	bne .ms_rt
 }
 	jmp .ms_ret
 .ms_crd
@@ -616,15 +618,15 @@ quit_to_basic
 	cli
 	jmp ($a002)				; BASIC warm start
 
-; Root→eps/options/ctrl/help/credits/quit; E1→skill; E2-6→order; skill→start; options stay/back
+; Root→eps/options/ctrl/help/credits/quit; E1→skill; E2-4→order; skill→start; options stay/back
 next_menu
 	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
-	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0
+	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0, 0, 0
 	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
 	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
 
 menu_sizes
-	!byte 6, 7, 5, 3
+	!byte 6, 5, 5, 3
 
 ; --- drawing ---------------------------------------------------------------
 draw_menu
@@ -846,7 +848,7 @@ calc_box
 	ror pix_max_l
 	lsr
 	ror pix_max_l
-	; Center option *text* on screen; pistol sits left with CURSOR_GAP.
+	; Center option *text* on screen; spinning Q sits left with CURSOR_GAP.
 	lda #40
 	sec
 	sbc pix_max_l			; text_cells
@@ -861,7 +863,7 @@ calc_box
 	sta box_left
 	lda pix_max_l
 	clc
-	adc #CURSOR_CELLS + CURSOR_GAP		; cursor + gap
+	adc #CURSOR_CELLS			; cursor slot; text is 8px closer than CURSOR_GAP
 	adc #BOX_PAD
 	adc #BOX_PAD
 	sta box_width
@@ -916,7 +918,7 @@ draw_menu_item
 .di_h
 	lda #HILITE_COL
 	sta ui_text_col
-	; Pistol cursor sprites: X = 24 + (box_left+BOX_PAD)*8, Y = 50+row*8
+	; Spinning Q sprites: X = 24 + (box_left+BOX_PAD)*8, Y = 45+row*8
 	lda box_left
 	clc
 	adc #BOX_PAD
@@ -931,7 +933,7 @@ draw_menu_item
 	asl
 	asl
 	clc
-	adc #50
+	adc #44				; 6px above char row (was 50)
 	sta cursor_spr_y
 .di_g
 	lda menu_id
@@ -948,7 +950,7 @@ draw_menu_item
 	lda box_left
 	clc
 	adc #BOX_PAD
-	adc #CURSOR_CELLS + CURSOR_GAP
+	adc #CURSOR_CELLS			; 8px closer to Q than CURSOR_CELLS+CURSOR_GAP
 	ldx pr_row
 	jmp print_at
 
@@ -1284,6 +1286,16 @@ copy_menu_sprites
 .cms4
 	lda menu_cursor_spr,x
 	sta CURSOR_SPR_RAM,x
+	lda menu_cursor_spr + $100,x
+	sta CURSOR_SPR_RAM + $100,x
+	lda menu_cursor_spr + $200,x
+	sta CURSOR_SPR_RAM + $200,x
+	lda menu_cursor_spr + $300,x
+	sta CURSOR_SPR_RAM + $300,x
+	lda menu_cursor_spr + $400,x
+	sta CURSOR_SPR_RAM + $400,x
+	lda menu_cursor_spr + $500,x
+	sta CURSOR_SPR_RAM + $500,x
 	inx
 	bne .cms4
 	rts
@@ -1294,14 +1306,18 @@ mux_logo_spr
 	sta $d015
 	rts
 
-; Raster IRQ mid — pistol cursor (4 colour layers, white in front).
+; Raster IRQ mid — spinning Q (4 colour layers × 6 frames).
 mux_cursor_spr
 	lda cursor_spr_en
 	bne .mc_go
 	rts
 .mc_go
+	lda cursor_frame
+	asl
+	asl					; frame * 4 layers
+	clc
+	adc #CURSOR_SPR_PTR0
 	ldx #0
-	lda #CURSOR_SPR_PTR0
 .mcp
 	sta SCREEN + $3f8,x
 	clc
@@ -2182,6 +2198,19 @@ wait_frame
 .wf_lo
 	lda $d011
 	bmi .wf_lo
+	inc cursor_tick
+	lda cursor_tick
+	cmp #5				; ~10 Hz on PAL, same as Quake menudot
+	bcc .wf_rts
+	lda #0
+	sta cursor_tick
+	inc cursor_frame
+	lda cursor_frame
+	cmp #CURSOR_FRAMES
+	bcc .wf_rts
+	lda #0
+	sta cursor_frame
+.wf_rts
 	rts
 
 wait_frames_x
@@ -2311,6 +2340,8 @@ menu_stack_d	!byte 0
 menu_can_ret	!byte 0
 hint_spr_en	!byte 0
 cursor_spr_en	!byte 0
+cursor_frame	!byte 0
+cursor_tick	!byte 0
 menu_mux_phase	!byte 0
 menu_raster_en	!byte 0
 hint_spr_x	!byte 0, 0, 0
@@ -2374,8 +2405,6 @@ str_e1		!scr "Dimension of the Doomed",0
 str_e2		!scr "The Realm of Black Magic",0
 str_e3		!scr "The Netherworld",0
 str_e4		!scr "The Elder World",0
-str_e5		!scr "Scourge of Armagon",0
-str_e6		!scr "Dissolution of Eternity",0
 str_fx_vol	!scr "Effects Volume 15",0
 str_mouse	!scr "Mouse (port 1) Off",0
 str_itytd	!scr "Easy",0
@@ -2399,7 +2428,7 @@ menu_str_lo
 	!byte <str_new_game, <str_sound, <str_control, <str_read_this
 	!byte <str_credits, <str_quit, 0, 0
 	!byte <str_e1, <str_e2, <str_e3, <str_e4
-	!byte <str_e5, <str_e6, <str_back, 0
+	!byte <str_back, 0, 0, 0
 	!byte <str_itytd, <str_dhm, <str_hmp, <str_uv
 	!byte <str_back, 0, 0, 0
 	!byte <str_fx_vol, <str_mouse, <str_back, 0
@@ -2408,7 +2437,7 @@ menu_str_hi
 	!byte >str_new_game, >str_sound, >str_control, >str_read_this
 	!byte >str_credits, >str_quit, 0, 0
 	!byte >str_e1, >str_e2, >str_e3, >str_e4
-	!byte >str_e5, >str_e6, >str_back, 0
+	!byte >str_back, 0, 0, 0
 	!byte >str_itytd, >str_dhm, >str_hmp, >str_uv
 	!byte >str_back, 0, 0, 0
 	!byte >str_fx_vol, >str_mouse, >str_back, 0

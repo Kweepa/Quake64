@@ -680,6 +680,19 @@ export function clipForFrame(clips, index) {
   return list.find((c) => i >= c.start && i < c.start + c.len) || list[0] || null;
 }
 
+export function normalizeExportClips(raw) {
+  if (!Array.isArray(raw)) return undefined;
+  const out = [];
+  const seen = new Set();
+  for (const n of raw) {
+    const name = String(n ?? "").trim();
+    if (!name || seen.has(name)) continue;
+    seen.add(name);
+    out.push(name);
+  }
+  return out;
+}
+
 export function normalizeClips(raw, frameCount) {
   const n = Math.max(0, frameCount | 0);
   if (!n || !Array.isArray(raw) || !raw.length) return [];
@@ -1784,6 +1797,8 @@ export function normalizeDocument(raw) {
       enemy.frames = parseEnemyFrames(e.frames, enemy.name);
       enemy.clips = normalizeClips(e.clips, enemy.frames.length);
       enemy.mdlRig = normalizeMdlRig(e.mdlRig);
+      const exportClips = normalizeExportClips(e.exportClips);
+      if (exportClips) enemy.exportClips = exportClips;
       doc.enemies.push(enemy);
     }
     const have = new Set(doc.enemies.map((e) => e.name));

@@ -46,6 +46,21 @@ ent_set_ptrs
 	sta gz_ptr+1
 	rts
 
+; X = enemy. A preserved. Y = type * PAIN_MAX + en_pain_i (pain or death variant)
+!if PAIN_MAX != 4 {
+	!error "pain_var_off assumes PAIN_MAX=4"
+}
+pain_var_off
+	sta rot0
+	lda en_type,x
+	asl
+	asl
+	clc
+	adc en_pain_i,x
+	tay
+	lda rot0
+	rts
+
 ; Point gx/gy/gz at the current pose for ent_type / obj_i.
 ; Clip from en_state + en_frame[obj_i]
 ent_set_pose
@@ -106,16 +121,16 @@ ent_set_pose
 	jmp .esp_off
 .esp_pain
 	lda en_frame,x
-	ldx ent_type
+	jsr pain_var_off
 	clc
-	adc enemy_pain_start,x
+	adc enemy_pain_start,y
 	tay
 	jmp .esp_off
 .esp_death
 	lda en_frame,x
-	ldx ent_type
+	jsr pain_var_off
 	clc
-	adc enemy_death_start,x
+	adc enemy_death_start,y
 	tay
 .esp_off
 	clc
@@ -2391,6 +2406,7 @@ kill_enemy
 	sta en_frame,x
 	sta en_timer,x
 	sta en_timer_h,x
+	jsr pick_death_var
 	lda en_type,x
 	bne .ke_dog
 	lda #SOUND_DEATHSCREAM1

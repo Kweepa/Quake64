@@ -229,6 +229,10 @@ h2 {
   color: var(--accent);
 }
 
+.anim-mem {
+  margin: 0.35rem 0 0.55rem;
+}
+
 .preview-panel .muted {
   margin: 0.35rem 0 0;
   font-size: 0.7rem;

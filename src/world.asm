@@ -93,6 +93,7 @@ init_enemies
 	sta en_step,x
 	sta en_step_h,x
 	sta en_pat_n,x
+	sta en_pain_i,x
 	lda en_rot,x			; map rot = editor octant (0=+Z)
 	sta en_dir,x
 	asl

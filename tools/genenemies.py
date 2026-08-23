@@ -14,6 +14,9 @@ OUT = ROOT / "src" / "enemy_data.asm"
 NVERTS = 13
 TYPES = ["Grunt", "Rottweiler"]
 PREFIX = ["grunt", "rott"]
+PAIN_MAX = 4
+PAIN_KEY = re.compile(r"^pain[a-z]?$")
+DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 
 # Original Quake HP; ROM stores Quake // 5 (byte-sized, Shambler 120 fits).
 HP_QUAKE = {
@@ -23,6 +26,24 @@ HP_QUAKE = {
     "Scrag": 80,
     "Ogre": 200,
     "Shambler": 600,
+}
+
+# Role clip names (and optional len override). Pain/death are variant lists.
+ROLE_CLIPS = {
+    "Grunt": {
+        "stand": ("stand", None),
+        "alert": ("load", None),
+        "run": ("run", None),
+        "walk": ("prowl", None),
+        "attack": ("shoot", None),
+    },
+    "Rottweiler": {
+        "stand": ("stand", None),
+        "alert": ("stand", 2),
+        "run": ("run", None),
+        "walk": ("walk", None),
+        "attack": ("leap", None),
+    },
 }
 
 # Facing folds into the runtime rotate angle (ent_rotate: a = yaw − rot),
@@ -39,15 +60,52 @@ def clip_const(prefix: str, name: str) -> str:
     return f"{prefix.upper()}_CLIP_{key}"
 
 
-def find_walk_clip(enemy: dict) -> tuple[int, int]:
+def find_clip(enemy: dict, *names: str) -> tuple[int, int] | None:
     clips = enemy.get("clips") or []
-    preferred = {"Grunt": "prowl", "Scrag": "fly"}
-    key = preferred.get(enemy["name"], "walk")
-    for want in (key, "walk", "prowl", "fly"):
+    for want in names:
         for c in clips:
             if clip_key(c.get("name", "")) == want:
                 return int(c["start"]), int(c["len"])
-    raise SystemExit(f"{enemy['name']}: no walk/prowl/fly clip")
+    return None
+
+
+def find_role(enemy: dict, role: str) -> tuple[int, int]:
+    spec = ROLE_CLIPS.get(enemy["name"], {}).get(role)
+    if spec is None:
+        raise SystemExit(f"{enemy['name']}: no role {role}")
+    name, len_override = spec
+    found = find_clip(enemy, name)
+    if found is None:
+        raise SystemExit(f"{enemy['name']}: no {name} clip for role {role}")
+    start, length = found
+    if len_override is not None:
+        length = min(length, int(len_override))
+    return start, length
+
+
+def find_variant_clips(enemy: dict, key_re: re.Pattern, what: str) -> list[tuple[int, int]]:
+    out: list[tuple[int, int]] = []
+    for c in enemy.get("clips") or []:
+        if key_re.match(clip_key(c.get("name", ""))):
+            out.append((int(c["start"]), int(c["len"])))
+            if len(out) >= PAIN_MAX:
+                break
+    if not out:
+        raise SystemExit(f"{enemy['name']}: no {what} clip")
+    return out
+
+
+def pad_variants(clips: list[tuple[int, int]]) -> tuple[int, list[int], list[int]]:
+    starts: list[int] = []
+    lens: list[int] = []
+    for i in range(PAIN_MAX):
+        if i < len(clips):
+            starts.append(clips[i][0])
+            lens.append(clips[i][1])
+        else:
+            starts.append(0)
+            lens.append(0)
+    return len(clips), starts, lens
 
 
 def s8(n: int) -> int:
@@ -65,7 +123,7 @@ def bchunk(data: list[int], w: int = 13) -> str:
     return "\n".join(lines) + "\n"
 
 
-def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list[int]], list[dict], tuple[int, int]]:
+def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list[int]], list[dict]]:
     lines = enemy["lines"]
     frames = enemy["frames"]
     clips = enemy.get("clips") or []
@@ -73,7 +131,6 @@ def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list
         raise SystemExit(f"{enemy['name']}: expected {NVERTS} lines, got {len(lines)}")
     if not frames:
         raise SystemExit(f"{enemy['name']}: no frames")
-    walk = find_walk_clip(enemy)
     gx: list[int] = []
     gy: list[int] = []
     gz: list[int] = []
@@ -84,7 +141,7 @@ def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list
             gx.append(s8(v["x"]))
             gy.append(s8(v["y"]))
             gz.append(s8(v["z"]))
-    return gx, gy, gz, lines, clips, walk
+    return gx, gy, gz, lines, clips
 
 
 def main() -> None:
@@ -100,27 +157,43 @@ def main() -> None:
         "",
     ]
     all_edges = None
-    walk_starts: list[int] = []
-    walk_lens: list[int] = []
-    death_starts: list[int] = []
-    death_lens: list[int] = []
+    roles: dict[str, list[int]] = {
+        "stand_start": [],
+        "stand_len": [],
+        "alert_start": [],
+        "alert_len": [],
+        "run_start": [],
+        "run_len": [],
+        "walk_start": [],
+        "walk_len": [],
+        "attack_start": [],
+        "attack_len": [],
+    }
+    pain_n: list[int] = []
+    pain_start: list[int] = []
+    pain_len: list[int] = []
+    death_n: list[int] = []
+    death_start: list[int] = []
+    death_len: list[int] = []
     max_nframes = 0
 
     for ti, name in enumerate(TYPES):
         if name not in by_name:
             raise SystemExit(f"missing enemy {name}")
-        gx, gy, gz, lines, clips, walk = export_type(by_name[name])
-        walk_starts.append(walk[0])
-        walk_lens.append(walk[1])
-        death = None
-        for c in clips:
-            if clip_key(c.get("name", "")) == "death":
-                death = (int(c["start"]), int(c["len"]))
-                break
-        if death is None:
-            raise SystemExit(f"{name}: no death clip")
-        death_starts.append(death[0])
-        death_lens.append(death[1])
+        enemy = by_name[name]
+        gx, gy, gz, lines, clips = export_type(enemy)
+        for role in ("stand", "alert", "run", "walk", "attack"):
+            start, length = find_role(enemy, role)
+            roles[f"{role}_start"].append(start)
+            roles[f"{role}_len"].append(length)
+        n, starts, lens = pad_variants(find_variant_clips(enemy, PAIN_KEY, "pain"))
+        pain_n.append(n)
+        pain_start.extend(starts)
+        pain_len.extend(lens)
+        n, starts, lens = pad_variants(find_variant_clips(enemy, DEATH_KEY, "death"))
+        death_n.append(n)
+        death_start.extend(starts)
+        death_len.extend(lens)
         if all_edges is None:
             all_edges = lines
         elif lines != all_edges:
@@ -162,27 +235,42 @@ def main() -> None:
     parts.append("enemy_gy_hi\t!byte >grunt_gy, >rott_gy")
     parts.append("enemy_gz_lo\t!byte <grunt_gz, <rott_gz")
     parts.append("enemy_gz_hi\t!byte >grunt_gz, >rott_gz")
-    parts.append("; Role clips — hand-tuned; keep in sync with enemy.asm AI")
-    parts.append("enemy_stand_start\t!byte 0, 44")
-    parts.append("enemy_stand_len\t\t!byte 8, 9")
-    parts.append("enemy_alert_start\t!byte 18, 44")
-    parts.append("enemy_alert_len\t\t!byte 11, 2")
-    parts.append("enemy_run_start\t\t!byte 35, 23")
-    parts.append("enemy_run_len\t\t!byte 8, 12")
-    parts.append("enemy_walk_start\t\t!byte 52, 53\t\t; Grunt prowl, Rott walk")
-    parts.append("enemy_walk_len\t\t!byte 24, 8")
-    parts.append("enemy_attack_start\t!byte 43, 35\t\t; Grunt shoot, Rott leap")
-    parts.append("enemy_attack_len\t!byte 9, 9")
-    parts.append("enemy_pain_start\t\t!byte 29, 17")
-    parts.append("enemy_pain_len\t\t!byte 6, 6")
+    parts.append("PAIN_MAX\t= 4\t\t; variants per type; pain_var_off uses ASL×2")
+    parts.append("; Role clips — looked up by name from editor JSON")
+    parts.append("enemy_stand_start\t!byte " + ", ".join(str(n) for n in roles["stand_start"]))
+    parts.append("enemy_stand_len\t\t!byte " + ", ".join(str(n) for n in roles["stand_len"]))
+    parts.append("enemy_alert_start\t!byte " + ", ".join(str(n) for n in roles["alert_start"]))
     parts.append(
-        "enemy_death_start\t!byte "
-        + ", ".join(str(s) for s in death_starts)
+        "enemy_alert_len\t\t!byte "
+        + ", ".join(str(n) for n in roles["alert_len"])
+        + "\t\t; Rott first 2 of stand"
     )
+    parts.append("enemy_run_start\t\t!byte " + ", ".join(str(n) for n in roles["run_start"]))
+    parts.append("enemy_run_len\t\t!byte " + ", ".join(str(n) for n in roles["run_len"]))
     parts.append(
-        "enemy_death_len\t\t!byte "
-        + ", ".join(str(n) for n in death_lens)
+        "enemy_walk_start\t\t!byte "
+        + ", ".join(str(n) for n in roles["walk_start"])
+        + "\t\t; Grunt prowl, Rott walk"
     )
+    parts.append("enemy_walk_len\t\t!byte " + ", ".join(str(n) for n in roles["walk_len"]))
+    parts.append(
+        "enemy_attack_start\t!byte "
+        + ", ".join(str(n) for n in roles["attack_start"])
+        + "\t\t; Grunt shoot, Rott leap"
+    )
+    parts.append("enemy_attack_len\t!byte " + ", ".join(str(n) for n in roles["attack_len"]))
+    parts.append("enemy_pain_n\t\t!byte " + ", ".join(str(n) for n in pain_n))
+    parts.append(
+        "enemy_pain_start\t!byte " + ", ".join(str(n) for n in pain_start)
+        + "\t; type * PAIN_MAX + variant"
+    )
+    parts.append("enemy_pain_len\t\t!byte " + ", ".join(str(n) for n in pain_len))
+    parts.append("enemy_death_n\t\t!byte " + ", ".join(str(n) for n in death_n))
+    parts.append(
+        "enemy_death_start\t!byte " + ", ".join(str(n) for n in death_start)
+        + "\t; type * PAIN_MAX + variant"
+    )
+    parts.append("enemy_death_len\t\t!byte " + ", ".join(str(n) for n in death_len))
     parts.append("enemy_range\t\t!byte 30, 4\t\t; approach stop (Chebyshev XZ)")
     hp_bytes = ", ".join(str(HP_QUAKE[t] // 5) for t in TYPES)
     hp_note = ", ".join(f"{t} {HP_QUAKE[t]}→{HP_QUAKE[t] // 5}" for t in TYPES)
@@ -208,8 +296,8 @@ def main() -> None:
     OUT.write_text("\n".join(parts) + "\n", encoding="utf-8")
     print(
         f"Wrote {OUT.relative_to(ROOT)} "
-        f"(walk start={walk_starts} len={walk_lens} "
-        f"death start={death_starts} len={death_lens})"
+        f"(walk start={roles['walk_start']} len={roles['walk_len']} "
+        f"pain n={pain_n} death n={death_n})"
     )
 
 

@@ -87,6 +87,9 @@ if exist src\game.prg move /y src\game.prg game.prg >nul
 if exist src\menu.prg move /y src\menu.prg menu.prg >nul
 if exist src\boot.prg move /y src\boot.prg boot.prg >nul
 
+python tools\mkreloc.py
+if errorlevel 1 exit /b 1
+
 python tools\mkdisk.py
 if errorlevel 1 exit /b 1
 

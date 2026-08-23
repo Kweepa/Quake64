@@ -13,7 +13,7 @@ proc_init
 	lda #0
 .pd
 	cpx	map_ndoors
-	+beq_far .psw0
+	beq .psw0
 	sta door_open,x
 	inx
 	beq .psw0
@@ -118,20 +118,20 @@ door_activate
 	beq .da_gold
 	lda have_keys
 	and #HAVE_SILVER
-	+beq_far .da_fail
+	beq .da_fail
 	bne .da_unlocked
 .da_gold
 	lda have_keys
 	and #HAVE_GOLD
-	+beq_far .da_fail
+	beq .da_fail
 .da_unlocked
 	ldx proc_tmp5
 	lda door_open,x
 	+cmp_mx door_sy
-	+bcs_far .da_fail
+	bcs .da_fail
 	jsr proc_count_free
 	cmp #2
-	+bcc_far .da_fail
+	bcc .da_fail
 	ldx proc_tmp5
 	lda #PROC_OPEN_DOOR
 	sta proc_tmp0
@@ -143,7 +143,7 @@ door_activate
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	+bcs_far .da_fail
+	bcs .da_fail
 	lda proc_tmp5
 	sta PROC_L,y
 	lda #SOUND_OPENDOOR
@@ -160,7 +160,9 @@ door_activate
 	lda #>DOOR_RECLOSE_MS
 	sta proc_tmp4
 	jsr proc_alloc
-	+bcs_far .da_fail
+	bcc .da_got
+	jmp .da_fail
+.da_got
 	lda proc_tmp5
 	sta PROC_L,y
 	clc

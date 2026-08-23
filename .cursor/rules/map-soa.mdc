@@ -1,0 +1,15 @@
+---
+description: Packed-map SoA must use mapacc macros; reloc scan is part of the disk build
+globs: src/**/*.asm, tools/mkdisk.py, tools/mkreloc.py, build.bat
+alwaysApply: true
+---
+
+# Map SoA accessors
+
+Field labels (`en_x`, `room_bg`, `door_y`, …) in `src/map_bss.asm` are **pointers** filled by `bind_map`, not the heap columns.
+
+- Always `+lda_mx` / `+sta_mx` / `+cmp_mx` / `+adc_mx` / `+sbc_mx` / `+ora_mx` / `+and_mx` / `+eor_mx` / `+ldy_mx` and the `*_my` variants from `src/mapacc.asm`.
+- Never `lda en_x,x` or `sta room_bg,y` — that assembles a load/store of the BSS pointer word.
+- Indirect is fine only after an explicit pointer setup (`lda (ptr),y`).
+
+Macros emit `lda $02id,x` (sentinel hi). After ACME writes `game.prg`, `python tools/mkreloc.py` must run **before** `python tools/mkdisk.py` (wired in `build.bat`). Skipping the scan ships a stale `RELOC`. New fields: add the `!word` in `map_bss.asm`, bind it in `bind_map`, keep using the macros — `mkreloc.py` picks up new sites.

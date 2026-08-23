@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Build quake64.d64 from boot/menu/tab/fnt/scr/sqt/game PRGs via c1541."""
+"""Build quake64.d64 from boot/menu/tab/fnt/scr/sqt/game/reloc PRGs via c1541.
+
+reloc.prg comes from tools/mkreloc.py after GAME assemble (see build.bat).
+Boot does not load RELOC; GAME LoadLevel does.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +23,7 @@ FILES = (
     ("scr.prg", "scr,p"),
     ("sqt.prg", "sqt,p"),
     ("game.prg", "game,p"),
+    ("reloc.prg", "reloc,p"),
 )
 
 MAP_FILES = [(f"maps/e1m{i}.prg", f"e1m{i},p") for i in range(1, 9)]

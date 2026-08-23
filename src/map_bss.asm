@@ -1,4 +1,7 @@
-; Runtime map header + SoA pointers (filled by bind_map)
+; Runtime map header + SoA pointers (filled by bind_map).
+; From room_x through map_text, labels are pointers into the packed map —
+; access columns only via +lda_mx / +sta_mx / +cmp_mx / *_my (mapacc.asm).
+; Never lda en_x,x (that loads the pointer word in this BSS).
 !zone map_bss
 
 ; Packed header bytes 0..23 — must stay contiguous (bind_map copies 24 bytes).

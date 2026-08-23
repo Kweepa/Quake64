@@ -10,7 +10,7 @@ orient_doors_for_room
 	ldx #0
 .odf
 	cpx	map_ndoors
-	+bcs_far .odf_rts
+	bcs .odf_rts
 	jsr orient_one_door
 	inx
 	beq .odf_rts
@@ -292,7 +292,7 @@ door_blocks
 	ldx #0
 .db
 	cpx	map_ndoors
-	+bcs_far .db_no
+	bcs .db_no
 	lda door_open,x
 	bne .db_n			; any open — not solid
 	+lda_mx door_ra
@@ -384,7 +384,7 @@ door_portal_ok
 	ldx #0
 .dpo
 	cpx	map_ndoors
-	+bcs_far .dpo_no
+	bcs .dpo_no
 	lda door_open,x
 	beq .dpo_n
 	+lda_mx door_ra
@@ -413,7 +413,7 @@ try_room_switch
 	ldx #0
 .trs
 	cpx	map_ndoors
-	+bcs_far .trs_rts
+	bcs .trs_rts
 	lda door_open,x
 	beq .trs_n
 	+ldy_mx door_ra
@@ -452,7 +452,7 @@ try_door_proximity
 	ldx #0
 .tdp
 	cpx	map_ndoors
-	+bcs_far .tdp_rts
+	bcs .tdp_rts
 	+lda_mx door_ra
 	cmp room_idx
 	beq .tdp_near

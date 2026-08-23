@@ -68,7 +68,7 @@ init_backpacks
 	ldx #0
 .ib_lp
 	cpx	map_nbackpacks
-	+bcs_far .ib_rts
+	bcs .ib_rts
 	lda #0
 	sta bp_taken,x
 	inx
@@ -86,7 +86,7 @@ init_enemies
 	ldx #0
 .ie_lp
 	cpx	map_nenemies
-	+bcs_far .ie_rts
+	bcs .ie_rts
 	lda #EN_IDLE
 	sta en_state,x
 	lda #0
@@ -126,7 +126,7 @@ init_drops
 	lda #1
 .id_lp
 	cpx	map_nenemies
-	+bcs_far .id_rts
+	bcs .id_rts
 	sta drop_taken,x
 	inx
 	beq .id_rts
@@ -256,10 +256,10 @@ update_floor
 	; crate tops (walkable)
 .uf_c
 	cpx	map_ncrates
-	+bcs_far .uf_p
+	bcs .uf_p
 	+lda_mx crate_room
 	cmp room_idx
-	+bne_far .uf_cn
+	bne .uf_cn
 	+lda_mx crate_x
 	sta box_x
 	+lda_mx crate_z
@@ -273,19 +273,19 @@ update_floor
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	+bcc_far .uf_cn
+	bcc .uf_cn
 	clc
 	+lda_mx crate_y
 	+adc_mx crate_sy
 	cmp floor_y
-	+bcc_far .uf_cn
-	+beq_far .uf_cn
+	bcc .uf_cn
+	beq .uf_cn
 	sta col_y			; crate_top
 	sec
 	lda cam_yh
 	sbc #EYE_HEIGHT			; feet
 	cmp col_y
-	+bcc_far .uf_cn			; feet < top — overhead
+	bcc .uf_cn			; feet < top — overhead
 	lda col_y
 	sta floor_y
 .uf_cn
@@ -297,12 +297,12 @@ update_floor
 	ldx #0
 .uf_pl
 	cpx	map_nplats
-	+bcs_far .uf_plats_done
+	bcs .uf_plats_done
 	+lda_mx plat_solid
-	+beq_far .uf_pn
+	beq .uf_pn
 	+lda_mx plat_room
 	cmp room_idx
-	+bne_far .uf_pn
+	bne .uf_pn
 	+lda_mx plat_x
 	sta box_x
 	+lda_mx plat_z
@@ -316,17 +316,17 @@ update_floor
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	+bcc_far .uf_pn
+	bcc .uf_pn
 	+lda_mx plat_y
 	cmp floor_y
-	+bcc_far .uf_pn
-	+beq_far .uf_pn
+	bcc .uf_pn
+	beq .uf_pn
 	sta col_y			; plat plane
 	sec
 	lda cam_yh
 	sbc #EYE_HEIGHT			; feet
 	cmp col_y
-	+bcc_far .uf_pn			; feet < plane — overhead
+	bcc .uf_pn			; feet < plane — overhead
 	lda col_y
 	sta floor_y
 .uf_pn
@@ -593,16 +593,16 @@ solid_at
 	ldx #0
 .sa_c
 	cpx	map_ncrates
-	+bcs_far .sa_p
+	bcs .sa_p
 	+lda_mx crate_room
 	cmp room_idx
-	+bne_far .sa_cn
+	bne .sa_cn
 	+lda_mx crate_y
 	sta box_y
 	+lda_mx crate_sy
 	sta box_sy
 	jsr player_overlaps_y
-	+bcc_far .sa_cn
+	bcc .sa_cn
 	+lda_mx crate_x
 	sta box_x
 	+lda_mx crate_z
@@ -612,7 +612,7 @@ solid_at
 	+lda_mx crate_sz
 	sta box_sz
 	jsr point_in_box_xz
-	+bcs_far .sa_yes
+	bcs .sa_yes
 .sa_cn
 	inx
 	beq .sa_p
@@ -622,18 +622,18 @@ solid_at
 	ldx #0
 .sa_pl
 	cpx	map_nplats
-	+bcs_far .sa_d
+	bcs .sa_d
 	+lda_mx plat_solid
-	+beq_far .sa_pn
+	beq .sa_pn
 	+lda_mx plat_room
 	cmp room_idx
-	+bne_far .sa_pn
+	bne .sa_pn
 	+lda_mx plat_y
 	sta box_y
 	lda #0
 	sta box_sy
 	jsr player_overlaps_y
-	+bcc_far .sa_pn
+	bcc .sa_pn
 	+lda_mx plat_x
 	sta box_x
 	+lda_mx plat_z
@@ -643,7 +643,7 @@ solid_at
 	+lda_mx plat_sz
 	sta box_sz
 	jsr point_in_box_xz
-	+bcs_far .sa_yes
+	bcs .sa_yes
 .sa_pn
 	inx
 	beq .sa_d
@@ -659,25 +659,25 @@ solid_at
 ; ------------------------------------------------------------------
 point_in_rc_xz
 	+lda_mx rc_sx
-	+beq_far .prc_no
+	beq .prc_no
 	lda col_x
 	+cmp_mx rc_x
-	+bcc_far .prc_no
+	bcc .prc_no
 	clc
 	+lda_mx rc_x
 	+adc_mx rc_sx
 	cmp col_x
-	+bcc_far .prc_no
-	+beq_far .prc_no
+	bcc .prc_no
+	beq .prc_no
 	lda col_z
 	+cmp_mx rc_z
-	+bcc_far .prc_no
+	bcc .prc_no
 	clc
 	+lda_mx rc_z
 	+adc_mx rc_sz
 	cmp col_z
-	+bcc_far .prc_no
-	+beq_far .prc_no
+	bcc .prc_no
+	beq .prc_no
 	sec
 	rts
 .prc_no
@@ -698,10 +698,10 @@ rc_inset_ok
 	bcs .rio_x0
 	sec
 	sbc #PLAYER_R
-	+bcc_far .rio_no
+	bcc .rio_no
 .rio_x0
 	+cmp_mx rc_x
-	+bcc_far .rio_no
+	bcc .rio_no
 	clc
 	+lda_mx rc_x
 	+adc_mx rc_sx
@@ -711,17 +711,17 @@ rc_inset_ok
 	sbc #PLAYER_R
 .rio_x1
 	cmp col_x
-	+bcc_far .rio_no
-	+beq_far .rio_no
+	bcc .rio_no
+	beq .rio_no
 	lda col_z
 	jsr .rio_join_zmin
 	bcs .rio_z0
 	sec
 	sbc #PLAYER_R
-	+bcc_far .rio_no
+	bcc .rio_no
 .rio_z0
 	+cmp_mx rc_z
-	+bcc_far .rio_no
+	bcc .rio_no
 	clc
 	+lda_mx rc_z
 	+adc_mx rc_sz
@@ -731,8 +731,8 @@ rc_inset_ok
 	sbc #PLAYER_R
 .rio_z1
 	cmp col_z
-	+bcc_far .rio_no
-	+beq_far .rio_no
+	bcc .rio_no
+	beq .rio_no
 	sec
 	rts
 .rio_no
@@ -956,31 +956,31 @@ room_cols_inset1
 	rts
 .rci1
 	+lda_mx rc_sx
-	+beq_far .rci_no
+	beq .rci_no
 	lda col_x
 	+cmp_mx rc_x
-	+bcc_far .rci_no
-	+beq_far .rci_no			; inset lo: >
+	bcc .rci_no
+	beq .rci_no			; inset lo: >
 	clc
 	+lda_mx rc_x
 	+adc_mx rc_sx
 	sec
 	sbc #1
 	cmp col_x
-	+bcc_far .rci_no
-	+beq_far .rci_no
+	bcc .rci_no
+	beq .rci_no
 	lda col_z
 	+cmp_mx rc_z
-	+bcc_far .rci_no
-	+beq_far .rci_no
+	bcc .rci_no
+	beq .rci_no
 	clc
 	+lda_mx rc_z
 	+adc_mx rc_sz
 	sec
 	sbc #1
 	cmp col_z
-	+bcc_far .rci_no
-	+beq_far .rci_no
+	bcc .rci_no
+	beq .rci_no
 	sec
 	rts
 .rci_no
@@ -1298,7 +1298,7 @@ try_proximity
 	ldx #0
 .tp_s
 	cpx	map_nswitches
-	+bcs_far .tp_el
+	bcs .tp_el
 	stx obj_i
 	+lda_mx sw_room
 	cmp room_idx
@@ -1328,13 +1328,13 @@ try_backpack_pickup
 	ldx #0
 .tbp_lp
 	cpx	map_nbackpacks
-	+bcs_far .tbp_rts
+	bcs .tbp_rts
 	stx obj_i
 	lda bp_taken,x
-	+bne_far .tbp_n
+	bne .tbp_n
 	+lda_mx bp_room
 	cmp room_idx
-	+bne_far .tbp_n
+	bne .tbp_n
 	+lda_mx bp_x
 	sta box_x
 	+lda_mx bp_y
@@ -1352,12 +1352,12 @@ try_backpack_pickup
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	+bcc_far .tbp_n
+	bcc .tbp_n
 	jsr player_overlaps_y
-	+bcc_far .tbp_n
+	bcc .tbp_n
 	ldx obj_i
 	jsr grant_backpack
-	+bcc_far .tbp_n
+	bcc .tbp_n
 	jsr hud_ammo
 	ldx obj_i
 	+lda_mx bp_type
@@ -1378,7 +1378,7 @@ try_backpack_pickup
 	ldx #0
 .tdp_lp
 	cpx	map_nenemies
-	+bcs_far .tdp_rts
+	bcs .tdp_rts
 	stx obj_i
 	lda drop_taken,x
 	bne .tdp_n
@@ -1813,10 +1813,10 @@ update_triggers
 	ldx #0
 .ut
 	cpx	map_ntrigs
-	+bcs_far .ut_miss
+	bcs .ut_miss
 	+lda_mx tr_room
 	cmp room_idx
-	+bne_far .ut_n
+	bne .ut_n
 	+lda_mx tr_x
 	sta box_x
 	+lda_mx tr_y
@@ -1831,22 +1831,22 @@ update_triggers
 	sta box_sz
 	lda cam_xh
 	cmp box_x
-	+bcc_far .ut_n
+	bcc .ut_n
 	clc
 	lda box_x
 	adc box_sx
 	cmp cam_xh
-	+bcc_far .ut_n
-	+beq_far .ut_n
+	bcc .ut_n
+	beq .ut_n
 	lda cam_zh
 	cmp box_z
-	+bcc_far .ut_n
+	bcc .ut_n
 	clc
 	lda box_z
 	adc box_sz
 	cmp cam_zh
-	+bcc_far .ut_n
-	+beq_far .ut_n
+	bcc .ut_n
+	beq .ut_n
 	stx pv0				; hit index
 	jmp .ut_apply
 .ut_n
@@ -1956,7 +1956,7 @@ trig_enter
 	jmp elev_activate
 .te_tele
 	lda map_ndests
-	+beq_far .te_tele_rts
+	beq .te_tele_rts
 	+ldy_mx tr_arg
 	lda #0
 	sta cam_xl

@@ -1435,7 +1435,7 @@ draw_world
 	ldx #0
 .dw_c
 	cpx	map_ncrates
-	+bcs_far .dw_d
+	bcs .dw_d
 	+lda_mx crate_room
 	cmp room_idx
 	bne .dw_cn
@@ -1468,7 +1468,7 @@ draw_world
 	ldx #0
 .dw_door
 	cpx	map_ndoors
-	+bcs_far .dw_sw
+	bcs .dw_sw
 	+lda_mx door_ra
 	cmp room_idx
 	beq .dw_doku
@@ -1504,7 +1504,7 @@ draw_world
 	ldx #0
 .dw_s
 	cpx	map_nswitches
-	+bcs_far .dw_e
+	bcs .dw_e
 	+lda_mx sw_room
 	cmp room_idx
 	bne .dw_sn
@@ -1534,7 +1534,7 @@ draw_world
 	ldx #0
 .dw_el
 	cpx	map_nelevs
-	+bcs_far .dw_sl
+	bcs .dw_sl
 	+lda_mx elev_room
 	cmp room_idx
 	bne .dw_eln
@@ -1566,7 +1566,7 @@ draw_world
 	ldx #0
 .dw_slope
 	cpx	map_nslopes
-	+bcs_far .dw_pl
+	bcs .dw_pl
 	+lda_mx slope_room
 	cmp room_idx
 	bne .dw_sln
@@ -1596,7 +1596,7 @@ draw_world
 	ldx #0
 .dw_plat
 	cpx	map_nplats
-	+bcs_far .dw_bp
+	bcs .dw_bp
 	+lda_mx plat_room
 	cmp room_idx
 	bne .dw_pln
@@ -1627,7 +1627,7 @@ draw_world
 	ldx #0
 .dw_bpl
 	cpx	map_nbackpacks
-	+bcs_far .dw_drops
+	bcs .dw_drops
 	lda bp_taken,x
 	bne .dw_bpn
 	+lda_mx bp_room
@@ -1660,7 +1660,7 @@ draw_world
 	ldx #0
 .dw_dpl
 	cpx	map_nenemies
-	+bcs_far .dw_rts
+	bcs .dw_rts
 	lda drop_taken,x
 	bne .dw_dpn
 	lda drop_room,x

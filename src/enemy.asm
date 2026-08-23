@@ -342,7 +342,7 @@ eu_next
 	ldx enemy_idx
 	inx
 	cpx	map_nenemies
-	+bcs_far .eu_done
+	bcs .eu_done
 	jmp .eu_lp
 .eu_done
 	lda #0
@@ -373,11 +373,11 @@ enemy_anim_step
 	jmp .eas_run
 +
 	cmp #EN_ALERT
-	+beq_far .eas_oneshot
+	beq .eas_oneshot
 	cmp #EN_ATTACK
-	+beq_far .eas_oneshot
+	beq .eas_oneshot
 	cmp #EN_PAIN
-	+beq_far .eas_oneshot
+	beq .eas_oneshot
 	cmp #EN_DYING
 	bne .eas_n
 	jmp .eas_die
@@ -1519,31 +1519,31 @@ enemy_cutout_idx
 ; X = rb index. C=1 if col_x/z inside inset 1.
 rb_inset1
 	+lda_mx rb_sx
-	+beq_far .rbi_no
+	beq .rbi_no
 	lda col_x
 	+cmp_mx rb_x
-	+bcc_far .rbi_no
-	+beq_far .rbi_no
+	bcc .rbi_no
+	beq .rbi_no
 	clc
 	+lda_mx rb_x
 	+adc_mx rb_sx
 	sec
 	sbc #1
 	cmp col_x
-	+bcc_far .rbi_no
-	+beq_far .rbi_no
+	bcc .rbi_no
+	beq .rbi_no
 	lda col_z
 	+cmp_mx rb_z
-	+bcc_far .rbi_no
-	+beq_far .rbi_no
+	bcc .rbi_no
+	beq .rbi_no
 	clc
 	+lda_mx rb_z
 	+adc_mx rb_sz
 	sec
 	sbc #1
 	cmp col_z
-	+bcc_far .rbi_no
-	+beq_far .rbi_no
+	bcc .rbi_no
+	beq .rbi_no
 	sec
 	rts
 .rbi_no
@@ -1660,7 +1660,7 @@ axe_try_kill
 	ldx #0
 .atk_lp
 	cpx	map_nenemies
-	+bcs_far .atk_no
+	bcs .atk_no
 	lda en_state,x
 	cmp #EN_DYING
 	bcs .atk_n

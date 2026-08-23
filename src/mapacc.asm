@@ -1,124 +1,78 @@
-; Packed-map SoA accessors. Field labels are 16-bit BSS pointers.
-; Macros load field id = (label-room_x)/2 and jsr map_* in mapacc_rt.asm.
+; Packed-map SoA accessors.
+;
+; Field labels in map_bss.asm are 16-bit *pointers* (filled by bind_map),
+; not the columns themselves. Never `lda en_x,x` / `sta room_bg,y` — that
+; reads the pointer word in GAME BSS. Always these macros, or an explicit
+; `lda (ptr),y` after setting a pointer from the bound table.
+;
+; Macros emit `lda $02id,x` (etc.): operand lo = field id = (.fld-room_x)/2,
+; hi = MAP_SMC_HI sentinel. tools/mkreloc.py scans game.prg for those
+; abs,x / abs,y ops and writes reloc.prg. LoadLevel patches the two operand
+; bytes to the bound column address after bind_map. Do not execute these
+; until after that patch.
+;
+; After GAME assemble, mkreloc.py must run before mkdisk.py (see build.bat).
 !zone mapacc
 
-!macro beq_far .t {
-	bne @s
-	jmp .t
-@s
-}
-!macro bne_far .t {
-	beq @s
-	jmp .t
-@s
-}
-!macro bcs_far .t {
-	bcc @s
-	jmp .t
-@s
-}
-!macro bcc_far .t {
-	bcs @s
-	jmp .t
-@s
-}
-
 !macro lda_mx .fld {
-	lda #(.fld - room_x) / 2
-	jsr map_lda_x
+	lda MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro sta_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_sta_x
+	sta MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro cmp_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_cmp_x
+	cmp MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro adc_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_adc_x
+	adc MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro sbc_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_sbc_x
+	sbc MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro ora_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_ora_x
+	ora MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro and_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_and_x
+	and MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro eor_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_eor_x
+	eor MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro ldy_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_ldy_x
+	ldy MAP_SMC_BASE + ((.fld - room_x) / 2),x
 }
 !macro ldx_mx .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_ldx_x
+	lda MAP_SMC_BASE + ((.fld - room_x) / 2),x
+	tax
 }
 !macro lda_my .fld {
-	lda #(.fld - room_x) / 2
-	jsr map_lda_y
+	lda MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro sta_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_sta_y
+	sta MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro cmp_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_cmp_y
+	cmp MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro adc_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_adc_y
+	adc MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro sbc_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_sbc_y
+	sbc MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro ora_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_ora_y
+	ora MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro and_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_and_y
+	and MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro eor_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_eor_y
+	eor MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro ldx_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_ldx_y
+	ldx MAP_SMC_BASE + ((.fld - room_x) / 2),y
 }
 !macro ldy_my .fld {
-	sta map_sv_a
-	lda #(.fld - room_x) / 2
-	jsr map_ldy_y
+	lda MAP_SMC_BASE + ((.fld - room_x) / 2),y
+	tay
 }
-

@@ -2072,7 +2072,7 @@ draw_enemies
 	ldx #0
 .de
 	cpx	map_nenemies
-	+bcs_far .de_rts
+	bcs .de_rts
 	lda en_state,x
 	cmp #EN_GONE
 	beq .de_n
@@ -2101,7 +2101,7 @@ draw_enemies
 	ldx #0
 	jsr xform_world_vert
 	jsr enemy_in_view
-	+bcc_far .de_one_rts
+	bcc .de_one_rts
 	jsr try_bite_splat			; CAM[0] still feet origin
 	ldx obj_i
 	+lda_mx en_type
@@ -2437,7 +2437,7 @@ finish_enemy_death
 	ldx #0
 .fed_slot
 	cpx	map_nenemies
-	+bcs_far .fed_rts
+	bcs .fed_rts
 	lda drop_taken,x
 	beq .fed_n
 	; free slot (taken=1 inactive)

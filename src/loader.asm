@@ -6,6 +6,8 @@
 
 level_dos_name
 	!text "E1M1"
+reloc_dos_name
+	!text "RELOC"
 
 en_name_len
 	!byte 5, 6, 4, 5, 4, 6, 6
@@ -97,7 +99,10 @@ heap_alloc
 	sta heap_top+1
 	rts
 
-; LoadLevel — IOINIT + blank + map + used enemy poses + bind_map.
+; LoadLevel — IOINIT + blank + map + reloc overlay + enemies.
+; Heap grows down from SCR_A: map first, then RELOC below it, bind_map on
+; map_base only, patch SMC operands, heap_top = map_base (drop reloc),
+; then load_map_enemies overwrites the old reloc bytes.
 ; load_in_play=0: cold (DEN off, no CIA2 quiet). =1: in-play (DEN on, quiet).
 ; C=0 ok, C=1 error. Caller re-inits VIC/IRQ.
 LoadLevel
@@ -156,6 +161,26 @@ LoadLevel
 	lda load_dest+1
 	sta map_base+1
 	jsr bind_map
+
+	lda #<RELOC_MAX
+	ldy #>RELOC_MAX
+	jsr heap_alloc
+	lda load_dest
+	sta reloc_base
+	lda load_dest+1
+	sta reloc_base+1
+	lda #5
+	ldx #<reloc_dos_name
+	ldy #>reloc_dos_name
+	jsr LoadPrg
+	bcs .ll_fail
+	jsr patch_map_smc
+	bcs .ll_fail
+	lda map_base
+	sta heap_top
+	lda map_base+1
+	sta heap_top+1
+
 	jsr load_map_enemies
 	bcs .ll_fail
 

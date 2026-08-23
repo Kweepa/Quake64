@@ -142,6 +142,15 @@ negsqlo		= $FC00
 negsqhi		= $FE00
 IRQ_TRAMP	= $093F			; jmp irq_entry; lo byte must be $3F
 
+; SMC map accessors: macros emit abs,x/y with this operand hi until LoadLevel
+; patches from reloc.prg. Must not collide with a real GAME abs address.
+MAP_SMC_HI	= $02
+MAP_SMC_BASE	= $0200
+RELOC_MAX	= $0800			; heap reserve for reloc overlay
+!if (>MAP_SMC_BASE) != MAP_SMC_HI {
+	!error "MAP_SMC_BASE hi must equal MAP_SMC_HI"
+}
+
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
 SINTAB		= $D608			; 320 bytes (extra quadrant for COS)
@@ -418,8 +427,8 @@ emuz_on		= $CC4A			; 1 = sprite 6 enabled
 emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
 item_spin	= $CC4C			; world powerup yaw (0..255)
 item_spin_l	= $CC4D			; 8.8 fraction
-map_sv_a	= $CC4E			; map accessor A save
-map_sv_y	= $CC4F			; map accessor Y save
+map_sv_a	= $CC4E			; heap_alloc size hi scratch
+map_sv_y	= $CC4F			; load_map_enemies slot index
 bind_cur	= $CC50			; word: bind_map cursor
 heap_top	= $CC52			; word: next LOAD dest (grows down from SCR_A)
 map_base	= $CC54			; word: packed map payload
@@ -430,7 +439,7 @@ load_name_l	= $CC5A
 load_name_h	= $CC5B
 load_type	= $CC5C
 bind_n		= $CC5D
-; $CC5E–$CC5F unused
+reloc_base	= $CC5E			; word: reloc overlay dest (reclaimed after patch)
 
 ; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
 VOC		= $CC60			; Cohen–Sutherland outcode (front verts)

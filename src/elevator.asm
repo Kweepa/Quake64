@@ -10,7 +10,7 @@ elev_init
 	sta elev_noise_n
 .ei
 	cpx	map_nelevs
-	+beq_far .ei_rts
+	beq .ei_rts
 	+lda_mx elev_y0
 	sta elev_y,x
 	inx
@@ -36,7 +36,7 @@ elev_activate
 	+lda_mx elev_id
 	sta proc_tmp1			; world id for busy / PROC_A
 	jsr proc_target_busy
-	+bcs_far .ea_fail
+	bcs .ea_fail
 	ldx proc_tmp5
 	+lda_mx elev_type
 	cmp #ELEV_TYPE_TOGGLE
@@ -45,11 +45,11 @@ elev_activate
 .ea_not_tog
 	jsr proc_count_free
 	cmp #2
-	+bcc_far .ea_fail
+	bcc .ea_fail
 	ldx proc_tmp5
 	lda elev_y,x
 	+cmp_mx elev_home
-	+bne_far .ea_fail			; only start from home (top)
+	bne .ea_fail			; only start from home (top)
 	+lda_mx elev_home
 	pha				; return height
 	+lda_mx elev_id
@@ -62,7 +62,7 @@ elev_activate
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	+bcs_far .ea_fail_pl
+	bcs .ea_fail_pl
 	lda proc_tmp5
 	sta PROC_L,y
 	lda #PROC_TIMER
@@ -74,7 +74,7 @@ elev_activate
 	lda #>ELEV_WAIT_MS
 	sta proc_tmp4
 	jsr proc_alloc
-	+bcs_far .ea_fail_pl
+	bcs .ea_fail_pl
 	lda proc_tmp5
 	sta PROC_L,y
 	pla
@@ -83,7 +83,9 @@ elev_activate
 .ea_toggle
 	jsr proc_count_free
 	cmp #1
-	+bcc_far .ea_fail
+	bcs .ea_tog_ok
+	jmp .ea_fail
+.ea_tog_ok
 	ldx proc_tmp5
 	lda elev_y,x
 	+cmp_mx elev_home
@@ -105,7 +107,9 @@ elev_activate
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	+bcs_far .ea_fail
+	bcc .ea_tog_got
+	jmp .ea_fail
+.ea_tog_got
 	lda proc_tmp5
 	sta PROC_L,y
 .ea_snd
@@ -200,7 +204,7 @@ elev_update_floor
 .euf_go
 	+lda_mx elev_room
 	cmp room_idx
-	+bne_far .euf_n
+	bne .euf_n
 	+lda_mx elev_x
 	sta box_x
 	+lda_mx elev_z
@@ -214,7 +218,7 @@ elev_update_floor
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	+bcc_far .euf_n
+	bcc .euf_n
 	; on elevator footprint — floor = elev_y + sy
 	; reject only if under the car (feet < elev_y); top is sy above elev_y
 	; so feet>=top would block boarding from a flush room floor
@@ -249,7 +253,7 @@ elev_try_auto
 	ldx #0
 .eta
 	cpx	map_nelevs
-	+bcs_far .eta_rts
+	bcs .eta_rts
 	+lda_mx elev_type
 	cmp #ELEV_TYPE_AUTO
 	bne .eta_n

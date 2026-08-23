@@ -1,0 +1,13 @@
+---
+description: Don't lecture a veteran game developer on engine 101
+alwaysApply: true
+---
+
+# Audience
+
+Steve is a game developer. Do not explain textbook engine facts (dt vs speed, hold-time integration, why slow frames make larger steps, what a watchpoint is, how IRQ vs main differs). He already knows.
+
+- Lead with the defect, the evidence, and the next check.
+- If a hypothesis is ruled out (e.g. frame time looked normal, speed-up is ~10× not "a bit twitchy"), drop it. Don't re-teach the mechanism you just got wrong.
+- Never present "larger dt → larger displacement" as the cause of a **multiplicative, persistent** speed-up when reported frame time is unchanged.
+- Don't pad with tutorials, glossaries, or "as you know." Same bar as talking to a coworker who shipped this engine.

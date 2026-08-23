@@ -39,6 +39,7 @@ TAB_INVZH	= TAB_STAGING + 1216	; 128
 TAB_BYTES	= 1344
 
 COL_BORDER	= 0
+COL_WHITE	= 1			; sample_ms tripwire latch
 COL_HURT	= 2			; red $d020 flash on damage
 COL_BG		= 9			; default viewport background (brown)
 COL_HUD_BG	= 0
@@ -554,6 +555,8 @@ fx_oy		= $CE9A
 fx_oz		= $CE9B
 fx_skip		= $CE9C			; 1 = skip next tick (spawn frame)
 en_pain_i	= $CE9D			; ENEMY_MAX: pain/death variant index
+sample_ms_chk	= $CEAD			; shadow of sample_ms (init_irq); tripwire restore
+spd_trip	= $CEAE			; sample_ms corruption count (IRQ .top)
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

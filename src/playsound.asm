@@ -27,6 +27,8 @@ sfx_ptr_h
 ; Main stages here; mid-split IRQ flushes via play_sound_commit.
 sfx_q
 	!byte 0, 0, 0, 0
+fs_save_x
+	!byte 0				; flush_sfx loop index (IRQ-private; not ZP)
 
 ; SID Fn-lo offset from $d400 per channel (V1/V2/V3)
 sfx_sid_base
@@ -83,12 +85,13 @@ sfx_voice_adsr_all
 	rts
 
 ; ------------------------------------------------------------------
-; play_sound — A = sound index; stage for mid-split IRQ (no sei).
-; Preserves X,Y; A clobbered
+; play_sound — A = sound index; stage for mid-split IRQ.
+; Queue length update is sei-atomic vs flush_sfx. Preserves X,Y; A clobbered.
 ; ------------------------------------------------------------------
 play_sound
 	stx ps_save_x
-	sty ps_save_y
+	php
+	sei
 	ldx sfx_q_len
 	cpx #SFX_QMAX
 	bcs .ps_full
@@ -96,8 +99,8 @@ play_sound
 	inx
 	stx sfx_q_len
 .ps_full
+	plp
 	ldx ps_save_x
-	ldy ps_save_y
 	rts
 
 ; Mid-split IRQ: commit staged IDs into channel queues.
@@ -107,9 +110,9 @@ flush_sfx
 	cpx sfx_q_len
 	bcs .fs_done
 	lda sfx_q,x
-	stx ps_save_x
+	stx fs_save_x
 	jsr play_sound_commit
-	ldx ps_save_x
+	ldx fs_save_x
 	inx
 	bne .fs_loop
 .fs_done

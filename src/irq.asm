@@ -80,6 +80,9 @@ init_irq
 	ldx #SAMPLE_MS_PAL
 +
 	stx sample_ms
+	stx sample_ms_chk
+	lda #0
+	sta spd_trip
 	pla
 	sta $01
 
@@ -217,6 +220,15 @@ irq_entry
 	sta irq_phase
 	inc frame_flag
 	jsr prof_read_casc
+	lda sample_ms
+	cmp sample_ms_chk
+	beq .top_ok
+	lda sample_ms_chk
+	sta sample_ms
+	inc spd_trip
+	lda #COL_WHITE
+	sta vic_border
+.top_ok
 	jsr irq_publish_vic
 	pla
 	tay
@@ -362,15 +374,24 @@ accum_keys
 ; Publish in_* → hold_* / key_* then clear (main, once per game frame).
 ; IRQ only accumulates into in_* each mid-split — do not snapshot there or
 ; a slow game frame only sees one video tick of hold ms.
+; Each 16-bit hold slot is sei-atomic vs irq_add_ms (lost/torn ticks).
 snapshot_input
-	ldx #11
--
+	ldx #0
+.si_ms
+	php
+	sei
 	lda in_fwd,x
 	sta hold_fwd,x
+	lda in_fwd+1,x
+	sta hold_fwd+1,x
 	lda #0
 	sta in_fwd,x
-	dex
-	bpl -
+	sta in_fwd+1,x
+	plp
+	inx
+	inx
+	cpx #12
+	bcc .si_ms
 	ldx #3
 -
 	lda in_wpn_axe,x

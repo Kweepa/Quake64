@@ -14,4 +14,4 @@ Tim Willits, Adrian Carmack,
 Kevin Cloud, Paul Steed,
 Trent Reznor & Nine Inch Nails.
 
-v1.0
+quake64 v1.00.0

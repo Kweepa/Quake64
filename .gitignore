@@ -2,6 +2,10 @@
 src/grunt_data.asm
 src/weapon_spr.asm
 
+# Cooked map / enemy pose PRGs
+maps/*.prg
+enemies/*.prg
+
 # Intermediate PRGs — playable disk is quake64.d64
 boot.prg
 menu.prg

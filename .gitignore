@@ -1,7 +1,3 @@
-# Generated tables (listings are kept in the tree)
-src/grunt_data.asm
-src/weapon_spr.asm
-
 # Intermediate PRGs — playable disk is quake64.d64
 *.prg
 
@@ -11,7 +7,10 @@ src/weapon_spr.asm
 *.sym
 __pycache__/
 *.pyc
+
+# Debugging stuff
 *.log
+*.vsf
 
 # Quake shareware (PAK / id1)
 shareware/
@@ -20,7 +19,6 @@ shareware/
 # Reference materials
 ref/
 tmp/
-assets/weapons/sheet.png
 
 # Editor / OS
 .DS_Store

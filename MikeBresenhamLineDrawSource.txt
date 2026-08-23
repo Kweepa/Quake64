@@ -1,0 +1,651 @@
+REM>source
+:
+DIM code 1024
+:
+REM ** 6502 FAST BRESENHAM LINE ROUTINE
+REM
+REM    creation date: 2003-03-01  Michael Kircher
+REM      last change: 2026-08-22  Michael Kircher
+REM    - commentary amended from side documentation
+REM    - introduced explicit labels for self-mod instructions
+REM
+REM    Licence: CC-BY-SA 4.0
+REM
+REM    This implementation of Bresenham on 6502 is supposed to plot
+REM    into a 'font-like' bitmap, with the characters arranged in
+REM    column-major order. All bytes within a 8-pixel bitmap column
+REM    are accessed with the (),Y address mode of the 6502.
+REM    
+REM    The following draw actions apply:
+REM
+REM    zp_opcode <- &09, set pixels
+REM    zp_opcode <- &29, clear pixels
+REM    zp_opcode <- &49, invert pixels
+:
+zp_opcode=&B5
+zp_error=&B6
+zp_dx=&F7
+zp_dy=&F8
+zp_scrn=&F9
+zp_x1=&FB
+zp_y1=&FC
+zp_x2=&FD
+zp_y2=&FE
+:
+FOR pass=4 TO 7 STEP 3
+P%=&3C00-2:O%=code
+[OPT pass
+ EQUW P% + 2
+
+.Line
+]
+
+REM ** Sort endpoints (force x1 <= x2 for left-to-right drawing) and determine |dx|
+
+[OPT pass
+ SEC
+ LDA zp_x2
+ SBC zp_x1            ; calculate A = x2-x1
+ BCS Line_00          ; if x2 >= x1, co-ordinates are already in order
+
+ LDX zp_x1            ; swap x1/x2 using X and Y registers
+ LDY zp_x2
+ STY zp_x1
+ STX zp_x2
+
+ LDX zp_y1            ; swap y1/y2 along
+ LDY zp_y2
+ STY zp_y1
+ STX zp_y2
+
+ EOR #&FF             ; form 2's-complement of 'negative' difference in A
+ ADC #&01             ; to obtain absolute value
+.Line_00
+ STA zp_dx            ; store |dx|
+]
+
+REM ** Determine vertical drawing direction and |dy|
+ 
+[OPT pass 
+ LDY #&C8             ; pre-load Y register with INY opcode (default down)
+ SEC
+ LDA zp_y2
+ SBC zp_y1            ; calculate A = y2-y1
+ BCS Line_01          ; if y2 >= y1, skip negation and keep INY
+
+ LDY #&88             ; overwrite Y register with DEY opcode (up)
+ EOR #&FF             ; form 2's-complement of 'negative' difference in A
+ ADC #&01             ; to obtain absolute value
+.Line_01
+ STA zp_dy            ; store |dy|
+]
+
+REM ** Determine slope ('flat' vs. 'steep' Bresenham steps)
+
+[OPT pass
+ CMP zp_dx
+ BCC Line_02          ; |dy|<|dx| => flat slope
+ JMP Line_44          ; otherwise, steep slope (or 'diagonal')
+]
+
+REM ** Initialize flat slope (|dx|>|dy|)
+
+[OPT pass
+.Line_02
+ CPY Line_13
+ BEQ Line_03          ; opcode unchanged, skip
+ STY Line_13          ; self-modify unrolled vertical step instructions
+ STY Line_17
+ STY Line_21
+ STY Line_25
+ STY Line_29
+ STY Line_33
+ STY Line_37
+ STY Line_41
+
+.Line_03
+ LDA zp_opcode        ; load draw action
+ CMP Line_12
+ BEQ Line_06          ; opcode unchanged, skip completely
+ STA Line_12          ; self-modify unrolled draw action instructions
+ STA Line_16
+ STA Line_20
+ STA Line_24
+ STA Line_28
+ STA Line_32
+ STA Line_36
+ STA Line_40
+
+ CMP #&29             ; change to clear action (AND #&xx opcode)?
+ BNE Line_04          ; no, branch to set/invert action (ORA #&xx or EOR #&xx opcode)
+
+ LDA #&7F
+ SEC                  ; prepare 'running' 0 bit in cyclic 9-bit C/A shift register
+ BCS Line_05
+
+.Line_04
+ LDA #&80
+ CMP Line_12 + 1      ; check correct operand for set/invert action
+ BEQ Line_06          ; already in place (happens for set <-> invert changes), skip
+ CLC                  ; prepare 'running' 1 bit in cyclic 9-bit C/A shift register 
+
+.Line_05
+ STA Line_12 + 1      ; self-modify unrolled draw action instruction operands
+ ROR A
+ STA Line_16 + 1
+ ROR A
+ STA Line_20 + 1
+ ROR A
+ STA Line_24 + 1
+ ROR A
+ STA Line_28 + 1
+ ROR A
+ STA Line_32 + 1
+ ROR A
+ STA Line_36 + 1
+ ROR A
+ STA Line_40 + 1
+
+.Line_06
+ LDA zp_x1            ; determine bitmap column address pointer
+ LSR A
+ LSR A
+ LSR A
+ TAX
+ LDA Line_86,X
+ STA zp_scrn
+ LDA Line_87,X
+ STA zp_scrn + 1
+
+ LDA zp_x1            ; configure unrolled horizontal entry point trampoline
+ AND #&07
+ TAX
+ LDA Line_08,X
+ STA Line_07 + 1
+ LDA Line_09,X
+ STA Line_07 + 2
+
+ LDA zp_dx            ; calculate error accumulator, error = |dx|/2, ...
+ TAX
+ LSR A
+ STA zp_error
+ INX                  ;  ... and number of pixels to draw, X = |dx|+1
+
+ LDY zp_y1            ; pass baseline vertical row index
+ SEC                  ; prime C=1 for Bresenham operations
+.Line_07
+ JMP &0000            ; launch into unrolled flat slope loop
+
+.Line_08
+ EQUB Line_11 MOD 256
+ EQUB Line_15 MOD 256
+ EQUB Line_19 MOD 256
+ EQUB Line_23 MOD 256
+ EQUB Line_27 MOD 256
+ EQUB Line_31 MOD 256
+ EQUB Line_35 MOD 256
+ EQUB Line_39 MOD 256
+.Line_09
+ EQUB Line_11 DIV 256
+ EQUB Line_15 DIV 256
+ EQUB Line_19 DIV 256
+ EQUB Line_23 DIV 256
+ EQUB Line_27 DIV 256
+ EQUB Line_31 DIV 256
+ EQUB Line_35 DIV 256
+ EQUB Line_39 DIV 256
+]
+
+REM ** Engine Core 1: flat slope rendering loop
+
+[OPT pass
+.Line_10
+ RTS                  ; symmetrical upward exit anchor for steps
+
+.Line_11
+ LDA (zp_scrn),Y      ; 1st pixel, bit 7
+.Line_12
+ ORA #&80             ; runtime self-modified opcode and operand field
+ STA (zp_scrn),Y
+ DEX                  ; all pixels drawn?
+ BEQ Line_10          ; exit
+ LDA zp_error
+ SBC zp_dy
+ BCS Line_14          ; if error >= 0, skip vertical adjustment (leaves C=1)
+ ADC zp_dx            ; if error < 0, add |dx| (automatically sets C=1)
+.Line_13
+ INY                  ; modified via vertical y-step injection
+.Line_14
+ STA zp_error
+
+.Line_15
+ LDA (zp_scrn),Y      ; 2nd pixel, bit 6
+.Line_16
+ ORA #&40
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_10
+ LDA zp_error
+ SBC zp_dy
+ BCS Line_18
+ ADC zp_dx
+.Line_17
+ INY
+.Line_18
+ STA zp_error
+
+.Line_19
+ LDA (zp_scrn),Y      ; 3rd pixel, bit 5
+.Line_20
+ ORA #&20
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_10
+ LDA zp_error
+ SBC zp_dy
+ BCS Line_22
+ ADC zp_dx
+.Line_21
+ INY
+.Line_22
+ STA zp_error
+
+.Line_23
+ LDA (zp_scrn),Y      ; 4th pixel, bit 4
+.Line_24
+ ORA #&10
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_10          ; max. upward range boundary for flat core engine exit
+ LDA zp_error
+ SBC zp_dy
+ BCS Line_26
+ ADC zp_dx
+.Line_25
+ INY
+.Line_26
+ STA zp_error         ; ... execution glides natively into the bottom segment ...
+
+.Line_27
+ LDA (zp_scrn),Y      ; 5th pixel, bit 3
+.Line_28
+ ORA #&08
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_43          ; max. downward range boundary for flat core engine exit
+ LDA zp_error
+ SBC zp_dy
+ BCS Line_30
+ ADC zp_dx
+.Line_29
+ INY
+.Line_30
+ STA zp_error
+
+.Line_31
+ LDA (zp_scrn),Y      ; 6th pixel, bit 2
+.Line_32
+ ORA #&04
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_43
+ LDA zp_error
+ SBC zp_dy
+ BCS Line_34
+ ADC zp_dx
+.Line_33
+ INY
+.Line_34
+ STA zp_error
+
+.Line_35
+ LDA (zp_scrn),Y      ; 7th pixel, bit 1
+.Line_36
+ ORA #&02
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_43
+ LDA zp_error
+ SBC zp_dy
+ BCS Line_38
+ ADC zp_dx
+.Line_37
+ INY
+.Line_38
+ STA zp_error
+
+.Line_39
+ LDA (zp_scrn),Y      ; 8th pixel, bit 0
+.Line_40
+ ORA #&01
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_43
+ LDA zp_error
+ SBC zp_dy
+ BCS Line_42
+ ADC zp_dx
+.Line_41
+ INY
+.Line_42
+ STA zp_error
+
+ CLC                  ; horizontal column advance, skip 1 full character tile right
+ LDA zp_scrn
+ ADC #&C0
+ STA zp_scrn
+ LDA zp_scrn + 1
+ ADC #&00
+ STA zp_scrn + 1
+
+ SEC                  ; prime C=1 again for Bresenham operations
+ JMP Line_11          ; continue with 1st pixel, bit 7 (flat)
+
+.Line_43
+ RTS                  ; symmetrical downward exit anchor for steps
+]
+
+REM ** Initialize steep slope (|dy|>=|dx|)
+
+[OPT pass
+.Line_44
+ CPY Line_56
+ BEQ Line_45          ; opcode unchanged, skip
+ STY Line_56          ; self-modify unrolled vertical step instructions
+ STY Line_60
+ STY Line_64
+ STY Line_68
+ STY Line_72
+ STY Line_76
+ STY Line_80
+ STY Line_84
+
+.Line_45
+ LDA zp_opcode        ; load draw action
+ CMP Line_55
+ BEQ Line_48          ; opcode unchanged, skip completely
+ STA Line_55          ; self-modify unrolled draw action instructions
+ STA Line_59
+ STA Line_63
+ STA Line_67
+ STA Line_71
+ STA Line_75
+ STA Line_79
+ STA Line_83
+
+ CMP #&29             ; change to clear action (AND #&xx opcode)?
+ BNE Line_46          ; no, branch to set/invert action (ORA #&xx or EOR #&xx opcode)
+
+ LDA #&7F
+ SEC                  ; prepare 'running' 0 bit in cyclic 9-bit C/A shift register
+ BCS Line_47
+
+.Line_46
+ LDA #&80
+ CMP Line_55 + 1      ; check correct operand for set/invert action
+ BEQ Line_48          ; already in place (happens for set <-> invert changes), skip
+ CLC                  ; prepare 'running' 1 bit in cyclic 9-bit C/A shift register
+
+.Line_47
+ STA Line_55 + 1      ; self-modify unrolled draw action instruction operands
+ ROR A
+ STA Line_59 + 1
+ ROR A
+ STA Line_63 + 1
+ ROR A
+ STA Line_67 + 1
+ ROR A
+ STA Line_71 + 1
+ ROR A
+ STA Line_75 + 1
+ ROR A
+ STA Line_79 + 1
+ ROR A
+ STA Line_83 + 1
+
+.Line_48
+ LDA zp_x1            ; determine bitmap column address pointer
+ LSR A
+ LSR A
+ LSR A
+ TAX
+ LDA Line_86,X
+ STA zp_scrn
+ LDA Line_87,X
+ STA zp_scrn + 1
+
+ LDA zp_x1            ; configure unrolled horizontal entry point trampoline
+ AND #&07
+ TAX
+ LDA Line_50,X
+ STA Line_49 + 1
+ LDA Line_51,X
+ STA Line_49 + 2
+
+ LDA zp_dy            ; calculate error accumulator, error = |dy|/2, ...
+ TAX
+ LSR A
+ STA zp_error
+ INX                  ;  ... and number of pixels to draw, X = |dy|+1
+
+ LDY zp_y1            ; pass baseline vertical row index
+ SEC                  ; prime C=1 for Bresenham operations
+.Line_49
+ JMP &0000            ; launch into unrolled steep slope loop(s)
+
+.Line_50
+ EQUB Line_54 MOD 256
+ EQUB Line_58 MOD 256
+ EQUB Line_62 MOD 256
+ EQUB Line_66 MOD 256
+ EQUB Line_70 MOD 256
+ EQUB Line_74 MOD 256
+ EQUB Line_78 MOD 256
+ EQUB Line_82 MOD 256
+.Line_51
+ EQUB Line_54 DIV 256
+ EQUB Line_58 DIV 256
+ EQUB Line_62 DIV 256
+ EQUB Line_66 DIV 256
+ EQUB Line_70 DIV 256
+ EQUB Line_74 DIV 256
+ EQUB Line_78 DIV 256
+ EQUB Line_82 DIV 256
+]
+
+REM ** Engine Core 2: steep slope rendering loop(s)
+
+[OPT pass
+.Line_52
+ RTS                  ; symmetrical upward exit anchor for loops
+
+.Line_53
+ STA zp_error
+.Line_54
+ LDA (zp_scrn),Y      ; 1st pixel, bit 7
+.Line_55
+ ORA #&80             ; runtime self-modified opcode and operand field
+ STA (zp_scrn),Y
+ DEX                  ; all pixels drawn?
+ BEQ Line_52          ; exit
+.Line_56
+ INY                  ; modified via vertical y-step injection
+ LDA zp_error
+ SBC zp_dx
+ BCS Line_53          ; if error >= 0, remain(!) in bit position (leaves C=1)
+ ADC zp_dy            ; if error < 0, add |dy| (automatically sets C=1) ...
+
+.Line_57
+ STA zp_error         ; ... and fall through into next bit loop
+.Line_58
+ LDA (zp_scrn),Y      ; 2nd pixel, bit 6
+.Line_59
+ ORA #&40
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_52
+.Line_60
+ INY
+ LDA zp_error
+ SBC zp_dx
+ BCS Line_57
+ ADC zp_dy
+
+.Line_61
+ STA zp_error
+.Line_62
+ LDA (zp_scrn),Y      ; 3rd pixel, bit 5
+.Line_63
+ ORA #&20
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_52
+.Line_64
+ INY
+ LDA zp_error
+ SBC zp_dx
+ BCS Line_61
+ ADC zp_dy
+
+.Line_65
+ STA zp_error
+.Line_66
+ LDA (zp_scrn),Y      ; 4th pixel, bit 4
+.Line_67
+ ORA #&10
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_52          ; max. upward range boundary for steep core engine exit
+.Line_68
+ INY
+ LDA zp_error
+ SBC zp_dx
+ BCS Line_65
+ ADC zp_dy            ; ...
+
+.Line_69
+ STA zp_error         ; ... execution glides natively into the bottom segment
+.Line_70
+ LDA (zp_scrn),Y      ; 5th pixel, bit 3
+.Line_71
+ ORA #&08
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_85          ; max. downward range boundary for steep core engine exit
+.Line_72
+ INY
+ LDA zp_error
+ SBC zp_dx
+ BCS Line_69
+ ADC zp_dy
+
+.Line_73
+ STA zp_error
+.Line_74
+ LDA (zp_scrn),Y      ; 6th pixel, bit 2
+.Line_75
+ ORA #&04
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_85
+.Line_76
+ INY
+ LDA zp_error
+ SBC zp_dx
+ BCS Line_73
+ ADC zp_dy
+
+.Line_77
+ STA zp_error
+.Line_78
+ LDA (zp_scrn),Y      ; 7th pixel, bit 1
+.Line_79
+ ORA #&02
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_85
+.Line_80 
+ INY
+ LDA zp_error
+ SBC zp_dx
+ BCS Line_77
+ ADC zp_dy
+
+.Line_81
+ STA zp_error
+.Line_82
+ LDA (zp_scrn),Y      ; 8th pixel, bit 0
+.Line_83
+ ORA #&01
+ STA (zp_scrn),Y
+ DEX
+ BEQ Line_85
+.Line_84
+ INY
+ LDA zp_error
+ SBC zp_dx
+ BCS Line_81
+ ADC zp_dy
+
+ STA zp_error         ; explicitly store away error value
+
+ CLC                  ; horizontal column advance, skip 1 full character tile right
+ LDA zp_scrn
+ ADC #&C0
+ STA zp_scrn
+ LDA zp_scrn + 1
+ ADC #&00
+ STA zp_scrn + 1
+
+ SEC                  ; prime C=1 again for Bresenham operations
+ JMP Line_54          ; continue with 1st pixel, bit 7 (steep)
+
+.Line_85
+ RTS                  ; symmetrical downward exit anchor for loops
+
+.Line_86
+ EQUB (&1100 +  0*192) MOD 256
+ EQUB (&1100 +  1*192) MOD 256
+ EQUB (&1100 +  2*192) MOD 256
+ EQUB (&1100 +  3*192) MOD 256
+ EQUB (&1100 +  4*192) MOD 256
+ EQUB (&1100 +  5*192) MOD 256
+ EQUB (&1100 +  6*192) MOD 256
+ EQUB (&1100 +  7*192) MOD 256
+ EQUB (&1100 +  8*192) MOD 256
+ EQUB (&1100 +  9*192) MOD 256
+ EQUB (&1100 + 10*192) MOD 256
+ EQUB (&1100 + 11*192) MOD 256
+ EQUB (&1100 + 12*192) MOD 256
+ EQUB (&1100 + 13*192) MOD 256
+ EQUB (&1100 + 14*192) MOD 256
+ EQUB (&1100 + 15*192) MOD 256
+ EQUB (&1100 + 16*192) MOD 256
+ EQUB (&1100 + 17*192) MOD 256
+ EQUB (&1100 + 18*192) MOD 256
+ EQUB (&1100 + 19*192) MOD 256
+.Line_87
+ EQUB (&1100 +  0*192) DIV 256
+ EQUB (&1100 +  1*192) DIV 256
+ EQUB (&1100 +  2*192) DIV 256
+ EQUB (&1100 +  3*192) DIV 256
+ EQUB (&1100 +  4*192) DIV 256
+ EQUB (&1100 +  5*192) DIV 256
+ EQUB (&1100 +  6*192) DIV 256
+ EQUB (&1100 +  7*192) DIV 256
+ EQUB (&1100 +  8*192) DIV 256
+ EQUB (&1100 +  9*192) DIV 256
+ EQUB (&1100 + 10*192) DIV 256
+ EQUB (&1100 + 11*192) DIV 256
+ EQUB (&1100 + 12*192) DIV 256
+ EQUB (&1100 + 13*192) DIV 256
+ EQUB (&1100 + 14*192) DIV 256
+ EQUB (&1100 + 15*192) DIV 256
+ EQUB (&1100 + 16*192) DIV 256
+ EQUB (&1100 + 17*192) DIV 256
+ EQUB (&1100 + 18*192) DIV 256
+ EQUB (&1100 + 19*192) DIV 256
+]
+NEXT
+:
+OSCLI "Save code &"+STR$~code+" &"+STR$~O%

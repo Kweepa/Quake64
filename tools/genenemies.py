@@ -232,6 +232,34 @@ def clip_ranges(enemy: dict, nframes: int) -> list[tuple[str, int, int]]:
     return out
 
 
+def json_clip_ranges(enemy: dict, nframes: int) -> list[tuple[str, int, int]]:
+    out: list[tuple[str, int, int]] = []
+    for c in enemy.get("clips") or []:
+        start = int(c["start"])
+        length = int(c["len"])
+        if start >= nframes or length <= 0:
+            continue
+        length = min(length, nframes - start)
+        out.append((clip_key(c.get("name", "")), start, length))
+    return out
+
+
+def uncovered_runs(covered: list[bool]) -> list[tuple[int, int]]:
+    out: list[tuple[int, int]] = []
+    i = 0
+    n = len(covered)
+    while i < n:
+        if covered[i]:
+            i += 1
+            continue
+        j = i + 1
+        while j < n and not covered[j]:
+            j += 1
+        out.append((i, j - i))
+        i = j
+    return out
+
+
 def pick_keys(frs: list[list[int]], start: int, length: int, extra: tuple[int, ...] = ()) -> list[int]:
     if length <= 2:
         return []
@@ -276,7 +304,7 @@ def cadence_keep(start: int, length: int, keys: list[int]) -> set[int]:
 def pack_poses(
     gx: list[int], gy: list[int], gz: list[int], enemy: dict, nframes: int, type_i: int
 ) -> tuple[list[int], list[int], list[int], list[int], int]:
-    """Keep first/+2/keys/last per clip. pose_map: stored index or $FF (midpoint lerp)."""
+    """Keep first/+2/keys/last per clip (roles and leftover JSON clips). pose_map: stored or $FF."""
     frs = frames_xyz(gx, gy, gz, nframes)
     covered = [False] * nframes
     keep: set[int] = set()
@@ -287,9 +315,14 @@ def pack_poses(
         keep |= cadence_keep(start, length, pick_keys(frs, start, length, extra))
         for i in range(start, start + length):
             covered[i] = True
-    for i in range(nframes):
-        if not covered[i]:
-            keep.add(i)
+    for _name, start, length in json_clip_ranges(enemy, nframes):
+        if all(covered[start : start + length]):
+            continue
+        keep |= cadence_keep(start, length, pick_keys(frs, start, length))
+        for i in range(start, start + length):
+            covered[i] = True
+    for start, length in uncovered_runs(covered):
+        keep |= cadence_keep(start, length, pick_keys(frs, start, length))
     kept_sorted = sorted(keep)
     idx_of = {g: i for i, g in enumerate(kept_sorted)}
     pose_map = [idx_of[i] if i in idx_of else 0xFF for i in range(nframes)]

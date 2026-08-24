@@ -30,5 +30,5 @@ enemy_drop_type	!byte 7, $ff, $ff, $ff, 4, $ff, $ff
 enemy_fire_frame	!byte 2, 4, 4, 6, 4, 4, 8
 enemy_class		!byte 0, 0, 1, 0, 0, 0, 0
 ; Stored pose count (PRG header / gy stride). Clip tables stay logical.
-enemy_nframes	!byte 48, 54, 43, 32, 71, 70, 79
+enemy_nframes	!byte 48, 48, 40, 32, 60, 59, 63
 

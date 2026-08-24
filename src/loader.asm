@@ -243,6 +243,8 @@ load_map_enemies
 	sta enemy_gy_hi,x
 	sta enemy_gz_lo,x
 	sta enemy_gz_hi,x
+	sta pose_map_lo,x
+	sta pose_map_hi,x
 	inx
 	cpx #ENEMY_NTYPES
 	bcc .lme_z
@@ -287,14 +289,28 @@ load_map_enemies
 	sec
 	rts
 
-; dest in load_dest; type in load_type. Pose: [nframes][gx…][gy…][gz…]
+; dest in load_dest; type in load_type.
+; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…]
 patch_enemy_gx
+	lda load_dest
+	sta src_ptr
+	lda load_dest+1
+	sta src_ptr+1
 	ldy load_type
 	clc
 	lda load_dest
-	adc #1
-	sta enemy_gx_lo,y
+	adc #2
+	sta pose_map_lo,y
 	lda load_dest+1
+	adc #0
+	sta pose_map_hi,y
+	ldy #1
+	lda (src_ptr),y			; n_logical
+	ldy load_type
+	clc
+	adc pose_map_lo,y		; gx = dest+2+n_logical
+	sta enemy_gx_lo,y
+	lda pose_map_hi,y
 	adc #0
 	sta enemy_gx_hi,y
 	ldx enemy_nframes,y

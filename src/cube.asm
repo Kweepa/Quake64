@@ -138,6 +138,17 @@ ent_set_pose
 	adc enemy_death_start,y
 	tay
 .esp_off
+	; Y = logical global frame. pose_map (heap): packed index or $FF = midpoint lerp.
+	ldx ent_type
+	lda pose_map_lo,x
+	sta rot1
+	lda pose_map_hi,x
+	sta rot2
+	lda (rot1),y
+	bpl .esp_stored
+	jmp pose_lerp
+.esp_stored
+	tay
 	clc
 	lda gx_ptr
 	adc frame13_lo,y
@@ -159,6 +170,124 @@ ent_set_pose
 	lda gz_ptr+1
 	adc frame13_hi,y
 	sta gz_ptr+1
+	rts
+
+; Y = logical frame with pose_map[Y]=$FF. rot1/rot2 = pose_map ptr.
+; Neighbors Y-1 / Y+1 are stored. Average into pose_gx/gy/gz.
+pose_lerp
+	sty gidx
+	dey
+	lda (rot1),y
+	sta rot0				; left packed index
+	ldy gidx
+	iny
+	lda (rot1),y
+	sta gidx				; right packed index
+	ldx ent_type
+	ldy rot0
+	clc
+	lda enemy_gx_lo,x
+	adc frame13_lo,y
+	sta src_ptr
+	lda enemy_gx_hi,x
+	adc frame13_hi,y
+	sta src_ptr+1
+	ldy gidx
+	clc
+	lda enemy_gx_lo,x
+	adc frame13_lo,y
+	sta dst_ptr
+	lda enemy_gx_hi,x
+	adc frame13_hi,y
+	sta dst_ptr+1
+	ldy #0
+.plx
+	jsr pose_avg_y
+	sta pose_gx,y
+	iny
+	cpy #NVERTS
+	bcc .plx
+	ldy rot0
+	clc
+	lda enemy_gy_lo,x
+	adc frame13_lo,y
+	sta src_ptr
+	lda enemy_gy_hi,x
+	adc frame13_hi,y
+	sta src_ptr+1
+	ldy gidx
+	clc
+	lda enemy_gy_lo,x
+	adc frame13_lo,y
+	sta dst_ptr
+	lda enemy_gy_hi,x
+	adc frame13_hi,y
+	sta dst_ptr+1
+	ldy #0
+.ply
+	jsr pose_avg_y
+	sta pose_gy,y
+	iny
+	cpy #NVERTS
+	bcc .ply
+	ldy rot0
+	clc
+	lda enemy_gz_lo,x
+	adc frame13_lo,y
+	sta src_ptr
+	lda enemy_gz_hi,x
+	adc frame13_hi,y
+	sta src_ptr+1
+	ldy gidx
+	clc
+	lda enemy_gz_lo,x
+	adc frame13_lo,y
+	sta dst_ptr
+	lda enemy_gz_hi,x
+	adc frame13_hi,y
+	sta dst_ptr+1
+	ldy #0
+.plz
+	jsr pose_avg_y
+	sta pose_gz,y
+	iny
+	cpy #NVERTS
+	bcc .plz
+	lda #<pose_gx
+	sta gx_ptr
+	lda #>pose_gx
+	sta gx_ptr+1
+	lda #<pose_gy
+	sta gy_ptr
+	lda #>pose_gy
+	sta gy_ptr+1
+	lda #<pose_gz
+	sta gz_ptr
+	lda #>pose_gz
+	sta gz_ptr+1
+	rts
+
+; Signed (src+dst)>>1. Y = vert. X/Y preserved. nlo/nhi scratch.
+pose_avg_y
+	lda #0
+	sta nhi
+	lda (src_ptr),y
+	bpl +
+	dec nhi
++	clc
+	adc (dst_ptr),y
+	sta nlo
+	lda nhi
+	adc #0
+	sta nhi
+	lda (dst_ptr),y
+	bpl +
+	dec nhi
++	lda nhi
+	cmp #$80
+	ror nhi
+	ror nlo
+	lda nlo
 	rts
 
 ; Rotate one enemy instance at ent_wx/wy/wz, ent_rot, ent_type.

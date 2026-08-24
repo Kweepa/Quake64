@@ -167,7 +167,12 @@ box_vis_edges	= $061C			; 24
 box_vis_vert	= $0634			; 12
 room_pack_edges	= $0640			; 64
 room_pack_vert	= $0680			; 32
-; next free $06A0
+pose_gx		= $06A0			; 13 — lerp scratch (ent_set_pose)
+pose_gy		= $06AD			; 13
+pose_gz		= $06BA			; 13
+pose_map_lo	= $06C7			; 7 — patched at pose load (logical → packed)
+pose_map_hi	= $06CE			; 7
+; next free $06D5
 
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.

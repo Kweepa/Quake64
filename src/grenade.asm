@@ -27,7 +27,7 @@ gren_alloc
 	sec
 	rts
 
-; A = yaw. X = slot. 45°: |h|=|v|=GREN_SPEED.
+; A = yaw. X = slot. Horizontal GREN_SPEED, upward GREN_SPEED_Y.
 gren_set_vel
 	stx obj_i
 	sta rot2
@@ -47,7 +47,7 @@ gren_set_vel
 	sta gr_vzh,x
 	lda #0
 	sta gr_vzl,x
-	lda #GREN_SPEED
+	lda #GREN_SPEED_Y
 	sta gr_vyh,x
 	lda #0
 	sta gr_vyl,x
@@ -82,46 +82,24 @@ gren_fill_slot
 	lda rot2
 	jmp gren_set_vel
 
-; A signed → nlo:nhi = A<<1
-gren_s8asl1
-	sta nlo
-	lda #0
-	bit nlo
-	bpl +
-	lda #$ff
-+
-	sta nhi
-	asl nlo
-	rol nhi
-	rts
-
+; Player center: cam xz, Y = feet + 2 (eye − (EYE_HEIGHT − 2)).
 spawn_player_grenade
 	jsr gren_alloc
 	bcc .spg_rts
 	stx obj_i
-	ldy yaw
-	lda SINTAB,y
-	jsr gren_s8asl1
-	clc
 	lda cam_xl
-	adc nlo
 	sta org_xl
 	lda cam_xh
-	adc nhi
 	sta org_xh
-	ldy yaw
-	lda COSTAB,y
-	jsr gren_s8asl1
-	clc
 	lda cam_zl
-	adc nlo
 	sta org_zl
 	lda cam_zh
-	adc nhi
 	sta org_zh
 	lda cam_yl
 	sta org_yl
 	lda cam_yh
+	sec
+	sbc #EYE_HEIGHT - 2
 	sta org_yh
 	ldx obj_i
 	lda room_idx

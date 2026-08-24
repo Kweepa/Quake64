@@ -1716,10 +1716,49 @@ axe_try_kill
 	rts
 
 ; ------------------------------------------------------------------
-; Super shotgun: screen-aim hit. Mid-body project → |sx−CX|≤SHOT_HIT_X,
-; damage = SHOT_DMG_MAX − (z>>2), min 1, for z in 0..SHOT_Z_MAX-1.
+; Hitscan: mid-body project → |sx−CX|≤scan_hit_x (and |sy−64| if
+; scan_hit_y≠$ff). dmg = scan_dmg_max − (z>>2), min 1, z in 0..SHOT_Z_MAX-1.
+; scan_dmg_all=1: every cone hit (SSG). =0: closest only (nail).
 ; Blood splat on closest hit; col_line wall splat on miss.
 shotgun_hitscan
+	lda #SHOT_HIT_X
+	sta scan_hit_x
+	lda #$ff
+	sta scan_hit_y
+	lda #SHOT_DMG_MAX
+	sta scan_dmg_max
+	lda #1
+	sta scan_dmg_all
+	lda #15
+	sta scan_jx_mask
+	lda #8
+	sta scan_jx_bias
+	lda #7
+	sta scan_jy_mask
+	lda #4
+	sta scan_jy_bias
+	jmp gun_hitscan
+
+nailgun_hitscan
+	lda #NAIL_HIT_X
+	sta scan_hit_x
+	lda #NAIL_HIT_Y
+	sta scan_hit_y
+	lda #NAIL_DMG_MAX
+	sta scan_dmg_max
+	lda #0
+	sta scan_dmg_all
+	lda #3
+	sta scan_jx_mask
+	lda #2
+	sta scan_jx_bias
+	lda #3
+	sta scan_jy_mask
+	lda #2
+	sta scan_jy_bias
+	jmp gun_hitscan
+
+gun_hitscan
 	lda #$ff
 	sta shot_hit_i
 	sta shot_hit_z
@@ -1794,7 +1833,8 @@ shotgun_hitscan
 .sh_proj
 	jsr project_cam0_screen
 	bcc .sh_n
-	; |sx − SCREEN_CX| ≤ SHOT_HIT_X
+	sty rot1				; sy
+	; |sx − SCREEN_CX| ≤ scan_hit_x
 	sec
 	sbc #SCREEN_CX
 	bpl .sh_xabs
@@ -1802,21 +1842,41 @@ shotgun_hitscan
 	clc
 	adc #1
 .sh_xabs
-	cmp #SHOT_HIT_X + 1
+	cmp scan_hit_x
+	beq .sh_xok
 	bcs .sh_n
-	; dmg = SHOT_DMG_MAX − (z >> 2), min 1
+.sh_xok
+	lda scan_hit_y
+	cmp #$ff
+	beq .sh_cone
+	lda rot1
+	sec
+	sbc #64
+	bpl .sh_yabs
+	eor #$ff
+	clc
+	adc #1
+.sh_yabs
+	cmp scan_hit_y
+	beq .sh_cone
+	bcs .sh_n
+.sh_cone
+	; dmg = scan_dmg_max − (z >> 2), min 1
+	lda scan_dmg_all
+	beq .sh_track
 	lda gidx
 	lsr
 	lsr
 	eor #$ff
 	sec
-	adc #SHOT_DMG_MAX
+	adc scan_dmg_max
 	bne .sh_do
 	lda #1
 .sh_do
 	ldx enemy_idx
 	jsr damage_enemy
 	ldx enemy_idx
+.sh_track
 	lda shot_hit_i
 	cmp #$ff
 	beq .sh_set
@@ -1824,6 +1884,7 @@ shotgun_hitscan
 	cmp shot_hit_z
 	bcs .sh_n
 .sh_set
+	ldx enemy_idx
 	stx shot_hit_i
 	lda gidx
 	sta shot_hit_z
@@ -1835,6 +1896,21 @@ shotgun_hitscan
 	lda shot_hit_i
 	cmp #$ff
 	beq .sh_miss
+	lda scan_dmg_all
+	bne .sh_splat
+	lda shot_hit_z
+	lsr
+	lsr
+	eor #$ff
+	sec
+	adc scan_dmg_max
+	bne .sh_cd
+	lda #1
+.sh_cd
+	ldx shot_hit_i
+	stx enemy_idx
+	jsr damage_enemy
+.sh_splat
 	jsr shotgun_hit_splat
 	jmp .sh_out
 .sh_miss
@@ -1863,7 +1939,7 @@ shotgun_hit_splat
 	bcc .shs_rts
 	ldx CAM_ZH				; view depth → EMUZ_Z* LOD
 	stx rot0
-	jsr splat_aim_jitter			; A/Y = projected ±8/±4
+	jsr splat_aim_jitter			; A/Y = projected ±jitter
 	sta rot2
 	lda #COL_SPLAT_HIT
 	sta splat_col
@@ -1929,7 +2005,7 @@ shotgun_miss_splat
 	stx rot0				; view depth → EMUZ_Z* LOD
 	lda #SCREEN_CX
 	ldy #64				; viewport centre = look
-	jsr splat_aim_jitter			; A/Y = centre ±8/±4
+	jsr splat_aim_jitter			; A/Y = centre ±jitter
 	sta rot2
 	lda col_line
 	sta splat_col
@@ -1939,15 +2015,15 @@ shotgun_miss_splat
 .sms_rts
 	rts
 
-; A/Y = base sx/sy → A/Y = base ±8 X / ±4 Y, clamped to viewport.
+; A/Y = base sx/sy → A/Y = base ±scan_j* jitter, clamped to viewport.
 splat_aim_jitter
 	sta rot2
 	tya
 	pha
 	jsr rnd8
-	and #15
+	and scan_jx_mask
 	sec
-	sbc #8
+	sbc scan_jx_bias
 	clc
 	adc rot2
 	bpl .saj_sx1
@@ -1962,9 +2038,9 @@ splat_aim_jitter
 	pla
 	sta rot1
 	jsr rnd8
-	and #7
+	and scan_jy_mask
 	sec
-	sbc #4
+	sbc scan_jy_bias
 	clc
 	adc rot1
 	tay

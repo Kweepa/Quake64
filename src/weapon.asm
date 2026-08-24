@@ -595,6 +595,7 @@ fire_shot
 	jmp start_recoil
 
 .fs_nail
+	jsr nailgun_hitscan
 	lda #POSE_FIRE
 	sta wpn_pose
 	ldx mg_frame

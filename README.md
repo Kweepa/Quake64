@@ -32,7 +32,7 @@ They run a room-scoped state machine (idle / patrol / alert / approach / attack 
 
 Yaw is rolled(!) into the world rotation to avoid a double rotate. Perspective and rotation use 8-bit **log / antilog LUTs** (`alog(log|x| + log|cos θ|)`).
 
-**Axe** is melee. **Super shotgun** is a hitscan with range falloff, blood on a hit and a wall splat on a miss. **Nailgun** is the sprites and ammo; the projectile is still to come. **Grenade launcher** throws a bouncing grenade (player and ogre) with splash damage. The blast is a half-dome of charset pixels: six unique directions, the other three quadrants filled with 90° Y rotates.
+**Axe** is melee. **Super shotgun** is a hitscan with range falloff, blood on a hit and a wall splat on a miss. **Nailgun** is a tighter hitscan (smaller cone, lower damage, same LOS / splat path). **Grenade launcher** throws a bouncing grenade (player and ogre) with splash damage. The blast is a half-dome of charset pixels: six unique directions, the other three quadrants filled with 90° Y rotates.
 
 The player weapon is **four hardware sprites** in a 2×2 grid, plus extra sprites for muzzle flash, enemy muzzle, and impact splat. Unplotted sprite pixels stay transparent so world lines show through the gun; bob and recoil are sprite x,y offsets.
 

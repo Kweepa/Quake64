@@ -2332,6 +2332,14 @@ try_bite_splat
 	bcc .tbs_rest
 	ldx CAM_ZH
 	stx rot0
+	lda #15
+	sta scan_jx_mask
+	lda #8
+	sta scan_jx_bias
+	lda #7
+	sta scan_jy_mask
+	lda #4
+	sta scan_jy_bias
 	jsr splat_aim_jitter
 	sta rot2
 	lda #COL_SPLAT_HIT

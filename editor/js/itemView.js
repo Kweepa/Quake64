@@ -712,6 +712,24 @@ export class ItemView {
     }
   }
 
+  #drawForwardArrow(ctx, cam, w, h) {
+    const y = 0.15;
+    const tipZ = ITEM_MAX;
+    const barbZ = ITEM_MAX - 1.2;
+    const tip = { x: 0, y, z: tipZ };
+    const col = "#d4a017";
+    this.#strokeSeg(ctx, cam, w, h, { x: 0, y, z: 0 }, tip, col, 2.5);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: 0.9, y, z: barbZ }, col, 2);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: -0.9, y, z: barbZ }, col, 2);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: 0, y: 1.05, z: barbZ }, col, 2);
+    const label = projectPoint({ x: 0, y: 0.55, z: tipZ + 0.6 }, cam, w, h);
+    if (label.ok) {
+      ctx.fillStyle = col;
+      ctx.font = "11px Segoe UI, sans-serif";
+      ctx.fillText("fwd", label.sx - 10, label.sy);
+    }
+  }
+
   draw() {
     if (!this.enabled) return;
     const ctx = this.ctx;
@@ -786,6 +804,7 @@ export class ItemView {
     this.#strokeSeg(ctx, cam, w, h, { x: lo, y: 0, z: 0 }, { x: hi, y: 0, z: 0 }, "#a66", 2);
     this.#strokeSeg(ctx, cam, w, h, o, { x: 0, y: hi, z: 0 }, "#6a6", 2);
     this.#strokeSeg(ctx, cam, w, h, { x: 0, y: 0, z: lo }, { x: 0, y: 0, z: hi }, "#66a", 2);
+    this.#drawForwardArrow(ctx, cam, w, h);
 
     let shownVerts = this.selectedVerts;
     if (this.drag?.kind === "box") {

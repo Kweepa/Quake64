@@ -8466,6 +8466,7 @@ class ItemView {
       this.drag.last = p;
       this.orbit.yaw += dx * 0.01;
       this.orbit.pitch = Math.max(-1.2, Math.min(1.2, this.orbit.pitch - dy * 0.01));
+      this.opts.onViewChanged?.();
       this.draw();
       return;
     }
@@ -8480,6 +8481,7 @@ class ItemView {
       t.x += (-right.x * dx + up.x * dy) * scale;
       t.y += (-right.y * dx + up.y * dy) * scale;
       t.z += (-right.z * dx + up.z * dy) * scale;
+      this.opts.onViewChanged?.();
       this.draw();
       return;
     }
@@ -8489,6 +8491,7 @@ class ItemView {
       this.drag.last = p;
       const delta = dx + dy;
       if (delta) this.orbit.dist = clampItemDist(this.orbit.dist * Math.exp(-delta * ITEM_ZOOM_K));
+      this.opts.onViewChanged?.();
       this.draw();
       return;
     }
@@ -8603,6 +8606,24 @@ class ItemView {
     }
   }
 
+  #drawForwardArrow(ctx, cam, w, h) {
+    const y = 0.15;
+    const tipZ = ITEM_MAX;
+    const barbZ = ITEM_MAX - 1.2;
+    const tip = { x: 0, y, z: tipZ };
+    const col = "#d4a017";
+    this.#strokeSeg(ctx, cam, w, h, { x: 0, y, z: 0 }, tip, col, 2.5);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: 0.9, y, z: barbZ }, col, 2);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: -0.9, y, z: barbZ }, col, 2);
+    this.#strokeSeg(ctx, cam, w, h, tip, { x: 0, y: 1.05, z: barbZ }, col, 2);
+    const label = projectPoint({ x: 0, y: 0.55, z: tipZ + 0.6 }, cam, w, h);
+    if (label.ok) {
+      ctx.fillStyle = col;
+      ctx.font = "11px Segoe UI, sans-serif";
+      ctx.fillText("fwd", label.sx - 10, label.sy);
+    }
+  }
+
   draw() {
     if (!this.enabled) return;
     const ctx = this.ctx;
@@ -8677,6 +8698,7 @@ class ItemView {
     this.#strokeSeg(ctx, cam, w, h, { x: lo, y: 0, z: 0 }, { x: hi, y: 0, z: 0 }, "#a66", 2);
     this.#strokeSeg(ctx, cam, w, h, o, { x: 0, y: hi, z: 0 }, "#6a6", 2);
     this.#strokeSeg(ctx, cam, w, h, { x: 0, y: 0, z: lo }, { x: 0, y: 0, z: hi }, "#66a", 2);
+    this.#drawForwardArrow(ctx, cam, w, h);
 
     let shownVerts = this.selectedVerts;
     if (this.drag?.kind === "box") {
@@ -8745,7 +8767,8 @@ let selectedVerts = [];
 let dirty = false;
 let saving = false;
 let autosaveTimer = null;
-let editorSaveTimer = null;
+let editorSaveRaf = 0;
+let editorSettingsReady = false;
 let applyingEditor = false;
 let undoStack = [];
 let redoStack = [];
@@ -9019,7 +9042,7 @@ document.addEventListener("focusout", () => {
 });
 
 function markUi() {
-  if (applyingEditor) return;
+  if (applyingEditor || !editorSettingsReady) return;
   schedulePersistEditor();
 }
 
@@ -9064,15 +9087,21 @@ function collectEditorState() {
 }
 
 function persistEditorSettings() {
+  if (!editorSettingsReady) return;
+  if (editorSaveRaf) {
+    cancelAnimationFrame(editorSaveRaf);
+    editorSaveRaf = 0;
+  }
   saveEditorSettings(docFileName(), collectEditorState());
 }
 
 function schedulePersistEditor() {
-  if (editorSaveTimer) clearTimeout(editorSaveTimer);
-  editorSaveTimer = setTimeout(() => {
-    editorSaveTimer = null;
+  if (!editorSettingsReady || applyingEditor) return;
+  if (editorSaveRaf) return;
+  editorSaveRaf = requestAnimationFrame(() => {
+    editorSaveRaf = 0;
     persistEditorSettings();
-  }, 250);
+  });
 }
 
 function applyEditorState(ed) {
@@ -9784,7 +9813,7 @@ function renderItemList() {
       itemMeshKey = key;
       if (!doc.items[key]) doc.items[key] = { verts: [], lines: [] };
       itemView.clearSelection();
-      markUi();
+      persistEditorSettings();
       refreshAll();
     });
     li.appendChild(btn);
@@ -11256,6 +11285,7 @@ function applyLoadedDoc(loaded) {
   const stored = loadEditorSettings(docFileName());
   applyEditorState(stored || loaded.editor || doc.editor);
   if (doc.editor) delete doc.editor;
+  editorSettingsReady = true;
   persistEditorSettings();
   clearUndoHistory();
   markClean();

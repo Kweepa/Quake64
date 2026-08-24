@@ -55,7 +55,7 @@ nail_fr_lo
 nail_fr_hi
 	!byte >spr_nail_1, >spr_nail_2
 nail_flash_en
-	!byte $10, $20			; sprite 4 left, sprite 5 right
+	!byte FLASH_EN_L, FLASH_EN_R	; sprite 4 left, sprite 5 right
 
 emuz_spr_lo
 	!byte <spr_emuz_0, <spr_emuz_1, <spr_emuz_2
@@ -157,7 +157,7 @@ init_weapon_hw
 	cpx #8				; body 0–3, flash 4–5, emuz 6, splat 7
 	bcc .iw_ptr
 
-	; nail R bitmap stays in slot 5
+	; nail R bitmap stays in WPN_FLASH2
 	lda #<spr_nail_fr
 	ldy #>spr_nail_fr
 	jsr blit_flash2
@@ -224,7 +224,7 @@ setup_weapon
 	ldx cur_weapon
 	lda wpn_body_lo,x
 	ldy wpn_body_hi,x
-	jsr blit256
+	jsr blit_n
 	ldx cur_weapon
 	lda wpn_flash4_lo,x
 	ldy wpn_flash4_hi,x
@@ -248,87 +248,158 @@ setup_weapon
 	sta wpn_y
 	rts
 
-; A = src lo, Y = src hi → WPN_RAM (256)
-blit256
-	sta .b256 + 1
-	sty .b256 + 2
+; A = src lo, Y = src hi → WPN_RAM, wpn_body_n[cur_weapon] bytes (0 = 256)
+blit_n
+	sta .bn + 1
+	sty .bn + 2
+	ldx cur_weapon
+	lda wpn_body_n,x
+	sta .bnlim + 1
 	ldx #0
-.b256
+.bn
 	lda $ffff,x
 	sta WPN_RAM,x
 	inx
-	bne .b256
+.bnlim
+	cpx #0
+	bne .bn
 	rts
 
-; A = src lo, Y = src hi → WPN_FLASH (64)
-blit_flash
-	sta .bf4 + 1
-	sty .bf4 + 2
-	ldx #0
-.bf4
-	lda $ffff,x
-	sta WPN_FLASH,x
+; A = src lo, Y = src hi → unpack zeromask into dest (set by wrappers).
+; Packed: 8-byte mask at src+0, nonzero payload at src+8. Y indexes mask only.
+unpack_fx
+	sta .us + 1
+	clc
+	adc #8
+	sta .us2 + 1
+	tya
+	sta .us + 2
+	adc #0
+	sta .us2 + 2
+	lda #0
+	tax
+.uclr
+.ud0
+	sta $ffff,x
 	inx
 	cpx #64
-	bcc .bf4
+	bne .uclr
+	ldy #0
+	ldx #0
+.umask
+.us	lda $ffff,y
+	iny
+	sta wpn_tmp0
+	lda #8
+.ubit
+	lsr wpn_tmp0
+	bcc .uz
+	pha
+.us2	lda $ffff
+	inc .us2 + 1
+	bne .ud1
+	inc .us2 + 2
+.ud1	sta $ffff,x
+	pla
+.uz
+	inx
+	sec
+	sbc #1
+	bne .ubit
+	cpx #64
+	bcc .umask
 	rts
+
+set_unpack_dst
+	sta .ud0 + 1
+	sta .ud1 + 1
+	sty .ud0 + 2
+	sty .ud1 + 2
+	rts
+
+; A = src lo, Y = src hi → WPN_FLASH (64, zeromask)
+blit_flash
+	pha
+	tya
+	pha
+	lda #<WPN_FLASH
+	ldy #>WPN_FLASH
+	jsr set_unpack_dst
+	pla
+	tay
+	pla
+	jmp unpack_fx
 
 blit_flash2
-	sta .bf5 + 1
-	sty .bf5 + 2
-	ldx #0
-.bf5
-	lda $ffff,x
-	sta WPN_FLASH2,x
-	inx
-	cpx #64
-	bcc .bf5
-	rts
+	pha
+	tya
+	pha
+	lda #<WPN_FLASH2
+	ldy #>WPN_FLASH2
+	jsr set_unpack_dst
+	pla
+	tay
+	pla
+	jmp unpack_fx
 
-; A = src lo, Y = src hi → WPN_EMUZ (64)
+; A = src lo, Y = src hi → WPN_EMUZ (64, zeromask)
 blit_emuz
-	sta .be6 + 1
-	sty .be6 + 2
-	ldx #0
-.be6
-	lda $ffff,x
-	sta WPN_EMUZ,x
-	inx
-	cpx #64
-	bcc .be6
-	rts
+	pha
+	tya
+	pha
+	lda #<WPN_EMUZ
+	ldy #>WPN_EMUZ
+	jsr set_unpack_dst
+	pla
+	tay
+	pla
+	jmp unpack_fx
 
-; A = src lo, Y = src hi → WPN_SPLAT (64)
+; A = src lo, Y = src hi → WPN_SPLAT (64, zeromask)
 blit_splat
-	sta .bs7 + 1
-	sty .bs7 + 2
-	ldx #0
-.bs7
-	lda $ffff,x
-	sta WPN_SPLAT,x
-	inx
-	cpx #64
-	bcc .bs7
-	rts
+	pha
+	tya
+	pha
+	lda #<WPN_SPLAT
+	ldy #>WPN_SPLAT
+	jsr set_unpack_dst
+	pla
+	tay
+	pla
+	jmp unpack_fx
+
+wpn_slot_base
+	!byte 0, 4, 8, 12
 
 ; IRQ (I/O on): weapon/muzzle/splat XY, $d015, $d010.
 apply_xy
 	lda #0
 	sta $d010
+	ldy #0				; slot 0..3
+.axy_slot
+	ldx cur_weapon
+	tya
+	clc
+	adc wpn_slot_base,x
+	tax				; dx/dy index
 	lda wpn_x
-	sta $d000
-	sta $d004
 	clc
-	adc #WPN_COL
-	sta $d002
-	sta $d006
+	adc wpn_dx,x
+	pha
 	lda wpn_y
-	sta $d001
-	sta $d003
 	clc
-	adc #WPN_ROW
-	sta $d005
-	sta $d007
+	adc wpn_dy,x
+	pha				; Y
+	tya
+	asl
+	tax				; VIC pair (sprites 0–3)
+	pla
+	sta $d001,x
+	pla
+	sta $d000,x
+	iny
+	cpy #4
+	bcc .axy_slot
 	lda cur_weapon
 	bne .axy_fl
 	lda flash_phase
@@ -336,14 +407,15 @@ apply_xy
 .axy_fl
 	jsr place_flash
 apply_en
-	lda #$0f
+	ldx cur_weapon
+	lda wpn_body_en,x
 	ldx flash_phase
 	beq .ae4
-	ora #$10
+	ora #FLASH_EN_L
 .ae4
 	ldx flash5_phase
 	beq .ae5
-	ora #$20
+	ora #FLASH_EN_R
 .ae5
 	ldx emuz_on
 	beq .ae6
@@ -383,9 +455,9 @@ place_flash
 	sta $d00b
 	rts
 
-; A = $10 sprite 4, $20 sprite 5. Other side's fade is left running.
+; A = FLASH_EN_L sprite 4, FLASH_EN_R sprite 5. Other side's fade is left running.
 start_flash
-	cmp #$20
+	cmp #FLASH_EN_R
 	beq .sf5
 	lda #1
 	sta flash_phase
@@ -518,7 +590,7 @@ fire_shot
 	bne .fs_flash
 	jsr spawn_player_grenade
 .fs_flash
-	lda #$10
+	lda #FLASH_EN_L
 	jsr start_flash
 	jmp start_recoil
 
@@ -528,7 +600,7 @@ fire_shot
 	ldx mg_frame
 	lda nail_fr_lo,x
 	ldy nail_fr_hi,x
-	jsr blit256
+	jsr blit_n
 	ldx mg_frame
 	lda nail_flash_en,x
 	jsr start_flash
@@ -588,7 +660,7 @@ nail_idle
 	ldx #WPN_NAIL
 	lda wpn_body_lo,x
 	ldy wpn_body_hi,x
-	jsr blit256
+	jsr blit_n
 	ldx #WPN_NAIL
 	lda wpn_idle_x,x
 	sta wpn_x
@@ -635,7 +707,7 @@ axe_apply_step
 	lda wpn_tmp0
 	and #AXE_F_SPARK
 	beq .aas_rts
-	lda #$10
+	lda #FLASH_EN_L
 	jsr start_flash
 .aas_rts
 	rts
@@ -659,7 +731,7 @@ wpn_to_idle
 	bne .ti_xy
 	lda wpn_body_lo,x
 	ldy wpn_body_hi,x
-	jsr blit256
+	jsr blit_n
 	ldx cur_weapon
 .ti_xy
 	rts
@@ -765,7 +837,7 @@ flash5_expired
 ; Blit + stage; IRQ apply_xy pokes VIC.
 ; Sprite top-left at tip −12/−10; LOD 0..2 from distance; colour = col_fx.
 start_enemy_muzzle
-	sta wpn_tmp0			; tip sx
+	pha				; tip sx (unpack_fx uses wpn_tmp0)
 	tya
 	pha				; tip sy
 	; distance LOD from tip view-z high (0 near … 2 far)
@@ -783,9 +855,14 @@ start_enemy_muzzle
 	lda emuz_spr_lo,x
 	ldy emuz_spr_hi,x
 	jsr blit_emuz
-	; VIC X = sx − 12 + VIEW_SPR_X0 (= sx + 76)
+	; VIC Y = sy − 10 + VIEW_SPR_Y0 (= sy + 112)
+	pla
 	clc
-	lda wpn_tmp0
+	adc #VIEW_SPR_Y0 - EMUZ_OY
+	sta emuz_vy
+	; VIC X = sx − 12 + VIEW_SPR_X0 (= sx + 76)
+	pla
+	clc
 	adc #VIEW_SPR_X0 - EMUZ_OX
 	sta emuz_vx
 	lda #0
@@ -793,11 +870,6 @@ start_enemy_muzzle
 	lda #EMUZ_MSB
 .sem_xlo
 	sta emuz_xmsb
-	; VIC Y = sy − 10 + VIEW_SPR_Y0 (= sy + 112)
-	pla
-	clc
-	adc #VIEW_SPR_Y0 - EMUZ_OY
-	sta emuz_vy
 	lda col_fx
 	sta emuz_col
 	lda emuz_on
@@ -860,7 +932,7 @@ tick_enemy_muzzle
 ; A = tip viewport sx, Y = tip viewport sy, X = depth (EMUZ_Z0/Z1 bands).
 ; Colour in splat_col. Sprite top-left at tip −12/−10.
 start_splat
-	sta wpn_tmp0			; tip sx
+	pha				; tip sx (unpack_fx uses wpn_tmp0)
 	tya
 	pha				; tip sy
 	txa					; depth → LOD 0..2 (same thresholds as emuz)
@@ -875,9 +947,14 @@ start_splat
 	lda splat_spr_lo,x
 	ldy splat_spr_hi,x
 	jsr blit_splat
-	; VIC X = sx − 12 + VIEW_SPR_X0 (= sx + 76)
+	; VIC Y = sy − 10 + VIEW_SPR_Y0 (= sy + 112)
+	pla
 	clc
-	lda wpn_tmp0
+	adc #VIEW_SPR_Y0 - EMUZ_OY
+	sta splat_vy
+	; VIC X = sx − 12 + VIEW_SPR_X0 (= sx + 76)
+	pla
+	clc
 	adc #VIEW_SPR_X0 - EMUZ_OX
 	sta splat_vx
 	lda #0
@@ -885,11 +962,6 @@ start_splat
 	lda #SPLAT_MSB
 .ssp_xlo
 	sta splat_xmsb
-	; VIC Y = sy − 10 + VIEW_SPR_Y0 (= sy + 112)
-	pla
-	clc
-	adc #VIEW_SPR_Y0 - EMUZ_OY
-	sta splat_vy
 	lda #1
 	sta splat_on
 	sta splat_skip

@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """Pack cleaned view-model PNGs → src/weapon_spr.asm (+ optional contact sheet).
 
-Editor exports {key}_{frame}.png. Copy to {key}_{frame}_edit.png and clean those.
-This script reads those _edit files plus 24×21 flash/spark PNGs.
+Occupancy is measured on the 48×42 `*_N_edit.png` files (not packed asm).
+
+    axe   TL (14,0)  BL (13,21)  mid-right (24,8)     → 3 cells
+    shot  stacked 24-wide at x=13 (edit ink 13..36)   → 2 cells
+    gren  top-mid (12,0) BL (0,21) BR (24,21)         → 3 cells
+    nail  full 2×2 on frames 0,1,2                    → 4 cells each
+
+Flashes are occupancy-masked (8-byte mask + nonzero bytes).
 
     python tools/genweapons.py
 """
@@ -11,22 +17,36 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+
+from sprmask import (  # noqa: E402
+    CELL,
+    H,
+    W,
+    bchunk,
+    blit_cell,
+    leftover_ink,
+    load_png_1bit,
+    pack_24x21,
+    pack_window,
+    pack_zeromask,
+    parse_label_bytes,
+    unpack_2x2,
+    unpack_zeromask,
+)
+
 DOC = ROOT / "editor" / "quake64.json"
 PNG_DIR = ROOT / "assets" / "weapons"
 OUT = ROOT / "src" / "weapon_spr.asm"
 SHEET = PNG_DIR / "sheet.png"
 
 AXE_KEY = "axe"
-W = 48
-H = 42
-FW = 24
-FH = 21
 EDIT_RE = re.compile(r"^([a-z0-9]+)_(\d+)_edit\.png$", re.I)
 
-# 24×21 muzzle / spark overlays (not editor view-models)
 FLASHES = [
     ("muzzle_flash.png", "spr_muzzle"),
     ("axe_flash.png", "spr_spark"),
@@ -34,86 +54,13 @@ FLASHES = [
     ("nail_flash_right.png", "spr_nail_fr"),
 ]
 
-
-def bchunk(data: list[int], width: int = 16) -> str:
-    lines = []
-    for i in range(0, len(data), width):
-        chunk = data[i : i + width]
-        lines.append("\t!byte " + ",".join(f"${b:02x}" for b in chunk))
-    return "\n".join(lines) + "\n"
-
-
-def pack_48x42(pix: list[list[int]]) -> list[int]:
-    out = [0] * 256
-
-    def blit(spr: int, ox: int, oy: int) -> None:
-        base = spr * 64
-        for y in range(21):
-            for col in range(3):
-                b = 0
-                for bit in range(8):
-                    if pix[oy + y][ox + col * 8 + bit]:
-                        b |= 0x80 >> bit
-                out[base + y * 3 + col] = b
-
-    blit(0, 0, 0)
-    blit(1, 24, 0)
-    blit(2, 0, 21)
-    blit(3, 24, 21)
-    return out
-
-
-def pack_24x21(pix: list[list[int]]) -> list[int]:
-    out = [0] * 64
-    for y in range(FH):
-        for col in range(3):
-            b = 0
-            for bit in range(8):
-                if pix[y][col * 8 + bit]:
-                    b |= 0x80 >> bit
-            out[y * 3 + col] = b
-    return out
-
-
-def unpack_48x42(data: list[int]) -> list[list[int]]:
-    pix = [[0] * W for _ in range(H)]
-
-    def blit(spr: int, ox: int, oy: int) -> None:
-        base = spr * 64
-        for y in range(21):
-            for col in range(3):
-                b = data[base + y * 3 + col]
-                for bit in range(8):
-                    if b & (0x80 >> bit):
-                        pix[oy + y][ox + col * 8 + bit] = 1
-
-    blit(0, 0, 0)
-    blit(1, 24, 0)
-    blit(2, 0, 21)
-    blit(3, 24, 21)
-    return pix
-
-
-def _threshold_rgb(im) -> list[list[int]]:
-    pix = [[0] * im.size[0] for _ in range(im.size[1])]
-    src = im.load()
-    for y in range(im.size[1]):
-        for x in range(im.size[0]):
-            r, g, b = src[x, y][:3]
-            if r > 16 or g > 16 or b > 16:
-                pix[y][x] = 1
-    return pix
-
-
-def load_png(path: Path, width: int, height: int) -> list[list[int]]:
-    try:
-        from PIL import Image
-    except ImportError as e:
-        raise SystemExit("Pillow is required: pip install Pillow") from e
-    im = Image.open(path).convert("RGB")
-    if im.size != (width, height):
-        raise SystemExit(f"{path.name}: expected {width}x{height}, got {im.size[0]}x{im.size[1]}")
-    return _threshold_rgb(im)
+# Weapon order in tables: axe, shot, nail, gren
+WINDOWS = {
+    "axe": [(14, 0), (13, 21), (24, 8)],
+    "shot2": [(13, 0), (13, 21)],
+    "nail": [(0, 0), (24, 0), (0, 21), (24, 21)],
+    "rock": [(12, 0), (0, 21), (24, 21)],
+}
 
 
 def glob_edit_frames(key: str) -> list[int]:
@@ -148,27 +95,61 @@ def item_frames(weapons: dict, key: str) -> list[int]:
     return [0]
 
 
-def load_item_sprites(key: str, frames: list[int]) -> list[list[int]]:
-    packed = []
-    for fi in frames:
-        path = PNG_DIR / f"{key}_{fi}_edit.png"
-        if not path.is_file():
-            raise SystemExit(f"missing {path.relative_to(ROOT)} (copy the export to *_edit.png and clean it)")
-        packed.append(pack_48x42(load_png(path, W, H)))
-    return packed
+def edit_png(key: str, frame: int) -> Path:
+    return PNG_DIR / f"{key}_{frame}_edit.png"
 
 
-def load_flashes() -> list[tuple[str, list[int]]]:
-    out: list[tuple[str, list[int]]] = []
-    for name, label in FLASHES:
-        path = PNG_DIR / name
-        if not path.is_file():
-            raise SystemExit(f"missing {path.relative_to(ROOT)}")
-        out.append((label, pack_24x21(load_png(path, FW, FH))))
-    return out
+def pix_from_png(key: str, frame: int) -> list[list[int]] | None:
+    path = edit_png(key, frame)
+    if path.is_file():
+        return load_png_1bit(path, W, H)
+    return None
 
 
-def write_sheet(rows: list[list[tuple[str, list[int]]]]) -> None:
+def pix_from_asm(label: str, windows: list[tuple[int, int]]) -> list[list[int]]:
+    raw = parse_label_bytes(OUT, label)
+    if len(raw) >= 256:
+        return unpack_2x2(raw[:256])
+    n = len(windows)
+    if len(raw) < n * CELL:
+        raise SystemExit(f"{label}: expected {n * CELL} occupancy bytes, got {len(raw)}")
+    pix = [[0] * W for _ in range(H)]
+    for i, (ox, oy) in enumerate(windows):
+        blit_cell(pix, raw[i * CELL : (i + 1) * CELL], ox, oy)
+    return pix
+
+
+def load_pix(key: str, frame: int, label: str) -> list[list[int]]:
+    path = edit_png(key, frame)
+    pix = pix_from_png(key, frame)
+    if pix is not None:
+        print(f"  occupancy {key}: {path.name}")
+        return pix
+    raise SystemExit(f"occupancy needs {path} (not packed asm / unedited png)")
+
+
+def cut_cells(key: str, pix: list[list[int]]) -> list[list[int]]:
+    windows = WINDOWS[key]
+    left = leftover_ink(pix, windows)
+    if left:
+        raise SystemExit(f"{key}: leftover ink {left[:20]}{'…' if len(left) > 20 else ''} ({len(left)})")
+    return [pack_window(pix, ox, oy) for ox, oy in windows]
+
+
+def flash_raw(png_name: str, label: str) -> list[int]:
+    path = PNG_DIR / png_name
+    if path.is_file():
+        return pack_24x21(load_png_1bit(path, 24, 21))
+    if OUT.is_file():
+        raw = parse_label_bytes(OUT, label)
+        head = OUT.read_text(encoding="utf-8")[:500]
+        if "zeromask" in head:
+            return unpack_zeromask(raw)
+        return list(raw[:CELL])
+    raise SystemExit(f"missing {path} and {OUT}")
+
+
+def write_sheet(rows: list[list[tuple[str, list[list[int]], list[tuple[int, int]]]]]) -> None:
     try:
         from PIL import Image, ImageDraw, ImageFont
     except ImportError:
@@ -188,17 +169,19 @@ def write_sheet(rows: list[list[tuple[str, list[int]]]]) -> None:
     y = pad
     for row in rows:
         x = pad
-        for name, data in row:
+        for name, cells, windows in row:
             draw.text((x, y), name, fill=(212, 160, 23), font=font)
-            pix = unpack_48x42(data)
-            cell = Image.new("RGB", (W, H), (10, 10, 12))
-            px = cell.load()
+            pix = [[0] * W for _ in range(H)]
+            for cell, (ox, oy) in zip(cells, windows):
+                blit_cell(pix, cell, ox, oy)
+            cell_im = Image.new("RGB", (W, H), (10, 10, 12))
+            px = cell_im.load()
             for yy in range(H):
                 for xx in range(W):
                     if pix[yy][xx]:
                         px[xx, yy] = (232, 228, 216)
             cy = y + label_h
-            im.paste(cell, (x, cy))
+            im.paste(cell_im, (x, cy))
             draw.rectangle((x - 1, cy - 1, x + W, cy + H), outline=(80, 70, 40))
             x += W + pad
         y += label_h + H + pad
@@ -207,60 +190,103 @@ def write_sheet(rows: list[list[tuple[str, list[int]]]]) -> None:
     print(f"Wrote {SHEET.relative_to(ROOT)}")
 
 
+def emit_cells(label: str, cells: list[list[int]]) -> list[str]:
+    flat: list[int] = []
+    for c in cells:
+        flat.extend(c)
+    return [label, bchunk(flat).rstrip(), ""]
+
+
 def main() -> None:
     if not DOC.is_file():
         raise SystemExit(f"missing {DOC}")
     doc = json.loads(DOC.read_text(encoding="utf-8"))
     weapons = doc.get("weapons") or {}
-    shot2 = load_item_sprites("shot2", item_frames(weapons, "shot2"))
-    nail = load_item_sprites("nail", item_frames(weapons, "nail"))
-    rock = load_item_sprites("rock", item_frames(weapons, "rock"))
+
+    shot_frames = item_frames(weapons, "shot2")
+    nail_frames = item_frames(weapons, "nail")
+    rock_frames = item_frames(weapons, "rock")
     axe_frames = item_frames(weapons, AXE_KEY)
-    axe = load_item_sprites(AXE_KEY, axe_frames)
-    flashes = load_flashes()
+
+    shot_pix = load_pix("shot2", shot_frames[0], "spr_shot2")
+    rock_pix = load_pix("rock", rock_frames[0], "spr_rock")
+    axe_pix = load_pix("axe", axe_frames[0], "spr_axe_0")
+    nail_pix = [load_pix("nail", f, f"spr_nail_{f}") for f in nail_frames]
+
+    shot = cut_cells("shot2", shot_pix)
+    rock = cut_cells("rock", rock_pix)
+    axe = cut_cells("axe", axe_pix)
+    nail = [cut_cells("nail", pix) for pix in nail_pix]
+
+    flashes = [(label, pack_zeromask(flash_raw(png, label))) for png, label in FLASHES]
+
+    # Tables: weapon order axe, shot, nail, gren. 4 slots; unused dx/dy = 0.
+    def pad4(windows: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        w = list(windows) + [(0, 0)] * (4 - len(windows))
+        return w[:4]
+
+    axe_w, shot_w, nail_w, rock_w = (pad4(WINDOWS[k]) for k in ("axe", "shot2", "nail", "rock"))
+    dx = [p[0] for w in (axe_w, shot_w, nail_w, rock_w) for p in w]
+    dy = [p[1] for w in (axe_w, shot_w, nail_w, rock_w) for p in w]
+    en = [
+        (1 << len(WINDOWS["axe"])) - 1,
+        (1 << len(WINDOWS["shot2"])) - 1,
+        (1 << len(WINDOWS["nail"])) - 1,
+        (1 << len(WINDOWS["rock"])) - 1,
+    ]
+    nbytes = [len(WINDOWS[k]) * CELL % 256 for k in ("axe", "shot2", "nail", "rock")]
+    # 256 cells → 0 so blit_n cpx #0 wraps after 256 copies
+
     parts = [
         "; Generated by tools/genweapons.py from assets/weapons — do not edit",
-        "; Body: 4 hi-res sprites (24x21, 64 bytes) in 2x2 = 48x42",
-        "; Flash/spark: 1 hi-res sprite (24x21, 64 bytes)",
+        "; Body cells are 24x21 occupancy windows (see wpn_dx / wpn_dy).",
+        "; Flashes: zeromask (8-byte occupancy + nonzero bytes).",
         "",
-        "spr_shot2",
-        bchunk(shot2[0]).rstrip(),
+        "; Slot dx/dy and enable: weapon order axe, shot, nail, gren (4 slots).",
+        "wpn_dx",
+        bchunk(dx).rstrip(),
+        "wpn_dy",
+        bchunk(dy).rstrip(),
+        "wpn_body_en",
+        bchunk(en).rstrip(),
+        "wpn_body_n",
+        bchunk(nbytes).rstrip(),
         "",
+    ]
+    parts += emit_cells("spr_shot2", shot)
+    parts += [
         "spr_nail_count",
         f"\t!byte {len(nail)}",
         "spr_nail",
-        "spr_nail_0",
     ]
-    parts.append(bchunk(nail[0]).rstrip())
-    for i, fr in enumerate(nail[1:], start=1):
-        parts.append("")
-        parts.append(f"spr_nail_{i}")
-        parts.append(bchunk(fr).rstrip())
-    parts.extend(
-        [
-            "",
-            "spr_rock",
-            bchunk(rock[0]).rstrip(),
-            "",
-            "spr_axe_count",
-            f"\t!byte {len(axe)}",
-            "spr_axe",
-        ]
-    )
-    for i, fr in enumerate(axe):
-        parts.append(f"spr_axe_{i}")
-        parts.append(bchunk(fr).rstrip())
-    parts.append("")
+    for i, cells in enumerate(nail):
+        parts += emit_cells(f"spr_nail_{i}", cells)
+    parts += emit_cells("spr_rock", rock)
+    parts += [
+        "spr_axe_count",
+        "\t!byte 1",
+        "spr_axe",
+    ]
+    parts += emit_cells("spr_axe_0", axe)
     for label, data in flashes:
-        parts.append(label)
-        parts.append(bchunk(data).rstrip())
-        parts.append("")
+        parts += [label, bchunk(data).rstrip(), ""]
+
     OUT.write_text("\n".join(parts) + "\n", encoding="utf-8")
     print(f"Wrote {OUT.relative_to(ROOT)}")
+    for k, cells in (("axe", axe), ("shot2", shot), ("rock", rock)):
+        print(f"  {k}: {len(cells)} cells ({len(cells) * CELL} bytes)")
+    print(f"  nail: {len(nail)} frames × {len(nail[0]) if nail else 0} cells")
+    for label, data in flashes:
+        print(f"  {label}: {len(data)} packed")
+
     write_sheet(
         [
-            [("axe", axe[0]), ("shot2", shot2[0]), ("rock", rock[0])],
-            [(f"nail {i}", fr) for i, fr in enumerate(nail)],
+            [
+                ("axe", axe, WINDOWS["axe"]),
+                ("shot2", shot, WINDOWS["shot2"]),
+                ("rock", rock, WINDOWS["rock"]),
+            ],
+            [(f"nail {i}", cells, WINDOWS["nail"]) for i, cells in enumerate(nail)],
         ]
     )
 

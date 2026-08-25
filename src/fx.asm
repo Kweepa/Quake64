@@ -30,34 +30,6 @@ start_explosion
 	sta fx_ms_h
 	rts
 
-tick_explosion
-	lda fx_on
-	beq .te_rts
-	lda fx_skip
-	beq .te_sub
-	lda #0
-	sta fx_skip
-	rts
-.te_sub
-	sec
-	lda fx_ms_l
-	sbc dt_ms
-	sta fx_ms_l
-	lda fx_ms_h
-	sbc dt_msh
-	sta fx_ms_h
-	bcc .te_off
-	ora fx_ms_l
-	bne .te_rts
-.te_off
-	lda #0
-	sta fx_on
-	sta fx_ms_l
-	sta fx_ms_h
-	sta fx_skip
-.te_rts
-	rts
-
 draw_explosion
 	lda fx_on
 	bne .de_go

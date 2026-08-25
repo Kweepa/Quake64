@@ -57,14 +57,59 @@ nail_fr_hi
 nail_flash_en
 	!byte FLASH_EN_L, FLASH_EN_R	; sprite 4 left, sprite 5 right
 
-emuz_spr_lo
+WS_EMUZ		= 0
+WS_SPLAT	= 1
+
+; LOD 0..2 per slot (emuz then splat)
+ws_spr_lo
 	!byte <spr_emuz_0, <spr_emuz_1, <spr_emuz_2
-emuz_spr_hi
-	!byte >spr_emuz_0, >spr_emuz_1, >spr_emuz_2
-splat_spr_lo
 	!byte <spr_splat_0, <spr_splat_1, <spr_splat_2
-splat_spr_hi
+ws_spr_hi
+	!byte >spr_emuz_0, >spr_emuz_1, >spr_emuz_2
 	!byte >spr_splat_0, >spr_splat_1, >spr_splat_2
+ws_blit_lo
+	!byte <WPN_EMUZ, <WPN_SPLAT
+ws_blit_hi
+	!byte >WPN_EMUZ, >WPN_SPLAT
+ws_msb
+	!byte EMUZ_MSB, SPLAT_MSB
+ws_ms_l
+	!byte <EMUZ_MS, <SPLAT_MS
+ws_ms_h
+	!byte >EMUZ_MS, >SPLAT_MS
+ws_hdr_lo
+	!byte <fxh_emuz, <fxh_splat
+ws_hdr_hi
+	!byte >fxh_emuz, >fxh_splat
+ws_vx_lo
+	!byte <emuz_vx, <splat_vx
+ws_vx_hi
+	!byte >emuz_vx, >splat_vx
+ws_vy_lo
+	!byte <emuz_vy, <splat_vy
+ws_vy_hi
+	!byte >emuz_vy, >splat_vy
+ws_col_lo
+	!byte <emuz_col, <splat_col
+ws_col_hi
+	!byte >emuz_col, >splat_col
+ws_xmsb_lo
+	!byte <emuz_xmsb, <splat_xmsb
+ws_xmsb_hi
+	!byte >emuz_xmsb, >splat_xmsb
+ws_snd
+	!byte SOUND_SHOOT, 0
+ws_colsrc
+	!byte 0, 1			; 0 = copy col_fx, 1 = leave splat_col
+
+fxh_lo
+	!byte <fxh_flash4, <fxh_flash5, <fxh_emuz, <fxh_splat, <fxh_explode
+fxh_hi
+	!byte >fxh_flash4, >fxh_flash5, >fxh_emuz, >fxh_splat, >fxh_explode
+fx_exp_lo
+	!byte <flash4_expired, <flash5_expired, <emuz_expired, <splat_expired, <fx_zero_header
+fx_exp_hi
+	!byte >flash4_expired, >flash5_expired, >emuz_expired, >splat_expired, >fx_zero_header
 
 ; Axe fire keyframes (right prepare → left/down arc). Idle is not in this table.
 axe_step_x
@@ -95,32 +140,32 @@ init_weapon_hw
 	sta $d015
 	sta spr_en
 	sta wpn_flash_en
-	sta flash_phase
-	sta flash_ms_l
-	sta flash_ms_h
-	sta flash5_phase
-	sta flash5_ms_l
-	sta flash5_ms_h
-	sta emuz_on
-	sta emuz_ms_l
-	sta emuz_ms_h
+	ldx #0
+.iw_fxh
+	lda fxh_lo,x
+	sta fx_ptr
+	lda fxh_hi,x
+	sta fx_ptr+1
+	lda #0
+	ldy #FXH_ON
+	sta (fx_ptr),y
+	iny
+	sta (fx_ptr),y
+	iny
+	sta (fx_ptr),y
+	iny
+	sta (fx_ptr),y
+	inx
+	cpx #FXH_COUNT
+	bcc .iw_fxh
 	sta emuz_xmsb
 	sta emuz_vx
 	sta emuz_vy
 	sta emuz_col
-	sta emuz_skip
-	sta splat_on
-	sta splat_ms_l
-	sta splat_ms_h
 	sta splat_xmsb
 	sta splat_vx
 	sta splat_vy
 	sta splat_col
-	sta splat_skip
-	sta fx_on
-	sta fx_ms_l
-	sta fx_ms_h
-	sta fx_skip
 	lda #$ff
 	sta emuz_pending
 	sta bite_splat_i
@@ -208,10 +253,12 @@ switch_weapon
 	lda #0
 	sta fire_rpt_l
 	sta fire_rpt_h
+	sta flash_phase
+	sta flash_skip
 	sta flash_ms_l
 	sta flash_ms_h
-	sta flash_phase
 	sta flash5_phase
+	sta flash5_skip
 	sta flash5_ms_l
 	sta flash5_ms_h
 	sta wpn_flash_en
@@ -342,32 +389,6 @@ blit_flash2
 	pla
 	jmp unpack_fx
 
-; A = src lo, Y = src hi → WPN_EMUZ (64, zeromask)
-blit_emuz
-	pha
-	tya
-	pha
-	lda #<WPN_EMUZ
-	ldy #>WPN_EMUZ
-	jsr set_unpack_dst
-	pla
-	tay
-	pla
-	jmp unpack_fx
-
-; A = src lo, Y = src hi → WPN_SPLAT (64, zeromask)
-blit_splat
-	pha
-	tya
-	pha
-	lda #<WPN_SPLAT
-	ldy #>WPN_SPLAT
-	jsr set_unpack_dst
-	pla
-	tay
-	pla
-	jmp unpack_fx
-
 wpn_slot_base
 	!byte 0, 4, 8, 12
 
@@ -461,6 +482,7 @@ start_flash
 	beq .sf5
 	lda #1
 	sta flash_phase
+	sta flash_skip
 	lda #<FLASH_YEL_MS
 	sta flash_ms_l
 	lda #>FLASH_YEL_MS
@@ -472,10 +494,12 @@ start_flash
 	beq .sf_xy
 	lda #0
 	sta flash5_phase
+	sta flash5_skip
 	jmp .sf_xy
 .sf5
 	lda #1
 	sta flash5_phase
+	sta flash5_skip
 	lda #<FLASH_YEL_MS
 	sta flash5_ms_l
 	lda #>FLASH_YEL_MS
@@ -488,9 +512,11 @@ start_flash
 hide_flash
 	lda #0
 	sta flash_phase
+	sta flash_skip
 	sta flash_ms_l
 	sta flash_ms_h
 	sta flash5_phase
+	sta flash5_skip
 	sta flash5_ms_l
 	sta flash5_ms_h
 	rts
@@ -509,10 +535,7 @@ update_weapon
 	cpy #4
 	bcc .uw_sw
 
-	jsr tick_flash
-	jsr tick_enemy_muzzle
-	jsr tick_splat
-	jsr tick_explosion
+	jsr tick_all_fx
 	jsr tick_anim
 
 	lda fire_rpt_l
@@ -765,129 +788,253 @@ recoil_apply_step
 	sta anim_ms_h
 	rts
 
-tick_flash
-	lda flash_phase
-	beq .tf5
+; fx_ptr → 4-byte header. C=1 expired this frame (does not clear +0).
+tick_fx
+	ldy #FXH_ON
+	lda (fx_ptr),y
+	beq .tf_idle
+	ldy #FXH_SKIP
+	lda (fx_ptr),y
+	beq .tf_sub
+	lda #0
+	sta (fx_ptr),y
+	clc
+	rts
+.tf_sub
+	ldy #FXH_MS_L
 	sec
-	lda flash_ms_l
+	lda (fx_ptr),y
 	sbc dt_ms
-	sta flash_ms_l
-	lda flash_ms_h
+	sta (fx_ptr),y
+	iny
+	lda (fx_ptr),y
 	sbc dt_msh
-	sta flash_ms_h
-	bcc .tf4_exp
-	ora flash_ms_l
-	bne .tf5
-.tf4_exp
-	jsr flash4_expired
-.tf5
-	lda flash5_phase
-	beq .tf_en
+	sta (fx_ptr),y
+	bcc .tf_exp
+	dey
+	ora (fx_ptr),y
+	bne .tf_live
+.tf_exp
 	sec
-	lda flash5_ms_l
-	sbc dt_ms
-	sta flash5_ms_l
-	lda flash5_ms_h
-	sbc dt_msh
-	sta flash5_ms_h
-	bcc .tf5_exp
-	ora flash5_ms_l
-	bne .tf_en
-.tf5_exp
-	jsr flash5_expired
-.tf_en
+	rts
+.tf_live
+	clc
+	rts
+.tf_idle
+	clc
+	rts
+
+tick_all_fx
+	ldx #0
+.ta_lp
+	lda fxh_lo,x
+	sta fx_ptr
+	lda fxh_hi,x
+	sta fx_ptr+1
+	jsr tick_fx
+	bcc .ta_n
+	lda fx_exp_lo,x
+	sta rot0
+	lda fx_exp_hi,x
+	sta rot1
+	jsr .ta_go
+.ta_n
+	inx
+	cpx #FXH_COUNT
+	bcc .ta_lp
+	rts
+.ta_go
+	jmp (rot0)
+
+fx_zero_header
+	lda #0
+	ldy #FXH_ON
+	sta (fx_ptr),y
+	iny
+	sta (fx_ptr),y
+	iny
+	sta (fx_ptr),y
+	iny
+	sta (fx_ptr),y
 	rts
 
 flash4_expired
 	lda flash_phase
 	cmp #1
-	bne .f4_off
+	bne fx_zero_header
 	lda #2
 	sta flash_phase
 	lda #COL_FLASH_R
 	sta flash4_col
+	lda #1
+	sta flash_skip
 	lda #<FLASH_RED_MS
 	sta flash_ms_l
 	lda #>FLASH_RED_MS
 	sta flash_ms_h
 	rts
-.f4_off
-	lda #0
-	sta flash_phase
-	rts
 
 flash5_expired
 	lda flash5_phase
 	cmp #1
-	bne .f5_off
+	bne fx_zero_header
 	lda #2
 	sta flash5_phase
 	lda #COL_FLASH_R
 	sta flash5_col
+	lda #1
+	sta flash5_skip
 	lda #<FLASH_RED_MS
 	sta flash5_ms_l
 	lda #>FLASH_RED_MS
 	sta flash5_ms_h
 	rts
-.f5_off
+
+emuz_expired
+	jsr fx_zero_header
 	lda #0
-	sta flash5_phase
+	sta emuz_xmsb
 	rts
 
-; A = tip viewport sx, Y = tip viewport sy. Depth = CAM_ZH+12.
-; Blit + stage; IRQ apply_xy pokes VIC.
-; Sprite top-left at tip −12/−10; LOD 0..2 from distance; colour = col_fx.
-start_enemy_muzzle
-	pha				; tip sx (unpack_fx uses wpn_tmp0)
+splat_expired
+	jsr fx_zero_header
+	lda #0
+	sta splat_xmsb
+	rts
+
+; A = value, X = slot. Store via ws_*_lo/hi pointer tables. Clobbers fx_ptr, Y.
+!macro ws_sta .lo, .hi {
+	pha
+	lda .lo,x
+	sta fx_ptr
+	lda .hi,x
+	sta fx_ptr+1
+	pla
+	ldy #0
+	sta (fx_ptr),y
+}
+
+; A = src lo, Y = src hi, X = slot → unpack into WPN_EMUZ / WPN_SPLAT.
+blit_world
+	pha
 	tya
-	pha				; tip sy
-	; distance LOD from tip view-z high (0 near … 2 far)
-	ldx #0
+	pha
+	lda ws_blit_lo,x
+	ldy ws_blit_hi,x
+	jsr set_unpack_dst
+	pla
+	tay
+	pla
+	jmp unpack_fx
+
+; A = tip viewport sx, Y = tip viewport sy. Depth = CAM_ZH+12.
+start_enemy_muzzle
+	pha
+	tya
+	pha
 	lda CAM_ZH+12
-	bmi .sem_far
+	ldx #WS_EMUZ
+	jmp start_world_spr
+
+; A = tip viewport sx, Y = tip viewport sy, X = depth (EMUZ_Z0/Z1 bands).
+start_splat
+	pha
+	tya
+	pha
+	txa
+	ldx #WS_SPLAT
+start_world_spr
+	pha				; z
+	txa
+	tay				; Y = slot
+	pla				; A = z
+	cpy #0
+	bne .sws_zok
+	cmp #0
+	bmi .sws_far
+.sws_zok
+	ldx #0
 	cmp #EMUZ_Z0
-	bcc .sem_lod
+	bcc .sws_lod
 	inx
 	cmp #EMUZ_Z1
-	bcc .sem_lod
-.sem_far
+	bcc .sws_lod
+.sws_far
 	ldx #2
-.sem_lod
-	lda emuz_spr_lo,x
-	ldy emuz_spr_hi,x
-	jsr blit_emuz
-	; VIC Y = sy − 10 + VIEW_SPR_Y0 (= sy + 112)
+.sws_lod
+	tya
+	pha				; slot
+	asl
+	sta wpn_tmp0
 	pla
+	pha
+	clc
+	adc wpn_tmp0			; slot*3
+	sta wpn_tmp0
+	txa
+	clc
+	adc wpn_tmp0			; + lod
+	tax
+	lda ws_spr_lo,x
+	ldy ws_spr_hi,x
+	pla				; slot
+	tax
+	pha
+	jsr blit_world
+	pla
+	tax				; X = slot
+	pla				; sy
 	clc
 	adc #VIEW_SPR_Y0 - EMUZ_OY
-	sta emuz_vy
-	; VIC X = sx − 12 + VIEW_SPR_X0 (= sx + 76)
-	pla
+	+ws_sta ws_vy_lo, ws_vy_hi
+	pla				; sx
 	clc
 	adc #VIEW_SPR_X0 - EMUZ_OX
-	sta emuz_vx
+	pha
 	lda #0
-	bcc .sem_xlo
-	lda #EMUZ_MSB
-.sem_xlo
-	sta emuz_xmsb
+	bcc .sws_xlo
+	lda ws_msb,x
+.sws_xlo
+	+ws_sta ws_xmsb_lo, ws_xmsb_hi
+	pla
+	+ws_sta ws_vx_lo, ws_vx_hi
+	lda ws_colsrc,x
+	bne .sws_nocol
 	lda col_fx
-	sta emuz_col
-	lda emuz_on
-	bne .sem_timer			; already up: no re-trigger sound
-	lda #SOUND_SHOOT
+	+ws_sta ws_col_lo, ws_col_hi
+.sws_nocol
+	lda ws_snd,x
+	beq .sws_arm
+	lda ws_hdr_lo,x
+	sta fx_ptr
+	lda ws_hdr_hi,x
+	sta fx_ptr+1
+	ldy #FXH_ON
+	lda (fx_ptr),y
+	bne .sws_arm
+	lda ws_snd,x
+	stx wpn_tmp0
 	jsr play_sound
-.sem_timer
+	ldx wpn_tmp0
+.sws_arm
+	lda ws_hdr_lo,x
+	sta fx_ptr
+	lda ws_hdr_hi,x
+	sta fx_ptr+1
 	lda #1
-	sta emuz_on
-	sta emuz_skip			; don't expire on this frame's ~150ms dt
-	lda #<EMUZ_MS
-	sta emuz_ms_l
-	lda #>EMUZ_MS
-	sta emuz_ms_h
-	rts				; IRQ apply_xy pokes VIC
+	ldy #FXH_ON
+	sta (fx_ptr),y
+	iny
+	sta (fx_ptr),y
+	lda ws_ms_l,x
+	ldy #FXH_MS_L
+	sta (fx_ptr),y
+	lda ws_ms_h,x
+	iny
+	sta (fx_ptr),y
+	rts
 
-; Write staged enemy-muzzle VIC regs (IRQ, I/O on).
+; Write staged enemy-muzzle VIC regs (IRQ, I/O on). Abs only — no ZP.
 place_enemy_muzzle
 	lda emuz_on
 	beq .pem_rts
@@ -900,78 +1047,6 @@ place_enemy_muzzle
 .pem_rts
 	rts
 
-tick_enemy_muzzle
-	lda emuz_on
-	beq .tem_rts
-	lda emuz_skip
-	beq .tem_sub
-	lda #0
-	sta emuz_skip			; survive spawn frame → next draw
-	rts
-.tem_sub
-	sec
-	lda emuz_ms_l
-	sbc dt_ms
-	sta emuz_ms_l
-	lda emuz_ms_h
-	sbc dt_msh
-	sta emuz_ms_h
-	bcc .tem_off
-	ora emuz_ms_l
-	bne .tem_rts
-.tem_off
-	lda #0
-	sta emuz_on
-	sta emuz_ms_l
-	sta emuz_ms_h
-	sta emuz_xmsb
-	sta emuz_skip
-	rts
-.tem_rts
-	rts
-
-; A = tip viewport sx, Y = tip viewport sy, X = depth (EMUZ_Z0/Z1 bands).
-; Colour in splat_col. Sprite top-left at tip −12/−10.
-start_splat
-	pha				; tip sx (unpack_fx uses wpn_tmp0)
-	tya
-	pha				; tip sy
-	txa					; depth → LOD 0..2 (same thresholds as emuz)
-	ldx #0
-	cmp #EMUZ_Z0
-	bcc .ssp_lod
-	inx
-	cmp #EMUZ_Z1
-	bcc .ssp_lod
-	ldx #2
-.ssp_lod
-	lda splat_spr_lo,x
-	ldy splat_spr_hi,x
-	jsr blit_splat
-	; VIC Y = sy − 10 + VIEW_SPR_Y0 (= sy + 112)
-	pla
-	clc
-	adc #VIEW_SPR_Y0 - EMUZ_OY
-	sta splat_vy
-	; VIC X = sx − 12 + VIEW_SPR_X0 (= sx + 76)
-	pla
-	clc
-	adc #VIEW_SPR_X0 - EMUZ_OX
-	sta splat_vx
-	lda #0
-	bcc .ssp_xlo
-	lda #SPLAT_MSB
-.ssp_xlo
-	sta splat_xmsb
-	lda #1
-	sta splat_on
-	sta splat_skip
-	lda #<SPLAT_MS
-	sta splat_ms_l
-	lda #>SPLAT_MS
-	sta splat_ms_h
-	rts
-
 place_splat
 	lda splat_on
 	beq .psp_rts
@@ -982,36 +1057,6 @@ place_splat
 	lda splat_col
 	sta $d02e
 .psp_rts
-	rts
-
-tick_splat
-	lda splat_on
-	beq .tsp_rts
-	lda splat_skip
-	beq .tsp_sub
-	lda #0
-	sta splat_skip
-	rts
-.tsp_sub
-	sec
-	lda splat_ms_l
-	sbc dt_ms
-	sta splat_ms_l
-	lda splat_ms_h
-	sbc dt_msh
-	sta splat_ms_h
-	bcc .tsp_off
-	ora splat_ms_l
-	bne .tsp_rts
-.tsp_off
-	lda #0
-	sta splat_on
-	sta splat_ms_l
-	sta splat_ms_h
-	sta splat_xmsb
-	sta splat_skip
-	rts
-.tsp_rts
 	rts
 
 tick_anim

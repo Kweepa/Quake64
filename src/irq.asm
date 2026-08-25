@@ -11,9 +11,17 @@
 !zone irq
 
 ; After sync to split-line start: 2+N*5-1 = 5N+1 cycles.
-; Mid: N=10 → 51cy then one sta (fits 186). View: three pla/sta after delay,
+; Mid: preload show_d018_bot, then ldx + delay + pla/sta (5N+11 post-wait).
+; Wait exits ~cycle 6–12; col 31 ends ~47. N=7 → 46cy window: after col 31,
+; still on 186 with sprite 7 DMA (centre splat). N=10 was already end-of-line
+; and splat slipped $d018 onto 187. IRQ_DEBUG_SPLIT pokes are 12cy — drop N
+; by 2 so the stripe matches shipped timing. View: three pla/sta after delay,
 ; so N=7 → 36cy + stores still on 122 (N=10 was slipping $d021 onto 123).
-IRQ_RBORDER_N	= 10
+!if IRQ_DEBUG_SPLIT = 1 {
+IRQ_RBORDER_N	= 5
+} else {
+IRQ_RBORDER_N	= 7
+}
 IRQ_RBORDER_VIEW	= 7
 
 nmi_rti
@@ -119,12 +127,14 @@ irq_entry
 	beq .split
 	jmp .top
 
-; Mid-viewport: sync to 186, right-border $d018, then keys/SFX.
+; Mid-viewport: preload, sync to 186, right-border $d018, then keys/SFX.
 ; accum_keys adds sample_ms into in_* each video frame; main snapshots.
 .split
 	txa
 	pha
 	tya
+	pha
+	lda show_d018_bot
 	pha
 	lda $d012
 	cmp #RASTER_SPLIT_LINE
@@ -134,11 +144,19 @@ irq_entry
 	cmp $d012
 	bne -
 .split_rb
-	lda show_d018_bot
+!if IRQ_DEBUG_SPLIT = 1 {
+	lda #COL_WHITE
+	sta $d020
+}
 	ldx #IRQ_RBORDER_N
 -
 	dex
 	bne -
+!if IRQ_DEBUG_SPLIT = 1 {
+	lda #COL_HURT
+	sta $d020
+}
+	pla
 	sta $d018
 	lda #RASTER_TOP
 	sta $d012

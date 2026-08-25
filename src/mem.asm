@@ -174,6 +174,54 @@ pose_map_lo	= $06C7			; 7 — patched at pose load (logical → packed)
 pose_map_hi	= $06CE			; 7
 ; next free $06D5
 
+; Room unique X/Z product share. $051E+ is frame13/enemy/room_pack.
+; $B000–$BFFF is free RAM (PRG must stay below SHARE_BASE).
+SHARE_BASE	= $B000
+cur_ux		= $B000			; 4 — current room unique X
+cur_uz		= $B004			; 4
+cur_nx		= $B008
+cur_nz		= $B009
+xshare		= $B00A			; 6 — $FF smul, else RX* slot
+zshare		= $B010			; 6
+RXC_L		= $B016			; 6 room UX×cos lo (snap after room xform)
+RXC_H		= $B01C
+RXS_L		= $B022
+RXS_H		= $B028
+RZC_L		= $B02E
+RZC_H		= $B034
+RZS_L		= $B03A
+RZS_H		= $B040			; last $B045
+crate_ux0	= $B046			; CRATE_MAX
+crate_ux1	= $B056
+crate_uz0	= $B066
+crate_uz1	= $B076
+slope_ux0	= $B086			; SLOPE_MAX
+slope_ux1	= $B096
+slope_uz0	= $B0A6
+slope_uz1	= $B0B6
+plat_ux0	= $B0C6			; PLAT_MAX
+plat_ux1	= $B0D6
+plat_uz0	= $B0E6
+plat_uz1	= $B0F6
+elev_ux0	= $B106			; ELEV_MAX
+elev_ux1	= $B10A
+elev_uz0	= $B10E
+elev_uz1	= $B112
+sw_ux0		= $B116			; SWITCH_MAX
+sw_ux1		= $B126
+sw_ux2		= $B136
+sw_uz0		= $B146
+sw_uz1		= $B156
+sw_uz2		= $B166
+door_ux0	= $B176			; DOOR_MAX
+door_ux1	= $B186
+door_uz0	= $B196
+door_uz1	= $B1A6
+SHARE_END	= $B1B6
+!if SHARE_END > $C000 {
+	!error "share BSS overlaps screen A"
+}
+
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
 SINTAB		= $D608			; 320 bytes (extra quadrant for COS)
@@ -286,6 +334,9 @@ SHOT_DMG_MAX	= 11		; Quake SSG 14×4=56 ÷ 5
 SHOT_HIT_X	= 20		; |sx − SCREEN_CX| ≤ this (pixels)
 SHOT_Z_MAX	= 32		; view-Z high max range; dmg = SHOT_DMG_MAX − (z>>2), min 1
 SHOT_MID_H	= 3			; mid-body Y above feet (≈ ENEMY_CULL_H/2)
+NAIL_DMG_MAX	= 2			; Quake nail 9 ÷ 5
+NAIL_HIT_X	= 6			; |sx − SCREEN_CX| ≤ this (pixels)
+NAIL_HIT_Y	= 8			; |sy − 64| ≤ this; shotgun uses $ff (no Y gate)
 ITEM_CULL_Y	= 2			; AABB |y| vs Chebyshev XZ + pad
 FOV_HALF	= 31			; yaw ticks ≈ atan(SCREEN_CX/FOCAL)
 
@@ -413,11 +464,12 @@ GREN_OWN_EN		= 1
 GREN_F_BOUNCE		= 1			; fuse running
 GREN_F_PEND		= 2			; waiting on fx_on
 GREN_TICK_MS		= 32
-GREN_GRAV		= $0148			; 40 u/s² × 32ms as 8.8
-GREN_SPEED		= 20			; 45° launch, range 20
+GREN_GRAV		= $01EC			; 60 u/s² × 32ms as 8.8
+GREN_SPEED		= 30			; horizontal
+GREN_SPEED_Y		= 10		; upward (was 20; ~22° not 45°)
 GREN_FUSE_MS		= 2000
 GREN_LIFE_MS		= 5000
-GREN_DMG_MAX		= 24			; Quake 120 ÷ 5
+GREN_DMG_MAX		= 24		; Quake 120 ÷ 5
 GREN_RAD		= 6
 GREN_HIT_R		= 1
 GREN_WRIST_L		= 5			; skeleton "Wrist L"
@@ -447,9 +499,7 @@ cur_weapon	= $CC34
 wpn_pose	= $CC35			; POSE_*
 fire_rpt_l	= $CC36
 fire_rpt_h	= $CC37
-flash_ms_l	= $CC38
-flash_ms_h	= $CC39
-flash_phase	= $CC3A			; sprite 4: 0 off, 1 yellow, 2 red
+; $CC38–$CC3A free (was flash4 timer)
 mg_frame	= $CC3B
 wpn_x		= $CC3C
 wpn_y		= $CC3D
@@ -460,12 +510,7 @@ anim_ms_h	= $CC41
 wpn_flash_en	= $CC42
 wpn_flash_dy	= $CC43
 wpn_tmp0	= $CC44
-flash5_ms_l	= $CC45
-flash5_ms_h	= $CC46
-flash5_phase	= $CC47			; sprite 5 (nail right)
-emuz_ms_l	= $CC48			; enemy muzzle remaining ms
-emuz_ms_h	= $CC49
-emuz_on		= $CC4A			; 1 = sprite 6 enabled
+; $CC45–$CC4A free (was flash5 timer + emuz on/ms)
 emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
 item_spin	= $CC4C			; world powerup yaw (0..255)
 item_spin_l	= $CC4D			; 8.8 fraction
@@ -559,16 +604,13 @@ emuz_vx		= $CE0E			; VIC X lo staged (IRQ apply_en)
 emuz_vy		= $CE0F			; VIC Y staged
 emuz_col		= $CE10			; sprite colour staged from col_fx
 emuz_pending	= $CE11			; enemy idx waiting to muzzle, $ff = none
-emuz_skip	= $CE12			; 1 = skip next tick (spawn frame; dt ~150ms > 100ms)
-splat_ms_l	= $CE13			; impact splat remaining ms
-splat_ms_h	= $CE14
-splat_on		= $CE15			; 1 = sprite 7 enabled
+; $CE12–$CE15 free (was emuz_skip + splat on/ms)
 splat_xmsb	= $CE16			; $d010 bit7 when X>=256
 splat_vx		= $CE17
 splat_vy		= $CE18
 splat_col	= $CE19			; COL_SPLAT_HIT or col_line (miss)
-splat_skip	= $CE1A			; 1 = skip next tick (spawn frame)
-shot_hit_i	= $CE1B			; closest SSG hit enemy, $ff = miss
+; $CE1A free (was splat_skip)
+shot_hit_i	= $CE1B			; closest hitscan enemy, $ff = miss
 shot_hit_z	= $CE1C			; CAM_ZH of that hit
 hurt_flash_l	= $CE1D			; remaining red-border ms
 hurt_flash_h	= $CE1E
@@ -589,17 +631,15 @@ have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD / HAVE_EARTH
 pu_kind		= $CE93			; 0 or BP_QUAD / BP_PENT / BP_RING
 pu_ms_l		= $CE94
 pu_ms_h		= $CE95
-fx_on		= $CE96			; 1 = explosion live
-fx_ms_l		= $CE97			; remaining ms
-fx_ms_h		= $CE98
+; $CE96–$CE98 free (was fx on/ms)
 fx_ox		= $CE99			; world origin (int)
 fx_oy		= $CE9A
 fx_oz		= $CE9B
-fx_skip		= $CE9C			; 1 = skip next tick (spawn frame)
+; $CE9C free (was fx_skip)
 en_pain_i	= $CE9D			; ENEMY_MAX: pain/death variant index
 sample_ms_chk	= $CEAD			; shadow of sample_ms (init_irq); tripwire restore
 spd_trip	= $CEAE			; sample_ms corruption count (IRQ .top)
-; Grenade SoA — 4 slots × 27 bytes + 1 scratch, $CEAF–$CF1B
+; Grenade SoA — 4 slots × 27 bytes + 1 scratch, $CEAF–$CF03
 gr_on		= $CEAF
 gr_room		= $CEB3
 gr_owner	= $CEB7
@@ -622,7 +662,47 @@ gr_fuse_h	= $CEF7
 gr_life_l	= $CEFB
 gr_life_h	= $CEFF
 gren_save_room	= $CF03
-; $CF04–$CF1B free (was last-vel draw tip)
+; Hitscan params (live during gun_hitscan / splat_aim_jitter)
+scan_hit_x	= $CF04			; |sx−CX| max (inclusive)
+scan_hit_y	= $CF05			; |sy−64| max, $ff = no Y gate
+scan_dmg_max	= $CF06			; dmg = this − (z>>2), min 1
+scan_dmg_all	= $CF07			; 1 = damage every cone hit (SSG)
+scan_jx_mask	= $CF08			; splat rnd X mask
+scan_jx_bias	= $CF09
+scan_jy_mask	= $CF0A
+scan_jy_bias	= $CF0B
+; Timed FX headers: +0 on/phase, +1 skip, +2 ms_l, +3 ms_h
+FXH_ON		= 0
+FXH_SKIP	= 1
+FXH_MS_L	= 2
+FXH_MS_H	= 3
+FXH_COUNT	= 5
+fxh_flash4	= $CF0C
+flash_phase	= fxh_flash4 + FXH_ON	; sprite 4: 0 off, 1 yellow, 2 red
+flash_skip	= fxh_flash4 + FXH_SKIP
+flash_ms_l	= fxh_flash4 + FXH_MS_L
+flash_ms_h	= fxh_flash4 + FXH_MS_H
+fxh_flash5	= $CF10
+flash5_phase	= fxh_flash5 + FXH_ON	; sprite 5 (nail right)
+flash5_skip	= fxh_flash5 + FXH_SKIP
+flash5_ms_l	= fxh_flash5 + FXH_MS_L
+flash5_ms_h	= fxh_flash5 + FXH_MS_H
+fxh_emuz	= $CF14
+emuz_on		= fxh_emuz + FXH_ON	; 1 = sprite 6 enabled
+emuz_skip	= fxh_emuz + FXH_SKIP
+emuz_ms_l	= fxh_emuz + FXH_MS_L
+emuz_ms_h	= fxh_emuz + FXH_MS_H
+fxh_splat	= $CF18
+splat_on	= fxh_splat + FXH_ON	; 1 = sprite 7 enabled
+splat_skip	= fxh_splat + FXH_SKIP
+splat_ms_l	= fxh_splat + FXH_MS_L
+splat_ms_h	= fxh_splat + FXH_MS_H
+fxh_explode	= $CF1C
+fx_on		= fxh_explode + FXH_ON	; 1 = explosion live
+fx_skip		= fxh_explode + FXH_SKIP
+fx_ms_l		= fxh_explode + FXH_MS_L
+fx_ms_h		= fxh_explode + FXH_MS_H
+; $CF20+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

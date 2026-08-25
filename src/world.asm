@@ -1552,175 +1552,125 @@ grant_bp_type
 	rts
 .gb_go
 	tay
-	lda gb_lo,y
+	lda gb_mode,y
+	asl
+	tax
+	lda gb_mh,x
 	sta rot0
-	lda gb_hi,y
+	lda gb_mh+1,x
 	sta rot1
 	jmp (rot0)
 
-gb_lo
-	!byte <gb_shells, <gb_nailgun, <gb_nails, <gb_grenlaunch
-	!byte <gb_grenades, <gb_hp25, <gb_hp50, <gb_shells5, <gb_armour
-	!byte <gb_quad, <gb_pent, <gb_ring, <gb_silver, <gb_gold, <gb_rune
-gb_hi
-	!byte >gb_shells, >gb_nailgun, >gb_nails, >gb_grenlaunch
-	!byte >gb_grenades, >gb_hp25, >gb_hp50, >gb_shells5, >gb_armour
-	!byte >gb_quad, >gb_pent, >gb_ring, >gb_silver, >gb_gold, >gb_rune
+GB_ADD = 0
+GB_GUN = 1
+GB_ARM = 2
+GB_PU  = 3
+GB_KEY = 4
 
-gb_hp25
-	lda player_hp
-	cmp #PLAYER_HP_MAX
-	bcc +
+gb_mh
+	!word gb_do_add, gb_do_gun, gb_do_arm, gb_do_pu, gb_do_key
+
+gb_mode
+	!byte GB_ADD, GB_GUN, GB_ADD, GB_GUN, GB_ADD
+	!byte GB_ADD, GB_ADD, GB_ADD, GB_ARM, GB_PU
+	!byte GB_PU, GB_PU, GB_KEY, GB_KEY, GB_KEY
+
+gb_ptr_lo
+	!byte <ammo_shells, <ammo_nails, <ammo_nails, <ammo_grenades, <ammo_grenades
+	!byte <player_hp, <player_hp, <ammo_shells, 0, 0
+	!byte 0, 0, 0, 0, 0
+gb_ptr_hi
+	!byte >ammo_shells, >ammo_nails, >ammo_nails, >ammo_grenades, >ammo_grenades
+	!byte >player_hp, >player_hp, >ammo_shells, 0, 0
+	!byte 0, 0, 0, 0, 0
+
+gb_add
+	!byte AMMO_SHELLS_BOX, AMMO_NAILS_GUN, AMMO_NAILS_BOX, AMMO_GRENADES_GUN, AMMO_GRENADES_BOX
+	!byte HP_PACK_25, HP_PACK_50, AMMO_SHELLS_DEATH, 0, 0
+	!byte 0, 0, 0, 0, 0
+
+gb_max
+	!byte AMMO_SHELLS_MAX, AMMO_NAILS_MAX, AMMO_NAILS_MAX, AMMO_GRENADES_MAX, AMMO_GRENADES_MAX
+	!byte PLAYER_HP_MAX, PLAYER_HP_MAX, AMMO_SHELLS_MAX, PLAYER_ARMOUR_MAX, 0
+	!byte 0, 0, 0, 0, 0
+
+gb_bits
+	!byte 0, HAVE_NAIL, 0, HAVE_GREN, 0
+	!byte 0, 0, 0, 0, 0
+	!byte 0, 0, HAVE_SILVER, HAVE_GOLD, HAVE_EARTH
+
+gb_wpn
+	!byte 0, WPN_NAIL, 0, WPN_GREN, 0
+	!byte 0, 0, 0, 0, 0
+	!byte 0, 0, 0, 0, 0
+
+; Y = BP_*. rot2=0 fail if at cap, 1 always add+clamp. C=1 stored. Restores Y.
+gb_add_amt
+	lda gb_ptr_lo,y
+	sta rot0
+	lda gb_ptr_hi,y
+	sta rot1
+	tya
+	tax
+	ldy #0
+	lda (rot0),y
+	ldy rot2
+	bne .ga_add
+	cmp gb_max,x
+	bcc .ga_add
 	jmp gb_no
-+
+.ga_add
 	clc
-	adc #HP_PACK_25
-	jmp gb_hp_clamp
-gb_hp50
-	lda player_hp
-	cmp #PLAYER_HP_MAX
-	bcc +
-	jmp gb_no
-+
-	clc
-	adc #HP_PACK_50
-gb_hp_clamp
-	bcs gb_hp_cap
-	cmp #PLAYER_HP_MAX
-	bcc gb_hp_ok
-	beq gb_hp_ok
-gb_hp_cap
-	lda #PLAYER_HP_MAX
-gb_hp_ok
-	sta player_hp
+	adc gb_add,x
+	bcs .ga_cap
+	cmp gb_max,x
+	bcc .ga_ok
+	beq .ga_ok
+.ga_cap
+	lda gb_max,x
+.ga_ok
+	ldy #0
+	sta (rot0),y
+	txa
+	tay
 	sec
 	rts
-gb_shells
-	lda #AMMO_SHELLS_BOX
-	bne gb_add_shells
-gb_shells5
-	lda #AMMO_SHELLS_DEATH
-gb_add_shells
+
+gb_do_add
+	lda #0
 	sta rot2
-	lda ammo_shells
-	cmp #AMMO_SHELLS_MAX
-	bcc +
-	jmp gb_no
-+
-	clc
-	adc rot2
-	bcs gb_shell_cap
-	cmp #AMMO_SHELLS_MAX
-	bcc gb_shell_ok
-	beq gb_shell_ok
-gb_shell_cap
-	lda #AMMO_SHELLS_MAX
-gb_shell_ok
-	sta ammo_shells
-	sec
-	rts
-gb_nails
-	lda ammo_nails
-	cmp #AMMO_NAILS_MAX
-	bcc +
-	jmp gb_no
-+
-	clc
-	adc #AMMO_NAILS_BOX
-	bcs gb_nail_cap
-	cmp #AMMO_NAILS_MAX
-	bcc gb_nail_ok
-	beq gb_nail_ok
-gb_nail_cap
-	lda #AMMO_NAILS_MAX
-gb_nail_ok
-	sta ammo_nails
-	sec
-	rts
-gb_grenades
-	lda ammo_grenades
-	cmp #AMMO_GRENADES_MAX
-	bcc +
-	jmp gb_no
-+
-	clc
-	adc #AMMO_GRENADES_BOX
-	bcs gb_gren_cap
-	cmp #AMMO_GRENADES_MAX
-	bcc gb_gren_ok
-	beq gb_gren_ok
-gb_gren_cap
-	lda #AMMO_GRENADES_MAX
-gb_gren_ok
-	sta ammo_grenades
-	sec
-	rts
-gb_nailgun
+	jmp gb_add_amt
+
+gb_do_gun
 	lda have_wpn
-	and #HAVE_NAIL
-	beq gb_ng_new
+	and gb_bits,y
+	beq .gg_new
 	jmp gb_no
-gb_ng_new
+.gg_new
 	lda have_wpn
-	ora #HAVE_NAIL
+	ora gb_bits,y
 	sta have_wpn
-	lda ammo_nails
-	clc
-	adc #AMMO_NAILS_GUN
-	bcs gb_ng_cap
-	cmp #AMMO_NAILS_MAX
-	bcc gb_ng_ok
-	beq gb_ng_ok
-gb_ng_cap
-	lda #AMMO_NAILS_MAX
-gb_ng_ok
-	sta ammo_nails
-	ldx #WPN_NAIL
+	lda #1
+	sta rot2
+	jsr gb_add_amt
+	ldx gb_wpn,y
 	jsr switch_weapon
 	sec
 	rts
-gb_grenlaunch
-	lda have_wpn
-	and #HAVE_GREN
-	beq gb_gl_new
-	jmp gb_no
-gb_gl_new
-	lda have_wpn
-	ora #HAVE_GREN
-	sta have_wpn
-	lda ammo_grenades
-	clc
-	adc #AMMO_GRENADES_GUN
-	bcs gb_gl_cap
-	cmp #AMMO_GRENADES_MAX
-	bcc gb_gl_ok
-	beq gb_gl_ok
-gb_gl_cap
-	lda #AMMO_GRENADES_MAX
-gb_gl_ok
-	sta ammo_grenades
-	ldx #WPN_GREN
-	jsr switch_weapon
-	sec
-	rts
-gb_armour
+
+gb_do_arm
 	lda player_armour
 	cmp #PLAYER_ARMOUR_MAX
-	bcs gb_no
+	bcc .gar_ok
+	jmp gb_no
+.gar_ok
 	lda #PLAYER_ARMOUR_MAX
 	sta player_armour
 	sec
 	rts
-gb_quad
-	lda #BP_QUAD
-	bne gb_pu_set
-gb_pent
-	lda #BP_PENT
-	bne gb_pu_set
-gb_ring
-	lda #BP_RING
-gb_pu_set
-	sta pu_kind
+
+gb_do_pu
+	sty pu_kind
 	lda #<POWERUP_MS
 	sta pu_ms_l
 	lda #>POWERUP_MS
@@ -1728,33 +1678,19 @@ gb_pu_set
 	jsr hud_powerup
 	sec
 	rts
-gb_silver
+
+gb_do_key
 	lda have_keys
-	and #HAVE_SILVER
-	bne gb_no
+	and gb_bits,y
+	beq .gk_new
+	jmp gb_no
+.gk_new
 	lda have_keys
-	ora #HAVE_SILVER
+	ora gb_bits,y
 	sta have_keys
 	sec
 	rts
-gb_gold
-	lda have_keys
-	and #HAVE_GOLD
-	bne gb_no
-	lda have_keys
-	ora #HAVE_GOLD
-	sta have_keys
-	sec
-	rts
-gb_rune
-	lda have_keys
-	and #HAVE_EARTH
-	bne gb_no
-	lda have_keys
-	ora #HAVE_EARTH
-	sta have_keys
-	sec
-	rts
+
 gb_no
 	clc
 	rts

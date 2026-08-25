@@ -944,55 +944,6 @@ persp88
 	lda #0
 	rts
 
-; |A| * FOCAL / z_eye → A (signed), clamp PERSP_MAX
-persp
-	sta mul_sign
-	bpl .abs
-	eor #$ff
-	clc
-	adc #1
-.abs
-	bne +
-	rts
-+
-	ldx z_eye
-	bne .pzok
-	lda #PERSP_MAX
-	jmp .psgn
-.pzok
-	tax
-	lda LOGTAB,x
-	clc
-	adc #LOG_FOCAL
-	sta prod_l
-	lda #0
-	adc #0
-	sta prod_h
-	ldx z_eye
-	sec
-	lda prod_l
-	sbc LOGTAB,x
-	sta prod_l
-	lda prod_h
-	sbc #0
-	bcc .zres
-	sta prod_h
-	jsr alog_fetch
-	cmp #PERSP_MAX
-	bcc .psgn
-	lda #PERSP_MAX
-	jmp .psgn
-.zres
-	lda #0
-.psgn
-	bit mul_sign
-	bpl +
-	eor #$ff
-	clc
-	adc #1
-+
-	rts
-
 ; prod_h:prod_l = unsigned idx → A = alog[idx], 255 if idx>=512
 alog_fetch
 	lda prod_h

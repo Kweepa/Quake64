@@ -2,8 +2,12 @@
 !zone vic
 
 init_vic
-	lda $dd00
-	and #%11111100			; VIC bank 3 = $C000–$FFFF
+	; Absolute write, upper 6 bits clear. Krill README:251-264 forbids masking
+	; a value READ from $dd00: bits 2-5 are inputs while its DDRA is $03, so a
+	; read-modify-write latches live pin state and the next load hangs. The
+	; read tells you nothing either — it returns $3c whether the latch is
+	; poisoned or not. Measured: NOTES.md "PHASE 1 RESULT", variants B vs E.
+	lda #$00				; VIC bank 3 = $C000–$FFFF
 	sta $dd00
 
 	lda #$1b				; DEN, 25 rows, YSCROLL=3, text mode

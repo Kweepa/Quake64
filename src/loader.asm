@@ -1,27 +1,38 @@
-; Disk load — Wolf64 KERNAL sequence, Quake $01 = BANK_IO / BANK_RAM.
+; Disk load — Krill fastloader (loadraw, LOAD_TO_API), $01 = BANK_LOADER
+; during the call, BANK_IO otherwise. Was a Wolf64-style KERNAL sequence.
 ; Maps + enemy poses pack downward from SCR_A ($C000).
 !zone loader
 
 !source "asset_sizes.asm"
 
+; Krill filenames are 0-terminated (README "Basic operation"); the KERNAL took
+; an explicit length instead, so every name below gained a terminator and the
+; en_name_len table went away.
 level_dos_name
 	!text "E1M1"
+	!byte 0
 reloc_dos_name
 	!text "RELOC"
+	!byte 0
 
-en_name_len
-	!byte 5, 6, 4, 5, 4, 6, 6
 en_name_lo
 	!byte <en_n0, <en_n1, <en_n2, <en_n3, <en_n4, <en_n5, <en_n6
 en_name_hi
 	!byte >en_n0, >en_n1, >en_n2, >en_n3, >en_n4, >en_n5, >en_n6
 en_n0	!text "GRUNT"
+	!byte 0
 en_n1	!text "KNIGHT"
+	!byte 0
 en_n2	!text "ROTT"
+	!byte 0
 en_n3	!text "SCRAG"
+	!byte 0
 en_n4	!text "OGRE"
+	!byte 0
 en_n5	!text "SHAMBL"
+	!byte 0
 en_n6	!text "CHTHON"
+	!byte 0
 
 ; FormatDosName — E1MN from level_num (1..8); 1541 names are PETSCII A–Z
 FormatDosName
@@ -37,30 +48,30 @@ FormatDosName
 	sta level_dos_name + 3
 	rts
 
-; LoadPrg — A=name length, X/Y=name pointer. Dest in load_dest. SA=0.
-; KERNAL must already be paged in. C=0 ok, C=1 error.
+; LoadPrg — X/Y = 0-terminated name pointer. Dest in load_dest. C=0 ok, C=1 err.
+; Krill loadraw with LOAD_TO_API: carry SET on entry takes the destination from
+; loadaddrlo/hi instead of the PRG header — which is what this needs, because
+; every heap blob (E1M1, RELOC, GRUNT…) carries header address $0000.
+; A is ignored; callers no longer pass a length.
+; Returns with interrupts DISABLED (see the sei below); callers already sei.
 LoadPrg
-	sta load_namelen
 	stx load_name_l
 	sty load_name_h
-
-	lda load_namelen
+	lda load_dest
+	sta loadaddrlo
+	lda load_dest+1
+	sta loadaddrhi
+	sei					; BANK_LOADER unmaps the KERNAL, so the
+						; IRQ vector would come from RAM at $fffe
+	lda #BANK_LOADER
+	sta $01
 	ldx load_name_l
 	ldy load_name_h
-	jsr $ffbd				; SETNAM
-	lda #1
-	ldx $ba
-	ldy #0					; SA=0 → X/Y dest
-	jsr $ffba				; SETLFS
-	lda #0
-	ldx load_dest
-	ldy load_dest+1
-	jsr $ffd5				; LOAD
+	sec					; carry SET → use loadaddrlo/hi
+	jsr loadraw
 	php
-	pha
-	lda #1
-	jsr $ffc3				; CLOSE
-	pla
+	lda #BANK_IO
+	sta $01
 	plp
 	rts
 
@@ -71,16 +82,9 @@ blank_screen
 	sta $d021
 	rts
 
-; IOINIT can leave CIA2 Timer A generating NMIs.
-load_cia2_quiet
-	lda #0
-	sta $dd0e
-	sta $dd0f
-	sta $02a1
-	lda #$7f
-	sta $dd0d
-	lda $dd0d
-	rts
+; load_cia2_quiet removed with the jsr $ff84 calls: it existed only because
+; KERNAL IOINIT could leave CIA2 Timer A generating NMIs. Krill touches CIA2
+; PRA/DDRA only, and never enables its timers.
 
 ; Fill frame13_lo/hi[i] = i*13 (pose gx/gy/gz stride). Called each LoadLevel.
 init_frame13
@@ -132,11 +136,11 @@ heap_alloc
 	sec
 	rts
 
-; LoadLevel — IOINIT + blank + map + reloc overlay + enemies.
+; LoadLevel — blank + map + reloc overlay + enemies, all via Krill.
 ; Heap grows down from SCR_A: map first, then RELOC below it, bind_map on
 ; map_base only, patch SMC operands, heap_top = map_base (drop reloc),
 ; then load_map_enemies overwrites the old reloc bytes.
-; load_in_play=0: cold (DEN off, no CIA2 quiet). =1: in-play (DEN on, quiet).
+; load_in_play=0: cold (DEN off). =1: in-play (init_vic, DEN on).
 ; C=0 ok, C=1 error. Caller re-inits VIC/IRQ.
 LoadLevel
 	sei
@@ -147,20 +151,21 @@ LoadLevel
 	lda $dc0d
 	lda #0
 	sta $d01a				; kill raster IRQ
+	; NO jsr $ff84 on either path. KERNAL IOINIT writes $DD02 = $3F, which is
+	; Krill's uninstall signal — the drive-side code tears itself down and the
+	; next loadraw hangs forever. Measured on VICE with true drive emulation:
+	; NOTES.md "PHASE 1 RESULT", variants C and D. IOINIT was only ever here
+	; to serve KERNAL LOAD, which this no longer uses.
+	; Interrupts stay off for the whole load: LoadPrg banks the KERNAL out.
 	lda load_in_play
 	beq .ll_cold
-	jsr $ff84				; reset IEC
-	jsr load_cia2_quiet
 	jsr init_vic				; DEN on before blank/load
 	jmp .ll_common
 .ll_cold
-	jsr $ff84				; IOINIT
-	; Match boot: do not quiesce CIA2. Quiet + DEN=0 stalls KERNAL IEC.
 	jsr blank_screen
 	lda $d011
-	and #%11101111				; DEN off after IOINIT
+	and #%11101111				; DEN off
 	sta $d011
-	cli
 	jmp .ll_dos
 
 .ll_common
@@ -186,7 +191,6 @@ LoadLevel
 	ldy map_size_hi,x
 	jsr heap_alloc
 	bcs .ll_fail
-	lda #4
 	ldx #<level_dos_name
 	ldy #>level_dos_name
 	jsr LoadPrg
@@ -205,7 +209,6 @@ LoadLevel
 	sta reloc_base
 	lda load_dest+1
 	sta reloc_base+1
-	lda #5
 	ldx #<reloc_dos_name
 	ldy #>reloc_dos_name
 	jsr LoadPrg
@@ -268,13 +271,10 @@ load_map_enemies
 	jsr heap_alloc
 	bcs .lme_err
 	ldy load_type
-	lda en_name_len,y
-	pha
 	lda en_name_lo,y
 	tax
 	lda en_name_hi,y
 	tay
-	pla
 	jsr LoadPrg
 	bcs .lme_err
 	jsr patch_enemy_gx
@@ -624,6 +624,9 @@ reboot_game
 	sta $01
 	ldx #$ff
 	txs
+	; DELIBERATE, and the only surviving IOINIT. $DD02 = $3F uninstalls the
+	; Krill drive code and hands the drive back to normal DOS, which is
+	; exactly what the KERNAL LOAD below needs. boot re-installs on entry.
 	jsr $ff84
 	lda $d011
 	and #%11101111

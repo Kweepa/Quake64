@@ -457,7 +457,8 @@ anim_ms_h	= $CC41
 wpn_flash_en	= $CC42
 wpn_flash_dy	= $CC43
 wpn_tmp0	= $CC44
-; $CC45–$CC4A free (was flash5 timer + emuz on/ms)
+ws_slot		= $CC45			; WS_EMUZ / WS_SPLAT during start_world_spr
+; $CC46–$CC4A free (was flash5 timer + emuz on/ms)
 emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
 item_spin	= $CC4C			; world powerup yaw (0..255)
 item_spin_l	= $CC4D			; 8.8 fraction

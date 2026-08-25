@@ -67,10 +67,6 @@ ws_spr_lo
 ws_spr_hi
 	!byte >spr_emuz_0, >spr_emuz_1, >spr_emuz_2
 	!byte >spr_splat_0, >spr_splat_1, >spr_splat_2
-ws_blit_lo
-	!byte <WPN_EMUZ, <WPN_SPLAT
-ws_blit_hi
-	!byte >WPN_EMUZ, >WPN_SPLAT
 ws_msb
 	!byte EMUZ_MSB, SPLAT_MSB
 ws_ms_l
@@ -914,13 +910,20 @@ splat_expired
 	sta (fx_ptr),y
 }
 
-; A = src lo, Y = src hi, X = slot → unpack into WPN_EMUZ / WPN_SPLAT.
+; A = src lo, Y = src hi. Dest from ws_slot (WPN_EMUZ / WPN_SPLAT).
 blit_world
 	pha
 	tya
 	pha
-	lda ws_blit_lo,x
-	ldy ws_blit_hi,x
+	ldx ws_slot
+	beq .bw_emuz
+	lda #<WPN_SPLAT
+	ldy #>WPN_SPLAT
+	jmp .bw_dst
+.bw_emuz
+	lda #<WPN_EMUZ
+	ldy #>WPN_EMUZ
+.bw_dst
 	jsr set_unpack_dst
 	pla
 	tay
@@ -945,6 +948,7 @@ start_splat
 	ldx #WS_SPLAT
 start_world_spr
 	pha				; z
+	stx ws_slot			; X is slot; lod calc reuses X
 	txa
 	tay				; Y = slot
 	pla				; A = z
@@ -962,14 +966,10 @@ start_world_spr
 .sws_far
 	ldx #2
 .sws_lod
-	tya
-	pha				; slot
+	lda ws_slot
 	asl
-	sta wpn_tmp0
-	pla
-	pha
 	clc
-	adc wpn_tmp0			; slot*3
+	adc ws_slot			; slot*3
 	sta wpn_tmp0
 	txa
 	clc
@@ -977,12 +977,8 @@ start_world_spr
 	tax
 	lda ws_spr_lo,x
 	ldy ws_spr_hi,x
-	pla				; slot
-	tax
-	pha
 	jsr blit_world
-	pla
-	tax				; X = slot
+	ldx ws_slot
 	pla				; sy
 	clc
 	adc #VIEW_SPR_Y0 - EMUZ_OY

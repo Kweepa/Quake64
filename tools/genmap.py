@@ -403,7 +403,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     # Doors
     door_x, door_y, door_z = [], [], []
     door_sx, door_sy, door_sz = [], [], []
-    door_ra, door_rb, door_home_y, door_face, door_key = [], [], [], [], []
+    door_ra, door_rb, door_home_y, door_face, door_key, door_type = [], [], [], [], [], []
     door_id = []
     for d in doors:
         ra, rb = door_rooms(rooms, d)
@@ -427,6 +427,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
             door_key.append(2 if "gold" in tag else 1)
         else:
             door_key.append(0)
+        dt = str(d.get("doorType") or "Tech").strip()
+        door_type.append({"Tech": 0, "Arch": 1, "Tri": 2, "tech": 0, "arch": 1, "tri": 2}.get(dt, 0))
         door_id.append(map_id[id(d)])
 
     # Crates
@@ -755,6 +757,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(door_home_y)
     add(door_face)
     add(door_key)
+    add(door_type)
     add(door_id)
     add(crate_x)
     add(crate_y)
@@ -881,6 +884,10 @@ BP_NTYPES	= 15
 DOOR_KEY_NONE	= 0
 DOOR_KEY_SILVER	= 1
 DOOR_KEY_GOLD	= 2
+DOOR_TECH	= 0
+DOOR_ARCH	= 1
+DOOR_TRI	= 2
+DOOR_NTYPES	= 3
 ENT_GRUNT	= 0
 ENT_KNIGHT	= 1
 ENT_ROTT	= 2

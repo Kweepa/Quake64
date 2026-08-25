@@ -75,6 +75,7 @@
           "dir": 1,
           "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "locked": false
         },
@@ -123,6 +124,7 @@
           "dir": 1,
           "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
           "locked": false
         },
@@ -237,6 +239,7 @@
           "dir": 1,
           "roomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
           "locked": false
         },
@@ -362,6 +365,7 @@
           "dir": 1,
           "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
           "locked": false
         },
@@ -396,6 +400,7 @@
           "dir": 1,
           "roomId": "d3c3453f-ac80-4092-a737-d02046fc3ceb",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "locked": false
         },
@@ -461,6 +466,7 @@
           "dir": 1,
           "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "locked": false
         },
@@ -630,6 +636,7 @@
           "dir": 1,
           "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "55bb6f77-5638-4dfc-a488-eda26561ed21",
           "locked": false
         },
@@ -730,6 +737,7 @@
           "dir": 1,
           "roomId": "fe882475-4577-4b90-b224-f631a99db34d",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "locked": false
         },
@@ -747,6 +755,7 @@
           "dir": 1,
           "roomId": "fe882475-4577-4b90-b224-f631a99db34d",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "b569290e-9dbc-4322-9838-ff8bdf565a1d",
           "locked": false
         },
@@ -891,6 +900,7 @@
           "dir": 1,
           "roomId": "c181607a-0146-4be9-8946-5c3b0527e1ef",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "b569290e-9dbc-4322-9838-ff8bdf565a1d",
           "locked": false
         },
@@ -940,6 +950,7 @@
           "dir": 1,
           "roomId": "7aa01381-3e67-4124-a149-f7e145551ec3",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "c181607a-0146-4be9-8946-5c3b0527e1ef",
           "locked": false
         },
@@ -1198,6 +1209,7 @@
           "dir": 1,
           "roomId": "0e15ffe3-9bc5-4237-8af7-48366c877a92",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "locked": false,
           "otherRoomId": null
         },
@@ -1262,7 +1274,7 @@
           "id": "dab2e523-7fd9-4565-b0d2-52e58b6849aa",
           "kind": "platform",
           "x": 37,
-          "y": 88,
+          "y": 87,
           "z": 59,
           "sx": 6,
           "sy": 1,
@@ -1301,6 +1313,7 @@
           "dir": 1,
           "roomId": "4dd2bf61-0d23-44d6-8f4f-0becf91014a7",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "locked": false,
           "otherRoomId": null
         },
@@ -1405,6 +1418,7 @@
           "dir": 1,
           "roomId": "c657232a-aafe-4d83-8b6d-2212ddec74ae",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "48f4bb7c-f85b-4837-acf3-8a81214372de",
           "locked": false
         },
@@ -1437,6 +1451,7 @@
           "dir": 1,
           "roomId": "c657232a-aafe-4d83-8b6d-2212ddec74ae",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "locked": false,
           "otherRoomId": null
         },
@@ -1454,6 +1469,7 @@
           "dir": 1,
           "roomId": "c657232a-aafe-4d83-8b6d-2212ddec74ae",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "locked": false,
           "otherRoomId": null
         },
@@ -1502,6 +1518,7 @@
           "dir": 1,
           "roomId": "c657232a-aafe-4d83-8b6d-2212ddec74ae",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "locked": false,
           "otherRoomId": null
         },
@@ -1622,6 +1639,7 @@
           "dir": 1,
           "roomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7",
           "locked": false
         },
@@ -1639,6 +1657,7 @@
           "dir": 1,
           "roomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "locked": false,
           "otherRoomId": null
         },
@@ -1810,6 +1829,7 @@
           "dir": 1,
           "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208",
           "lockKey": "silver",
+          "doorType": "Tech",
           "otherRoomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085",
           "locked": true
         },
@@ -1827,6 +1847,7 @@
           "dir": 1,
           "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "ec707e69-9eec-4e53-a32b-681dccd8ec0f",
           "locked": false
         },
@@ -1900,6 +1921,7 @@
           "dir": 1,
           "roomId": "7b2e58fd-ad8a-4d66-b1bb-9855f518c055",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "bca3293b-77d8-485a-bd79-37df6d5a2208",
           "locked": false
         },
@@ -2043,6 +2065,7 @@
           "dir": 1,
           "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "7b2e58fd-ad8a-4d66-b1bb-9855f518c055",
           "locked": false
         },
@@ -2143,6 +2166,7 @@
           "dir": 1,
           "roomId": "87b9a1be-0500-45bd-a0a3-38a481a30200",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "80430749-edbc-4d7d-bbca-332263790b75",
           "locked": false
         },
@@ -2160,6 +2184,7 @@
           "dir": 1,
           "roomId": "80430749-edbc-4d7d-bbca-332263790b75",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5",
           "locked": false
         },
@@ -2252,7 +2277,7 @@
           "id": "3b4f2e72-c5a4-4257-b5a6-3492ed270533",
           "kind": "platform",
           "x": 128,
-          "y": 95,
+          "y": 94,
           "z": 133,
           "sx": 8,
           "sy": 1,
@@ -2305,6 +2330,7 @@
           "dir": 1,
           "roomId": "1c572e13-1b60-48fc-abea-43a8adb20734",
           "lockKey": "unlocked",
+          "doorType": "Tech",
           "otherRoomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
           "locked": false
         },
@@ -2322,6 +2348,7 @@
           "dir": 1,
           "roomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5",
           "lockKey": "silver",
+          "doorType": "Tech",
           "otherRoomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf",
           "locked": true
         }
@@ -41983,6 +42010,120 @@
         [
           7,
           8
+        ]
+      ]
+    },
+    "Tech": {
+      "verts": [
+        {
+          "x": -2,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "x": 2,
+          "y": 4,
+          "z": 0
+        },
+        {
+          "x": -2,
+          "y": 4,
+          "z": 0
+        }
+      ],
+      "lines": [
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          0,
+          3
+        ]
+      ]
+    },
+    "Arch": {
+      "verts": [
+        {
+          "x": -2,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "x": 2,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "x": 2,
+          "y": 3,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "y": 4,
+          "z": 0
+        },
+        {
+          "x": -2,
+          "y": 3,
+          "z": 0
+        }
+      ],
+      "lines": [
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          0,
+          4
+        ]
+      ]
+    },
+    "Tri": {
+      "verts": [
+        {
+          "x": -3,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "x": 3,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "y": 4,
+          "z": 0
+        }
+      ],
+      "lines": [
+        [
+          1,
+          2
+        ],
+        [
+          0,
+          2
         ]
       ]
     },

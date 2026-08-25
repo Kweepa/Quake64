@@ -1844,8 +1844,9 @@ xform_mesh_xz
 	rts
 }
 
-; Local UX/UZ about box+ITEM_BIAS, then R_(yaw+ent_rot). Caller: load_view_trig.
-; Quad/pent/ring pass item_spin in ent_rot; other pickups pass 0.
+; Local UX/UZ about ent_wx/wy/wz, then R_(yaw+ent_rot). Caller: load_view_trig.
+; xform_item_spin: world centre is box+ITEM_BIAS (pickups).
+; xform_item_at: caller already set ent_wx/wy/wz (doors).
 xform_item_spin
 	clc
 	lda box_x
@@ -1857,6 +1858,7 @@ xform_item_spin
 	lda box_z
 	adc #ITEM_BIAS
 	sta ent_wz
+xform_item_at
 	ldx #0
 	jsr xform_world_vert
 	lda CAM_X

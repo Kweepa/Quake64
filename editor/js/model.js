@@ -468,6 +468,9 @@ export const PICKUP_TYPES = [
 export const BACKPACK_TYPES = PICKUP_TYPES;
 
 export const ITEM_MESH_KEYS = ["backpack", ...PICKUP_TYPES];
+export const DOOR_TYPES = ["Tech", "Arch", "Tri"];
+export const DOOR_MESH_KEYS = DOOR_TYPES;
+export const ALL_MESH_KEYS = [...ITEM_MESH_KEYS, ...DOOR_MESH_KEYS];
 export const ITEM_MIN = -4;
 export const ITEM_MAX = 4;
 export const ITEM_ORIGIN = 0;
@@ -501,6 +504,21 @@ export function clampBackpackType(s) {
 
 export function clampDoorLock(s) {
   return s === "silver" || s === "gold" ? s : "unlocked";
+}
+
+export function clampDoorType(s) {
+  const t = String(s ?? "");
+  if (DOOR_TYPES.includes(t)) return t;
+  const lower = t.toLowerCase();
+  if (lower === "tech") return "Tech";
+  if (lower === "arch") return "Arch";
+  if (lower === "tri") return "Tri";
+  return "Tech";
+}
+
+export function isDoorMeshKey(key) {
+  const t = String(key ?? "");
+  return DOOR_TYPES.includes(t) || t === "tech" || t === "arch" || t === "tri";
 }
 
 export function clampItemCoord(n) {
@@ -708,6 +726,51 @@ export function defaultItemMeshes() {
         [6, 8],
       ]
     ),
+    Tech: meshOf(
+      [
+        [-2, 0, 0],
+        [2, 0, 0],
+        [2, 4, 0],
+        [-2, 4, 0],
+        [-2, 2, 0],
+        [2, 2, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 5],
+      ]
+    ),
+    Arch: meshOf(
+      [
+        [-2, 0, 0],
+        [2, 0, 0],
+        [2, 3, 0],
+        [0, 4, 0],
+        [-2, 3, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 0],
+      ]
+    ),
+    Tri: meshOf(
+      [
+        [-2, 0, 0],
+        [2, 0, 0],
+        [0, 4, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 0],
+      ]
+    ),
   };
 }
 
@@ -748,10 +811,14 @@ export function parseItemMesh(raw) {
 export function parseItemMeshes(raw) {
   const d = defaultItemMeshes();
   if (!raw || typeof raw !== "object") return d;
-  for (const key of ITEM_MESH_KEYS) {
-    if (raw[key] == null) continue;
-    const mesh = parseItemMesh(raw[key]);
-    if (key === "backpack" && !mesh.verts.length) continue;
+  const src = { ...raw };
+  if (src.tech != null && src.Tech == null) src.Tech = src.tech;
+  if (src.arch != null && src.Arch == null) src.Arch = src.arch;
+  if (src.tri != null && src.Tri == null) src.Tri = src.tri;
+  for (const key of ALL_MESH_KEYS) {
+    if (src[key] == null) continue;
+    const mesh = parseItemMesh(src[key]);
+    if (!mesh.verts.length && (key === "backpack" || isDoorMeshKey(key))) continue;
     d[key] = mesh;
   }
   return d;
@@ -804,7 +871,18 @@ export function itemMeshHasGeom(mesh) {
 
 export function itemMeshFor(doc, type) {
   const items = doc?.items || defaultItemMeshes();
-  const key = type === "backpack" ? "backpack" : clampPickupType(type);
+  if (type === "backpack") {
+    const mesh = items.backpack;
+    if (itemMeshHasGeom(mesh)) return mesh;
+    return defaultItemMeshes().backpack;
+  }
+  if (isDoorMeshKey(type)) {
+    const key = clampDoorType(type);
+    const mesh = items[key];
+    if (itemMeshHasGeom(mesh)) return mesh;
+    return items.Tech || defaultItemMeshes().Tech;
+  }
+  const key = clampPickupType(type);
   const mesh = items[key];
   if (itemMeshHasGeom(mesh)) return mesh;
   return items.backpack || defaultItemMeshes().backpack;
@@ -1114,6 +1192,7 @@ export function clampObject(obj) {
   if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
   if (obj.kind === "doorway") {
     obj.lockKey = clampDoorLock(obj.lockKey);
+    obj.doorType = clampDoorType(obj.doorType);
     obj.locked = obj.lockKey !== "unlocked";
     delete obj.keyTag;
     if (obj.otherRoomId != null) obj.otherRoomId = String(obj.otherRoomId);
@@ -1190,6 +1269,7 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (kind === "pickup") obj.pickup = clampPickupType(extra.pickup);
   if (kind === "doorway") {
     obj.lockKey = clampDoorLock(extra.lockKey ?? (extra.locked ? "silver" : "unlocked"));
+    obj.doorType = clampDoorType(extra.doorType);
     if (extra.otherRoomId) obj.otherRoomId = String(extra.otherRoomId);
   }
   if (kind === "platform") obj.collide = extra.collide !== false;
@@ -1225,6 +1305,7 @@ export function objectLabel(obj) {
   }
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
   if (obj.kind === "pickup") return `Pickup (${clampPickupType(obj.pickup)})`;
+  if (obj.kind === "doorway") return `Doorway (${clampDoorType(obj.doorType)})`;
   return KINDS[obj.kind].label;
 }
 
@@ -1590,7 +1671,7 @@ export function canAddEnemyType(map, typeName) {
  */
 export const C64_OBJECT_BYTES = {
   room: 11,
-  doorway: 12,
+  doorway: 13,
   crate: 8,
   slope: 10,
   platform: 8,
@@ -2056,6 +2137,7 @@ function parseObjects(list) {
       name: o.name,
       tag: o.tag,
       lockKey: o.lockKey,
+      doorType: o.doorType,
       locked: o.locked,
       keyTag: o.keyTag,
       elevAuto: o.elevAuto,
@@ -2285,7 +2367,7 @@ export function parseEditorState(raw) {
   } else {
     d.activeLevel = null;
   }
-  if (typeof raw.item === "string" && ITEM_MESH_KEYS.includes(raw.item)) d.item = raw.item;
+  if (typeof raw.item === "string" && ALL_MESH_KEYS.includes(raw.item)) d.item = raw.item;
   const io = raw.itemOrbit || {};
   const tgt = io.target || {};
   d.itemOrbit = {

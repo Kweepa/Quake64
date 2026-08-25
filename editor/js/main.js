@@ -28,11 +28,16 @@ import {
   MAX_NAME_LEN,
   MAX_TAG_LEN,
   PICKUP_TYPES,
+  ALL_MESH_KEYS,
   ITEM_MESH_KEYS,
+  DOOR_MESH_KEYS,
+  DOOR_TYPES,
   DOOR_LOCKS,
   DOOR_LOCK_LABELS,
   clampPickupType,
   clampDoorLock,
+  clampDoorType,
+  isDoorMeshKey,
   ITEM_MAX_UNIQUE,
   itemMeshStats,
   createObject,
@@ -522,7 +527,7 @@ function applyEditorState(ed) {
     collapsedRooms.clear();
     for (const id of ed.collapsedRooms) collapsedRooms.add(id);
     if (ed.activeLevel && LEVEL_NAMES.includes(ed.activeLevel)) doc.activeLevel = ed.activeLevel;
-    itemMeshKey = ITEM_MESH_KEYS.includes(ed.item) ? ed.item : "backpack";
+    itemMeshKey = ALL_MESH_KEYS.includes(ed.item) ? ed.item : "backpack";
     const iorb = itemView.orbit;
     iorb.yaw = ed.itemOrbit.yaw;
     iorb.pitch = ed.itemOrbit.pitch;
@@ -1195,12 +1200,11 @@ function renderEnemyList() {
   });
 }
 
-function renderItemList() {
-  const ul = document.getElementById("item-mesh-list");
+function renderMeshKeyList(ul, keys) {
   if (!ul) return;
   ul.innerHTML = "";
   if (!doc.items) doc.items = {};
-  for (const key of ITEM_MESH_KEYS) {
+  for (const key of keys) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
@@ -1216,6 +1220,11 @@ function renderItemList() {
     li.appendChild(btn);
     ul.appendChild(li);
   }
+}
+
+function renderItemList() {
+  renderMeshKeyList(document.getElementById("item-mesh-list"), ITEM_MESH_KEYS);
+  renderMeshKeyList(document.getElementById("door-mesh-list"), DOOR_MESH_KEYS);
 }
 
 function ensureWeaponItem(key) {
@@ -1660,7 +1669,9 @@ function renderInspector() {
     if (itemMeshKey !== "backpack" && !doc.items[itemMeshKey].verts.length) {
       const f = document.createElement("p");
       f.className = "muted";
-      f.textContent = "Empty — falls back to backpack.";
+      f.textContent = isDoorMeshKey(itemMeshKey)
+        ? "Empty — falls back to Tech."
+        : "Empty — falls back to backpack.";
       root.appendChild(f);
     }
     const sel = itemView.selection();
@@ -1986,6 +1997,16 @@ function renderInspector() {
       }
       lockSel.addEventListener("change", () => apply(() => (obj.lockKey = lockSel.value)));
       root.appendChild(field("Lock", lockSel));
+      const typeSel = document.createElement("select");
+      for (const t of DOOR_TYPES) {
+        const opt = document.createElement("option");
+        opt.value = t;
+        opt.textContent = t;
+        if (clampDoorType(obj.doorType) === t) opt.selected = true;
+        typeSel.appendChild(opt);
+      }
+      typeSel.addEventListener("change", () => apply(() => (obj.doorType = typeSel.value)));
+      root.appendChild(field("Type", typeSel));
     }
     const sizeP = document.createElement("p");
     sizeP.className = "muted";

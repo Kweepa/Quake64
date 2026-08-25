@@ -10,24 +10,15 @@ box_edges
 ; Ramp hypotenuses (no top/bottom — room/platform already draw those)
 ramp_side_edges
 	!byte 1,2, 3,0
-; Platform quad, switch triangle, door closed/open (no floor edge)
+; Platform quad, switch triangle
 quad_edges
 	!byte 0,1, 1,2, 2,3, 3,0
 tri_edges
 	!byte 0,1, 1,2, 2,0
-; Closed: BL-TL, TL-TR, TR-BL, TR-BR. Open: left 0-1-4, right 2-5 + 2-3.
-door_closed_edges
-	!byte 0,1, 1,2, 2,0,  2,3
-door_open_edges
-	!byte 0,1, 1,4, 4,0,  2,5, 2,3
 
 ; World-vertical edges (same xid/zid, different Y) — 1 = Y-only clip
 box_edge_vert
 	!byte 0,0,0,0, 0,0,0,0, 1,1,1,1
-door_closed_vert
-	!byte 1,0,0,1
-door_open_vert
-	!byte 1,0,0,0,1
 ramp_side_vert
 	!byte 0,0
 quad_vert
@@ -39,10 +30,6 @@ tri_vert
 ; box_col doubles as identity for ≤4-vert meshes with distinct columns.
 box_col
 	!byte 0,1,2,3, 0,1,2,3
-door_closed_col
-	!byte 0,0,1,1
-door_open_col
-	!byte 0,0,1,1, 2,3
 ident_col
 	!byte 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
 
@@ -51,22 +38,6 @@ box_xid
 	!byte 0,1,1,0, 0,1,1,0
 box_zid
 	!byte 0,0,1,1, 0,0,1,1
-door_closed_z_xid
-	!byte 0,0,1,1
-door_closed_z_zid
-	!byte 0,0,0,0
-door_closed_x_xid
-	!byte 0,0,0,0
-door_closed_x_zid
-	!byte 0,0,1,1
-door_open_z_xid
-	!byte 0,0,3,3,1,2
-door_open_z_zid
-	!byte 0,0,0,0,0,0
-door_open_x_xid
-	!byte 0,0,0,0,0,0
-door_open_x_zid
-	!byte 0,0,3,3,1,2
 sw_z_xid
 	!byte 1,0,2
 sw_z_zid
@@ -186,20 +157,6 @@ set_box_xzid
 	lda #<box_col
 	sta col_ptr
 	lda #>box_col
-	sta col_ptr+1
-	rts
-
-set_door_closed_col
-	lda #<door_closed_col
-	sta col_ptr
-	lda #>door_closed_col
-	sta col_ptr+1
-	rts
-
-set_door_open_col
-	lda #<door_open_col
-	sta col_ptr
-	lda #>door_open_col
 	sta col_ptr+1
 	rts
 
@@ -583,56 +540,14 @@ plane_pvert
 	clc
 	rts
 
-; A = base, pv3 = amount → A = base-pv3 clamped 0
-coord_sub
-	sec
-	sbc pv3
-	bcs .csok
-	lda #0
-.csok
-	rts
-
-; A = base, pv3 = amount → A = base+pv3 clamped 255
-coord_add
-	clc
-	adc pv3
-	bcc .caok
-	lda #255
-.caok
-	rts
-
 ; ------------------------------------------------------------------
+; FACE_PZ/MZ/PX/MX → yaw so local +Z points out of the door face
+door_face_rot
+	!byte 0, 128, 192, 64
+
 draw_door_mesh
 	jsr load_view_trig
-	jsr fill_door_verts
-	ldx obj_i
-	lda door_open,x
-	bne .dd_open
-	lda #4
-	sta mesh_nv
-	sta mesh_ne
-	lda #<door_closed_edges
-	sta edge_ptr
-	lda #>door_closed_edges
-	sta edge_ptr+1
-	lda #<door_closed_vert
-	sta edge_vert_ptr
-	lda #>door_closed_vert
-	sta edge_vert_ptr+1
-	jmp stroke_mesh
-.dd_open
-	lda #6
-	sta mesh_nv
-	lda #5
-	sta mesh_ne
-	lda #<door_open_edges
-	sta edge_ptr
-	lda #>door_open_edges
-	sta edge_ptr+1
-	lda #<door_open_vert
-	sta edge_vert_ptr
-	lda #>door_open_vert
-	sta edge_vert_ptr+1
+	jsr fill_door_type_verts
 	jmp stroke_mesh
 
 stroke_tri
@@ -825,6 +740,171 @@ fill_item_verts
 	sta ent_rot
 	jmp xform_item_spin
 
+; Door type mesh: local X across, Y up, Z thickness. Origin = face bottom-centre.
+fill_door_type_verts
+	ldx obj_i
+	+lda_mx door_type
+	cmp #DOOR_NTYPES
+	bcc +
+	lda #0
++
+	tay
+	lda door_nv,y
+	bne +
+	ldy #0
++
+	lda door_nv,y
+	sta mesh_nv
+	lda door_ne,y
+	sta mesh_ne
+	lda door_nx,y
+	sta mesh_nx
+	lda door_nz,y
+	sta mesh_nz
+	sty rot0
+	clc
+	lda #<door_ux
+	adc door_uo,y
+	sta src_ptr
+	lda #>door_ux
+	adc #0
+	sta src_ptr+1
+	ldy #0
+.fdt_ux
+	cpy mesh_nx
+	bcs .fdt_uz
+	lda (src_ptr),y
+	sta UX,y
+	iny
+	bne .fdt_ux
+.fdt_uz
+	ldy rot0
+	clc
+	lda #<door_uz
+	adc door_zo,y
+	sta src_ptr
+	lda #>door_uz
+	adc #0
+	sta src_ptr+1
+	ldy #0
+.fdt_uzl
+	cpy mesh_nz
+	bcs .fdt_vy
+	lda (src_ptr),y
+	sta UZ,y
+	iny
+	bne .fdt_uzl
+.fdt_vy
+	ldy rot0
+	clc
+	lda #<door_vy
+	adc door_vo,y
+	sta src_ptr
+	lda #>door_vy
+	adc #0
+	sta src_ptr+1
+	ldy #0
+.fdt_vyl
+	cpy mesh_nv
+	bcs .fdt_ptr
+	clc
+	lda (src_ptr),y
+	adc box_y
+	sta VY,y
+	iny
+	bne .fdt_vyl
+.fdt_ptr
+	ldy rot0
+	clc
+	lda #<door_xid
+	adc door_vo,y
+	sta xid_ptr
+	lda #>door_xid
+	adc #0
+	sta xid_ptr+1
+	clc
+	lda #<door_zid
+	adc door_vo,y
+	sta zid_ptr
+	lda #>door_zid
+	adc #0
+	sta zid_ptr+1
+	clc
+	lda #<door_col
+	adc door_vo,y
+	sta col_ptr
+	lda #>door_col
+	adc #0
+	sta col_ptr+1
+	clc
+	lda #<door_edges
+	adc door_eo,y
+	sta edge_ptr
+	lda #>door_edges
+	adc #0
+	sta edge_ptr+1
+	lda door_eo,y
+	lsr
+	clc
+	adc #<door_evert
+	sta edge_vert_ptr
+	lda #>door_evert
+	adc #0
+	sta edge_vert_ptr+1
+	jsr fill_door_origin
+	jmp xform_item_at
+
+; ent_wx/wy/wz = door AABB bottom-centre on the outward face; ent_rot from vface.
+fill_door_origin
+	ldx obj_i
+	lda door_vface,x
+	cmp #FACE_PX
+	bcc .fdo_z
+	cmp #FACE_MX
+	beq .fdo_mx
+	clc
+	lda box_x
+	adc box_sx
+	sta ent_wx
+	jmp .fdo_zmid
+.fdo_mx
+	lda box_x
+	sta ent_wx
+.fdo_zmid
+	lda box_sz
+	lsr
+	clc
+	adc box_z
+	sta ent_wz
+	jmp .fdo_y
+.fdo_z
+	cmp #FACE_MZ
+	beq .fdo_mz
+	clc
+	lda box_z
+	adc box_sz
+	sta ent_wz
+	jmp .fdo_xmid
+.fdo_mz
+	lda box_z
+	sta ent_wz
+.fdo_xmid
+	lda box_sx
+	lsr
+	clc
+	adc box_x
+	sta ent_wx
+.fdo_y
+	lda box_y
+	sta ent_wy
+	ldx obj_i
+	lda door_vface,x
+	and #3
+	tay
+	lda door_face_rot,y
+	sta ent_rot
+	rts
+
 ; dt<<4 as 8.8 → ~1 rev / 4s
 update_item_spin
 	lda dt_ms
@@ -858,201 +938,6 @@ fill_plat_verts
 	lda #4
 	sta mesh_nv
 	jsr set_box_xzid
-	jmp xform_mesh_xz
-
-; Closed: 4 corners of the face. Open: two full-width leaves, each slides open/2.
-fill_door_verts
-	ldx obj_i
-	lda door_open,x
-	lsr
-	sta pv3				; slide
-	lda box_y
-	sta pv1				; y0
-	clc
-	adc box_sy
-	sta pv2				; y1
-	lda door_vface,x
-	cmp #FACE_PX
-	bcc .fdz
-	jmp .fdx
-.fdz
-	cmp #FACE_MZ
-	beq .fdmz
-	clc
-	lda box_z
-	adc box_sz
-	jmp .fdzp
-.fdmz
-	lda box_z
-.fdzp
-	sta UZ
-	lda #1
-	sta mesh_nz
-	ldx obj_i
-	lda door_open,x
-	bne .fdz_op
-	lda box_x
-	sta UX
-	clc
-	adc box_sx
-	bcc .fdz_c2
-	lda #255
-.fdz_c2
-	sta UX+1
-	lda #2
-	sta mesh_nx
-	lda pv1
-	sta VY
-	lda pv2
-	sta VY+1
-	sta VY+2
-	lda pv1
-	sta VY+3
-	lda #<door_closed_z_xid
-	sta xid_ptr
-	lda #>door_closed_z_xid
-	sta xid_ptr+1
-	lda #<door_closed_z_zid
-	sta zid_ptr
-	lda #>door_closed_z_zid
-	sta zid_ptr+1
-	jsr set_door_closed_col
-	lda #4
-	sta mesh_nv
-	jmp xform_mesh_xz
-.fdz_op
-	lda box_x
-	jsr coord_sub
-	sta UX				; xL
-	clc
-	adc box_sx
-	bcc .fdl1
-	lda #255
-.fdl1
-	sta UX+1			; xL+sx
-	lda box_x
-	jsr coord_add
-	sta UX+2			; xR
-	clc
-	adc box_sx
-	bcc .fdr1
-	lda #255
-.fdr1
-	sta UX+3			; xR+sx
-	lda #4
-	sta mesh_nx
-	lda pv1
-	sta VY
-	lda pv2
-	sta VY+1
-	sta VY+2
-	lda pv1
-	sta VY+3
-	lda pv2
-	sta VY+4
-	lda pv1
-	sta VY+5
-	lda #<door_open_z_xid
-	sta xid_ptr
-	lda #>door_open_z_xid
-	sta xid_ptr+1
-	lda #<door_open_z_zid
-	sta zid_ptr
-	lda #>door_open_z_zid
-	sta zid_ptr+1
-	jsr set_door_open_col
-	lda #6
-	sta mesh_nv
-	jmp xform_mesh_xz
-.fdx
-	ldx obj_i
-	cmp #FACE_MX
-	beq .fdmx
-	clc
-	lda box_x
-	adc box_sx
-	jmp .fdxp
-.fdmx
-	lda box_x
-.fdxp
-	sta UX
-	lda #1
-	sta mesh_nx
-	ldx obj_i
-	lda door_open,x
-	bne .fdx_op
-	lda box_z
-	sta UZ
-	clc
-	adc box_sz
-	bcc .fdx_c2
-	lda #255
-.fdx_c2
-	sta UZ+1
-	lda #2
-	sta mesh_nz
-	lda pv1
-	sta VY
-	lda pv2
-	sta VY+1
-	sta VY+2
-	lda pv1
-	sta VY+3
-	lda #<door_closed_x_xid
-	sta xid_ptr
-	lda #>door_closed_x_xid
-	sta xid_ptr+1
-	lda #<door_closed_x_zid
-	sta zid_ptr
-	lda #>door_closed_x_zid
-	sta zid_ptr+1
-	jsr set_door_closed_col
-	lda #4
-	sta mesh_nv
-	jmp xform_mesh_xz
-.fdx_op
-	lda box_z
-	jsr coord_sub
-	sta UZ				; zL
-	clc
-	adc box_sz
-	bcc .fdzl1
-	lda #255
-.fdzl1
-	sta UZ+1			; zL+sz
-	lda box_z
-	jsr coord_add
-	sta UZ+2			; zR
-	clc
-	adc box_sz
-	bcc .fdzr1
-	lda #255
-.fdzr1
-	sta UZ+3			; zR+sz
-	lda #4
-	sta mesh_nz
-	lda pv1
-	sta VY
-	lda pv2
-	sta VY+1
-	sta VY+2
-	lda pv1
-	sta VY+3
-	lda pv2
-	sta VY+4
-	lda pv1
-	sta VY+5
-	lda #<door_open_x_xid
-	sta xid_ptr
-	lda #>door_open_x_xid
-	sta xid_ptr+1
-	lda #<door_open_x_zid
-	sta zid_ptr
-	lda #>door_open_x_zid
-	sta zid_ptr+1
-	jsr set_door_open_col
-	lda #6
-	sta mesh_nv
 	jmp xform_mesh_xz
 
 ; Up-pointing triangle on the switch face
@@ -1464,7 +1349,7 @@ draw_world
 	beq .dw_d
 	jmp .dw_c
 .dw_d
-	; doors: closed 4-vert face; open full-width leaves slide open/2
+	; doors: static type mesh on the outward face
 	ldx #0
 .dw_door
 	cpx	map_ndoors

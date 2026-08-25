@@ -71,3 +71,38 @@ item_evert
 	!byte 0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0
 	!byte 0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0
 	!byte 0,0,0,1,0,0,0,1,0,0,0,0,1,0,1,0
+
+door_nv
+	!byte 4,5,3
+door_ne
+	!byte 3,4,2
+door_nx
+	!byte 2,3,3
+door_nz
+	!byte 1,1,1
+door_vo
+	!byte 0,4,9
+door_eo
+	!byte 0,6,14
+door_uo
+	!byte 0,2,5
+door_zo
+	!byte 0,1,2
+
+door_ux
+	!byte 254,2,254,2,0,253,3,0
+door_uz
+	!byte 0,0,0
+door_vy
+	!byte 0,0,4,4,0,0,3,4,3,0,0,4
+door_xid
+	!byte 0,1,1,0,0,1,1,2,0,0,1,2
+door_zid
+	!byte 0,0,0,0,0,0,0,0,0,0,0,0
+door_col
+	!byte 0,1,1,0,0,1,1,2,0,0,1,2
+door_edges
+	!byte 1,2,2,3,0,3,1,2,2,3,3,4,0,4,1,2
+	!byte 0,2
+door_evert
+	!byte 1,0,1,1,0,0,1,0,0

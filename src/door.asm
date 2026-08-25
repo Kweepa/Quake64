@@ -207,34 +207,6 @@ orient_one_door
 	rts
 
 ; ------------------------------------------------------------------
-; player_in_door_y — Y=door index; C=1 if player XZ in door AABB
-; ------------------------------------------------------------------
-player_in_door_y
-	lda cam_xh
-	cmp door_vx,y
-	bcc .pid_no
-	clc
-	lda door_vx,y
-	adc door_vsx,y
-	cmp cam_xh
-	bcc .pid_no
-	beq .pid_no
-	lda cam_zh
-	cmp door_vz,y
-	bcc .pid_no
-	clc
-	lda door_vz,y
-	adc door_vsz,y
-	cmp cam_zh
-	bcc .pid_no
-	beq .pid_no
-	sec
-	rts
-.pid_no
-	clc
-	rts
-
-; ------------------------------------------------------------------
 ; door_other_room — X=door; A=linked room that isn't room_idx ($ff none)
 ; ------------------------------------------------------------------
 door_other_room
@@ -286,15 +258,38 @@ door_front
 	rts
 
 ; ------------------------------------------------------------------
-; door_blocks — col_x/col_z vs closed door in this room. C=1 blocked
+; door_unlocked — X=door; C=1 if no key or player has the key
+; ------------------------------------------------------------------
+door_unlocked
+	+lda_mx door_key
+	beq .du_yes
+	cmp #DOOR_KEY_GOLD
+	beq .du_gold
+	lda have_keys
+	and #HAVE_SILVER
+	beq .du_no
+	bne .du_yes
+.du_gold
+	lda have_keys
+	and #HAVE_GOLD
+	beq .du_no
+.du_yes
+	sec
+	rts
+.du_no
+	clc
+	rts
+
+; ------------------------------------------------------------------
+; door_blocks — col_x/col_z vs locked door in this room. C=1 blocked
 ; ------------------------------------------------------------------
 door_blocks
 	ldx #0
 .db
 	cpx	map_ndoors
 	bcs .db_no
-	lda door_open,x
-	bne .db_n			; any open — not solid
+	jsr door_unlocked
+	bcs .db_n			; unlocked / have key — not solid
 	+lda_mx door_ra
 	cmp room_idx
 	beq .db_chk
@@ -378,15 +373,15 @@ door_hole_hit
 	jmp point_in_box_xz
 
 ; ------------------------------------------------------------------
-; door_portal_ok — col_x/col_z in an open door hole of room_idx? C=1 yes
+; door_portal_ok — col_x/col_z in an unlocked door hole of room_idx? C=1 yes
 ; ------------------------------------------------------------------
 door_portal_ok
 	ldx #0
 .dpo
 	cpx	map_ndoors
 	bcs .dpo_no
-	lda door_open,x
-	beq .dpo_n
+	jsr door_unlocked
+	bcc .dpo_n
 	+lda_mx door_ra
 	cmp room_idx
 	beq .dpo_chk
@@ -407,46 +402,51 @@ door_portal_ok
 	rts
 
 ; ------------------------------------------------------------------
-; try_room_switch — if an open door's other room contains the player, switch
+; try_room_switch — if an unlocked door's other room contains the player, switch
+; C=1 if room_idx changed
 ; ------------------------------------------------------------------
 try_room_switch
 	ldx #0
 .trs
 	cpx	map_ndoors
-	bcs .trs_rts
-	lda door_open,x
-	beq .trs_n
+	bcs .trs_no
+	jsr door_unlocked
+	bcc .trs_n
 	+ldy_mx door_ra
 	jsr .trs_inside
-	bcs .trs_rts
+	bcs .trs_yes
 	+ldy_mx door_rb
 	jsr .trs_inside
-	bcs .trs_rts
+	bcs .trs_yes
 .trs_n
 	inx
-	beq .trs_rts
+	beq .trs_no
 	jmp .trs
-.trs_rts
+.trs_no
+	clc
+	rts
+.trs_yes
+	sec
 	rts
 .trs_inside
 	cpy room_idx
-	beq .trs_no
+	beq .trs_in_no
 	lda cam_xh
 	sta col_x
 	lda cam_zh
 	sta col_z
 	jsr col_in_room_y
-	bcc .trs_no
+	bcc .trs_in_no
 	tya
 	jsr set_room_idx
 	sec
 	rts
-.trs_no
+.trs_in_no
 	clc
 	rts
 
 ; ------------------------------------------------------------------
-; try_door_proximity — auto-open if in front trigger box
+; try_door_proximity — locked door without key → "key required" HUD
 ; ------------------------------------------------------------------
 try_door_proximity
 	ldx #0
@@ -460,9 +460,13 @@ try_door_proximity
 	cmp room_idx
 	bne .tdp_n
 .tdp_near
+	jsr door_unlocked
+	bcs .tdp_n
 	jsr prox_door
 	bcc .tdp_n
-	jsr door_activate
+	ldx obj_i
+	+lda_mx door_key
+	jsr hud_key_req
 	ldx obj_i
 .tdp_n
 	inx

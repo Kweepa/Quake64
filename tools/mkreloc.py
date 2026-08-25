@@ -84,8 +84,9 @@ def main() -> None:
 
     labels = parse_labels(Path(args.labels))
     max_id = 255
-    if "room_x" in labels and "map_text" in labels:
-        max_id = (labels["map_text"] - labels["room_x"]) // 2
+    last = "door_type" if "door_type" in labels else "map_text"
+    if "room_x" in labels and last in labels:
+        max_id = (labels[last] - labels["room_x"]) // 2
         if max_id < 0 or max_id > 255:
             print("map pointer table field id out of range", file=sys.stderr)
             sys.exit(1)

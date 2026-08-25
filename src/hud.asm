@@ -704,6 +704,29 @@ hud_got
 	jsr hud_msg_center
 	jmp .hg_arm
 
+; A = DOOR_KEY_SILVER / DOOR_KEY_GOLD. Centered on HUD_ROW4 for STATUS_MS.
+hud_key_req
+	cmp #DOOR_KEY_GOLD
+	beq .hkr_gold
+	lda #<hud_str_silver_req
+	sta src_ptr
+	lda #>hud_str_silver_req
+	sta src_ptr+1
+	jmp .hkr_show
+.hkr_gold
+	lda #<hud_str_gold_req
+	sta src_ptr
+	lda #>hud_str_gold_req
+	sta src_ptr+1
+.hkr_show
+	jsr hud_msg_blank
+	jsr hud_msg_center
+	lda #<STATUS_MS
+	sta status_ms_l
+	lda #>STATUS_MS
+	sta status_ms_h
+	rts
+
 ; Tick status line; blank and clear msg_on when the timer expires.
 update_status
 	lda status_ms_l
@@ -727,6 +750,8 @@ update_status
 
 HUD_GOT_LEN	= 8			; "Got the "
 hud_str_got	!byte 71,111,116,32,116,104,101,32,0	; Got the
+hud_str_silver_req	!byte 83,105,108,118,101,114,32,107,101,121,32,114,101,113,117,105,114,101,100,0	; Silver key required
+hud_str_gold_req	!byte 71,111,108,100,32,107,101,121,32,114,101,113,117,105,114,101,100,0	; Gold key required
 bpn_shells	!byte 115,104,101,108,108,115,0		; shells
 bpn_nailgun	!byte 110,97,105,108,103,117,110,0	; nailgun
 bpn_nails	!byte 110,97,105,108,115,0		; nails

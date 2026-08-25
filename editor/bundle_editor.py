@@ -120,6 +120,8 @@ def main() -> None:
       <section id="items-left" hidden>
         <h2>Items</h2>
         <ul id="item-mesh-list" class="object-list"></ul>
+        <h2>Doors</h2>
+        <ul id="door-mesh-list" class="object-list"></ul>
       </section>
     </aside>
 

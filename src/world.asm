@@ -1322,6 +1322,10 @@ apply_move_world
 	jsr play_sound
 .am_sw
 	jsr try_room_switch
+	bcc .am_rts
+	lda #SOUND_OPENDOOR
+	jsr play_sound
+.am_rts
 	rts
 
 ; A = signed sintab → add (A * vel_ms)>>6 into wish X 8.8

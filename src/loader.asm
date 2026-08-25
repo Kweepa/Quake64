@@ -446,6 +446,7 @@ bind_map
 	+bind_add door_home_y, map_ndoors
 	+bind_add door_face, map_ndoors
 	+bind_add door_key, map_ndoors
+	+bind_add door_type, map_ndoors
 	+bind_add door_id, map_ndoors
 
 	+bind_add crate_x, map_ncrates

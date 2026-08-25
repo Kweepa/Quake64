@@ -9,22 +9,11 @@ proc_init
 	inx
 	cpx #PROC_NUM
 	bne .pi
-	ldx #0
-	lda #0
-.pd
-	cpx	map_ndoors
-	beq .psw0
-	sta door_open,x
-	inx
-	beq .psw0
-	jmp .pd
-.psw0
 	jsr elev_init
 	lda #0
 	sta in_use
 	sta key_use
 	sta key_use_was
-.pdone
 	rts
 
 proc_find_free
@@ -95,81 +84,6 @@ proc_count_free
 	rts
 
 ; ------------------------------------------------------------------
-; door_activate — X = door SoA index; C=0 success
-; ------------------------------------------------------------------
-door_activate
-	stx proc_tmp5			; local SoA
-	jmp .da_body
-.da_fail
-	sec
-	ldx proc_tmp5
-	rts
-.da_body
-	+lda_mx door_id
-	sta proc_tmp1			; world id for busy / PROC_A
-	jsr proc_target_busy
-	bcc .da_free
-	jmp .da_fail
-.da_free
-	ldx proc_tmp5
-	+lda_mx door_key
-	beq .da_unlocked
-	cmp #DOOR_KEY_GOLD
-	beq .da_gold
-	lda have_keys
-	and #HAVE_SILVER
-	beq .da_fail
-	bne .da_unlocked
-.da_gold
-	lda have_keys
-	and #HAVE_GOLD
-	beq .da_fail
-.da_unlocked
-	ldx proc_tmp5
-	lda door_open,x
-	+cmp_mx door_sy
-	bcs .da_fail
-	jsr proc_count_free
-	cmp #2
-	bcc .da_fail
-	ldx proc_tmp5
-	lda #PROC_OPEN_DOOR
-	sta proc_tmp0
-	+lda_mx door_id
-	sta proc_tmp1
-	+lda_mx door_sy
-	sta proc_tmp2
-	lda #0
-	sta proc_tmp3
-	sta proc_tmp4
-	jsr proc_alloc
-	bcs .da_fail
-	lda proc_tmp5
-	sta PROC_L,y
-	lda #SOUND_OPENDOOR
-	jsr play_sound
-	ldx proc_tmp5
-	lda #PROC_TIMER
-	sta proc_tmp0
-	+lda_mx door_id
-	sta proc_tmp1
-	lda #PROC_LOWER_DOOR
-	sta proc_tmp2
-	lda #<DOOR_RECLOSE_MS
-	sta proc_tmp3
-	lda #>DOOR_RECLOSE_MS
-	sta proc_tmp4
-	jsr proc_alloc
-	bcc .da_got
-	jmp .da_fail
-.da_got
-	lda proc_tmp5
-	sta PROC_L,y
-	clc
-	ldx proc_tmp5
-	rts
-
-; ------------------------------------------------------------------
 ; Accumulate motion: add dt once, then try one 64ms step (C=0 if stepped)
 ; ------------------------------------------------------------------
 proc_add_dt
@@ -219,22 +133,14 @@ proc_update_work
 	bne .pu_n1
 	jmp .pu_timer
 .pu_n1
-	cmp #PROC_OPEN_DOOR
-	bne .pu_n2
-	jmp .pu_rd
-.pu_n2
-	cmp #PROC_LOWER_DOOR
-	bne .pu_n3
-	jmp .pu_ld
-.pu_n3
 	cmp #PROC_LOWER_ELEV
-	bne .pu_n4
+	bne .pu_n2
 	jmp elev_pu_le
-.pu_n4
+.pu_n2
 	cmp #PROC_RAISE_ELEV
-	bne .pu_n5
+	bne .pu_n3
 	jmp elev_pu_re
-.pu_n5
+.pu_n3
 	jmp proc_update_next
 
 .pu_timer
@@ -262,12 +168,7 @@ proc_update_work
 	lda proc_tmp0
 	cmp #PROC_RAISE_ELEV
 	beq .pu_talloc
-	cmp #PROC_LOWER_DOOR
-	bne .pu_talloc
-	lda #SOUND_CLOSEDOOR
-	jsr play_sound
-	lda #0
-	sta proc_tmp2			; LOWER_DOOR dest open=0
+	; non-raise successors still allocate (elev lower, etc.)
 .pu_talloc
 	lda #0
 	sta proc_tmp3
@@ -291,51 +192,5 @@ proc_update_work
 	lda PROC_C,x
 	ora PROC_D,x
 	beq .pu_tfire
-	ldx proc_tmp5
-	jmp proc_update_next
-
-.pu_rd
-	jsr proc_add_dt
-.pu_rd_lp
-	jsr proc_try_step
-	bcc .pu_rd_go
-	jmp proc_update_next
-.pu_rd_go
-	ldy PROC_L,x
-	lda door_open,y
-	cmp PROC_B,x
-	bcs .pu_rd_done
-	clc
-	adc #1
-	sta door_open,y
-	jmp .pu_rd_lp
-.pu_rd_done
-	lda #PROC_FREE
-	sta PROC_KIND,x
-	jmp proc_update_next
-
-.pu_ld
-	; stall if player in door volume
-	stx proc_tmp5
-	ldy PROC_L,x
-	jsr player_in_door_y
-	bcs .pu_ld_wait
-	jsr proc_add_dt
-.pu_ld_lp
-	jsr proc_try_step
-	bcs .pu_ld_wait
-	ldy PROC_L,x
-	lda door_open,y
-	beq .pu_ld_done
-	sec
-	sbc #1
-	sta door_open,y
-	jmp .pu_ld_lp
-.pu_ld_wait
-	ldx proc_tmp5
-	jmp proc_update_next
-.pu_ld_done
-	lda #PROC_FREE
-	sta PROC_KIND,x
 	ldx proc_tmp5
 	jmp proc_update_next

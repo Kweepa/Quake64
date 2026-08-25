@@ -1,4 +1,4 @@
-; 40-col HUD — Quake 8×8 font in UI charset $F000 (ASCII screen codes)
+; 40-col HUD — Quake 8×8 font in UI charset $F800 (ASCII screen codes)
 ; Single-buffered in matrix A. Raster HUD / flyback always D018_A_UI; the
 ; viewport still flips A/B. Colour RAM is shared.
 !zone hud
@@ -613,11 +613,11 @@ hud_powerup
 .hpu_quad
 	ldx #0
 	lda #HUD_CH_QUAD
-	bne .hpu_draw
+	jmp .hpu_draw
 .hpu_pent
 	ldx #6
 	lda #HUD_CH_PENT
-	bne .hpu_draw
+	jmp .hpu_draw
 .hpu_ring
 	ldx #12
 	lda #HUD_CH_RING

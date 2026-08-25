@@ -233,6 +233,10 @@ h2 {
   margin: 0.35rem 0 0.55rem;
 }
 
+.anim-mem.error {
+  color: #f88;
+}
+
 .preview-panel .muted {
   margin: 0.35rem 0 0;
   font-size: 0.7rem;

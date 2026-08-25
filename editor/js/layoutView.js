@@ -17,8 +17,7 @@ import {
   roomGeometry,
   preserveRoomSplits,
   applyRoomSplitDelta,
-  inferDoorOtherRoom,
-  snapDoorBetweenRooms,
+  assignDoorRooms,
   snapSwitchToRoom,
   roomFloorY,
   roomById,
@@ -435,9 +434,7 @@ export class LayoutView {
       const obj = objs.find((o) => o.id === orig.id);
       if (!obj) continue;
       if (obj.kind === "doorway") {
-        const other = inferDoorOtherRoom(doc, obj);
-        if (other) obj.otherRoomId = other.id;
-        snapDoorBetweenRooms(obj, roomById(doc, obj.roomId), roomById(doc, obj.otherRoomId));
+        assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
         clampObject(obj);
       } else if (obj.kind === "switch") {
         snapSwitchToRoom(obj, roomById(doc, obj.roomId));
@@ -636,7 +633,9 @@ export class LayoutView {
 
   #visibleObjects(doc) {
     const local = this.opts.getLocalMode?.() || false;
-    return activeMap(doc).objects.filter((o) => objectVisible(doc, o, this.camera, local));
+    const focus = this.opts.getFocusRoom?.() || null;
+    const neighbours = !!(local && this.opts.getNeighbourMode?.());
+    return activeMap(doc).objects.filter((o) => objectVisible(doc, o, local, focus, neighbours));
   }
 
   #objectSegments(doc, obj) {
@@ -1024,6 +1023,8 @@ export class LayoutView {
       }
     }
     const local = this.opts.getLocalMode?.() || false;
+    const neighbours = !!(local && this.opts.getNeighbourMode?.());
+    const tag = local ? (neighbours ? "LOCAL+N" : "LOCAL") : "ALL";
     const primary = this.#primaryId();
     this.#syncGridY(doc);
 
@@ -1057,7 +1058,7 @@ export class LayoutView {
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";
     ctx.fillText(
-      `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${local ? "LOCAL" : "ALL"}  spd ${cam.speed | 0}`,
+      `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${tag}  spd ${cam.speed | 0}`,
       8,
       16
     );

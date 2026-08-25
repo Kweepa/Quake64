@@ -1015,6 +1015,19 @@ function bestDoorHullFace(obj, room) {
   return best?.f || null;
 }
 
+/** Best hull face per room, nearest first. Lateral miss is +50; wrong Y is +1000. */
+export function doorRoomScores(door, rooms) {
+  if (!door || !rooms?.length) return [];
+  const scored = [];
+  for (const room of rooms) {
+    const f = bestDoorHullFace(door, room);
+    if (!f) continue;
+    scored.push({ room, f, score: hullFaceScore(door, f) });
+  }
+  scored.sort((a, b) => a.score - b.score);
+  return scored;
+}
+
 /** Face of the door AABB closer to the given room (in-game stroke plane). */
 export function doorNearFaceId(door, room) {
   if (!door) return "+z";

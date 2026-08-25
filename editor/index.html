@@ -241,6 +241,10 @@ h2 {
   margin: 0.35rem 0 0.55rem;
 }
 
+.anim-mem.error {
+  color: #f88;
+}
+
 .preview-panel .muted {
   margin: 0.35rem 0 0;
   font-size: 0.7rem;
@@ -779,6 +783,7 @@ button:disabled {
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
       <button type="button" id="btn-draw-local">Local</button>
+      <button type="button" id="btn-draw-neighbours" title="Door-linked rooms (when Local is on)">Neighbours</button>
     </div>
     <div class="toolbar-actions">
       <button type="button" id="btn-undo" title="Ctrl+Z" disabled>Undo</button>
@@ -1882,6 +1887,19 @@ function bestDoorHullFace(obj, room) {
     if (!best || score < best.score) best = { f, score };
   }
   return best?.f || null;
+}
+
+/** Best hull face per room, nearest first. Lateral miss is +50; wrong Y is +1000. */
+function doorRoomScores(door, rooms) {
+  if (!door || !rooms?.length) return [];
+  const scored = [];
+  for (const room of rooms) {
+    const f = bestDoorHullFace(door, room);
+    if (!f) continue;
+    scored.push({ room, f, score: hullFaceScore(door, f) });
+  }
+  scored.sort((a, b) => a.score - b.score);
+  return scored;
 }
 
 /** Face of the door AABB closer to the given room (in-game stroke plane). */
@@ -3143,8 +3161,288 @@ const MAX_MAP_OBJECTS = 255;
 const MAP_MAX_TYPES = 3;
 const MAP_MAX_BYTES = 3072;
 const ENEMY_POSE_MAX = 4096;
+const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
+
 /** Packed map header: 11 counts + 3 type ids + 6 spawn + 4 mesh lens. */
 const MAP_HDR_BYTES = 24;
+
+// Keep in sync with tools/genenemies.py (clip-local fire + role names).
+const FIRE_FRAME = [2, 4, 4, 6, 4, 4, 8];
+const PAIN_MAX = 4;
+const ROLE_CLIPS = {
+  Grunt: { stand: ["stand"], alert: ["load"], run: ["run"], walk: ["prowl"], attack: ["shoot"] },
+  Knight: {
+    stand: ["stand"],
+    alert: ["standing"],
+    run: ["runb"],
+    walk: ["walk"],
+    attack: ["attackb"],
+  },
+  Rottweiler: {
+    stand: ["stand"],
+    alert: ["stand", 2],
+    run: ["run"],
+    walk: ["walk"],
+    attack: ["leap"],
+  },
+  Scrag: {
+    stand: ["hover"],
+    alert: ["hover", 4],
+    run: ["fly"],
+    walk: ["fly"],
+    attack: ["magatt"],
+  },
+  Ogre: {
+    stand: ["stand"],
+    alert: ["stand", 4],
+    run: ["run"],
+    walk: ["walk"],
+    attack: ["smash"],
+  },
+  Shambler: {
+    stand: ["stand"],
+    alert: ["stand", 4],
+    run: ["run"],
+    walk: ["walk"],
+    attack: ["smash"],
+  },
+  Chthon: {
+    stand: ["walk", 8],
+    alert: ["walk", 4],
+    run: ["walk"],
+    walk: ["walk"],
+    attack: ["attack"],
+  },
+};
+
+function poseClipKey(name) {
+  return String(name).replace(/_+$/, "").toLowerCase();
+}
+
+function poseClipByName(clips, name) {
+  for (const c of clips) {
+    if (c.name === name) return c;
+  }
+  const k = poseClipKey(name);
+  for (const c of clips) {
+    if (poseClipKey(c.name) === k) return c;
+  }
+  return null;
+}
+
+/**
+ * Stick clips/frames that will go in the pose PRG (exportClips checkboxes).
+ * Missing exportClips → all copied clips. Checked names with no stick frames are skipped.
+ */
+function exportPoseData(enemy) {
+  const frames = enemy?.frames || [];
+  const clips = enemy?.clips || [];
+  const names = Array.isArray(enemy?.exportClips) ? enemy.exportClips : null;
+  if (!names) return { clips, frames };
+  const outClips = [];
+  const outFrames = [];
+  let start = 0;
+  for (const name of names) {
+    const c = poseClipByName(clips, name);
+    if (!c) continue;
+    const slice = frames.slice(c.start | 0, (c.start | 0) + (c.len | 0));
+    if (!slice.length) continue;
+    outClips.push({ name: c.name, start, len: slice.length });
+    outFrames.push(...slice);
+    start += slice.length;
+  }
+  return { clips: outClips, frames: outFrames };
+}
+
+function findPoseClip(clips, ...names) {
+  for (const want of names) {
+    for (const c of clips) {
+      if (poseClipKey(c.name) === want) return [c.start | 0, c.len | 0];
+    }
+  }
+  return null;
+}
+
+function findPoseRole(name, clips, role) {
+  const spec = ROLE_CLIPS[name]?.[role];
+  if (!spec) return null;
+  const found = findPoseClip(clips, spec[0]);
+  if (!found) return null;
+  let [start, length] = found;
+  if (spec[1] != null) length = Math.min(length, spec[1]);
+  return [start, length];
+}
+
+function findPoseVariants(clips, kind) {
+  const re = kind === "pain" ? /^pain[a-z]?$/ : /^(bdeath|death[a-z]?)$/;
+  const out = [];
+  for (const c of clips) {
+    if (!re.test(poseClipKey(c.name))) continue;
+    out.push([c.start | 0, c.len | 0]);
+    if (out.length >= PAIN_MAX) break;
+  }
+  if (!out.length) {
+    const stand = findPoseClip(clips, "stand", "walk", "hover");
+    if (stand) out.push([stand[0], 1]);
+  }
+  return out;
+}
+
+function poseAccAt(frs, i) {
+  if (!frs || i <= 0 || i >= frs.length - 1) return 0;
+  let m = 0;
+  const a = frs[i - 1];
+  const b = frs[i];
+  const c = frs[i + 1];
+  if (!a || !b || !c) return 0;
+  for (let v = 0; v < 13; v++) {
+    for (const k of ["x", "y", "z"]) {
+      const d = Math.abs((c[v][k] | 0) - 2 * (b[v][k] | 0) + (a[v][k] | 0));
+      if (d > m) m = d;
+    }
+  }
+  return m;
+}
+
+function posePickKeys(frs, start, length, extra) {
+  if (length <= 2) return [];
+  const minSep = Math.max(2, (length / 3) | 0);
+  const keys = [];
+  for (const e of extra) {
+    if (start < e && e < start + length - 1) keys.push(e);
+    if (keys.length >= 2) return keys.slice(0, 2).sort((a, b) => a - b);
+  }
+  if (!frs) return keys.sort((a, b) => a - b);
+  const scored = [];
+  for (let i = start + 1; i < start + length - 1; i++) {
+    scored.push([poseAccAt(frs, i), i]);
+  }
+  scored.sort((a, b) => b[0] - a[0] || b[1] - a[1]);
+  for (const [, i] of scored) {
+    if (keys.some((k) => Math.abs(i - k) < minSep)) continue;
+    keys.push(i);
+    if (keys.length === 2) break;
+  }
+  return keys.sort((a, b) => a - b);
+}
+
+function poseCadenceKeep(start, length, keys) {
+  if (length <= 0) return new Set();
+  const last = start + length - 1;
+  const keyset = new Set(keys);
+  const kept = [];
+  let f = start;
+  while (f < last) {
+    const plug = [...keyset].filter((k) => f < k && k < f + 2).sort((a, b) => a - b);
+    kept.push(f);
+    if (plug.length) {
+      kept.push(plug[0]);
+      f = plug[0] + 2;
+    } else {
+      f += 2;
+    }
+  }
+  kept.push(last);
+  return new Set(kept);
+}
+
+function poseUncoveredRuns(covered) {
+  const out = [];
+  let i = 0;
+  while (i < covered.length) {
+    if (covered[i]) {
+      i += 1;
+      continue;
+    }
+    let j = i + 1;
+    while (j < covered.length && !covered[j]) j += 1;
+    out.push([i, j - i]);
+    i = j;
+  }
+  return out;
+}
+
+/**
+ * Packed pose PRG size (tools/genenemies.py pack_poses).
+ * clips: [{name, start, len}] covering the logical timeline.
+ * frames: stick verts for those logical indices, or null → cadence + fire pin only.
+ */
+function packedPoseBytes(enemy, clips, frames) {
+  const name = enemy?.name || "Grunt";
+  if (clips === undefined) {
+    const pose = exportPoseData(enemy);
+    clips = pose.clips;
+    frames = pose.frames;
+  }
+  const clipList = clips || [];
+  const frs = frames && frames.length ? frames : null;
+  let nLogical = 0;
+  for (const c of clipList) {
+    const end = (c.start | 0) + (c.len | 0);
+    if (end > nLogical) nLogical = end;
+  }
+  if (frs && frs.length > nLogical) nLogical = frs.length;
+  if (nLogical <= 0) return { bytes: 0, nLogical: 0, nStored: 0 };
+
+  const typeI = Math.max(
+    0,
+    ENEMY_TYPES.findIndex((t) => t.name === name),
+  );
+  const covered = Array(nLogical).fill(false);
+  const keep = new Set();
+  const atk = findPoseRole(name, clipList, "attack");
+  const fire = atk ? atk[0] + (FIRE_FRAME[typeI] ?? 2) : -1;
+
+  const ranges = [];
+  for (const role of ["stand", "alert", "run", "walk", "attack"]) {
+    const found = findPoseRole(name, clipList, role);
+    if (!found) continue;
+    let [start, length] = found;
+    if (start >= nLogical || length <= 0) continue;
+    length = Math.min(length, nLogical - start);
+    ranges.push([role, start, length]);
+  }
+  for (const kind of ["pain", "death"]) {
+    findPoseVariants(clipList, kind).forEach(([start, length], i) => {
+      if (start >= nLogical || length <= 0) return;
+      ranges.push([`${kind}${i}`, start, Math.min(length, nLogical - start)]);
+    });
+  }
+  for (const [role, start, length] of ranges) {
+    const extra = role === "attack" && fire >= 0 ? [fire] : [];
+    for (const i of poseCadenceKeep(start, length, posePickKeys(frs, start, length, extra))) {
+      keep.add(i);
+    }
+    for (let i = start; i < start + length; i++) covered[i] = true;
+  }
+  for (const c of clipList) {
+    const start = c.start | 0;
+    let length = c.len | 0;
+    if (start >= nLogical || length <= 0) continue;
+    length = Math.min(length, nLogical - start);
+    let all = true;
+    for (let i = start; i < start + length; i++) {
+      if (!covered[i]) {
+        all = false;
+        break;
+      }
+    }
+    if (all) continue;
+    for (const i of poseCadenceKeep(start, length, posePickKeys(frs, start, length, []))) {
+      keep.add(i);
+    }
+    for (let i = start; i < start + length; i++) covered[i] = true;
+  }
+  for (const [start, length] of poseUncoveredRuns(covered)) {
+    for (const i of poseCadenceKeep(start, length, posePickKeys(frs, start, length, []))) {
+      keep.add(i);
+    }
+  }
+
+  const nStored = keep.size;
+  const bytes = 2 + nLogical + nStored * STICK_POSE_BYTES;
+  return { bytes, nLogical, nStored };
+}
 
 /** Unique enemy type names placed on a map (unknown names count as Grunt). */
 function mapEnemyTypeNames(map) {
@@ -3169,24 +3467,24 @@ function canAddEnemyType(map, typeName) {
 
 /**
  * Bytes per instance in the cooked C64 SoA (tools/genmap.py).
- * Trigger text blob is counted separately. Spawn is always 5 bytes in the map.
+ * Trigger text blob is counted separately. Spawn lives in the 24-byte header.
  */
 const C64_OBJECT_BYTES = {
   room: 11,
-  doorway: 10,
-  crate: 7,
-  slope: 9,
-  platform: 7,
-  elevator: 10,
-  switch: 9,
-  enemy: 7,
+  doorway: 12,
+  crate: 8,
+  slope: 10,
+  platform: 8,
+  elevator: 11,
+  switch: 10,
+  enemy: 8,
   trigger: 10,
-  spawn: 5,
-  pickup: 5,
+  spawn: 0,
+  pickup: 6,
   teleporter_dest: 5,
 };
 
-/** Counts + estimated packed map RAM for the active level. */
+/** Counts + packed map RAM for the active level (matches genmap cook_one). */
 function mapStats(doc) {
   const map = activeMap(doc);
   const byKind = {};
@@ -3194,6 +3492,7 @@ function mapStats(doc) {
   let c64Bytes = MAP_HDR_BYTES;
   c64Bytes += clampName(map.name).length + 1; // map_name + NUL
   let hasSpawn = false;
+  let mapText = 0;
   for (const obj of map.objects) {
     const kind = obj.kind;
     if (!KINDS[kind]) continue;
@@ -3206,12 +3505,14 @@ function mapStats(doc) {
     }
     c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
     if (kind === "room") {
-      c64Bytes += 18; // three collider slots
+      c64Bytes += 18; // three collider slots (3×6)
+      c64Bytes += 12; // two cutout slots (2×6), always padded
+      c64Bytes += 8; // nv/ne/vo/eo/nx/nz/uo/zo (zeros on box)
       if (clampRoomShape(obj.shape) !== "box") {
         const g = roomGeometry(obj);
         const nx = new Set(g.verts.map((v) => v.x)).size;
         const nz = new Set(g.verts.map((v) => v.z)).size;
-        c64Bytes += 8 + nx + nz + g.verts.length * 4 + g.edges.length * 3;
+        c64Bytes += nx + nz + g.verts.length * 4 + g.edges.length * 4;
       }
     }
     if (kind === "trigger" && clampTriggerPurpose(obj.purpose) === "message") {
@@ -3219,28 +3520,41 @@ function mapStats(doc) {
         .replace(/\r\n/g, "\n")
         .split("\n", 1)[0]
         .slice(0, 40);
-      c64Bytes += text.length + 1; // chars + NUL in map_text
+      mapText += text.length + 1; // chars + NUL in map_text
     }
   }
+  c64Bytes += mapText || 1; // dummy NUL if no message triggers
   const enemyTypes = mapEnemyTypeNames(map);
   const enemyTypeCount = enemyTypes.length;
   const overTypes = enemyTypeCount > MAP_MAX_TYPES;
-  const overBytes = c64Bytes > MAP_MAX_BYTES;
+  let poseBytes = 0;
+  const poseParts = [];
+  for (const name of enemyTypes) {
+    const e = (doc.enemies || []).find((en) => en.name === name);
+    if (!e) continue;
+    const n = packedPoseBytes(e).bytes;
+    poseBytes += n;
+    poseParts.push(`${name} ${n}`);
+  }
+  const loadBytes = c64Bytes + poseBytes;
   return {
     total,
     byKind,
     c64Bytes,
+    poseBytes,
+    loadBytes,
+    poseParts,
     max: MAX_MAP_OBJECTS,
     enemyTypes,
     enemyTypeCount,
     overTypes,
-    overBytes,
-    overBudget: overTypes || overBytes,
+    overBudget: overTypes,
   };
 }
 
 function formatMapStats(stats) {
-  const parts = [`${stats.total}/${stats.max} objects`];
+  const load = `${stats.c64Bytes}:${stats.loadBytes}`;
+  const parts = [load, `${stats.total}/${stats.max} objects`];
   const order = [
     "room",
     "doorway",
@@ -3276,10 +3590,12 @@ function formatMapStats(stats) {
     parts.push(`${n} ${n === 1 ? one : plurals[kind] || `${one}s`}`);
   }
   parts.push(`${stats.enemyTypeCount}/${MAP_MAX_TYPES} types`);
-  const kb =
-    stats.c64Bytes >= 1024 ? `${(stats.c64Bytes / 1024).toFixed(1)}K` : `${stats.c64Bytes} B`;
-  parts.push(`~${kb} / ${MAP_MAX_BYTES} B`);
   return parts.join(" · ");
+}
+
+function formatMapLoadTitle(stats) {
+  const bits = [`map ${stats.c64Bytes}`, ...(stats.poseParts || [])];
+  return `${bits.join(" + ")} = ${stats.loadBytes}`;
 }
 
 function activeMap(doc) {
@@ -3361,12 +3677,53 @@ function objectTree(doc) {
   return { nodes, orphans };
 }
 
-function inferDoorOtherRoom(doc, door) {
-  if (!door || door.kind !== "doorway") return null;
-  const hits = roomsOf(doc).filter((r) => r.id !== door.roomId && aabbOverlapsRoom(door, r));
-  if (!hits.length) return null;
-  hits.sort((a, b) => aabbVolume(a) - aabbVolume(b));
-  return hits[0];
+/** Hull-face scores below this are on-wall; +50 is a lateral miss. */
+const DOOR_PAIR_MAX = 8;
+const DOOR_PAIR_SLACK = 4;
+
+/** Closest room, plus a second room across the same portal if still close. */
+function inferDoorRoomPair(doc, door) {
+  if (!door || door.kind !== "doorway") return { room: null, other: null };
+  const scored = doorRoomScores(door, roomsOf(doc));
+  if (!scored.length || scored[0].score >= 50) return { room: null, other: null };
+  const best = scored[0];
+  const closeLimit = Math.min(DOOR_PAIR_MAX, best.score + DOOR_PAIR_SLACK);
+  let otherHit = null;
+  for (const hit of scored) {
+    if (hit.room.id === best.room.id) continue;
+    if (hit.score > closeLimit) continue;
+    const opposite = hit.f.axis === best.f.axis && hit.f.sign !== best.f.sign;
+    const ranked = opposite ? hit.score : hit.score + 100;
+    if (!otherHit || ranked < otherHit.ranked) otherHit = { hit, ranked };
+  }
+  return { room: best.room, other: otherHit?.hit.room || null };
+}
+
+function assignDoorRooms(doc, door, owner) {
+  if (!door || door.kind !== "doorway") return door;
+  const pair = inferDoorRoomPair(doc, door);
+  const a = pair.room;
+  const b = pair.other;
+  const ownerId = owner?.id || null;
+  if (ownerId && a && ownerId === a.id) {
+    door.roomId = a.id;
+    door.otherRoomId = b?.id || null;
+  } else if (ownerId && b && ownerId === b.id) {
+    door.roomId = b.id;
+    door.otherRoomId = a?.id || null;
+  } else if (a) {
+    door.roomId = a.id;
+    door.otherRoomId = b?.id || null;
+  } else if (ownerId) {
+    door.roomId = ownerId;
+    door.otherRoomId = door.otherRoomId === ownerId ? null : door.otherRoomId || null;
+  } else {
+    door.roomId = null;
+    door.otherRoomId = null;
+  }
+  if (door.otherRoomId === door.roomId) door.otherRoomId = null;
+  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
+  return door;
 }
 
 function neighbourRooms(doc, room) {
@@ -3385,14 +3742,25 @@ function neighbourRooms(doc, room) {
   return out;
 }
 
-function localVisibleIds(doc, cam) {
-  const cur = currentRoom(doc, cam);
-  if (!cur) return new Set();
-  const ids = new Set([cur.id]);
-  const neigh = neighbourRooms(doc, cur);
-  for (const r of neigh) ids.add(r.id);
-  const rooms = [cur, ...neigh];
+/** Selected room, or owner room of the newest selected object; else lastRoomId. */
+function localFocusRoom(doc, selectedIds, lastId) {
+  const ids = Array.isArray(selectedIds) ? selectedIds : [];
+  const objs = activeMap(doc).objects;
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const obj = objs.find((o) => o.id === ids[i]);
+    if (!obj) continue;
+    if (obj.kind === "room") return obj;
+    const r = roomById(doc, obj.roomId);
+    if (r) return r;
+  }
+  return roomById(doc, lastId);
+}
+
+function localVisibleIds(doc, focus, includeNeighbours) {
+  if (!focus) return new Set();
+  const rooms = [focus, ...(includeNeighbours ? neighbourRooms(doc, focus) : [])];
   const roomIds = new Set(rooms.map((r) => r.id));
+  const ids = new Set(roomIds);
   for (const obj of activeMap(doc).objects) {
     if (obj.kind === "room") continue;
     if (roomIds.has(obj.roomId) || (obj.kind === "doorway" && roomIds.has(obj.otherRoomId))) {
@@ -3402,9 +3770,9 @@ function localVisibleIds(doc, cam) {
   return ids;
 }
 
-function objectVisible(doc, obj, cam, localMode) {
+function objectVisible(doc, obj, localMode, focus, neighbours) {
   if (!localMode) return true;
-  return localVisibleIds(doc, cam).has(obj.id);
+  return localVisibleIds(doc, focus, neighbours).has(obj.id);
 }
 
 const BASE_SKELETON = [
@@ -3668,6 +4036,7 @@ function defaultEditorState() {
   return {
     mode: "layout",
     localDraw: false,
+    neighbourDraw: false,
     selectedIds: [],
     enemy: "Grunt",
     frameIndex: 0,
@@ -3746,6 +4115,7 @@ function parseEditorState(raw) {
   if (!raw || typeof raw !== "object") return d;
   if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons" || raw.mode === "items") d.mode = raw.mode;
   d.localDraw = !!raw.localDraw;
+  d.neighbourDraw = !!raw.neighbourDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
   d.frameIndex = Math.max(0, num(raw.frameIndex, 0) | 0);
@@ -6059,9 +6429,7 @@ class LayoutView {
       const obj = objs.find((o) => o.id === orig.id);
       if (!obj) continue;
       if (obj.kind === "doorway") {
-        const other = inferDoorOtherRoom(doc, obj);
-        if (other) obj.otherRoomId = other.id;
-        snapDoorBetweenRooms(obj, roomById(doc, obj.roomId), roomById(doc, obj.otherRoomId));
+        assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
         clampObject(obj);
       } else if (obj.kind === "switch") {
         snapSwitchToRoom(obj, roomById(doc, obj.roomId));
@@ -6260,7 +6628,9 @@ class LayoutView {
 
   #visibleObjects(doc) {
     const local = this.opts.getLocalMode?.() || false;
-    return activeMap(doc).objects.filter((o) => objectVisible(doc, o, this.camera, local));
+    const focus = this.opts.getFocusRoom?.() || null;
+    const neighbours = !!(local && this.opts.getNeighbourMode?.());
+    return activeMap(doc).objects.filter((o) => objectVisible(doc, o, local, focus, neighbours));
   }
 
   #objectSegments(doc, obj) {
@@ -6648,6 +7018,8 @@ class LayoutView {
       }
     }
     const local = this.opts.getLocalMode?.() || false;
+    const neighbours = !!(local && this.opts.getNeighbourMode?.());
+    const tag = local ? (neighbours ? "LOCAL+N" : "LOCAL") : "ALL";
     const primary = this.#primaryId();
     this.#syncGridY(doc);
 
@@ -6681,7 +7053,7 @@ class LayoutView {
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";
     ctx.fillText(
-      `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${local ? "LOCAL" : "ALL"}  spd ${cam.speed | 0}`,
+      `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${tag}  spd ${cam.speed | 0}`,
       8,
       16
     );
@@ -6910,9 +7282,12 @@ class OverheadView {
     const doc = this.opts.getDoc();
     const cam = this.opts.getCamera();
     const local = this.opts.getLocalMode?.() || false;
-    const cur = currentRoom(doc, cam);
-    const neigh = cur ? neighbourRooms(doc, cur) : [];
-    const vis = local ? localVisibleIds(doc, cam) : null;
+    const neighbourOn = !!this.opts.getNeighbourMode?.();
+    const camRoom = currentRoom(doc, cam);
+    const focus = local ? this.opts.getFocusRoom?.() || null : camRoom;
+    const neigh = focus ? neighbourRooms(doc, focus) : [];
+    const vis = local ? localVisibleIds(doc, focus, neighbourOn) : null;
+    const cur = focus;
     const selected = new Set(this.opts.getSelectedIds?.() || []);
     const primary = this.opts.getSelectedId?.();
     if (primary) selected.add(primary);
@@ -8759,6 +9134,7 @@ const ANIM_PLAY_MS = 100;
 let doc = createDefaultDocument();
 let editorMode = "layout";
 let localDraw = false;
+let neighbourDraw = false;
 let selectedIds = [];
 let pendingPlace = null;
 let enemyIndex = 0;
@@ -8801,6 +9177,8 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   getDoc: () => doc,
   getSelectedIds: () => selectedIds,
   getLocalMode: () => localDraw && editorMode === "layout",
+  getNeighbourMode: () => neighbourDraw,
+  getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
   onSelectIds: (ids, additive) => {
     if (additive) {
       for (const id of ids) {
@@ -8838,6 +9216,8 @@ const overheadView = new OverheadView(document.getElementById("overhead-canvas")
   getSelectedId: () => (selectedIds.length ? selectedIds[selectedIds.length - 1] : null),
   getSelectedIds: () => selectedIds,
   getLocalMode: () => localDraw,
+  getNeighbourMode: () => neighbourDraw,
+  getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
 });
 
 const animView = new AnimView(document.getElementById("view-canvas"), {
@@ -9054,6 +9434,7 @@ function collectEditorState() {
   return parseEditorState({
     mode: editorMode,
     localDraw,
+    neighbourDraw,
     selectedIds: [...selectedIds],
     enemy: enemy?.name || "Grunt",
     frameIndex,
@@ -9127,6 +9508,7 @@ function applyEditorState(ed) {
     syncClipFromFrameIndex(activeEnemy());
     const have = new Set(activeMap(doc).objects.map((o) => o.id));
     selectedIds = ed.selectedIds.filter((id) => have.has(id));
+    rememberSelectedRoom();
     selectedVerts = [...ed.selectedVerts];
     setMdlScale(ed.mdlScale);
     weaponKey = WEAPON_KEYS.includes(ed.weapon) ? ed.weapon : "axe";
@@ -9144,6 +9526,7 @@ function applyEditorState(ed) {
     iorb.target.x = ed.itemOrbit.target.x;
     iorb.target.y = ed.itemOrbit.target.y;
     iorb.target.z = ed.itemOrbit.target.z;
+    setNeighbourDraw(ed.neighbourDraw, false);
     setDrawMode(ed.localDraw);
     setMode(ed.mode);
   } finally {
@@ -9263,22 +9646,15 @@ function exportClipNames(e, mdl) {
   return filterMdlClips(mdl?.clips).map((c) => c.name);
 }
 
-/** ROM gx/gy/gz signed bytes + clip start/len. Shared LUTs omitted. */
-const STICK_POSE_BYTES = 13 * 3;
-const STICK_CLIP_BYTES = 2;
-
-function stickRomBytes(frames, clips) {
-  return frames * STICK_POSE_BYTES + clips * STICK_CLIP_BYTES;
-}
-
-function formatStickRomMem(frames, clips) {
-  const bytes = stickRomBytes(frames, clips);
+function formatPackedPoseMem(packed) {
+  const { bytes, nLogical, nStored } = packed;
   const size =
     bytes >= 1024
       ? `${bytes / 1024 < 10 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)} KB`
       : `${bytes} bytes`;
-  const f = frames === 1 ? "frame" : "frames";
-  return `≈ ${size} in-game (${frames} ${f})`;
+  const over =
+    bytes > ENEMY_POSE_MAX ? ` OVER ${bytes - ENEMY_POSE_MAX}` : "";
+  return `≈ ${size} in-game (${nStored} stored / ${nLogical} logical)${over}`;
 }
 
 function getTimeline(e) {
@@ -9407,16 +9783,36 @@ function setOrthoMode(mode) {
   markUi();
 }
 
+function syncDrawButtons() {
+  document.getElementById("btn-draw-all").classList.toggle("active", !localDraw);
+  document.getElementById("btn-draw-local").classList.toggle("active", localDraw);
+  document.getElementById("btn-draw-neighbours")?.classList.toggle("active", neighbourDraw);
+}
+
+function drawModeStatus() {
+  if (!localDraw) return "All rooms";
+  if (!localFocusRoom(doc, selectedIds, lastRoomId)) return "Local: no room selected";
+  return neighbourDraw ? "Local + neighbours" : "Local draw";
+}
+
 function setDrawMode(local) {
   localDraw = local;
-  document.getElementById("btn-draw-all").classList.toggle("active", !local);
-  document.getElementById("btn-draw-local").classList.toggle("active", local);
-  const cam = layoutView.camera;
-  const room = currentRoom(doc, cam);
-  if (local && !room) setStatus("Local: camera is not inside a room", true);
-  else setStatus(local ? "Local draw" : "All rooms");
+  syncDrawButtons();
+  const msg = drawModeStatus();
+  setStatus(msg, local && msg.startsWith("Local: no"));
   refreshAll();
   markUi();
+}
+
+function setNeighbourDraw(on, redraw = true) {
+  neighbourDraw = !!on;
+  syncDrawButtons();
+  if (redraw) {
+    const msg = drawModeStatus();
+    if (localDraw) setStatus(msg, msg.startsWith("Local: no"));
+    refreshAll();
+    markUi();
+  }
 }
 
 function buildPalette() {
@@ -9492,7 +9888,7 @@ function finishPaletteDrop(e) {
   clampObject(obj);
   activeMap(doc).objects.push(obj);
   if (kind === "doorway") {
-    assignDoorRooms(obj, owner);
+    assignDoorRooms(doc, obj, owner);
     clampObject(obj);
   } else if (kind === "switch" && owner) {
     snapSwitchToRoom(obj, owner);
@@ -9517,12 +9913,16 @@ function rememberSelectedRoom() {
     if (!obj) continue;
     if (obj.kind === "room") {
       lastRoomId = obj.id;
-      return;
+      break;
     }
     if (obj.roomId) {
       lastRoomId = obj.roomId;
-      return;
+      break;
     }
+  }
+  if (localDraw && !applyingEditor) {
+    const msg = drawModeStatus();
+    setStatus(msg, msg.startsWith("Local: no"));
   }
 }
 
@@ -9534,15 +9934,6 @@ function placementRoom() {
     if (r) return r;
   }
   return roomById(doc, lastRoomId);
-}
-
-function assignDoorRooms(door, owner) {
-  if (!door || door.kind !== "doorway") return;
-  if (owner) door.roomId = owner.id;
-  const other = inferDoorOtherRoom(doc, door);
-  door.otherRoomId = other && other.id !== door.roomId ? other.id : door.otherRoomId || null;
-  if (door.otherRoomId === door.roomId) door.otherRoomId = null;
-  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
 }
 
 function deleteSelected() {
@@ -9632,6 +10023,7 @@ function updateCenterChrome() {
       const stats = mapStats(doc);
       statsEl.hidden = false;
       statsEl.textContent = formatMapStats(stats);
+      statsEl.title = formatMapLoadTitle(stats);
       statsEl.classList.toggle("error", !!stats.overBudget);
     }
     return;
@@ -9647,6 +10039,7 @@ function updateCenterChrome() {
   if (statsEl) {
     statsEl.hidden = true;
     statsEl.textContent = "";
+    statsEl.title = "";
     statsEl.classList.remove("error");
   }
 }
@@ -10521,7 +10914,7 @@ function renderInspector() {
       sel.addEventListener("change", () =>
         apply(() => {
           obj.roomId = sel.value || null;
-          if (obj.kind === "doorway") assignDoorRooms(obj, roomById(doc, obj.roomId));
+          if (obj.kind === "doorway") assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
           if (obj.kind === "switch") snapSwitchToRoom(obj, roomById(doc, obj.roomId));
         })
       );
@@ -10643,14 +11036,12 @@ function renderInspector() {
         ul.appendChild(li);
       });
       root.appendChild(ul);
-      let selFrames = 0;
-      for (const c of timeline) {
-        if (selected.has(c.name)) selFrames += c.len;
-      }
+      const packed = packedPoseBytes(e);
       const mem = document.createElement("p");
       mem.className = "muted anim-mem";
-      mem.title = "gx/gy/gz signed bytes (13 verts × 3) plus clip start/len";
-      mem.textContent = formatStickRomMem(selFrames, selected.size);
+      mem.classList.toggle("error", packed.bytes > ENEMY_POSE_MAX);
+      mem.title = "Packed pose PRG: 2 + logical map + stored gx/gy/gz (13×3). Clip tables are in GAME.";
+      mem.textContent = formatPackedPoseMem(packed);
       root.appendChild(mem);
     } else {
       const clipSel = document.createElement("select");
@@ -11202,6 +11593,7 @@ function refreshPanels() {
   syncWeaponScaleInputs();
   syncWeaponGlobalButtons();
   overheadView.draw();
+  if (editorMode === "layout") layoutView.draw();
   if (editorMode === "anim") animView.draw();
   if (editorMode === "weapons") weaponView.draw();
   if (editorMode === "items") itemView.draw();
@@ -11265,6 +11657,9 @@ document.getElementById("btn-draw-all").addEventListener("click", () => {
 });
 document.getElementById("btn-draw-local").addEventListener("click", () => {
   setDrawMode(true);
+});
+document.getElementById("btn-draw-neighbours")?.addEventListener("click", () => {
+  setNeighbourDraw(!neighbourDraw);
 });
 document.getElementById("btn-ortho-top").addEventListener("click", () => setOrthoMode("top"));
 document.getElementById("btn-ortho-left").addEventListener("click", () => setOrthoMode("left"));

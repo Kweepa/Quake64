@@ -36,13 +36,16 @@ import {
   itemMeshStats,
   createObject,
   createDefaultDocument,
-  currentRoom,
+  localFocusRoom,
   normalizeDocument,
   uid,
   LEVEL_NAMES,
   activeMap,
   mapStats,
   formatMapStats,
+  formatMapLoadTitle,
+  packedPoseBytes,
+  ENEMY_POSE_MAX,
   MAP_MAX_TYPES,
   canAddEnemyType,
   clipForFrame,
@@ -53,7 +56,7 @@ import {
   roomUnderObject,
   roomById,
   roomsOf,
-  inferDoorOtherRoom,
+  assignDoorRooms,
   snapDoorBetweenRooms,
   snapSwitchToRoom,
   usesLinkTag,
@@ -132,6 +135,7 @@ const ANIM_PLAY_MS = 100;
 let doc = createDefaultDocument();
 let editorMode = "layout";
 let localDraw = false;
+let neighbourDraw = false;
 let selectedIds = [];
 let pendingPlace = null;
 let enemyIndex = 0;
@@ -174,6 +178,8 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   getDoc: () => doc,
   getSelectedIds: () => selectedIds,
   getLocalMode: () => localDraw && editorMode === "layout",
+  getNeighbourMode: () => neighbourDraw,
+  getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
   onSelectIds: (ids, additive) => {
     if (additive) {
       for (const id of ids) {
@@ -211,6 +217,8 @@ const overheadView = new OverheadView(document.getElementById("overhead-canvas")
   getSelectedId: () => (selectedIds.length ? selectedIds[selectedIds.length - 1] : null),
   getSelectedIds: () => selectedIds,
   getLocalMode: () => localDraw,
+  getNeighbourMode: () => neighbourDraw,
+  getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
 });
 
 const animView = new AnimView(document.getElementById("view-canvas"), {
@@ -427,6 +435,7 @@ function collectEditorState() {
   return parseEditorState({
     mode: editorMode,
     localDraw,
+    neighbourDraw,
     selectedIds: [...selectedIds],
     enemy: enemy?.name || "Grunt",
     frameIndex,
@@ -500,6 +509,7 @@ function applyEditorState(ed) {
     syncClipFromFrameIndex(activeEnemy());
     const have = new Set(activeMap(doc).objects.map((o) => o.id));
     selectedIds = ed.selectedIds.filter((id) => have.has(id));
+    rememberSelectedRoom();
     selectedVerts = [...ed.selectedVerts];
     setMdlScale(ed.mdlScale);
     weaponKey = WEAPON_KEYS.includes(ed.weapon) ? ed.weapon : "axe";
@@ -517,6 +527,7 @@ function applyEditorState(ed) {
     iorb.target.x = ed.itemOrbit.target.x;
     iorb.target.y = ed.itemOrbit.target.y;
     iorb.target.z = ed.itemOrbit.target.z;
+    setNeighbourDraw(ed.neighbourDraw, false);
     setDrawMode(ed.localDraw);
     setMode(ed.mode);
   } finally {
@@ -636,22 +647,15 @@ function exportClipNames(e, mdl) {
   return filterMdlClips(mdl?.clips).map((c) => c.name);
 }
 
-/** ROM gx/gy/gz signed bytes + clip start/len. Shared LUTs omitted. */
-const STICK_POSE_BYTES = 13 * 3;
-const STICK_CLIP_BYTES = 2;
-
-function stickRomBytes(frames, clips) {
-  return frames * STICK_POSE_BYTES + clips * STICK_CLIP_BYTES;
-}
-
-function formatStickRomMem(frames, clips) {
-  const bytes = stickRomBytes(frames, clips);
+function formatPackedPoseMem(packed) {
+  const { bytes, nLogical, nStored } = packed;
   const size =
     bytes >= 1024
       ? `${bytes / 1024 < 10 ? (bytes / 1024).toFixed(1) : Math.round(bytes / 1024)} KB`
       : `${bytes} bytes`;
-  const f = frames === 1 ? "frame" : "frames";
-  return `≈ ${size} in-game (${frames} ${f})`;
+  const over =
+    bytes > ENEMY_POSE_MAX ? ` OVER ${bytes - ENEMY_POSE_MAX}` : "";
+  return `≈ ${size} in-game (${nStored} stored / ${nLogical} logical)${over}`;
 }
 
 function getTimeline(e) {
@@ -780,16 +784,36 @@ function setOrthoMode(mode) {
   markUi();
 }
 
+function syncDrawButtons() {
+  document.getElementById("btn-draw-all").classList.toggle("active", !localDraw);
+  document.getElementById("btn-draw-local").classList.toggle("active", localDraw);
+  document.getElementById("btn-draw-neighbours")?.classList.toggle("active", neighbourDraw);
+}
+
+function drawModeStatus() {
+  if (!localDraw) return "All rooms";
+  if (!localFocusRoom(doc, selectedIds, lastRoomId)) return "Local: no room selected";
+  return neighbourDraw ? "Local + neighbours" : "Local draw";
+}
+
 function setDrawMode(local) {
   localDraw = local;
-  document.getElementById("btn-draw-all").classList.toggle("active", !local);
-  document.getElementById("btn-draw-local").classList.toggle("active", local);
-  const cam = layoutView.camera;
-  const room = currentRoom(doc, cam);
-  if (local && !room) setStatus("Local: camera is not inside a room", true);
-  else setStatus(local ? "Local draw" : "All rooms");
+  syncDrawButtons();
+  const msg = drawModeStatus();
+  setStatus(msg, local && msg.startsWith("Local: no"));
   refreshAll();
   markUi();
+}
+
+function setNeighbourDraw(on, redraw = true) {
+  neighbourDraw = !!on;
+  syncDrawButtons();
+  if (redraw) {
+    const msg = drawModeStatus();
+    if (localDraw) setStatus(msg, msg.startsWith("Local: no"));
+    refreshAll();
+    markUi();
+  }
 }
 
 function buildPalette() {
@@ -865,7 +889,7 @@ function finishPaletteDrop(e) {
   clampObject(obj);
   activeMap(doc).objects.push(obj);
   if (kind === "doorway") {
-    assignDoorRooms(obj, owner);
+    assignDoorRooms(doc, obj, owner);
     clampObject(obj);
   } else if (kind === "switch" && owner) {
     snapSwitchToRoom(obj, owner);
@@ -890,12 +914,16 @@ function rememberSelectedRoom() {
     if (!obj) continue;
     if (obj.kind === "room") {
       lastRoomId = obj.id;
-      return;
+      break;
     }
     if (obj.roomId) {
       lastRoomId = obj.roomId;
-      return;
+      break;
     }
+  }
+  if (localDraw && !applyingEditor) {
+    const msg = drawModeStatus();
+    setStatus(msg, msg.startsWith("Local: no"));
   }
 }
 
@@ -907,15 +935,6 @@ function placementRoom() {
     if (r) return r;
   }
   return roomById(doc, lastRoomId);
-}
-
-function assignDoorRooms(door, owner) {
-  if (!door || door.kind !== "doorway") return;
-  if (owner) door.roomId = owner.id;
-  const other = inferDoorOtherRoom(doc, door);
-  door.otherRoomId = other && other.id !== door.roomId ? other.id : door.otherRoomId || null;
-  if (door.otherRoomId === door.roomId) door.otherRoomId = null;
-  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
 }
 
 function deleteSelected() {
@@ -1005,6 +1024,7 @@ function updateCenterChrome() {
       const stats = mapStats(doc);
       statsEl.hidden = false;
       statsEl.textContent = formatMapStats(stats);
+      statsEl.title = formatMapLoadTitle(stats);
       statsEl.classList.toggle("error", !!stats.overBudget);
     }
     return;
@@ -1020,6 +1040,7 @@ function updateCenterChrome() {
   if (statsEl) {
     statsEl.hidden = true;
     statsEl.textContent = "";
+    statsEl.title = "";
     statsEl.classList.remove("error");
   }
 }
@@ -1894,7 +1915,7 @@ function renderInspector() {
       sel.addEventListener("change", () =>
         apply(() => {
           obj.roomId = sel.value || null;
-          if (obj.kind === "doorway") assignDoorRooms(obj, roomById(doc, obj.roomId));
+          if (obj.kind === "doorway") assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
           if (obj.kind === "switch") snapSwitchToRoom(obj, roomById(doc, obj.roomId));
         })
       );
@@ -2016,14 +2037,12 @@ function renderInspector() {
         ul.appendChild(li);
       });
       root.appendChild(ul);
-      let selFrames = 0;
-      for (const c of timeline) {
-        if (selected.has(c.name)) selFrames += c.len;
-      }
+      const packed = packedPoseBytes(e);
       const mem = document.createElement("p");
       mem.className = "muted anim-mem";
-      mem.title = "gx/gy/gz signed bytes (13 verts × 3) plus clip start/len";
-      mem.textContent = formatStickRomMem(selFrames, selected.size);
+      mem.classList.toggle("error", packed.bytes > ENEMY_POSE_MAX);
+      mem.title = "Packed pose PRG: 2 + logical map + stored gx/gy/gz (13×3). Clip tables are in GAME.";
+      mem.textContent = formatPackedPoseMem(packed);
       root.appendChild(mem);
     } else {
       const clipSel = document.createElement("select");
@@ -2575,6 +2594,7 @@ function refreshPanels() {
   syncWeaponScaleInputs();
   syncWeaponGlobalButtons();
   overheadView.draw();
+  if (editorMode === "layout") layoutView.draw();
   if (editorMode === "anim") animView.draw();
   if (editorMode === "weapons") weaponView.draw();
   if (editorMode === "items") itemView.draw();
@@ -2638,6 +2658,9 @@ document.getElementById("btn-draw-all").addEventListener("click", () => {
 });
 document.getElementById("btn-draw-local").addEventListener("click", () => {
   setDrawMode(true);
+});
+document.getElementById("btn-draw-neighbours")?.addEventListener("click", () => {
+  setNeighbourDraw(!neighbourDraw);
 });
 document.getElementById("btn-ortho-top").addEventListener("click", () => setOrthoMode("top"));
 document.getElementById("btn-ortho-left").addEventListener("click", () => setOrthoMode("left"));

@@ -70,6 +70,7 @@ def main() -> None:
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
       <button type="button" id="btn-draw-local">Local</button>
+      <button type="button" id="btn-draw-neighbours" title="Door-linked rooms (when Local is on)">Neighbours</button>
     </div>
     <div class="toolbar-actions">
       <button type="button" id="btn-undo" title="Ctrl+Z" disabled>Undo</button>

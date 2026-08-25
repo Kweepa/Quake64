@@ -414,7 +414,15 @@ update_floor
 	lda cam_yh
 	sbc #EYE_HEIGHT			; feet
 	cmp col_y
-	bcc .uf_pn			; feet < plane — overhead
+	beq .uf_pl_adopt		; same height
+	bcs .uf_pl_adopt		; feet > plane — standing on it
+	sta proc_tmp0			; feet
+	lda col_y
+	sec
+	sbc proc_tmp0			; rise
+	cmp #STEP_UP + 1
+	bcs .uf_pn			; too high — walk under
+.uf_pl_adopt
 	lda col_y
 	sta floor_y
 .uf_pn
@@ -733,7 +741,7 @@ solid_at
 	beq .sa_p
 	jmp .sa_c
 .sa_p
-	; platforms — solid on Y overlap (plane as sy=0)
+	; platforms — solid on Y overlap (plane as sy=0); rise <= STEP_UP is a step-up
 	ldx #0
 .sa_pl
 	cpx	map_nplats
@@ -749,6 +757,15 @@ solid_at
 	sta box_sy
 	jsr player_overlaps_y
 	bcc .sa_pn
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	sta col_y
+	lda box_y
+	sec
+	sbc col_y			; rise (overlap => plat_y > feet)
+	cmp #STEP_UP + 1
+	bcc .sa_pn			; step-up — not a wall
 	+lda_mx plat_x
 	sta box_x
 	+lda_mx plat_z
@@ -1856,7 +1873,8 @@ near_box_xz
 	rts
 
 ; ------------------------------------------------------------------
-; update_triggers — first overlapping volume in the active room (XZ).
+; update_triggers — first 3D overlap in the active room: XZ plus
+; [box_y, box_y+sy) vs the player feet–eye line (player_overlaps_y).
 ; Message: HUD while inside. Hurt: 10 HP on enter, then every HURT_MS.
 ; End of level / teleport / elevator: once on entry until leave.
 ; ------------------------------------------------------------------
@@ -1881,23 +1899,13 @@ update_triggers
 	+lda_mx tr_sz
 	sta box_sz
 	lda cam_xh
-	cmp box_x
-	bcc .ut_n
-	clc
-	lda box_x
-	adc box_sx
-	cmp cam_xh
-	bcc .ut_n
-	beq .ut_n
+	sta col_x
 	lda cam_zh
-	cmp box_z
+	sta col_z
+	jsr point_in_box_xz
 	bcc .ut_n
-	clc
-	lda box_z
-	adc box_sz
-	cmp cam_zh
+	jsr player_overlaps_y
 	bcc .ut_n
-	beq .ut_n
 	stx pv0				; hit index
 	jmp .ut_apply
 .ut_n

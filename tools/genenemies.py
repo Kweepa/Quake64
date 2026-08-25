@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 import struct
+from copy import deepcopy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -100,18 +101,58 @@ def find_clip(enemy: dict, *names: str) -> tuple[int, int] | None:
     return None
 
 
-def find_role(enemy: dict, role: str) -> tuple[int, int]:
+def find_role(enemy: dict, role: str) -> tuple[int, int] | None:
     spec = ROLE_CLIPS.get(enemy["name"], {}).get(role)
     if spec is None:
-        raise SystemExit(f"{enemy['name']}: no role {role}")
+        return None
     name, len_override = spec
     found = find_clip(enemy, name)
     if found is None:
-        raise SystemExit(f"{enemy['name']}: no {name} clip for role {role}")
+        return None
     start, length = found
     if len_override is not None:
         length = min(length, int(len_override))
     return start, length
+
+
+def require_role(enemy: dict, role: str) -> tuple[int, int]:
+    found = find_role(enemy, role)
+    if found is not None:
+        return found
+    found = find_clip(enemy, "stand", "walk", "hover")
+    if found is not None:
+        return found
+    clips = enemy.get("clips") or []
+    if clips:
+        return int(clips[0]["start"]), max(1, int(clips[0]["len"]))
+    raise SystemExit(f"{enemy['name']}: no {role} clip (and no fallback)")
+
+
+def apply_export_clips(enemy: dict) -> None:
+    """Keep only exportClips, remapping stick frames/starts. Missing list → all clips."""
+    names = enemy.get("exportClips")
+    if not isinstance(names, list):
+        return
+    clips = enemy.get("clips") or []
+    frames = enemy.get("frames") or []
+    by_name = {c.get("name", ""): c for c in clips}
+    by_key = {clip_key(c.get("name", "")): c for c in clips}
+    new_frames: list = []
+    new_clips: list[dict] = []
+    start = 0
+    for name in names:
+        c = by_name.get(name) or by_key.get(clip_key(name))
+        if c is None:
+            continue
+        a, n = int(c["start"]), int(c["len"])
+        sl = frames[a : a + n]
+        if not sl:
+            continue
+        new_clips.append({"name": c.get("name", name), "start": start, "len": len(sl)})
+        new_frames.extend(sl)
+        start += len(sl)
+    enemy["frames"] = new_frames
+    enemy["clips"] = new_clips
 
 
 def find_variant_clips(enemy: dict, key_re: re.Pattern, what: str) -> list[tuple[int, int]]:
@@ -124,8 +165,12 @@ def find_variant_clips(enemy: dict, key_re: re.Pattern, what: str) -> list[tuple
     if not out:
         stand = find_clip(enemy, "stand", "walk", "hover")
         if stand is None:
-            raise SystemExit(f"{enemy['name']}: no {what} clip")
-        out.append((stand[0], 1))
+            clips = enemy.get("clips") or []
+            if not clips:
+                raise SystemExit(f"{enemy['name']}: no {what} clip")
+            out.append((int(clips[0]["start"]), 1))
+        else:
+            out.append((stand[0], 1))
     return out
 
 
@@ -222,7 +267,10 @@ def acc_at(frs: list[list[int]], i: int) -> int:
 def clip_ranges(enemy: dict, nframes: int) -> list[tuple[str, int, int]]:
     out: list[tuple[str, int, int]] = []
     for role in ("stand", "alert", "run", "walk", "attack"):
-        start, length = find_role(enemy, role)
+        found = find_role(enemy, role)
+        if found is None:
+            continue
+        start, length = found
         if start < nframes and length > 0:
             out.append((role, start, min(length, nframes - start)))
     for what, key in (("pain", PAIN_KEY), ("death", DEATH_KEY)):
@@ -308,10 +356,10 @@ def pack_poses(
     frs = frames_xyz(gx, gy, gz, nframes)
     covered = [False] * nframes
     keep: set[int] = set()
-    atk_start, atk_len = find_role(enemy, "attack")
-    fire = atk_start + FIRE_FRAME[type_i]
+    atk = find_role(enemy, "attack")
+    fire = (atk[0] + FIRE_FRAME[type_i]) if atk else -1
     for name, start, length in clip_ranges(enemy, nframes):
-        extra = (fire,) if name == "attack" else ()
+        extra = (fire,) if name == "attack" and fire >= 0 else ()
         keep |= cadence_keep(start, length, pick_keys(frs, start, length, extra))
         for i in range(start, start + length):
             covered[i] = True
@@ -383,7 +431,8 @@ def main() -> None:
     for ti, name in enumerate(TYPES):
         if name not in by_name:
             raise SystemExit(f"missing enemy {name}")
-        enemy = by_name[name]
+        enemy = deepcopy(by_name[name])
+        apply_export_clips(enemy)
         gx, gy, gz, lines, _clips = export_type(enemy)
         nframes = trim_to_budget(gx, gy, gz, enemy)
         gx, gy, gz, pose_map, n_stored = pack_poses(gx, gy, gz, enemy, nframes, ti)
@@ -398,7 +447,7 @@ def main() -> None:
         n_lerp = sum(1 for v in pose_map if v == 0xFF)
         print(f"{name}: logical={nframes} stored={n_stored} lerp={n_lerp} bytes={len(payload)}")
         for role in ("stand", "alert", "run", "walk", "attack"):
-            start, length = find_role(enemy, role)
+            start, length = require_role(enemy, role)
             if start + length > nframes:
                 length = max(1, nframes - start)
             roles[f"{role}_start"].append(start)

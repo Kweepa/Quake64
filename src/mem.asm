@@ -4,8 +4,9 @@
 ; $D000/$D800 charset A top/bot  $E000/$E800 charset B top/bot
 ; Viewport uses charset cols 0–23; col 24 (char 192) is $FF×8 margins.
 ; Tails (cols 24–31) hold unique log/sin/invz LUTs — not mirrored.
-; $F000 UI charset (disk fnt). Judd sqlo..negsqhi at $F800 (disk sqt).
-; Game PRG $0900–<$C000.
+; $F000 Judd sqlo..negsqhi (disk sqt). $F800 UI charset (disk fnt).
+; Game PRG $0900–<$C000. Heap grows down from $C000 (map, reloc, poses).
+; $FFFA–$FFFF overlay unused UI char 255 (init_irq).
 ;
 ; Boot $0801, menu overlay then game at $0900.
 ; Survives GAME load: reboot stub $08F9, level_num $08FC, selectors $08FD–$08FF.
@@ -69,10 +70,10 @@ D018_A_TOP	= $04			; matrix $C000, charset $D000
 D018_A_BOT	= $06			; matrix $C000, charset $D800
 D018_B_TOP	= $18			; matrix $C400, charset $E000
 D018_B_BOT	= $1A			; matrix $C400, charset $E800
-D018_A_UI	= $0C			; matrix $C000, UI charset $F000 (HUD band always this)
-D018_B_UI	= $1C			; unused — HUD is not flipped with the viewport
+D018_A_UI	= $0E			; matrix $C000, UI charset $F800 (HUD band always this)
+D018_B_UI	= $1E			; unused — HUD is not flipped with the viewport
 
-UI_CHARSET	= $F000
+UI_CHARSET	= $F800
 UI_FONT_PAGES	= 8			; 256 glyphs, ASCII-indexed from quakefont.png
 ; 40-col HUD (rows 0–8 above VIEW_ROW):
 ;  0FFF              Quake64
@@ -124,24 +125,18 @@ HUD_CH_Z	= $5a
 HUD_CH_SHELL	= $7b			; { → shell icon
 HUD_CH_NAIL	= $7c			; | → nail icon
 HUD_CH_GREN	= $7d			; } → grenade icon
-HUD_CH_QUAD	= $80			; 2×2 powerup tiles (quad/pent/ring)
-HUD_CH_PENT	= $84
-HUD_CH_RING	= $88
+HUD_CH_QUAD	= $00			; 2×2 powerup tiles in $00–$1E (quad/pent/ring)
+HUD_CH_PENT	= $04
+HUD_CH_RING	= $08
 COL_HUD		= 8			; orange digits
 COL_HUD_DIM	= 2			; dark red stage letters
 
-; Judd quarter-square (disk sqt @ $F800, page-aligned; mulset_* stores lo only)
+; Judd quarter-square (disk sqt @ $F000, page-aligned; mulset_* stores lo only)
 ; Under KERNAL — multiply only with $01=$30 (same as A-side LUTs).
-; negsqhi[506..511] sits on the CPU vectors $FFFA-$FFFF. Indices 506..510
-; are REACHABLE data (a-m = 251..255 in umul8a/b), so those bytes must stay
-; true table values. IRQ uses $FFFE=$3F plus free hi $FFFF (negsq[511] is
-; unreachable) → trampoline at IRQ_TRAMP. Restore/NMI is undefined (table
-; bytes, not a handler). init_irq restores the table after menu_sfx.
-sqlo		= $F800
-sqhi		= $FA00
-negsqlo		= $FC00
-negsqhi		= $FE00
-IRQ_TRAMP	= $093F			; jmp irq_entry; lo byte must be $3F
+sqlo		= $F000
+sqhi		= $F200
+negsqlo		= $F400
+negsqhi		= $F600
 
 ; SMC map accessors: macros emit abs,x/y with this operand hi until LoadLevel
 ; patches from reloc.prg. Must not collide with a real GAME abs address.
@@ -173,54 +168,6 @@ pose_gz		= $06BA			; 13
 pose_map_lo	= $06C7			; 7 — patched at pose load (logical → packed)
 pose_map_hi	= $06CE			; 7
 ; next free $06D5
-
-; Room unique X/Z product share. $051E+ is frame13/enemy/room_pack.
-; $B000–$BFFF is free RAM (PRG must stay below SHARE_BASE).
-SHARE_BASE	= $B000
-cur_ux		= $B000			; 4 — current room unique X
-cur_uz		= $B004			; 4
-cur_nx		= $B008
-cur_nz		= $B009
-xshare		= $B00A			; 6 — $FF smul, else RX* slot
-zshare		= $B010			; 6
-RXC_L		= $B016			; 6 room UX×cos lo (snap after room xform)
-RXC_H		= $B01C
-RXS_L		= $B022
-RXS_H		= $B028
-RZC_L		= $B02E
-RZC_H		= $B034
-RZS_L		= $B03A
-RZS_H		= $B040			; last $B045
-crate_ux0	= $B046			; CRATE_MAX
-crate_ux1	= $B056
-crate_uz0	= $B066
-crate_uz1	= $B076
-slope_ux0	= $B086			; SLOPE_MAX
-slope_ux1	= $B096
-slope_uz0	= $B0A6
-slope_uz1	= $B0B6
-plat_ux0	= $B0C6			; PLAT_MAX
-plat_ux1	= $B0D6
-plat_uz0	= $B0E6
-plat_uz1	= $B0F6
-elev_ux0	= $B106			; ELEV_MAX
-elev_ux1	= $B10A
-elev_uz0	= $B10E
-elev_uz1	= $B112
-sw_ux0		= $B116			; SWITCH_MAX
-sw_ux1		= $B126
-sw_ux2		= $B136
-sw_uz0		= $B146
-sw_uz1		= $B156
-sw_uz2		= $B166
-door_ux0	= $B176			; DOOR_MAX
-door_ux1	= $B186
-door_uz0	= $B196
-door_uz1	= $B1A6
-SHARE_END	= $B1B6
-!if SHARE_END > $C000 {
-	!error "share BSS overlaps screen A"
-}
 
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.

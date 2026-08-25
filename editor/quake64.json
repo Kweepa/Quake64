@@ -1412,8 +1412,8 @@
           "dir": 1,
           "roomId": "c657232a-aafe-4d83-8b6d-2212ddec74ae",
           "lockKey": "unlocked",
-          "locked": false,
-          "otherRoomId": "48f4bb7c-f85b-4837-acf3-8a81214372de"
+          "otherRoomId": "48f4bb7c-f85b-4837-acf3-8a81214372de",
+          "locked": false
         },
         {
           "id": "8a5e8065-e95f-42f6-962d-63019b7c5ff2",
@@ -1581,7 +1581,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "",
+          "name": "Junction",
           "bgColor": 9,
           "lineColor": 7,
           "fxColor": 1,
@@ -1629,8 +1629,8 @@
           "dir": 1,
           "roomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf",
           "lockKey": "unlocked",
-          "locked": false,
-          "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7"
+          "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7",
+          "locked": false
         },
         {
           "id": "cbab9e58-b9f6-47bf-8b66-08b2ca5ac6db",
@@ -1695,23 +1695,6 @@
           ]
         },
         {
-          "id": "1c225b23-e9b1-4b70-a025-f36e3c51899c",
-          "kind": "doorway",
-          "x": 115,
-          "y": 91,
-          "z": 110,
-          "sx": 1,
-          "sy": 5,
-          "sz": 4,
-          "face": "+x",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085",
-          "lockKey": "unlocked",
-          "locked": false,
-          "otherRoomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf"
-        },
-        {
           "id": "71beb0b0-e3f8-4902-8c6e-aa5360b45e94",
           "kind": "enemy",
           "x": 91,
@@ -1774,40 +1757,6 @@
           ]
         },
         {
-          "id": "b5d8b75a-3cf8-4704-9ce3-f031f2a9d89b",
-          "kind": "enemy",
-          "x": 58,
-          "y": 96,
-          "z": 158,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 0,
-          "enemy": "Knight",
-          "patrol": false,
-          "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208"
-        },
-        {
-          "id": "cf689d26-bcde-4fad-a2d8-a237643ec7e0",
-          "kind": "enemy",
-          "x": 46,
-          "y": 96,
-          "z": 161,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 0,
-          "enemy": "Knight",
-          "patrol": false,
-          "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208"
-        },
-        {
           "id": "486e7247-6a3e-4551-bea1-78db519ad754",
           "kind": "switch",
           "x": 53,
@@ -1867,9 +1816,9 @@
           "axis": "z",
           "dir": 1,
           "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208",
-          "lockKey": "unlocked",
-          "locked": false,
-          "otherRoomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085"
+          "lockKey": "silver",
+          "otherRoomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085",
+          "locked": true
         },
         {
           "id": "b1a66d89-3357-4b88-83f8-9d320ef1a408",
@@ -1885,8 +1834,8 @@
           "dir": 1,
           "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208",
           "lockKey": "unlocked",
-          "locked": false,
-          "otherRoomId": "ec707e69-9eec-4e53-a32b-681dccd8ec0f"
+          "otherRoomId": "ec707e69-9eec-4e53-a32b-681dccd8ec0f",
+          "locked": false
         },
         {
           "id": "260da86c-b9d6-4bcb-8309-aaafc63f3bf4",
@@ -1922,16 +1871,16 @@
         {
           "id": "7b2e58fd-ad8a-4d66-b1bb-9855f518c055",
           "kind": "room",
-          "x": 23,
-          "y": 89,
-          "z": 128,
-          "sx": 15,
-          "sy": 20,
-          "sz": 21,
+          "x": 21,
+          "y": 91,
+          "z": 133,
+          "sx": 17,
+          "sy": 18,
+          "sz": 15,
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "",
+          "name": "Back Stair",
           "bgColor": 9,
           "lineColor": 7,
           "fxColor": 1,
@@ -1947,7 +1896,7 @@
           "kind": "doorway",
           "x": 38,
           "y": 96,
-          "z": 143,
+          "z": 144,
           "sx": 1,
           "sy": 5,
           "sz": 4,
@@ -1956,8 +1905,428 @@
           "dir": 1,
           "roomId": "7b2e58fd-ad8a-4d66-b1bb-9855f518c055",
           "lockKey": "unlocked",
-          "locked": false,
-          "otherRoomId": "bca3293b-77d8-485a-bd79-37df6d5a2208"
+          "otherRoomId": "bca3293b-77d8-485a-bd79-37df6d5a2208",
+          "locked": false
+        },
+        {
+          "id": "5d623762-5b57-40d0-bd88-a1a8fada1818",
+          "kind": "slope",
+          "x": 25,
+          "y": 91,
+          "z": 144,
+          "sx": 13,
+          "sy": 5,
+          "sz": 4,
+          "face": "+z",
+          "axis": "x",
+          "dir": 1,
+          "roomId": "7b2e58fd-ad8a-4d66-b1bb-9855f518c055"
+        },
+        {
+          "id": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
+          "kind": "room",
+          "x": 19,
+          "y": 91,
+          "z": 106,
+          "sx": 43,
+          "sy": 12,
+          "sz": 32,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "name": "Backroom",
+          "bgColor": 9,
+          "lineColor": 7,
+          "fxColor": 1,
+          "weaponColor": 0,
+          "shape": "S",
+          "rx": 0,
+          "ry": 1,
+          "rz": 0,
+          "cuts": [
+            {
+              "su": 12,
+              "sv": 37
+            },
+            {
+              "su": 13,
+              "sv": 20
+            }
+          ]
+        },
+        {
+          "id": "1c572e13-1b60-48fc-abea-43a8adb20734",
+          "kind": "room",
+          "x": 19,
+          "y": 91,
+          "z": 74,
+          "sx": 28,
+          "sy": 12,
+          "sz": 31,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "name": "Backhall",
+          "bgColor": 9,
+          "lineColor": 7,
+          "fxColor": 1,
+          "weaponColor": 0,
+          "shape": "S",
+          "rx": 2,
+          "ry": 1,
+          "rz": 0,
+          "cuts": [
+            {
+              "su": 24,
+              "sv": 13
+            },
+            {
+              "su": 25,
+              "sv": 9
+            }
+          ]
+        },
+        {
+          "id": "6de5c39e-516e-4780-ae51-2b93206e5a8b",
+          "kind": "elevator",
+          "x": 39,
+          "y": 91,
+          "z": 125,
+          "sx": 14,
+          "sy": 7,
+          "sz": 7,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
+          "tag": "reveal",
+          "elevType": "toggle"
+        },
+        {
+          "id": "5ec6b5ec-2323-4592-8c52-72847c919e66",
+          "kind": "pickup",
+          "x": 48,
+          "y": 91,
+          "z": 128,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
+          "pickup": "armour"
+        },
+        {
+          "id": "d368af96-26e6-486c-a6d5-2d30ea2677fa",
+          "kind": "switch",
+          "x": 43,
+          "y": 92,
+          "z": 137,
+          "sx": 2,
+          "sy": 3,
+          "sz": 1,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
+          "tag": "reveal"
+        },
+        {
+          "id": "159cbe77-d951-4041-b45a-5abceb23845d",
+          "kind": "doorway",
+          "x": 38,
+          "y": 91,
+          "z": 133,
+          "sx": 1,
+          "sy": 5,
+          "sz": 4,
+          "face": "-x",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
+          "lockKey": "unlocked",
+          "otherRoomId": "7b2e58fd-ad8a-4d66-b1bb-9855f518c055",
+          "locked": false
+        },
+        {
+          "id": "8a01a665-f76f-410a-b450-5e8c86ec10d5",
+          "kind": "room",
+          "x": 116,
+          "y": 91,
+          "z": 90,
+          "sx": 32,
+          "sy": 24,
+          "sz": 27,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "name": "Yard",
+          "bgColor": 9,
+          "lineColor": 7,
+          "fxColor": 1,
+          "weaponColor": 0,
+          "shape": "box",
+          "rx": 0,
+          "ry": 0,
+          "rz": 0,
+          "cuts": []
+        },
+        {
+          "id": "80430749-edbc-4d7d-bbca-332263790b75",
+          "kind": "room",
+          "x": 128,
+          "y": 91,
+          "z": 118,
+          "sx": 20,
+          "sy": 16,
+          "sz": 23,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "name": "Exit Stair",
+          "bgColor": 9,
+          "lineColor": 7,
+          "fxColor": 1,
+          "weaponColor": 0,
+          "shape": "L",
+          "rx": 0,
+          "ry": 1,
+          "rz": 0,
+          "cuts": [
+            {
+              "su": 15,
+              "sv": 12
+            }
+          ]
+        },
+        {
+          "id": "87b9a1be-0500-45bd-a0a3-38a481a30200",
+          "kind": "room",
+          "x": 149,
+          "y": 99,
+          "z": 128,
+          "sx": 28,
+          "sy": 12,
+          "sz": 18,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "name": "Gate",
+          "bgColor": 9,
+          "lineColor": 7,
+          "fxColor": 1,
+          "weaponColor": 0,
+          "shape": "T",
+          "rx": 0,
+          "ry": 3,
+          "rz": 0,
+          "cuts": [
+            {
+              "su": 7,
+              "sv": 12
+            },
+            {
+              "su": 7,
+              "sv": 12
+            }
+          ]
+        },
+        {
+          "id": "375a7b75-e6be-425a-a715-ae43c3308727",
+          "kind": "doorway",
+          "x": 148,
+          "y": 99,
+          "z": 135,
+          "sx": 1,
+          "sy": 5,
+          "sz": 4,
+          "face": "-x",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "87b9a1be-0500-45bd-a0a3-38a481a30200",
+          "lockKey": "unlocked",
+          "otherRoomId": "80430749-edbc-4d7d-bbca-332263790b75",
+          "locked": false
+        },
+        {
+          "id": "f57a52e6-50b4-4c51-9f38-2a54d911939f",
+          "kind": "doorway",
+          "x": 130,
+          "y": 91,
+          "z": 117,
+          "sx": 4,
+          "sy": 5,
+          "sz": 1,
+          "face": "-z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "80430749-edbc-4d7d-bbca-332263790b75",
+          "lockKey": "unlocked",
+          "otherRoomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5",
+          "locked": false
+        },
+        {
+          "id": "d3791800-d527-46bf-9745-5c1839ecec06",
+          "kind": "enemy",
+          "x": 131,
+          "y": 92,
+          "z": 104,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 0,
+          "enemy": "Ogre",
+          "patrol": true,
+          "roomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5"
+        },
+        {
+          "id": "27df1347-6fbb-4782-84a9-78c046a2cab0",
+          "kind": "enemy",
+          "x": 41,
+          "y": 96,
+          "z": 160,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 4,
+          "enemy": "Knight",
+          "patrol": false,
+          "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208"
+        },
+        {
+          "id": "82821ab8-3dd1-4d1b-b521-5408b9331ba9",
+          "kind": "enemy",
+          "x": 56,
+          "y": 96,
+          "z": 160,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 4,
+          "enemy": "Knight",
+          "patrol": false,
+          "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208"
+        },
+        {
+          "id": "e7fafa29-1615-4dc1-b484-90998a407b63",
+          "kind": "enemy",
+          "x": 159,
+          "y": 99,
+          "z": 138,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 6,
+          "enemy": "Knight",
+          "patrol": false,
+          "roomId": "87b9a1be-0500-45bd-a0a3-38a481a30200"
+        },
+        {
+          "id": "883faa14-0646-45c4-b1ca-1850cc2573c3",
+          "kind": "trigger",
+          "x": 169,
+          "y": 99,
+          "z": 135,
+          "sx": 8,
+          "sy": 4,
+          "sz": 4,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "end_level",
+          "text": "",
+          "tag": "",
+          "roomId": "87b9a1be-0500-45bd-a0a3-38a481a30200"
+        },
+        {
+          "id": "3b4f2e72-c5a4-4257-b5a6-3492ed270533",
+          "kind": "platform",
+          "x": 128,
+          "y": 95,
+          "z": 133,
+          "sx": 8,
+          "sy": 1,
+          "sz": 8,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "80430749-edbc-4d7d-bbca-332263790b75",
+          "collide": true
+        },
+        {
+          "id": "2d4b715b-e819-44f8-ae2c-5d2bb722a950",
+          "kind": "slope",
+          "x": 128,
+          "y": 91,
+          "z": 120,
+          "sx": 8,
+          "sy": 4,
+          "sz": 13,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "80430749-edbc-4d7d-bbca-332263790b75"
+        },
+        {
+          "id": "ddc39b33-e26b-4ac5-b403-7e46405316ae",
+          "kind": "slope",
+          "x": 136,
+          "y": 95,
+          "z": 133,
+          "sx": 12,
+          "sy": 4,
+          "sz": 8,
+          "face": "+z",
+          "axis": "x",
+          "dir": 1,
+          "roomId": "80430749-edbc-4d7d-bbca-332263790b75"
+        },
+        {
+          "id": "8b71ab5f-afbe-4aac-a558-280e9a021c5c",
+          "kind": "doorway",
+          "x": 20,
+          "y": 91,
+          "z": 105,
+          "sx": 4,
+          "sy": 5,
+          "sz": 1,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "1c572e13-1b60-48fc-abea-43a8adb20734",
+          "lockKey": "unlocked",
+          "otherRoomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
+          "locked": false
+        },
+        {
+          "id": "37ee4b5e-db37-4182-a909-487377de554c",
+          "kind": "doorway",
+          "x": 115,
+          "y": 91,
+          "z": 110,
+          "sx": 1,
+          "sy": 5,
+          "sz": 4,
+          "face": "-x",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5",
+          "lockKey": "silver",
+          "locked": true,
+          "otherRoomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf"
         }
       ]
     },
@@ -7252,9 +7621,7 @@
       "exportClips": [
         "stand",
         "death",
-        "deathc",
         "load",
-        "pain",
         "painb",
         "run",
         "shoot",
@@ -12470,14 +12837,10 @@
       "exportClips": [
         "stand",
         "runb",
-        "runattack",
-        "painb",
+        "pain",
         "attackb",
         "walk",
-        "kneel",
-        "standing",
-        "death",
-        "deathb"
+        "death"
       ]
     },
     {
@@ -16732,12 +17095,10 @@
       },
       "exportClips": [
         "attack",
-        "death",
         "deathb",
         "pain",
         "painb",
         "run",
-        "leap",
         "stand",
         "walk"
       ]
@@ -27182,7 +27543,17 @@
             48
           ]
         ]
-      }
+      },
+      "exportClips": [
+        "stand",
+        "walk",
+        "run",
+        "swing",
+        "shoot",
+        "pain",
+        "death",
+        "pull"
+      ]
     },
     {
       "id": "d7c8cabb-5cad-4568-9b67-ae45cd2a1e4e",
@@ -33661,7 +34032,17 @@
             94
           ]
         ]
-      }
+      },
+      "exportClips": [
+        "stand",
+        "walk",
+        "run",
+        "smash",
+        "swingr",
+        "magic",
+        "pain",
+        "death"
+      ]
     },
     {
       "id": "0b17d7c9-a7b6-45b5-a9c1-525e26810d06",

@@ -103,9 +103,12 @@ export class OverheadView {
     const doc = this.opts.getDoc();
     const cam = this.opts.getCamera();
     const local = this.opts.getLocalMode?.() || false;
-    const cur = currentRoom(doc, cam);
-    const neigh = cur ? neighbourRooms(doc, cur) : [];
-    const vis = local ? localVisibleIds(doc, cam) : null;
+    const neighbourOn = !!this.opts.getNeighbourMode?.();
+    const camRoom = currentRoom(doc, cam);
+    const focus = local ? this.opts.getFocusRoom?.() || null : camRoom;
+    const neigh = focus ? neighbourRooms(doc, focus) : [];
+    const vis = local ? localVisibleIds(doc, focus, neighbourOn) : null;
+    const cur = focus;
     const selected = new Set(this.opts.getSelectedIds?.() || []);
     const primary = this.opts.getSelectedId?.();
     if (primary) selected.add(primary);

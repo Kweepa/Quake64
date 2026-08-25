@@ -7,22 +7,22 @@ enemy_edge_vert
 	!byte 0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ; Role clips
-enemy_stand_start	!byte 0, 0, 44, 0, 0, 0, 17
+enemy_stand_start	!byte 0, 0, 26, 0, 0, 0, 17
 enemy_stand_len		!byte 8, 9, 9, 15, 9, 17, 8
-enemy_alert_start	!byte 18, 61, 44, 0, 0, 0, 17
-enemy_alert_len		!byte 11, 4, 2, 4, 4, 4, 4
-enemy_run_start		!byte 35, 9, 23, 15, 25, 29, 17
+enemy_alert_start	!byte 18, 0, 26, 0, 0, 0, 17
+enemy_alert_len		!byte 11, 9, 2, 4, 4, 4, 4
+enemy_run_start		!byte 29, 9, 14, 15, 25, 29, 17
 enemy_run_len		!byte 8, 8, 12, 14, 8, 6, 31
-enemy_walk_start		!byte 52, 42, 53, 15, 9, 17, 17
+enemy_walk_start		!byte 46, 31, 35, 15, 9, 17, 17
 enemy_walk_len		!byte 24, 14, 8, 14, 16, 12, 31
-enemy_attack_start	!byte 43, 31, 35, 29, 47, 35, 57
-enemy_attack_len	!byte 9, 11, 9, 13, 14, 12, 23
+enemy_attack_start	!byte 37, 20, 26, 29, 0, 35, 57
+enemy_attack_len	!byte 9, 11, 9, 13, 9, 12, 23
 enemy_pain_n		!byte 1, 1, 1, 1, 1, 1, 1
-enemy_pain_start	!byte 29, 0, 0, 0, 28, 0, 0, 0, 17, 0, 0, 0, 42, 0, 0, 0, 67, 0, 0, 0, 77, 0, 0, 0, 17, 0, 0, 0
-enemy_pain_len		!byte 6, 0, 0, 0, 3, 0, 0, 0, 6, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 1, 0, 0, 0
+enemy_pain_start	!byte 0, 0, 0, 0, 17, 0, 0, 0, 8, 0, 0, 0, 42, 0, 0, 0, 53, 0, 0, 0, 68, 0, 0, 0, 17, 0, 0, 0
+enemy_pain_len		!byte 1, 0, 0, 0, 3, 0, 0, 0, 6, 0, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 1, 0, 0, 0
 enemy_death_n		!byte 1, 1, 1, 1, 1, 1, 1
-enemy_death_start	!byte 8, 0, 0, 0, 65, 0, 0, 0, 8, 0, 0, 0, 46, 0, 0, 0, 72, 0, 0, 0, 83, 0, 0, 0, 48, 0, 0, 0
-enemy_death_len		!byte 10, 0, 0, 0, 10, 0, 0, 0, 9, 0, 0, 0, 8, 0, 0, 0, 14, 0, 0, 0, 11, 0, 0, 0, 9, 0, 0, 0
+enemy_death_start	!byte 8, 0, 0, 0, 45, 0, 0, 0, 26, 0, 0, 0, 46, 0, 0, 0, 58, 0, 0, 0, 74, 0, 0, 0, 48, 0, 0, 0
+enemy_death_len		!byte 10, 0, 0, 0, 10, 0, 0, 0, 1, 0, 0, 0, 8, 0, 0, 0, 14, 0, 0, 0, 11, 0, 0, 0, 9, 0, 0, 0
 enemy_range		!byte 30, 30, 4, 24, 20, 16, 40
 enemy_hp_init		!byte 6, 15, 5, 16, 40, 120, 80
 enemy_pain_chance	!byte $80, $80, $c0, $80, $80, $80, $80
@@ -30,5 +30,5 @@ enemy_drop_type	!byte 7, $ff, $ff, $ff, 4, $ff, $ff
 enemy_fire_frame	!byte 2, 4, 4, 6, 4, 4, 8
 enemy_class		!byte 0, 0, 1, 0, 0, 0, 0
 ; Stored pose count (PRG header / gy stride). Clip tables stay logical.
-enemy_nframes	!byte 48, 48, 40, 32, 60, 59, 63
+enemy_nframes	!byte 44, 35, 28, 32, 52, 53, 63
 

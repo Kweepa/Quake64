@@ -88,6 +88,9 @@ if exist src\boot.prg move /y src\boot.prg boot.prg >nul
 python tools\mkreloc.py
 if errorlevel 1 exit /b 1
 
+python tools\checkheap.py
+if errorlevel 1 exit /b 1
+
 python tools\mkdisk.py
 if errorlevel 1 exit /b 1
 

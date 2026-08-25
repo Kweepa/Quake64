@@ -16,7 +16,7 @@
 - [x] Remember to save item selection and camera position for the items tab.
 - [x] An arrow showing which way is forward in the items viewport.
 - [x] Get rid of the static bitmap at a distance optimization. It doesn't look good and it's not optimizing for the worst case anyway.
-- [ ] Fill the IRQ trampoline hole at $0903–$093E (~60 bytes of NOPs after `jmp start` at $0900). Park some small unaligned table or constants there so that padding isn’t wasted; trampoline at $093F must stay.
+- [x] Dropped the $093F IRQ trampoline (sqtab no longer sits on $FFFE). GAME starts at $0900 with no NOP pad.
 - [ ] same for the cassette buffer, the space under the stack, some stuff in page 2, and $400-$7ff. use as BSS.
 - [x] shooting in some directions doesn't hit the room walls. for example the ends of the corridors in the starting room.
 - [x] the player can step up onto a ramp from any height below. fix.

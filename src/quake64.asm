@@ -16,16 +16,6 @@ IRQ_DEBUG_SPLIT	= 0				; 1 = $d020 stripe at mid-split (tune 186)
 
 *= LOCODE_BASE
 start
-	jmp .start_real
-
-; RAM IRQ vector target. With $01=$30 the CPU fetches $FFFE/$FFFF, which are
-; negsqhi[510]/[511]: [510]=$3F is live table data, [511] is unreachable and
-; holds >IRQ_TRAMP (init_irq). So the handler must sit at $xx3F exactly.
-	!fill IRQ_TRAMP - *, $ea
-!if * != IRQ_TRAMP { !error "IRQ_TRAMP misplaced" }
-	jmp irq_entry
-
-.start_real
 	sei
 	cld
 	ldx #$ff
@@ -36,7 +26,7 @@ start
 	lda #0
 	sta load_in_play
 	jsr install_reboot_stub
-	lda #1
+	lda #2
 	sta level_num
 	jsr LoadLevel
 	bcc .start_ok

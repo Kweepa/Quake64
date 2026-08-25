@@ -43,8 +43,9 @@ difficulty	= $08FF			; menu skill 0..3
 MENU_COPY_TAB	= LOCODE_BASE + 3
 
 ; Menu overlay (VIC bank 1). Unused by the game image.
-SCREEN		= $4000
-SCREEN_B	= $4400
+; Matrix + sprites pack under bitmap so menu PRG can grow past $4000.
+VIC_BANK1	= $4000
+SCREEN		= $5C00			; colour matrix (was $4000)
 BITMAP		= $6000
 BITMAP_SIZE	= 8000
 BITMAP_END	= BITMAP + BITMAP_SIZE

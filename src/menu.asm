@@ -25,12 +25,13 @@ HINT_GAP	= 8			; px between key sprite and label
 HINT_SPR_Y	= 228			; 21px sprite centered on row 23
 MUX_LOGO_RASTER	= 30
 MUX_HINT_RASTER	= 90
-LOGO_SPR_RAM	= $4800			; 5×64 title highlights in VIC bank 1
-LOGO_SPR_PTR0	= (LOGO_SPR_RAM - SCREEN) / 64
+; 5+6+24 sprites × 64 just under SCREEN ($5C00)
+LOGO_SPR_RAM	= $5340
+LOGO_SPR_PTR0	= (LOGO_SPR_RAM - VIC_BANK1) / 64
 HINT_SPR_RAM	= LOGO_SPR_RAM + TITLE_SPR_COUNT * 64
-HINT_SPR_PTR0	= (HINT_SPR_RAM - SCREEN) / 64
+HINT_SPR_PTR0	= (HINT_SPR_RAM - VIC_BANK1) / 64
 CURSOR_SPR_RAM	= HINT_SPR_RAM + HINT_SPR_COUNT * 64
-CURSOR_SPR_PTR0	= (CURSOR_SPR_RAM - SCREEN) / 64
+CURSOR_SPR_PTR0	= (CURSOR_SPR_RAM - VIC_BANK1) / 64
 
 TEXT_COL	= 7			; yellow options
 HILITE_COL	= 1			; white selected
@@ -585,9 +586,18 @@ menu_select
 	jmp .ms_ret
 .ms_crd
 	jsr sfx_shoot
-	lda #<credits_text
-	ldy #>credits_text
+	ldx #0
+.ms_cr
+	txa
+	pha
+	lda credits_lo,x
+	ldy credits_hi,x
 	jsr show_text_screen
+	pla
+	tax
+	inx
+	cpx #CREDITS_PAGES
+	bne .ms_cr
 .ms_ret
 	jsr draw_menu
 .ms_st
@@ -1158,7 +1168,7 @@ init_menu_vic
 	and #%11100111			; hires (not MCM), 40 cols
 	ora #%00001000
 	sta $d016
-	lda #%00001000			; matrix $4000, bitmap $6000
+	lda #%01111000			; matrix $5C00, bitmap $6000
 	sta $d018
 	lda #0
 	sta $d015
@@ -1206,7 +1216,7 @@ clear_screen
 	lda #0
 	beq .cs_p
 .cs_col
-	; colour matrix from row 6: 760 bytes (do not touch sprite ptrs @ $43F8)
+	; colour matrix from row 6: 760 bytes (do not touch sprite ptrs @ SCREEN+$3f8)
 	ldx #0
 	lda clear_bg
 .cs_c
@@ -2567,6 +2577,6 @@ menu_str_hi
 !source "menu_pcsfreq.asm"
 
 end_menu = *
-!if end_menu > $4000 {
-	!error "Menu overlaps SCREEN; end=$", end_menu
+!if end_menu > LOGO_SPR_RAM {
+	!error "Menu overlaps LOGO_SPR_RAM; end=$", end_menu
 }

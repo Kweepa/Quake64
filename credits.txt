@@ -1,11 +1,14 @@
 Quake is a trademark of
 ID Software LLC/Zenimax Media Inc.
+
 Unofficial Commodore 64 fan port
 created by Steve McCrea in 2026.
+
 Not affiliated with or endorsed
 by ID Software or Zenimax.
-For non-commercial/fan use only.
 
+For non-commercial/fan use only.
+^
 Quake was created by
 John Carmack, Michael Abrash,
 John Cash, John Romero,
@@ -13,5 +16,10 @@ American McGee, Sandy Petersen,
 Tim Willits, Adrian Carmack,
 Kevin Cloud, Paul Steed,
 Trent Reznor & Nine Inch Nails.
+^
+Loader: Krill / Plush.
+Loader integration by Chris Masiero.
 
-quake64 v1.00.0
+Thanks all!
+
+quake64 v0.40.0

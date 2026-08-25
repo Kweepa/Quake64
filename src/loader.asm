@@ -364,12 +364,23 @@ maybe_stream_room
 	jsr room_types_resident
 	bcc .msr_mark
 	php					; the load banks $01 and sets I
+	sei					; hold IRQ off for blank + load + restore
 	lda $01
 	pha
 	lda #BANK_IO
 	sta $01
+	lda #0				; black viewport (HUD colour RAM untouched)
+	sta col_bg
+	sta col_line
+	jsr fill_viewport_colour
+	lda #0
+	sta $d021
 	jsr stream_room_enemies
 	bcs .msr_fail
+	jsr apply_room_palette
+	jsr fill_viewport_colour
+	lda col_bg
+	sta $d021
 	pla
 	sta $01
 	plp

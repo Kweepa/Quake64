@@ -26,7 +26,7 @@ start
 	lda #0
 	sta load_in_play
 	jsr install_reboot_stub
-	lda #2
+	lda #1
 	sta level_num
 	jsr LoadLevel
 	bcc .start_ok

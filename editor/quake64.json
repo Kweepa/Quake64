@@ -1,6 +1,6 @@
 {
   "version": 9,
-  "activeLevel": "E1M2",
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -1064,36 +1064,6 @@
           "text": "",
           "tag": "",
           "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
-        },
-        {
-          "id": "f2a61676-2874-468d-b801-68a01c037ed3",
-          "kind": "pickup",
-          "x": 12,
-          "y": 104,
-          "z": 119,
-          "sx": 0.9270509831248422,
-          "sy": 1.5,
-          "sz": 0.8028497019894523,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434",
-          "pickup": "grenade launcher"
-        },
-        {
-          "id": "ae338b6a-ca0c-4a7d-be83-fc507b1674e5",
-          "kind": "pickup",
-          "x": 9,
-          "y": 104,
-          "z": 119,
-          "sx": 0.9270509831248422,
-          "sy": 1.5,
-          "sz": 0.8028497019894523,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434",
-          "pickup": "nailgun"
         }
       ]
     },

@@ -1077,7 +1077,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "purpose": "message",
+          "purpose": "hurt",
           "text": "",
           "tag": "",
           "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"

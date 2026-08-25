@@ -56,6 +56,7 @@ start
 	sta $01
 	jsr mulset_init
 	jsr world_init
+	jsr maybe_stream_room			; room_idx is valid now: pull its poses
 	cli
 
 main
@@ -93,6 +94,7 @@ main
 	jsr update_weapon
 	jsr apply_move_world
 	jsr maybe_room_palette
+	jsr maybe_stream_room			; after movement, before the next draw
 	jsr try_proximity
 	jsr proc_update
 	jsr update_floor

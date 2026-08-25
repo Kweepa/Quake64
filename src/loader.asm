@@ -139,7 +139,7 @@ heap_alloc
 ; LoadLevel — blank + map + reloc overlay + enemies, all via Krill.
 ; Heap grows down from SCR_A: map first, then RELOC below it, bind_map on
 ; map_base only, patch SMC operands, heap_top = map_base (drop reloc),
-; then load_map_enemies overwrites the old reloc bytes.
+; then the reloc bytes are reclaimed as the per-room pose sub-heap.
 ; load_in_play=0: cold (DEN off). =1: in-play (init_vic, DEN on).
 ; C=0 ok, C=1 error. Caller re-inits VIC/IRQ.
 LoadLevel
@@ -220,8 +220,12 @@ LoadLevel
 	lda map_base+1
 	sta heap_top+1
 
-	jsr load_map_enemies
-	bcs .ll_fail
+	; No level-wide enemy load any more: maybe_stream_room pulls the current
+	; room's types once world_init has set room_idx. Establish "nothing
+	; resident" for real -- the flags live in BSS and are not zero on entry.
+	jsr clear_pose_ptrs
+	lda #$ff
+	sta stream_room
 
 	; end_game < heap_top
 	lda #<end_game
@@ -235,11 +239,58 @@ LoadLevel
 	sec
 	rts
 
-; Load the three type slots; $FF = unused. Patch gx/gy/gz for loaded types.
-load_map_enemies
+; --- per-room pose streaming ----------------------------------------------
+; Load only the pose banks the CURRENT room needs, instead of every type the
+; level uses. The budget stops being "all types in this level" and becomes
+; "the types in one room", which is what buys the headroom.
+;
+; This is safe because pose data is read ONLY by the draw path (cube.asm),
+; which already filters on en_room == room_idx. enemy.asm's update path never
+; touches it, so enemies left behind in other rooms keep ticking their state
+; machines normally and simply never look at the banks we swapped out. They do
+; NOT need killing off.
+;
+; The pose region is a clean sub-heap: LoadLevel leaves heap_top = map_base and
+; these pack downward from there, so reclaiming is just resetting heap_top.
+;
+; DELIBERATELY NOT DONE: keeping the old room resident while the new one loads.
+; That needs heap for both at once, which defeats the whole point. A room swap
+; is a full swap. The cost is a ~0.5 s stall on a door crossing, which is a
+; level-design problem -- a short enemy-free corridor between heavy rooms hides
+; it completely, and is Kweepa's call to make, not ours.
+
+; C=0 if every type this room needs is already resident, so the swap can be
+; skipped entirely. Makes doubling back through a door free, and makes rooms
+; that add no new types cost nothing.
+room_types_resident
+	ldx #0
+.rtr_lp
+	cpx map_nenemies
+	bcs .rtr_yes
+	+lda_mx en_room
+	cmp room_idx
+	bne .rtr_n
+	+ldy_mx en_type
+	lda pose_map_hi,y			; 0 = not loaded (heap never reaches page 0)
+	beq .rtr_no
+.rtr_n
+	inx
+	jmp .rtr_lp
+.rtr_yes
+	clc
+	rts
+.rtr_no
+	sec
+	rts
+
+; Mark every type as not-resident. room_types_resident uses pose_map_hi as the
+; "is it loaded" flag, so this MUST run before the first residency test of a
+; level -- otherwise it reads whatever was left in BSS, concludes the types are
+; already present, and the enemies draw through junk pointers.
+clear_pose_ptrs
 	ldx #0
 	txa
-.lme_z
+.cpp
 	sta enemy_gx_lo,x
 	sta enemy_gx_hi,x
 	sta enemy_gy_lo,x
@@ -250,44 +301,85 @@ load_map_enemies
 	sta pose_map_hi,x
 	inx
 	cpx #ENEMY_NTYPES
-	bcc .lme_z
+	bcc .cpp
+	rts
+
+; Reclaim the pose sub-heap and load every distinct type in room_idx.
+; C=0 ok, C=1 out of heap.
+stream_room_enemies
+	jsr clear_pose_ptrs
+	lda map_base				; reclaim everything below the map
+	sta heap_top
+	lda map_base+1
+	sta heap_top+1
 
 	ldx #0
-.lme_lp
-	lda map_type0,x
-	cmp #$ff
-	beq .lme_n
-	sta load_type
+.sre_lp
+	cpx map_nenemies
+	bcs .sre_ok
+	+lda_mx en_room
+	cmp room_idx
+	bne .sre_n
+	+ldy_mx en_type
+	lda pose_map_hi,y
+	bne .sre_n				; already loaded this pass
+	sty load_type
 	stx map_sv_y
-	ldy load_type
 	lda enemy_size_lo,y
 	ora enemy_size_hi,y
-	beq .lme_err
+	beq .sre_err
 	lda enemy_size_lo,y
 	pha
 	lda enemy_size_hi,y
 	tay
 	pla
 	jsr heap_alloc
-	bcs .lme_err
+	bcs .sre_err
 	ldy load_type
 	lda en_name_lo,y
 	tax
 	lda en_name_hi,y
 	tay
 	jsr LoadPrg
-	bcs .lme_err
+	bcs .sre_err
 	jsr patch_enemy_gx
 	ldx map_sv_y
-.lme_n
+.sre_n
 	inx
-	cpx #MAP_MAX_TYPES
-	bcc .lme_lp
+	jmp .sre_lp
+.sre_ok
 	clc
 	rts
-.lme_err
+.sre_err
 	sec
 	rts
+
+; Call once per frame after movement, exactly like maybe_room_palette.
+; Placed after it in the main loop so the swap completes before the next
+; frame's draw_enemies runs against the new room_idx.
+maybe_stream_room
+	lda room_idx
+	cmp stream_room
+	beq .msr_rts
+	jsr room_types_resident
+	bcc .msr_mark
+	php					; the load banks $01 and sets I
+	lda $01
+	pha
+	lda #BANK_IO
+	sta $01
+	jsr stream_room_enemies
+	bcs .msr_fail
+	pla
+	sta $01
+	plp
+.msr_mark
+	lda room_idx
+	sta stream_room
+.msr_rts
+	rts
+.msr_fail
+	jmp load_fail_hang			; standing rule: crash, never degrade
 
 ; dest in load_dest; type in load_type.
 ; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…]
@@ -582,6 +674,7 @@ restart_level
 	sta $01
 	jsr game_zp_init
 	jsr world_init
+	jsr maybe_stream_room
 	lda #BANK_IO
 	sta $01
 	jsr init_hud

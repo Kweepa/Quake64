@@ -667,7 +667,11 @@ fx_on		= fxh_explode + FXH_ON	; 1 = explosion live
 fx_skip		= fxh_explode + FXH_SKIP
 fx_ms_l		= fxh_explode + FXH_MS_L
 fx_ms_h		= fxh_explode + FXH_MS_H
-; $CF20+ free
+; Room whose pose banks are currently resident; $ff = none yet. Lives in the
+; genuinely-free space above the effect timers -- NOT in the $CE82 hole that
+; memorymap.md claims is unused, because en_pat_n and the grenade SoA are there.
+stream_room	= $CF20
+; $CF21+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

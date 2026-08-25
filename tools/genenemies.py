@@ -24,6 +24,16 @@ PAIN_KEY = re.compile(r"^pain[a-z]?$")
 DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 # Clip-local fire frames (matches enemy_fire_frame). Pinned as an attack key.
 FIRE_FRAME = [2, 4, 4, 6, 4, 4, 8]
+# Mid-distance stick LOD threshold (CAM_ZH); Ogre needs more for chainsaw tip.
+DEFAULT_LOD_Z = {
+    "Grunt": 4,
+    "Knight": 4,
+    "Rottweiler": 4,
+    "Scrag": 4,
+    "Ogre": 10,
+    "Shambler": 4,
+    "Chthon": 4,
+}
 
 HP_QUAKE = {
     "Grunt": 30,
@@ -427,6 +437,7 @@ def main() -> None:
     max_nframes = 0
     nframes_list: list[int] = []
     stored_list: list[int] = []
+    lod_z_list: list[int] = []
 
     for ti, name in enumerate(TYPES):
         if name not in by_name:
@@ -444,8 +455,14 @@ def main() -> None:
         pose_sizes.append(len(payload))
         nframes_list.append(nframes)
         stored_list.append(n_stored)
+        raw_lod = enemy.get("lodZ", DEFAULT_LOD_Z.get(name, 4))
+        try:
+            lod = int(raw_lod)
+        except (TypeError, ValueError):
+            lod = DEFAULT_LOD_Z.get(name, 4)
+        lod_z_list.append(max(0, min(255, lod)))
         n_lerp = sum(1 for v in pose_map if v == 0xFF)
-        print(f"{name}: logical={nframes} stored={n_stored} lerp={n_lerp} bytes={len(payload)}")
+        print(f"{name}: logical={nframes} stored={n_stored} lerp={n_lerp} bytes={len(payload)} lodZ={lod_z_list[-1]}")
         for role in ("stand", "alert", "run", "walk", "attack"):
             start, length = require_role(enemy, role)
             if start + length > nframes:
@@ -501,6 +518,11 @@ def main() -> None:
     parts.append("enemy_drop_type	!byte 7, $ff, $ff, $ff, 4, $ff, $ff")
     parts.append("enemy_fire_frame	!byte 2, 4, 4, 6, 4, 4, 8")
     parts.append("enemy_class		!byte 0, 0, 1, 0, 0, 0, 0")
+    parts.append("; LOD Z by type: " + ", ".join(TYPES))
+    parts.append(
+        "enemy_lod_z		!byte " + ", ".join(str(n) for n in lod_z_list)
+        + "	; full project while CAM_ZH < this"
+    )
     parts.append("; Stored pose count (PRG header / gy stride). Clip tables stay logical.")
     parts.append("enemy_nframes	!byte " + ", ".join(str(n) for n in stored_list))
     parts.append("")

@@ -155,7 +155,9 @@
           "dir": 1,
           "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "tag": "firstelevator",
-          "elevType": "toggle"
+          "elevAuto": true,
+          "elevLow": 0,
+          "elevHigh": 1
         },
         {
           "id": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
@@ -401,7 +403,7 @@
           "id": "96b8e2c2-ba44-4235-b044-524ebad77149",
           "kind": "platform",
           "x": 123,
-          "y": 78,
+          "y": 77,
           "z": 160,
           "sx": 4,
           "sy": 1,
@@ -426,7 +428,9 @@
           "dir": 1,
           "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "tag": "hidden",
-          "elevType": "toggle"
+          "elevAuto": true,
+          "elevLow": 0,
+          "elevHigh": 1
         },
         {
           "id": "0060c2f4-f669-470d-8159-ab47285693a6",
@@ -518,13 +522,13 @@
         {
           "id": "bcc49cd0-7f52-4aff-b5b0-06934f74d4d6",
           "kind": "switch",
-          "x": 140,
+          "x": 141,
           "y": 66,
-          "z": 145,
-          "sx": 1,
+          "z": 175,
+          "sx": 2,
           "sy": 3,
-          "sz": 2,
-          "face": "-x",
+          "sz": 1,
+          "face": "+z",
           "axis": "z",
           "dir": 1,
           "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
@@ -544,7 +548,9 @@
           "dir": 1,
           "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "tag": "bridge",
-          "elevType": "toggle"
+          "elevAuto": true,
+          "elevLow": 0,
+          "elevHigh": 1
         },
         {
           "id": "068b89e9-f42f-4496-bf96-194113281897",
@@ -785,7 +791,7 @@
           "id": "8a071844-c19e-45c6-bf23-9e66816817e2",
           "kind": "platform",
           "x": 99,
-          "y": 61,
+          "y": 60,
           "z": 71,
           "sx": 6,
           "sy": 1,
@@ -814,7 +820,7 @@
           "id": "685c24d0-4f3d-4384-96b8-cd89e1e2dab0",
           "kind": "platform",
           "x": 99,
-          "y": 57,
+          "y": 56,
           "z": 49,
           "sx": 6,
           "sy": 1,
@@ -1064,6 +1070,23 @@
           "text": "",
           "tag": "",
           "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
+        },
+        {
+          "id": "80fe0d34-d543-4d16-a329-ea103d015c8a",
+          "kind": "trigger",
+          "x": 140,
+          "y": 55,
+          "z": 116,
+          "sx": 20,
+          "sy": 4,
+          "sz": 20,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "message",
+          "text": "",
+          "tag": "",
+          "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04"
         }
       ]
     },
@@ -1821,7 +1844,9 @@
           "dir": 1,
           "roomId": "ec707e69-9eec-4e53-a32b-681dccd8ec0f",
           "tag": "keylift",
-          "elevType": "toggle"
+          "elevAuto": true,
+          "elevLow": 0,
+          "elevHigh": 1
         },
         {
           "id": "0f360451-ce53-46c5-8fbc-ccd4b4e69737",
@@ -1970,7 +1995,9 @@
           "dir": 1,
           "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
           "tag": "reveal",
-          "elevType": "toggle"
+          "elevAuto": true,
+          "elevLow": 0,
+          "elevHigh": 1
         },
         {
           "id": "5ec6b5ec-2323-4592-8c52-72847c919e66",
@@ -2295,8 +2322,8 @@
           "dir": 1,
           "roomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5",
           "lockKey": "silver",
-          "locked": true,
-          "otherRoomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf"
+          "otherRoomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf",
+          "locked": true
         }
       ]
     },
@@ -7588,6 +7615,7 @@
           ]
         ]
       },
+      "lodZ": 4,
       "exportClips": [
         "stand",
         "death",
@@ -12804,6 +12832,7 @@
           ]
         ]
       },
+      "lodZ": 4,
       "exportClips": [
         "stand",
         "runb",
@@ -17063,6 +17092,7 @@
           ]
         ]
       },
+      "lodZ": 4,
       "exportClips": [
         "attack",
         "deathb",
@@ -20827,7 +20857,8 @@
             33
           ]
         ]
-      }
+      },
+      "lodZ": 4
     },
     {
       "id": "184bc6f7-ce39-4c53-8600-192ce13d27c6",
@@ -27514,6 +27545,7 @@
           ]
         ]
       },
+      "lodZ": 10,
       "exportClips": [
         "stand",
         "walk",
@@ -34003,6 +34035,7 @@
           ]
         ]
       },
+      "lodZ": 4,
       "exportClips": [
         "stand",
         "walk",
@@ -41278,7 +41311,8 @@
             211
           ]
         ]
-      }
+      },
+      "lodZ": 4
     }
   ],
   "weapons": {
@@ -41803,13 +41837,18 @@
     "gold key": {
       "verts": [
         {
-          "x": -2,
-          "y": 0,
+          "x": 0,
+          "y": 2,
           "z": 0
         },
         {
-          "x": -2,
-          "y": 2,
+          "x": 1,
+          "y": 3,
+          "z": 0
+        },
+        {
+          "x": -1,
+          "y": 3,
           "z": 0
         },
         {
@@ -41818,23 +41857,18 @@
           "z": 0
         },
         {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        {
+          "x": 1,
+          "y": 1,
+          "z": 0
+        },
+        {
           "x": -1,
           "y": 1,
-          "z": 0
-        },
-        {
-          "x": 2,
-          "y": 1,
-          "z": 0
-        },
-        {
-          "x": 1,
-          "y": 2,
-          "z": 0
-        },
-        {
-          "x": 1,
-          "y": 0,
           "z": 0
         }
       ],
@@ -41856,16 +41890,16 @@
           3
         ],
         [
-          3,
-          4
-        ],
-        [
           4,
           5
         ],
         [
           4,
           6
+        ],
+        [
+          0,
+          4
         ]
       ]
     },

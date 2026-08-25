@@ -23,6 +23,7 @@ import {
   roomById,
   itemMeshFor,
   itemMeshWorldSegs,
+  elevStopBottoms,
 } from "./model.js";
 import {
   BOX_CORNERS,
@@ -662,7 +663,7 @@ export class LayoutView {
       return segs;
     }
     if (obj.kind === "platform") {
-      const y = obj.y;
+      const y = (obj.y | 0) + (obj.sy | 0);
       segs.push(
         { a: { x: obj.x, y, z: obj.z }, b: { x: obj.x + obj.sx, y, z: obj.z } },
         { a: { x: obj.x + obj.sx, y, z: obj.z }, b: { x: obj.x + obj.sx, y, z: obj.z + obj.sz } },
@@ -1044,6 +1045,12 @@ export class LayoutView {
       this.#drawObject(ctx, doc, obj, cam, w, h, hi, sel, obj.id === primary);
     }
 
+    const selIds = this.#selectedIds();
+    if (selIds.length === 1) {
+      const elev = objs.find((o) => o.id === selIds[0] && o.kind === "elevator");
+      if (elev) this.#drawElevDestGhosts(ctx, doc, elev, cam, w, h);
+    }
+
     if (this.drag?.kind === "box") {
       const r = this.#boxRect();
       ctx.fillStyle = "rgba(212, 160, 23, 0.12)";
@@ -1139,6 +1146,33 @@ export class LayoutView {
       this.#drawGlyphs(ctx, obj, cam, w, h, color);
     }
     if (primary) this.#drawGizmo(ctx, obj, cam, w, h);
+  }
+
+  #drawElevDestGhosts(ctx, doc, elev, cam, w, h) {
+    const stops = elevStopBottoms(doc, elev);
+    const liveTop = (elev.y | 0) + (elev.sy | 0);
+    const x0 = elev.x | 0;
+    const z0 = elev.z | 0;
+    const sx = elev.sx | 0;
+    const sz = elev.sz | 0;
+    const sy = elev.sy | 0;
+    ctx.strokeStyle = KINDS.elevator.color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    for (const bottom of [stops.dest, stops.home]) {
+      const top = bottom + sy;
+      if (top === liveTop) continue;
+      const corners = [
+        { x: x0, y: top, z: z0 },
+        { x: x0 + sx, y: top, z: z0 },
+        { x: x0 + sx, y: top, z: z0 + sz },
+        { x: x0, y: top, z: z0 + sz },
+      ];
+      for (let i = 0; i < 4; i++) {
+        this.#line3(ctx, corners[i], corners[(i + 1) % 4], cam, w, h);
+      }
+    }
+    ctx.setLineDash([]);
   }
 
   #drawGlyphs(ctx, obj, cam, w, h, color) {

@@ -1450,7 +1450,6 @@ try_proximity
 	inx
 	bne .tp_s
 .tp_el
-	jsr elev_try_auto
 	jsr try_backpack_pickup
 .tp_rts
 	rts

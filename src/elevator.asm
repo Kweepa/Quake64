@@ -1,4 +1,4 @@
-; Elevators — activate, motion, floor boarding, auto stand-on, move noise
+; Elevators — activate (toggle), motion, floor boarding, move noise
 !zone elevator
 
 ; ------------------------------------------------------------------
@@ -21,100 +21,47 @@ elev_init
 
 ; ------------------------------------------------------------------
 ; elev_activate — X = elev SoA index; C=0 success
-; toggle: one-shot to the other stop; else lower→wait→raise from home
+; one-shot to the other stop (home ↔ dest)
 ; ------------------------------------------------------------------
 elev_activate
 	stx proc_tmp5			; local SoA
-	jmp .ea_body
-.ea_fail_pl
-	pla
-.ea_fail
-	sec
-	ldx proc_tmp5
-	rts
-.ea_body
 	+lda_mx elev_id
 	sta proc_tmp1			; world id for busy / PROC_A
 	jsr proc_target_busy
 	bcs .ea_fail
-	ldx proc_tmp5
-	+lda_mx elev_type
-	cmp #ELEV_TYPE_TOGGLE
-	bne .ea_not_tog
-	jmp .ea_toggle
-.ea_not_tog
 	jsr proc_count_free
-	cmp #2
+	cmp #1
 	bcc .ea_fail
 	ldx proc_tmp5
 	lda elev_y,x
 	+cmp_mx elev_home
-	bne .ea_fail			; only start from home (top)
-	+lda_mx elev_home
-	pha				; return height
-	+lda_mx elev_id
-	sta proc_tmp1
+	bne .ea_up
 	lda #PROC_LOWER_ELEV
 	sta proc_tmp0
 	+lda_mx elev_dest
 	sta proc_tmp2
-	lda #0
-	sta proc_tmp3
-	sta proc_tmp4
-	jsr proc_alloc
-	bcs .ea_fail_pl
-	lda proc_tmp5
-	sta PROC_L,y
-	lda #PROC_TIMER
-	sta proc_tmp0
-	lda #PROC_RAISE_ELEV
-	sta proc_tmp2
-	lda #<ELEV_WAIT_MS
-	sta proc_tmp3
-	lda #>ELEV_WAIT_MS
-	sta proc_tmp4
-	jsr proc_alloc
-	bcs .ea_fail_pl
-	lda proc_tmp5
-	sta PROC_L,y
-	pla
-	sta PROC_E,y
-	jmp .ea_snd
-.ea_toggle
-	jsr proc_count_free
-	cmp #1
-	bcs .ea_tog_ok
-	jmp .ea_fail
-.ea_tog_ok
-	ldx proc_tmp5
-	lda elev_y,x
-	+cmp_mx elev_home
-	bne .ea_tog_up
-	lda #PROC_LOWER_ELEV
-	sta proc_tmp0
-	+lda_mx elev_dest
-	sta proc_tmp2
-	jmp .ea_tog_go
-.ea_tog_up
+	jmp .ea_go
+.ea_up
 	lda #PROC_RAISE_ELEV
 	sta proc_tmp0
 	+lda_mx elev_home
 	sta proc_tmp2
-.ea_tog_go
+.ea_go
 	+lda_mx elev_id
 	sta proc_tmp1
 	lda #0
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	bcc .ea_tog_got
-	jmp .ea_fail
-.ea_tog_got
+	bcs .ea_fail
 	lda proc_tmp5
 	sta PROC_L,y
-.ea_snd
 	jsr elev_noise_on
 	clc
+	ldx proc_tmp5
+	rts
+.ea_fail
+	sec
 	ldx proc_tmp5
 	rts
 
@@ -244,30 +191,6 @@ elev_update_floor
 	beq .euf_rts
 	jmp .euf
 .euf_rts
-	rts
-
-; ------------------------------------------------------------------
-; elev_try_auto — stand-on automatic elevators in this room
-; ------------------------------------------------------------------
-elev_try_auto
-	ldx #0
-.eta
-	cpx	map_nelevs
-	bcs .eta_rts
-	+lda_mx elev_type
-	cmp #ELEV_TYPE_AUTO
-	bne .eta_n
-	+lda_mx elev_room
-	cmp room_idx
-	bne .eta_n
-	cpx pl_on_elev
-	bne .eta_n
-	jsr elev_activate
-.eta_n
-	inx
-	beq .eta_rts
-	jmp .eta
-.eta_rts
 	rts
 
 ; ------------------------------------------------------------------

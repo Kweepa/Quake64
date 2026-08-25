@@ -30,7 +30,7 @@ MAP_FIELDS = {
     "plat_x", "plat_y", "plat_z", "plat_sx", "plat_sz",
     "plat_room", "plat_solid", "plat_id",
     "elev_x", "elev_y0", "elev_z", "elev_sx", "elev_sy", "elev_sz",
-    "elev_type", "elev_home", "elev_dest", "elev_room", "elev_id",
+    "elev_home", "elev_dest", "elev_room", "elev_id",
     "sw_x", "sw_y", "sw_z", "sw_sx", "sw_sy", "sw_sz",
     "sw_elev", "sw_room", "sw_face", "sw_id",
     "en_x", "en_y", "en_z", "en_type", "en_rot", "en_room", "en_patrol", "en_id",

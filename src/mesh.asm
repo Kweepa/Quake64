@@ -1541,21 +1541,21 @@ draw_world
 	stx obj_i
 	+lda_mx elev_x
 	sta box_x
+	clc
 	lda elev_y,x
-	sta box_y
+	+adc_mx elev_sy
+	sta box_y			; top plane
 	+lda_mx elev_z
 	sta box_z
 	+lda_mx elev_sx
 	sta box_sx
-	+lda_mx elev_sy
+	lda #1
 	sta box_sy
 	+lda_mx elev_sz
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_er
-	lda #0
-	sta box_inside
-	jsr draw_box
+	jsr draw_plat_mesh
 .dw_er
 	ldx obj_i
 .dw_eln

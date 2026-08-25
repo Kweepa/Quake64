@@ -11,7 +11,9 @@ import {
   clampTriggerText,
   clampName,
   clampTag,
-  clampElevType,
+  elevHeightsAuto,
+  clampElevHeights,
+  elevStopBottoms,
   clampTriggerPurpose,
   TRIGGER_PURPOSES,
   TRIGGER_PURPOSE_LABELS,
@@ -25,7 +27,6 @@ import {
   MAX_TRIGGER_TEXT,
   MAX_NAME_LEN,
   MAX_TAG_LEN,
-  ELEV_TYPES,
   PICKUP_TYPES,
   ITEM_MESH_KEYS,
   DOOR_LOCKS,
@@ -64,6 +65,8 @@ import {
   emptyMdlRig,
   DEFAULT_MDL_SCALE,
   clampMdlScale,
+  clampEnemyLodZ,
+  defaultEnemyLodZ,
   WEAPON_KEYS,
   WEAPON_LABELS,
   clampWeaponScale,
@@ -1869,16 +1872,48 @@ function renderInspector() {
       root.appendChild(field("Tag", tagInp));
     }
     if (obj.kind === "elevator") {
-      const sel = document.createElement("select");
-      for (const t of ELEV_TYPES) {
-        const opt = document.createElement("option");
-        opt.value = t;
-        opt.textContent = t;
-        if (clampElevType(obj.elevType) === t) opt.selected = true;
-        sel.appendChild(opt);
+      const autoChk = document.createElement("input");
+      autoChk.type = "checkbox";
+      autoChk.checked = elevHeightsAuto(obj);
+      autoChk.addEventListener("change", () =>
+        apply(() => {
+          obj.elevAuto = autoChk.checked;
+          if (!obj.elevAuto) {
+            const room = roomById(doc, obj.roomId);
+            const floorY = room ? room.y | 0 : 0;
+            const stops = elevStopBottoms(doc, { ...obj, elevAuto: true });
+            obj.elevLow = stops.dest - floorY;
+            obj.elevHigh = stops.home - floorY;
+            clampElevHeights(obj);
+          }
+        })
+      );
+      root.appendChild(field("Auto heights", autoChk));
+      if (!elevHeightsAuto(obj)) {
+        clampElevHeights(obj);
+        const lowInp = document.createElement("input");
+        lowInp.type = "number";
+        lowInp.step = "1";
+        lowInp.value = String(obj.elevLow);
+        lowInp.addEventListener("change", () =>
+          apply(() => {
+            obj.elevLow = lowInp.value | 0;
+            clampElevHeights(obj);
+          })
+        );
+        root.appendChild(field("Low (vs room)", lowInp));
+        const highInp = document.createElement("input");
+        highInp.type = "number";
+        highInp.step = "1";
+        highInp.value = String(obj.elevHigh);
+        highInp.addEventListener("change", () =>
+          apply(() => {
+            obj.elevHigh = highInp.value | 0;
+            clampElevHeights(obj);
+          })
+        );
+        root.appendChild(field("High (vs room)", highInp));
       }
-      sel.addEventListener("change", () => apply(() => (obj.elevType = sel.value)));
-      root.appendChild(field("Type", sel));
     }
     if (obj.kind === "pickup") {
       const sel = document.createElement("select");
@@ -1992,6 +2027,22 @@ function renderInspector() {
     refreshAll();
   });
   root.appendChild(field("Name", name));
+
+  const lodInp = document.createElement("input");
+  lodInp.type = "number";
+  lodInp.min = "0";
+  lodInp.max = "255";
+  lodInp.step = "1";
+  lodInp.value = String(clampEnemyLodZ(e.lodZ, e.name));
+  lodInp.title = "Full stick project while view Z < this (cheap LOD beyond)";
+  lodInp.addEventListener("change", () => {
+    pushUndo();
+    e.lodZ = clampEnemyLodZ(lodInp.value, e.name);
+    lodInp.value = String(e.lodZ);
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("LOD Z", lodInp));
 
   const timeline = getTimeline(e);
   const mdl = sharewareModels[e.name];

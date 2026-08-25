@@ -77,6 +77,17 @@ export const ANIM_ORBIT_DIST_MAX = 400;
 export const ITEM_ORBIT_DIST_MIN = 8;
 export const ITEM_ORBIT_DIST_MAX = 80;
 export const DOC_VERSION = 9;
+/** Mid-distance stick LOD: full project while CAM_ZH < lodZ (world units). */
+export const DEFAULT_ENEMY_LOD_Z = 4;
+export const ENEMY_LOD_Z_BY_NAME = {
+  Grunt: 4,
+  Knight: 4,
+  Rottweiler: 4,
+  Scrag: 4,
+  Ogre: 10,
+  Shambler: 4,
+  Chthon: 4,
+};
 export const DEFAULT_WEAPON_SCALE = 0.4;
 export const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
 export const WEAPON_LABELS = {
@@ -90,6 +101,16 @@ export function clampMdlScale(n) {
   const v = Number(n);
   if (!Number.isFinite(v)) return DEFAULT_MDL_SCALE;
   return Math.max(0.1, Math.min(2, v));
+}
+
+export function defaultEnemyLodZ(name) {
+  return ENEMY_LOD_Z_BY_NAME[name] ?? DEFAULT_ENEMY_LOD_Z;
+}
+
+export function clampEnemyLodZ(n, name) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return defaultEnemyLodZ(name);
+  return Math.max(0, Math.min(255, v | 0));
 }
 
 /** Default room viewport colours (C64 indices). */
@@ -331,11 +352,99 @@ export const MAX_TRIGGER_TEXT = 80;
 export const MAX_NAME_LEN = 40;
 export const MAX_TAG_LEN = 16;
 
-/** Elevator motion: descending = switch lower→wait→raise; automatic = stand-on same cycle; toggle = switch, stay until retrigger. */
-export const ELEV_TYPES = ["descending", "automatic", "toggle"];
+/** Elevator height mode: Auto invents home/dest at cook; off uses elevLow/elevHigh vs room.y. */
+export function elevHeightsAuto(obj) {
+  return obj?.elevAuto !== false;
+}
 
-export function clampElevType(s) {
-  return ELEV_TYPES.includes(s) ? s : "descending";
+export function clampElevHeights(obj) {
+  let low = Number.isFinite(Number(obj.elevLow)) ? obj.elevLow | 0 : 0;
+  let high = Number.isFinite(Number(obj.elevHigh)) ? obj.elevHigh | 0 : 1;
+  if (high <= low) high = low + 1;
+  obj.elevLow = low;
+  obj.elevHigh = high;
+  obj.elevAuto = elevHeightsAuto(obj);
+  delete obj.elevType;
+}
+
+function xzAabbGap(a, b) {
+  const ax1 = (a.x | 0) + (a.sx | 0);
+  const bx1 = (b.x | 0) + (b.sx | 0);
+  const az1 = (a.z | 0) + (a.sz | 0);
+  const bz1 = (b.z | 0) + (b.sz | 0);
+  const dx = Math.max(0, (a.x | 0) - bx1, (b.x | 0) - ax1);
+  const dz = Math.max(0, (a.z | 0) - bz1, (b.z | 0) - az1);
+  return dx + dz;
+}
+
+function nearestFloorHome(elev, room, floorY) {
+  const elevSy = elev.sy | 0;
+  const elevTop = (elev.y | 0) + elevSy;
+  let bestKey = null;
+  let bestHome = null;
+  for (const c of roomGeometry(room).colliders || []) {
+    if ((c.sx | 0) <= 0) continue;
+    const cy = c.y | 0;
+    if (cy <= floorY) continue;
+    const home = cy - elevSy;
+    if (home <= floorY) continue;
+    const key = [xzAabbGap(elev, c), Math.abs(cy - elevTop)];
+    if (
+      bestKey == null ||
+      key[0] < bestKey[0] ||
+      (key[0] === bestKey[0] && key[1] < bestKey[1])
+    ) {
+      bestKey = key;
+      bestHome = home;
+    }
+  }
+  return bestHome;
+}
+
+function nearestPlatHome(elev, roomId, plats, floorY) {
+  const elevSy = elev.sy | 0;
+  const elevTop = (elev.y | 0) + elevSy;
+  let bestKey = null;
+  let bestHome = null;
+  for (const p of plats) {
+    if (p.roomId !== roomId) continue;
+    const surface = (p.y | 0) + ((p.sy | 0) || 1);
+    const home = surface - elevSy;
+    if (home <= floorY) continue;
+    const key = [xzAabbGap(elev, p), Math.abs(surface - elevTop)];
+    if (
+      bestKey == null ||
+      key[0] < bestKey[0] ||
+      (key[0] === bestKey[0] && key[1] < bestKey[1])
+    ) {
+      bestKey = key;
+      bestHome = home;
+    }
+  }
+  return bestHome;
+}
+
+/**
+ * Absolute elev_y bottoms for dest (low) and home (high), matching tools/genmap.py.
+ * @returns {{ dest: number, home: number }}
+ */
+export function elevStopBottoms(doc, elev) {
+  const room = roomUnderObject(doc, elev) || roomById(doc, elev.roomId);
+  const floorY = room ? room.y | 0 : 0;
+  if (!elevHeightsAuto(elev)) {
+    clampElevHeights(elev);
+    return { dest: floorY + elev.elevLow, home: floorY + elev.elevHigh };
+  }
+  let home = elev.y | 0;
+  const dest = floorY;
+  if ((elev.y | 0) === floorY && room) {
+    const map = activeMap(doc);
+    const plats = (map?.objects || []).filter((o) => o.kind === "platform");
+    let raised = nearestFloorHome(elev, room, floorY);
+    if (raised == null) raised = nearestPlatHome(elev, elev.roomId, plats, floorY);
+    if (raised != null) home = raised;
+  }
+  return { dest, home };
 }
 
 /** Placeable pickup contents (not including death-drop shells5). */
@@ -1000,7 +1109,7 @@ export function clampObject(obj) {
     else obj.roomId = null;
   }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
-  if (obj.kind === "elevator") obj.elevType = clampElevType(obj.elevType);
+  if (obj.kind === "elevator") clampElevHeights(obj);
   if (obj.kind === "pickup") obj.pickup = clampPickupType(obj.pickup);
   if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
   if (obj.kind === "doorway") {
@@ -1073,7 +1182,11 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.roomId = String(extra.roomId);
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
-  if (kind === "elevator") obj.elevType = clampElevType(extra.elevType);
+  if (kind === "elevator") {
+    obj.elevAuto = extra.elevAuto !== false;
+    if (extra.elevLow != null) obj.elevLow = extra.elevLow | 0;
+    if (extra.elevHigh != null) obj.elevHigh = extra.elevHigh | 0;
+  }
   if (kind === "pickup") obj.pickup = clampPickupType(extra.pickup);
   if (kind === "doorway") {
     obj.lockKey = clampDoorLock(extra.lockKey ?? (extra.locked ? "silver" : "unlocked"));
@@ -1892,6 +2005,7 @@ export function createEnemy(name = "Grunt") {
     frames: [dummyFrameFor(name)],
     clips: [],
     mdlRig: emptyMdlRig(),
+    lodZ: defaultEnemyLodZ(name),
   };
 }
 
@@ -1944,7 +2058,9 @@ function parseObjects(list) {
       lockKey: o.lockKey,
       locked: o.locked,
       keyTag: o.keyTag,
-      elevType: o.elevType,
+      elevAuto: o.elevAuto,
+      elevLow: o.elevLow,
+      elevHigh: o.elevHigh,
       pickup: o.pickup,
       backpack: o.backpack,
       order: o.order,
@@ -2010,7 +2126,12 @@ function parseObjects(list) {
       if (o.roomId != null) obj.roomId = String(o.roomId);
     }
     if (usesLinkTag(o.kind) && o.tag != null) obj.tag = clampTag(o.tag);
-    if (o.kind === "elevator" && o.elevType != null) obj.elevType = clampElevType(o.elevType);
+    if (o.kind === "elevator") {
+      obj.elevAuto = o.elevAuto !== false;
+      if (o.elevLow != null) obj.elevLow = o.elevLow | 0;
+      if (o.elevHigh != null) obj.elevHigh = o.elevHigh | 0;
+      delete obj.elevType;
+    }
     if (o.kind === "pickup" || o.kind === "backpack") {
       obj.pickup = clampPickupType(o.pickup || o.backpack);
     }
@@ -2284,6 +2405,7 @@ export function normalizeDocument(raw) {
       enemy.frames = parseEnemyFrames(e.frames, enemy.name);
       enemy.clips = normalizeClips(e.clips, enemy.frames.length);
       enemy.mdlRig = normalizeMdlRig(e.mdlRig);
+      enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;
       doc.enemies.push(enemy);

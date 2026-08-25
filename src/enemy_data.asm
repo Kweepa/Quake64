@@ -29,6 +29,8 @@ enemy_pain_chance	!byte $80, $80, $c0, $80, $80, $80, $80
 enemy_drop_type	!byte 7, $ff, $ff, $ff, 4, $ff, $ff
 enemy_fire_frame	!byte 2, 4, 4, 6, 4, 4, 8
 enemy_class		!byte 0, 0, 1, 0, 0, 0, 0
+; LOD Z by type: Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon
+enemy_lod_z		!byte 4, 4, 4, 4, 10, 4, 4	; full project while CAM_ZH < this
 ; Stored pose count (PRG header / gy stride). Clip tables stay logical.
 enemy_nframes	!byte 44, 35, 28, 32, 52, 53, 63
 

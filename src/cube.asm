@@ -2286,7 +2286,8 @@ draw_enemies
 }
 	lda CAM_ZH+11
 	bmi .de_full
-	cmp #ENEMY_LOD_Z
+	ldy ent_type
+	cmp enemy_lod_z,y
 	bcc .de_full
 	jsr ent_far_project
 !if PROFILE = 1 {

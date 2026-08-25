@@ -39,9 +39,6 @@ ENEMY_MAX = 16
 TRIG_MAX = 16
 DEST_MAX = 16
 BP_MAX = 32
-ELEV_DESCENDING = 0
-ELEV_AUTOMATIC = 1
-ELEV_TOGGLE = 2
 FACE = {"+z": 0, "-z": 1, "+x": 2, "-x": 3}
 ROOM_BG_DEFAULT = 9
 ROOM_LINE_DEFAULT = 7
@@ -185,10 +182,11 @@ def nearest_plat_home(
     for pi, p in enumerate(plats):
         if plat_rooms[pi] != room_i:
             continue
-        home = int(p["y"]) - elev_sy
+        surface = int(p["y"]) + int(p.get("sy") or 1)
+        home = surface - elev_sy
         if home <= floor_y:
             continue
-        key = (xz_aabb_gap(elev, p), abs(int(p["y"]) - elev_top))
+        key = (xz_aabb_gap(elev, p), abs(surface - elev_top))
         if best_key is None or key < best_key:
             best_key = key
             best_home = home
@@ -471,7 +469,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     for p in plats:
         ri = room_index(rooms, p, "platform")
         plat_x.append(p["x"])
-        plat_y.append(p["y"])
+        plat_y.append(int(p["y"]) + int(p.get("sy") or 1))
         plat_z.append(p["z"])
         plat_sx.append(p["sx"])
         plat_sz.append(p["sz"])
@@ -479,14 +477,13 @@ def cook_one(level: dict, map_key: str) -> bytes:
         plat_solid.append(0 if p.get("collide") is False else 1)
         plat_id.append(map_id[id(p)])
 
-    # Elevators
+    # Elevators (toggle only)
     elev_x, elev_y, elev_z = [], [], []
     elev_sx, elev_sy, elev_sz = [], [], []
-    elev_type, elev_home, elev_dest, elev_room = [], [], [], []
+    elev_home, elev_dest, elev_room = [], [], []
     elev_id = []
     for e in elevs:
         ri = room_index(rooms, e, "elevator")
-        et = e.get("elevType") or "descending"
         floor_y = rooms[ri]["y"]
         elev_x.append(e["x"])
         elev_y.append(e["y"])
@@ -494,21 +491,25 @@ def cook_one(level: dict, map_key: str) -> bytes:
         elev_sx.append(e["sx"])
         elev_sy.append(e["sy"])
         elev_sz.append(e["sz"])
-        if et == "automatic":
-            elev_type.append(ELEV_AUTOMATIC)
-        elif et == "toggle":
-            elev_type.append(ELEV_TOGGLE)
+        auto = e.get("elevAuto") is not False
+        if auto:
+            home = e["y"]
+            dest = floor_y
+            if e["y"] == floor_y:
+                raised = nearest_floor_home(e, rooms[ri], floor_y)
+                if raised is None:
+                    raised = nearest_plat_home(e, ri, plats, plat_room, floor_y)
+                if raised is not None:
+                    home = raised
         else:
-            elev_type.append(ELEV_DESCENDING)
-        home = e["y"]
-        if et == "toggle" and e["y"] == floor_y:
-            raised = nearest_floor_home(e, rooms[ri], floor_y)
-            if raised is None:
-                raised = nearest_plat_home(e, ri, plats, plat_room, floor_y)
-            if raised is not None:
-                home = raised
+            low = int(e.get("elevLow") or 0)
+            high = int(e.get("elevHigh") or 1)
+            if high <= low:
+                high = low + 1
+            dest = floor_y + low
+            home = floor_y + high
         elev_home.append(home)
-        elev_dest.append(floor_y)
+        elev_dest.append(dest)
         elev_room.append(ri)
         elev_id.append(map_id[id(e)])
 
@@ -787,7 +788,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(elev_sx)
     add(elev_sy)
     add(elev_sz)
-    add(elev_type)
     add(elev_home)
     add(elev_dest)
     add(elev_room)
@@ -853,9 +853,6 @@ MAP_MAX_TYPES	= 3
 MAP_MAX_BYTES	= 3072
 ENEMY_POSE_MAX	= 4096
 MAP_NLEVELS	= 8
-ELEV_TYPE_DESCEND	= 0
-ELEV_TYPE_AUTO	= 1
-ELEV_TYPE_TOGGLE	= 2
 TRIG_MSG	= 0
 TRIG_END	= 1
 TRIG_HURT	= 2

@@ -483,7 +483,6 @@ bind_map
 	+bind_add elev_sx, map_nelevs
 	+bind_add elev_sy, map_nelevs
 	+bind_add elev_sz, map_nelevs
-	+bind_add elev_type, map_nelevs
 	+bind_add elev_home, map_nelevs
 	+bind_add elev_dest, map_nelevs
 	+bind_add elev_room, map_nelevs

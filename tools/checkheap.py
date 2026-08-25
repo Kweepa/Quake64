@@ -1,25 +1,15 @@
 #!/usr/bin/env python3
 """Simulate LoadLevel heap vs GAME size; fail the build if a map cannot load.
 
-Heap grows down from SCR_A. LoadLevel: map, RELOC_MAX (then drop), pose banks
-for map_type0..2. heap_alloc fails when new top <= end_game, so need must be
-strictly less than SCR_A - end_game.
+Heap grows down from SCR_A. LoadLevel: map, RELOC_MAX (then drop), then pose
+banks. heap_alloc fails when new top <= end_game, so need must be strictly less
+than SCR_A - end_game.
 
-NOTE: with per-room pose streaming this model is CONSERVATIVE. The runtime no
-longer holds map_type0..2 for the whole level -- it holds only the types in the
-room the player is standing in, so the real peak is the worst SINGLE ROOM, which
-is smaller. This tool therefore over-estimates, which is safe (it can fail a
-build that would have run) but no longer tight.
+With per-room streaming the pose banks resident at any moment are only those of
+the room being played, so the gate is the worst SINGLE ROOM, not the sum of the
+level types. tools/perroom.py extracts the per-room sets by replaying bind_map
+over the packed payload, and validates what it finds before this acts on it.
 
-Making it exact needs the per-room enemy sets, which live in the packed payload
-as en_room/en_type. Those are already in the map -- streaming derives them at
-runtime and needs no format change -- but locating them here means replicating
-genmap's whole field-packing order. harness/streamcheck.py measures the real
-per-room figures on the running game instead, which cannot drift from what the
-loader actually does.
-
-Must run after GAME assemble (game.lbl) and genmap/genenemies PRGs, before
-tools/mkdisk.py (see build.bat).
 """
 
 from __future__ import annotations
@@ -31,6 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mkreloc import parse_labels, parse_mem_const
+from perroom import per_room_types
 
 ROOT = Path(__file__).resolve().parents[1]
 MAP_DIR = ROOT / "maps"
@@ -122,10 +113,8 @@ def main() -> None:
         f"heap  GAME ${locode:04X}-${end_game:04X}  "
         f"avail {avail}  reloc_max {reloc_max}"
     )
-    print("      per-room streaming is active: these 'poses' figures are")
-    print("      the LEVEL-wide worst case and so OVER-ESTIMATE. The real")
-    print("      peak is the worst single room. Measure it for real with")
-    print("      harness/streamcheck.py.")
+    print("      per-room model: the gate is the worst SINGLE ROOM, since")
+    print("      streaming holds only the types in the room being played.")
 
     failed = False
     any_level = False
@@ -138,34 +127,42 @@ def main() -> None:
             continue
         any_level = True
         types = map_types(payload)
-        pose_sum = 0
-        names: list[str] = []
         for t in types:
-            sz = poses[t]
-            if sz == 0:
+            if poses[t] == 0:
                 print(
                     f"{key}: missing pose PRG for {DOS_NAME[t]}",
                     file=sys.stderr,
                 )
                 failed = True
-                continue
-            pose_sum += sz
-            names.append(DOS_NAME[t])
-        need = len(payload) + max(reloc_max, pose_sum)
+
+        # Level-wide sum, kept only to show what streaming is saving.
+        level_sum = sum(poses[t] for t in types)
+
+        # The gate: the worst single room. Only that room's types are
+        # resident at once, so that is the real peak.
+        per_room = per_room_types(payload)
+        worst_room, worst_sum, worst_names = -1, 0, []
+        for room in sorted(per_room):
+            s = sum(poses[t] for t in per_room[room])
+            if s > worst_sum:
+                worst_room = room
+                worst_sum = s
+                worst_names = [DOS_NAME[t] for t in sorted(per_room[room])]
+
+        need = len(payload) + max(reloc_max, worst_sum)
         slack = avail - need
-        pose_s = ",".join(names) if names else "-"
+        pose_s = ",".join(worst_names) if worst_names else "-"
+        where = f"room {worst_room}" if worst_room >= 0 else "no enemies"
+        saved = level_sum - worst_sum
+        head = (
+            f"{key}  map {len(payload)}  worst {worst_sum} ({where}: {pose_s})"
+            f"  level-wide {level_sum} (-{saved})  need {need}"
+        )
         if slack <= 0:
-            over = need - avail
-            print(
-                f"{key}  map {len(payload)}  poses {pose_sum} ({pose_s})  "
-                f"need {need}  OVER {over}"
-            )
+            print(f"{head}  OVER {need - avail}")
             failed = True
         else:
-            print(
-                f"{key}  map {len(payload)}  poses {pose_sum} ({pose_s})  "
-                f"need {need}  slack {slack}"
-            )
+            print(f"{head}  slack {slack}")
 
     if not any_level:
         print("checkheap: no map PRGs", file=sys.stderr)

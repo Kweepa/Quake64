@@ -22,48 +22,42 @@ boot_start
 	sta $d020				; border shows even with DEN=0
 	cli
 
-	; MENU → $0900, run difficulty select
-	lda #4
+	; --- bring up the Krill fastloader ---------------------------------
+	; These two are the LAST KERNAL loads. LOADER carries its own address
+	; ($EE08, under the KERNAL — LOAD writes go to RAM there); INSTALL sits
+	; at $2000 and is transient, overwritten by MENU and GAME afterwards.
+	lda #6
+	ldx #<name_loader
+	ldy #>name_loader
+	jsr load_sa1
+	bcs .fail
+	lda #7
+	ldx #<name_install
+	ldy #>name_install
+	jsr load_sa1
+	bcs .fail
+	jsr KRILL_INSTALL			; C=1 → no fallback, hang loudly
+	bcs .fail
+
+	; MENU → $0900 (header address), run difficulty select
 	ldx #<name_menu
 	ldy #>name_menu
-	jsr $ffbd
-	lda #1
-	ldx $ba
-	ldy #0
-	jsr $ffba
-	lda #0
-	ldx #<LOCODE_BASE
-	ldy #>LOCODE_BASE
-	jsr $ffd5
+	jsr krill_load
 	bcs .fail
-	lda #1
-	jsr $ffc3
 	jsr LOCODE_BASE
 
-	; TAB → $8000 (SA=0), copy into charset tails via MENU+3
-	lda #3
+	; TAB → $8000 (header address), copy into charset tails via MENU+3
 	ldx #<name_tab
 	ldy #>name_tab
-	jsr $ffbd
-	lda #1
-	ldx $ba
-	ldy #0
-	jsr $ffba
-	lda #0
-	ldx #<TAB_STAGING
-	ldy #>TAB_STAGING
-	jsr $ffd5
+	jsr krill_load
 	bcs .fail
-	lda #1
-	jsr $ffc3
 	jsr MENU_COPY_TAB
 
+	; Walk the 0-terminated name list; an empty name ends it.
 	ldx #0
 .next
 	lda file_tab,x
 	beq .done
-	sta .len
-	inx
 	stx .xi
 	txa
 	clc
@@ -72,13 +66,14 @@ boot_start
 	lda #>file_tab
 	adc #0
 	tay
-	lda .len
-	jsr load_sa1
+	jsr krill_load
 	bcs .fail
-	lda .xi
-	clc
-	adc .len
-	tax
+	ldx .xi
+.skip
+	inx
+	lda file_tab,x
+	bne .skip
+	inx					; step past the terminator
 	jmp .next
 
 .done
@@ -92,6 +87,8 @@ boot_start
 .hang
 	jmp .hang
 
+; KERNAL LOAD, SA=1 (address from the PRG header). A=len, X/Y=name.
+; Only used for LOADER and INSTALL, before Krill is up.
 load_sa1
 	jsr $ffbd
 	lda #1
@@ -106,24 +103,49 @@ load_sa1
 	plp
 	rts
 
-.len	!byte 0
+; Krill loadraw, X/Y = 0-terminated name. Carry CLEAR on entry, so the
+; destination comes from the PRG header — every file here carries its own.
+; BANK_LOADER unmaps the KERNAL, so this must run under SEI: the IRQ vector
+; would otherwise be read from RAM at $fffe, which is uninitialised until FNT
+; lands. C=0 ok, C=1 error.
+krill_load
+	sei
+	lda #BANK_LOADER
+	sta $01
+	clc
+	jsr loadraw
+	php
+	lda #$36
+	sta $01
+	plp
+	cli
+	rts
+
 .xi	!byte 0
 
 file_tab
-	!byte 3
 	!text "FNT"
-	!byte 3
+	!byte 0
 	!text "SCR"
-	!byte 3
+	!byte 0
 	!text "SQT"
-	!byte 4
+	!byte 0
 	!text "GAME"
 	!byte 0
+	!byte 0					; end of list
 
 name_menu
 	!text "MENU"
+	!byte 0
 name_tab
 	!text "TAB"
+	!byte 0
+name_loader
+	!text "LOADER"
+	!byte 0
+name_install
+	!text "INSTALL"
+	!byte 0
 
 end_boot = *
 !if end_boot > REBOOT_STUB {

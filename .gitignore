@@ -1,6 +1,10 @@
 # Intermediate PRGs — playable disk is quake64.d64
 *.prg
 
+# ...except the Krill loader binaries, which are vendored build INPUTS:
+# boot KERNAL-loads them before the fastloader exists. See krill/README.md.
+!krill/*.prg
+
 # Build outputs
 *.lbl
 *.o

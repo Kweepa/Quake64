@@ -1148,10 +1148,8 @@ apply_story_layout
 init_menu_vic
 	lda #$35				; I/O in, KERNAL out (menu_sfx IRQ uses $fffe)
 	sta $01
-	lda $dd00
-	and #%11111100
-	ora #%00000010			; VIC bank 1 ($4000-$7FFF)
-	sta $dd00
+	lda #%00000010			; VIC bank 1 ($4000-$7FFF), upper 6 bits 0
+	sta $dd00			; absolute write — see vic.asm init_vic
 	lda $d011
 	and #%10000111			; clear ECM/BMM/DEN/RSEL
 	ora #%00101011			; hires bitmap + 25 rows, DEN off until first draw

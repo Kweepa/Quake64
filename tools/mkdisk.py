@@ -3,6 +3,13 @@
 
 reloc.prg comes from tools/mkreloc.py after GAME assemble (see build.bat).
 Boot does not load RELOC; GAME LoadLevel does.
+
+krill/loader.prg and krill/install.prg are prebuilt Krill v194 binaries checked
+in under krill/ (see krill/README.md). Boot KERNAL-loads both, runs INSTALL
+once, and every load after that goes through the fastloader.
+
+DOS names are deliberately LOWERCASE. c1541 maps uppercase ASCII into the
+shifted PETSCII range $c1-$da, which a C64 typing LOAD"NAME" can never match.
 """
 
 from __future__ import annotations
@@ -17,6 +24,8 @@ from typing import Optional
 
 FILES = (
     ("boot.prg", "quake64"),
+    ("krill/loader.prg", "loader,p"),
+    ("krill/install.prg", "install,p"),
     ("menu.prg", "menu,p"),
     ("tab.prg", "tab,p"),
     ("fnt.prg", "fnt,p"),

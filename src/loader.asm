@@ -332,61 +332,37 @@ clear_one_pose
 	sta pose_map_hi,x
 	rts
 
-; src_ptr → dst_ptr, size A=lo Y=hi. dst > src; overlap-safe (copy high→low).
+; src_ptr → dst_ptr, size X=pages Y=frac. dst > src; overlap-safe (high→low).
 copy_block_up
-	sta bind_n
-	sty map_sv_a
+	txa
 	clc
-	lda src_ptr
-	adc bind_n
-	sta src_ptr
-	lda src_ptr+1
-	adc map_sv_a
+	adc src_ptr+1
 	sta src_ptr+1
-	sec
-	lda src_ptr
-	sbc #1
-	sta src_ptr
-	lda src_ptr+1
-	sbc #0
-	sta src_ptr+1
+	txa
 	clc
-	lda dst_ptr
-	adc bind_n
-	sta dst_ptr
-	lda dst_ptr+1
-	adc map_sv_a
+	adc dst_ptr+1
 	sta dst_ptr+1
-	sec
-	lda dst_ptr
-	sbc #1
-	sta dst_ptr
-	lda dst_ptr+1
-	sbc #0
-	sta dst_ptr+1
-.cbu_lp
-	lda bind_n
-	ora map_sv_a
-	beq .cbu_rts
-	ldy #0
+	cpy #0
+	beq .cbu_pages
+.cbu_frac
+	dey
 	lda (src_ptr),y
 	sta (dst_ptr),y
-	lda src_ptr
-	bne .cbu_sd
+	tya
+	bne .cbu_frac
+.cbu_pages
+	cpx #0
+	beq .cbu_rts
 	dec src_ptr+1
-.cbu_sd
-	dec src_ptr
-	lda dst_ptr
-	bne .cbu_dd
 	dec dst_ptr+1
-.cbu_dd
-	dec dst_ptr
-	lda bind_n
-	bne .cbu_cd
-	dec map_sv_a
-.cbu_cd
-	dec bind_n
-	jmp .cbu_lp
+.cbu_page
+	dey				; 0 → 255
+	lda (src_ptr),y
+	sta (dst_ptr),y
+	tya
+	bne .cbu_page
+	dex
+	jmp .cbu_pages
 .cbu_rts
 	rts
 
@@ -462,8 +438,8 @@ dump_pose_type
 	sta dst_ptr
 	lda load_dest+1
 	sta dst_ptr+1
-	lda bind_n
-	ldy map_sv_a
+	ldx map_sv_a			; pages
+	ldy bind_n			; frac
 	jsr copy_block_up
 	ldy pose_keep
 	sty load_type

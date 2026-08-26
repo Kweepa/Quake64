@@ -14,18 +14,23 @@ import {
 import {
   cornerWorld,
   distPointToSegment2d,
+  intersectPlane,
   lookVectors,
   projectLine,
   projectPoint,
+  screenRay,
 } from "./math3d.js";
+import {
+  GIZMO_FALLBACK_LEN,
+  drawTranslateGizmo,
+  gizmoAxisDragDelta,
+  hitTranslateGizmo,
+} from "./gizmo.js";
 
 const ITEM_VERT_HIT = 10;
 const ITEM_LINE_HIT = 6;
 const ITEM_BOX_CLICK = 4;
 const ITEM_ZOOM_K = 0.008;
-const ITEM_AXIS_LEN = 2;
-const ITEM_AXIS_HIT = 9;
-const ITEM_AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 function clampItemDist(d) {
   return Math.max(ITEM_ORBIT_DIST_MIN, Math.min(ITEM_ORBIT_DIST_MAX, d));
@@ -50,7 +55,7 @@ export class ItemView {
     this.drag = null;
     this.hoverVert = -1;
     this.hoverLine = -1;
-    this.hoverAxis = null;
+    this.hoverGizmo = null;
     this.selectedVerts = [];
     this.selectedLines = [];
     this.enabled = false;
@@ -98,7 +103,7 @@ export class ItemView {
     this.selectedLines = [];
     this.hoverVert = -1;
     this.hoverLine = -1;
-    this.hoverAxis = null;
+    this.hoverGizmo = null;
   }
 
   addVertAtOrigin() {
@@ -431,11 +436,52 @@ export class ItemView {
     return { v: { x: x / n, y: y / n, z: z / n }, indices: selected };
   }
 
-  #axisEnd(v, axis) {
-    return {
-      x: v.x + (axis === "x" ? ITEM_AXIS_LEN : 0),
-      y: v.y + (axis === "y" ? ITEM_AXIS_LEN : 0),
-      z: v.z + (axis === "z" ? ITEM_AXIS_LEN : 0),
+  #applyVertDrag(origs, applyCoord) {
+    const mesh = this.#mesh();
+    const next = mesh.verts.map((v) => ({ ...v }));
+    for (const o of origs) {
+      next[o.i].x = o.x;
+      next[o.i].y = o.y;
+      next[o.i].z = o.z;
+      applyCoord(next[o.i], o);
+    }
+    const seen = new Set();
+    for (const v of next) {
+      const k = `${v.x},${v.y},${v.z}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+    }
+    if (!this.#uniqueOk(next)) return false;
+    for (const o of origs) {
+      mesh.verts[o.i].x = next[o.i].x;
+      mesh.verts[o.i].y = next[o.i].y;
+      mesh.verts[o.i].z = next[o.i].z;
+    }
+    return true;
+  }
+
+  #gizmoDragOrigs(prim) {
+    const mesh = this.#mesh();
+    return prim.indices.map((i) => ({
+      i,
+      x: mesh.verts[i].x,
+      y: mesh.verts[i].y,
+      z: mesh.verts[i].z,
+    }));
+  }
+
+  #startGizmoDrag(gizmoHit, prim, p) {
+    this.opts.beginUndo?.();
+    this.drag = {
+      kind: gizmoHit.kind,
+      axis: gizmoHit.axis,
+      plane: gizmoHit.plane,
+      planeN: gizmoHit.planeN,
+      grab: gizmoHit.world,
+      gizmoAxisLen: gizmoHit.gizmoAxisLen ?? GIZMO_FALLBACK_LEN,
+      origs: this.#gizmoDragOrigs(prim),
+      orig: { x: prim.v.x, y: prim.v.y, z: prim.v.z },
+      start: p,
     };
   }
 
@@ -474,26 +520,12 @@ export class ItemView {
     return best;
   }
 
-  #hitAxis(mx, my) {
-    const prim = this.#selectionAnchor();
-    if (!prim) return null;
-    const cam = this.#cam();
-    const w = this.cssW;
-    const h = this.cssH;
-    const pa = projectPoint(prim.v, cam, w, h);
-    if (!pa.ok) return null;
-    let best = null;
-    let bestD = ITEM_AXIS_HIT;
-    for (const axis of ["x", "y", "z"]) {
-      const pb = projectPoint(this.#axisEnd(prim.v, axis), cam, w, h);
-      if (!pb.ok) continue;
-      const d = distPointToSegment2d(mx, my, pa.sx, pa.sy, pb.sx, pb.sy);
-      if (d < bestD) {
-        bestD = d;
-        best = axis;
-      }
-    }
-    return best;
+  #onWheel(e) {
+    if (!this.enabled) return;
+    e.preventDefault();
+    this.orbit.dist = clampItemDist(this.orbit.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1));
+    this.opts.onViewChanged?.();
+    this.draw();
   }
 
   #occupied(mesh, x, y, z, skip = new Set()) {
@@ -547,14 +579,6 @@ export class ItemView {
     this.opts.onSelect?.();
   }
 
-  #onWheel(e) {
-    if (!this.enabled) return;
-    e.preventDefault();
-    this.orbit.dist = clampItemDist(this.orbit.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1));
-    this.opts.onViewChanged?.();
-    this.draw();
-  }
-
   #onDown(e) {
     if (!this.enabled) return;
     this.canvas.focus();
@@ -584,27 +608,23 @@ export class ItemView {
       return;
     }
 
+    const prim = this.#selectionAnchor();
+    const cam = this.#cam();
+    if (prim) {
+      const gizmoHit = hitTranslateGizmo(prim.v, cam, this.cssW, this.cssH, p.x, p.y);
+      if (gizmoHit) {
+        this.#startGizmoDrag(gizmoHit, prim, p);
+        this.canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+
     const vi = this.#hitVert(p.x, p.y, mesh.verts);
     if (vi >= 0) {
       this.#selectVert(vi, e.shiftKey);
       this.drag = { kind: "select" };
       this.canvas.setPointerCapture(e.pointerId);
       this.draw();
-      return;
-    }
-
-    const axis = this.#hitAxis(p.x, p.y);
-    if (axis) {
-      const prim = this.#selectionAnchor();
-      this.opts.beginUndo?.();
-      this.drag = {
-        kind: "axis",
-        axis,
-        origs: prim.indices.map((i) => ({ i, x: mesh.verts[i].x, y: mesh.verts[i].y, z: mesh.verts[i].z })),
-        orig: { x: prim.v.x, y: prim.v.y, z: prim.v.z },
-        start: p,
-      };
-      this.canvas.setPointerCapture(e.pointerId);
       return;
     }
 
@@ -626,9 +646,14 @@ export class ItemView {
     const p = this.#eventPos(e);
     const mesh = this.#mesh();
     if (!this.drag) {
+      const prim = this.#selectionAnchor();
+      const cam = this.#cam();
       this.hoverVert = this.#hitVert(p.x, p.y, mesh.verts);
-      this.hoverAxis = this.hoverVert >= 0 ? null : this.#hitAxis(p.x, p.y);
-      this.hoverLine = this.hoverAxis || this.hoverVert >= 0 ? -1 : this.#hitLine(p.x, p.y, mesh);
+      this.hoverGizmo =
+        prim && this.hoverVert < 0
+          ? hitTranslateGizmo(prim.v, cam, this.cssW, this.cssH, p.x, p.y)
+          : null;
+      this.hoverLine = this.hoverGizmo || this.hoverVert >= 0 ? -1 : this.#hitLine(p.x, p.y, mesh);
       this.draw();
       return;
     }
@@ -674,37 +699,48 @@ export class ItemView {
     }
     if (this.drag.kind === "axis") {
       const cam = this.#cam();
-      const orig = this.drag.orig;
-      const pa = projectPoint(orig, cam, this.cssW, this.cssH);
-      const pb = projectPoint(this.#axisEnd(orig, this.drag.axis), cam, this.cssW, this.cssH);
-      if (!pa.ok || !pb.ok) return;
-      const ax = pb.sx - pa.sx;
-      const ay = pb.sy - pa.sy;
-      const alen2 = ax * ax + ay * ay;
-      if (alen2 < 16) return;
-      const t = ((p.x - this.drag.start.x) * ax + (p.y - this.drag.start.y) * ay) / alen2;
-      const delta = Math.round(t * ITEM_AXIS_LEN);
-      const next = mesh.verts.map((v) => ({ ...v }));
-      for (const o of this.drag.origs) {
-        next[o.i].x = o.x;
-        next[o.i].y = o.y;
-        next[o.i].z = o.z;
-        next[o.i][this.drag.axis] = clampItemCoord(o[this.drag.axis] + delta);
+      const delta = gizmoAxisDragDelta(
+        p,
+        this.drag.grab,
+        this.drag.axis,
+        this.drag.start,
+        this.drag.gizmoAxisLen ?? GIZMO_FALLBACK_LEN,
+        cam,
+        this.cssW,
+        this.cssH
+      );
+      if (delta == null) return;
+      if (
+        this.#applyVertDrag(this.drag.origs, (v, o) => {
+          v[this.drag.axis] = clampItemCoord(o[this.drag.axis] + delta);
+        })
+      ) {
+        this.opts.onChange?.();
+        this.draw();
       }
-      const seen = new Set();
-      for (const v of next) {
-        const k = `${v.x},${v.y},${v.z}`;
-        if (seen.has(k)) return;
-        seen.add(k);
+      return;
+    }
+    if (this.drag.kind === "plane") {
+      const cam = this.#cam();
+      const ray = screenRay(p.x, p.y, cam, this.cssW, this.cssH);
+      const hit = intersectPlane(ray.origin, ray.dir, this.drag.grab, this.drag.planeN);
+      if (!hit) return;
+      let dx = Math.round(hit.point.x - this.drag.grab.x);
+      let dy = Math.round(hit.point.y - this.drag.grab.y);
+      let dz = Math.round(hit.point.z - this.drag.grab.z);
+      if (this.drag.plane === "xy") dz = 0;
+      else if (this.drag.plane === "xz") dy = 0;
+      else if (this.drag.plane === "yz") dx = 0;
+      if (
+        this.#applyVertDrag(this.drag.origs, (v, o) => {
+          v.x = clampItemCoord(o.x + dx);
+          v.y = clampItemCoord(o.y + dy);
+          v.z = clampItemCoord(o.z + dz);
+        })
+      ) {
+        this.opts.onChange?.();
+        this.draw();
       }
-      if (!this.#uniqueOk(next)) return;
-      for (const o of this.drag.origs) {
-        mesh.verts[o.i].x = next[o.i].x;
-        mesh.verts[o.i].y = next[o.i].y;
-        mesh.verts[o.i].z = next[o.i].z;
-      }
-      this.opts.onChange?.();
-      this.draw();
     }
   }
 
@@ -748,7 +784,7 @@ export class ItemView {
     if (!this.enabled) return;
     const orbitEnded = this.drag?.kind === "orbit" || this.drag?.kind === "zoom" || this.drag?.kind === "pan";
     if (this.drag?.kind === "box") this.#finishBox();
-    if (this.drag?.kind === "axis") this.opts.endUndo?.();
+    if (this.drag?.kind === "axis" || this.drag?.kind === "plane") this.opts.endUndo?.();
     this.drag = null;
     if (orbitEnded) this.opts.onViewChanged?.();
     try {
@@ -771,11 +807,7 @@ export class ItemView {
   }
 
   #drawGizmo(ctx, cam, w, h, v) {
-    for (const axis of ["x", "y", "z"]) {
-      const hi = this.hoverAxis === axis || this.drag?.axis === axis;
-      const col = hi ? "#fff" : ITEM_AXIS_COLS[axis];
-      this.#strokeSeg(ctx, cam, w, h, v, this.#axisEnd(v, axis), col, hi ? 3 : 2);
-    }
+    drawTranslateGizmo(ctx, v, cam, w, h, { hoverGizmo: this.hoverGizmo, drag: this.drag });
   }
 
   #drawForwardArrow(ctx, cam, w, h) {

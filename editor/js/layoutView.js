@@ -29,7 +29,6 @@ import {
   BOX_CORNERS,
   BOX_EDGES,
   cornerWorld,
-  closestTOnSegment2d,
   distPointToSegment2d,
   faceCorners,
   intersectPlane,
@@ -39,6 +38,13 @@ import {
   rayAabb,
   screenRay,
 } from "./math3d.js";
+import {
+  GIZMO_FALLBACK_LEN,
+  drawTranslateGizmo,
+  gizmoAxisDragDelta,
+  gizmoMetrics,
+  hitTranslateGizmo,
+} from "./gizmo.js";
 
 const HANDLE = 7;
 const LINE_HIT = 8;
@@ -69,6 +75,7 @@ export class LayoutView {
     this.zoom = null;
     this.lastT = 0;
     this.hoverId = null;
+    this.hoverGizmo = null;
     this.drag = null;
     this.gridY = 0;
     this.placePreview = null;
@@ -290,9 +297,14 @@ export class LayoutView {
         contents.push({ ...other });
       }
     }
+    const primaryObj = objs.find((o) => o.id === ids[ids.length - 1]) || origs[0];
+    const gizmo = primaryObj
+      ? gizmoMetrics(aabbCenter(primaryObj), this.camera, this.cssW, this.cssH)
+      : { axisLen: GIZMO_FALLBACK_LEN, planeLen: GIZMO_FALLBACK_LEN / 3 };
     return {
       kind: handle.kind,
       axis: handle.axis,
+      plane: handle.plane,
       corner: handle.corner,
       key: handle.key,
       side: handle.side,
@@ -301,8 +313,9 @@ export class LayoutView {
       origs,
       contents,
       grab: handle.world,
-      planeN: lookVectors(this.camera.yaw, this.camera.pitch).forward,
+      planeN: handle.planeN || lookVectors(this.camera.yaw, this.camera.pitch).forward,
       primaryId: ids[ids.length - 1],
+      gizmoAxisLen: handle.gizmoAxisLen ?? gizmo.axisLen,
     };
   }
 
@@ -414,6 +427,8 @@ export class LayoutView {
       return;
     }
     const doc = this.opts.getDoc();
+    const primary = this.#primaryId();
+    this.hoverGizmo = primary ? this.#hitHandle(doc, primary, p.x, p.y) : null;
     this.hoverId = this.#pick(doc, p.x, p.y)?.id || null;
   }
 
@@ -441,7 +456,7 @@ export class LayoutView {
 
   #finishTransform() {
     const d = this.drag;
-    if (!d || (d.kind !== "move" && d.kind !== "axis")) return;
+    if (!d || (d.kind !== "move" && d.kind !== "axis" && d.kind !== "plane")) return;
     const doc = this.opts.getDoc();
     const objs = activeMap(doc).objects;
     for (const orig of d.origs) {
@@ -457,18 +472,8 @@ export class LayoutView {
     }
   }
 
-  #axisDelta(p, grab, axis, start) {
-    const along = { x: grab.x, y: grab.y, z: grab.z };
-    along[axis] += 8;
-    const pa = projectPoint(grab, this.camera, this.cssW, this.cssH);
-    const pb = projectPoint(along, this.camera, this.cssW, this.cssH);
-    if (!pa.ok || !pb.ok) return null;
-    const ax = pb.sx - pa.sx;
-    const ay = pb.sy - pa.sy;
-    const alen2 = ax * ax + ay * ay;
-    if (alen2 < 16) return null;
-    const t = ((p.x - start.x) * ax + (p.y - start.y) * ay) / alen2;
-    return Math.round(t * 8);
+  #axisDelta(p, grab, axis, start, axisLen) {
+    return gizmoAxisDragDelta(p, grab, axis, start, axisLen, this.camera, this.cssW, this.cssH);
   }
 
   #applyFaceDelta(obj, orig, side, delta) {
@@ -578,7 +583,7 @@ export class LayoutView {
     }
 
     if (d.kind === "axis") {
-      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start, d.gizmoAxisLen ?? GIZMO_FALLBACK_LEN);
       if (delta == null) return;
       for (const orig of d.origs) {
         const obj = objs.find((o) => o.id === orig.id);
@@ -590,6 +595,34 @@ export class LayoutView {
         const obj = objs.find((o) => o.id === orig.id);
         if (!obj) continue;
         obj[d.axis] = orig[d.axis] + delta;
+        clampObject(obj);
+      }
+      return;
+    }
+
+    if (d.kind === "plane") {
+      const hit = intersectPlane(ray.origin, ray.dir, d.grab, d.planeN);
+      if (!hit) return;
+      let dx = Math.round(hit.point.x - d.grab.x);
+      let dy = Math.round(hit.point.y - d.grab.y);
+      let dz = Math.round(hit.point.z - d.grab.z);
+      if (d.plane === "xy") dz = 0;
+      else if (d.plane === "xz") dy = 0;
+      else if (d.plane === "yz") dx = 0;
+      for (const orig of d.origs) {
+        const obj = objs.find((o) => o.id === orig.id);
+        if (!obj) continue;
+        obj.x = orig.x + dx;
+        obj.y = orig.y + dy;
+        obj.z = orig.z + dz;
+        clampObject(obj);
+      }
+      for (const orig of d.contents) {
+        const obj = objs.find((o) => o.id === orig.id);
+        if (!obj) continue;
+        obj.x = orig.x + dx;
+        obj.y = orig.y + dy;
+        obj.z = orig.z + dz;
         clampObject(obj);
       }
       return;
@@ -626,7 +659,7 @@ export class LayoutView {
       const orig = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
       const obj = objs.find((o) => o.id === orig.id);
       if (!obj || obj.kind !== "room") return;
-      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start, d.gizmoAxisLen ?? GIZMO_FALLBACK_LEN);
       if (delta == null) return;
       applyRoomSplitDelta(obj, orig, d.key, delta * (d.scale || 1));
       clampObject(obj);
@@ -637,7 +670,7 @@ export class LayoutView {
       const orig = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
       const obj = objs.find((o) => o.id === orig.id);
       if (!obj || KINDS[obj.kind].fixed) return;
-      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start, d.gizmoAxisLen ?? GIZMO_FALLBACK_LEN);
       if (delta == null) return;
       this.#applyFaceDelta(obj, orig, d.side, delta);
       if (obj.kind === "room") preserveRoomSplits(obj, orig);
@@ -852,28 +885,8 @@ export class LayoutView {
       }
     }
     const c = aabbCenter(obj);
-    const axes = [
-      { axis: "x", p: { x: c.x + 8, y: c.y, z: c.z } },
-      { axis: "y", p: { x: c.x, y: c.y + 8, z: c.z } },
-      { axis: "z", p: { x: c.x, y: c.y, z: c.z + 8 } },
-    ];
-    const pc = projectPoint(c, cam, w, h);
-    for (const a of axes) {
-      const pa = projectPoint(a.p, cam, w, h);
-      if (!pc.ok || !pa.ok) continue;
-      if (distPointToSegment2d(mx, my, pc.sx, pc.sy, pa.sx, pa.sy) < 8) {
-        const t = closestTOnSegment2d(mx, my, pc.sx, pc.sy, pa.sx, pa.sy);
-        return {
-          kind: "axis",
-          axis: a.axis,
-          world: {
-            x: c.x + (a.p.x - c.x) * t,
-            y: c.y + (a.p.y - c.y) * t,
-            z: c.z + (a.p.z - c.z) * t,
-          },
-        };
-      }
-    }
+    const gizmoHit = hitTranslateGizmo(c, cam, w, h, mx, my, HANDLE + 1);
+    if (gizmoHit) return gizmoHit;
     if (!KINDS[obj.kind].fixed) {
       for (let i = 0; i < 8; i++) {
         const cw = cornerWorld(obj, i);
@@ -1203,9 +1216,7 @@ export class LayoutView {
 
   #drawGizmo(ctx, obj, cam, w, h) {
     const c = aabbCenter(obj);
-    this.#line3(ctx, c, { x: c.x + 8, y: c.y, z: c.z }, cam, w, h, "#e55");
-    this.#line3(ctx, c, { x: c.x, y: c.y + 8, z: c.z }, cam, w, h, "#5e5");
-    this.#line3(ctx, c, { x: c.x, y: c.y, z: c.z + 8 }, cam, w, h, "#55e");
+    drawTranslateGizmo(ctx, c, cam, w, h, { hoverGizmo: this.hoverGizmo, drag: this.drag });
     if (KINDS[obj.kind].fixed) return;
     ctx.fillStyle = "#f2d36b";
     for (let i = 0; i < 8; i++) {

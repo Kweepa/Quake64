@@ -5211,6 +5211,237 @@ function faceCorners(faceId) {
 }
 
 
+// ---- js/gizmo.js ----
+const GIZMO_SCREEN_FRAC = 0.1;
+const GIZMO_FALLBACK_LEN = 8;
+const GIZMO_AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
+const GIZMO_AXIS_HIT = 8;
+
+const GIZMO_PLANES = [
+  { plane: "yz", planeN: { x: 1, y: 0, z: 0 }, stroke: "#ee5555", fill: "rgba(238,85,85,0.3)" },
+  { plane: "xz", planeN: { x: 0, y: 1, z: 0 }, stroke: "#55ee55", fill: "rgba(85,238,85,0.3)" },
+  { plane: "xy", planeN: { x: 0, y: 0, z: 1 }, stroke: "#5555ee", fill: "rgba(85,85,238,0.3)" },
+];
+
+const AXIS_BASIS = {
+  x: [
+    { x: 0, y: 1, z: 0 },
+    { x: 0, y: 0, z: 1 },
+  ],
+  y: [
+    { x: 1, y: 0, z: 0 },
+    { x: 0, y: 0, z: 1 },
+  ],
+  z: [
+    { x: 1, y: 0, z: 0 },
+    { x: 0, y: 1, z: 0 },
+  ],
+};
+
+const CONE_FRAC = 0.2;
+const CONE_RADIUS = 0.085;
+const CONE_SEGS = 10;
+
+function gizmoPlaneCorners(c, plane, planeLen) {
+  const p = (dx, dy, dz) => ({ x: c.x + dx, y: c.y + dy, z: c.z + dz });
+  if (plane === "xy") return [p(0, 0, 0), p(planeLen, 0, 0), p(planeLen, planeLen, 0), p(0, planeLen, 0)];
+  if (plane === "xz") return [p(0, 0, 0), p(planeLen, 0, 0), p(planeLen, 0, planeLen), p(0, 0, planeLen)];
+  return [p(0, 0, 0), p(0, planeLen, 0), p(0, planeLen, planeLen), p(0, 0, planeLen)];
+}
+
+function gizmoPlaneGrab(c, plane, planeLen) {
+  const h = planeLen * 0.5;
+  if (plane === "xy") return { x: c.x + h, y: c.y + h, z: c.z };
+  if (plane === "xz") return { x: c.x + h, y: c.y, z: c.z + h };
+  return { x: c.x, y: c.y + h, z: c.z + h };
+}
+
+function pointInPoly2d(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x;
+    const yi = poly[i].y;
+    const xj = poly[j].x;
+    const yj = poly[j].y;
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function gizmoMetrics(c, cam, w, h) {
+  const focal = Math.min(w, h) * 0.9;
+  const targetPx = Math.min(w, h) * GIZMO_SCREEN_FRAC;
+  const cc = worldToCamera(c, cam);
+  const axisLen = cc.z >= NEAR ? (targetPx / focal) * cc.z : GIZMO_FALLBACK_LEN;
+  return { axisLen, planeLen: axisLen / 3, focal, targetPx };
+}
+
+function gizmoPlaneHandles(c, gizmo) {
+  const { axisLen, planeLen } = gizmo;
+  return GIZMO_PLANES.map((p) => ({
+    kind: "plane",
+    plane: p.plane,
+    planeN: p.planeN,
+    stroke: p.stroke,
+    fill: p.fill,
+    corners: gizmoPlaneCorners(c, p.plane, planeLen),
+    world: gizmoPlaneGrab(c, p.plane, planeLen),
+    gizmoAxisLen: axisLen,
+  }));
+}
+
+function gizmoAxisEnd(c, axis, axisLen) {
+  const end = { x: c.x, y: c.y, z: c.z };
+  end[axis] += axisLen;
+  return end;
+}
+
+function projectGizmoPoly(corners, cam, w, h) {
+  const poly = [];
+  for (const p of corners) {
+    const pr = projectPoint(p, cam, w, h);
+    if (!pr.ok) return null;
+    poly.push({ x: pr.sx, y: pr.sy });
+  }
+  return poly;
+}
+
+function drawGizmoPlaneQuad(ctx, corners, cam, w, h, fill, stroke, hi) {
+  const poly = projectGizmoPoly(corners, cam, w, h);
+  if (!poly) return;
+  ctx.beginPath();
+  ctx.moveTo(poly[0].x, poly[0].y);
+  for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+  ctx.closePath();
+  ctx.fillStyle = hi ? "rgba(255,255,255,0.35)" : fill;
+  ctx.fill();
+  ctx.strokeStyle = hi ? "#fff" : stroke;
+  ctx.lineWidth = hi ? 2 : 1.5;
+  ctx.stroke();
+}
+
+function drawGizmoLine(ctx, a, b, cam, w, h, col, width = 2) {
+  const seg = projectLine(a, b, cam, w, h);
+  if (!seg) return;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(seg.ax, seg.ay);
+  ctx.lineTo(seg.bx, seg.by);
+  ctx.stroke();
+}
+
+function gizmoConeRing(c, axis, axisLen) {
+  const tip = gizmoAxisEnd(c, axis, axisLen);
+  const coneLen = axisLen * CONE_FRAC;
+  const r = axisLen * CONE_RADIUS;
+  const base = gizmoAxisEnd(c, axis, axisLen - coneLen);
+  const [u, v] = AXIS_BASIS[axis];
+  const ring = [];
+  for (let i = 0; i < CONE_SEGS; i++) {
+    const a = (i / CONE_SEGS) * Math.PI * 2;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    ring.push({
+      x: base.x + (u.x * ca + v.x * sa) * r,
+      y: base.y + (u.y * ca + v.y * sa) * r,
+      z: base.z + (u.z * ca + v.z * sa) * r,
+    });
+  }
+  return { tip, ring, shaftEnd: base };
+}
+
+function drawGizmoCone(ctx, tip, ring, cam, w, h, col) {
+  const pt = projectPoint(tip, cam, w, h);
+  if (!pt.ok) return;
+  const base = [];
+  for (const p of ring) {
+    const pr = projectPoint(p, cam, w, h);
+    if (!pr.ok) return;
+    base.push(pr);
+  }
+  ctx.fillStyle = col;
+  for (let i = 0; i < base.length; i++) {
+    const a = base[i];
+    const b = base[(i + 1) % base.length];
+    ctx.beginPath();
+    ctx.moveTo(pt.sx, pt.sy);
+    ctx.lineTo(a.sx, a.sy);
+    ctx.lineTo(b.sx, b.sy);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
+function drawGizmoAxis(ctx, c, axis, axisLen, cam, w, h, col, width) {
+  const { tip, ring, shaftEnd } = gizmoConeRing(c, axis, axisLen);
+  drawGizmoLine(ctx, c, shaftEnd, cam, w, h, col, width);
+  drawGizmoCone(ctx, tip, ring, cam, w, h, col);
+}
+
+/** Screen-fixed translate gizmo: plane quads then RGB axis lines. */
+function drawTranslateGizmo(ctx, c, cam, w, h, state = {}) {
+  const { hoverGizmo = null, drag = null } = state;
+  const gizmo = gizmoMetrics(c, cam, w, h);
+  for (const handle of gizmoPlaneHandles(c, gizmo)) {
+    const hi =
+      (hoverGizmo?.kind === "plane" && hoverGizmo.plane === handle.plane) ||
+      (drag?.kind === "plane" && drag.plane === handle.plane);
+    drawGizmoPlaneQuad(ctx, handle.corners, cam, w, h, handle.fill, handle.stroke, hi);
+  }
+  for (const axis of ["x", "y", "z"]) {
+    const hi =
+      (hoverGizmo?.kind === "axis" && hoverGizmo.axis === axis) ||
+      (drag?.kind === "axis" && drag.axis === axis);
+    const col = hi ? "#fff" : GIZMO_AXIS_COLS[axis];
+    drawGizmoAxis(ctx, c, axis, gizmo.axisLen, cam, w, h, col, hi ? 3 : 2);
+  }
+  return gizmo;
+}
+
+function hitTranslateGizmo(c, cam, w, h, mx, my, axisHit = GIZMO_AXIS_HIT) {
+  const gizmo = gizmoMetrics(c, cam, w, h);
+  for (const handle of gizmoPlaneHandles(c, gizmo)) {
+    const poly = projectGizmoPoly(handle.corners, cam, w, h);
+    if (poly && pointInPoly2d(mx, my, poly)) return handle;
+  }
+  const pc = projectPoint(c, cam, w, h);
+  if (!pc.ok) return null;
+  for (const axis of ["x", "y", "z"]) {
+    const end = gizmoAxisEnd(c, axis, gizmo.axisLen);
+    const pa = projectPoint(end, cam, w, h);
+    if (!pa.ok) continue;
+    if (distPointToSegment2d(mx, my, pc.sx, pc.sy, pa.sx, pa.sy) < axisHit) {
+      const t = closestTOnSegment2d(mx, my, pc.sx, pc.sy, pa.sx, pa.sy);
+      return {
+        kind: "axis",
+        axis,
+        world: {
+          x: c.x + (end.x - c.x) * t,
+          y: c.y + (end.y - c.y) * t,
+          z: c.z + (end.z - c.z) * t,
+        },
+        gizmoAxisLen: gizmo.axisLen,
+      };
+    }
+  }
+  return null;
+}
+
+function gizmoAxisDragDelta(p, grab, axis, start, axisLen, cam, w, h) {
+  const along = gizmoAxisEnd(grab, axis, axisLen);
+  const pa = projectPoint(grab, cam, w, h);
+  const pb = projectPoint(along, cam, w, h);
+  if (!pa.ok || !pb.ok) return null;
+  const ax = pb.sx - pa.sx;
+  const ay = pb.sy - pa.sy;
+  const alen2 = ax * ax + ay * ay;
+  if (alen2 < 16) return null;
+  const t = ((p.x - start.x) * ax + (p.y - start.y) * ay) / alen2;
+  return Math.round(t * axisLen);
+}
+
+
 // ---- js/io.js ----
 const HANDLE_DB = "quake64-editor";
 const HANDLE_STORE = "handles";
@@ -6771,6 +7002,7 @@ class LayoutView {
     this.zoom = null;
     this.lastT = 0;
     this.hoverId = null;
+    this.hoverGizmo = null;
     this.drag = null;
     this.gridY = 0;
     this.placePreview = null;
@@ -6992,9 +7224,14 @@ class LayoutView {
         contents.push({ ...other });
       }
     }
+    const primaryObj = objs.find((o) => o.id === ids[ids.length - 1]) || origs[0];
+    const gizmo = primaryObj
+      ? gizmoMetrics(aabbCenter(primaryObj), this.camera, this.cssW, this.cssH)
+      : { axisLen: GIZMO_FALLBACK_LEN, planeLen: GIZMO_FALLBACK_LEN / 3 };
     return {
       kind: handle.kind,
       axis: handle.axis,
+      plane: handle.plane,
       corner: handle.corner,
       key: handle.key,
       side: handle.side,
@@ -7003,8 +7240,9 @@ class LayoutView {
       origs,
       contents,
       grab: handle.world,
-      planeN: lookVectors(this.camera.yaw, this.camera.pitch).forward,
+      planeN: handle.planeN || lookVectors(this.camera.yaw, this.camera.pitch).forward,
       primaryId: ids[ids.length - 1],
+      gizmoAxisLen: handle.gizmoAxisLen ?? gizmo.axisLen,
     };
   }
 
@@ -7116,6 +7354,8 @@ class LayoutView {
       return;
     }
     const doc = this.opts.getDoc();
+    const primary = this.#primaryId();
+    this.hoverGizmo = primary ? this.#hitHandle(doc, primary, p.x, p.y) : null;
     this.hoverId = this.#pick(doc, p.x, p.y)?.id || null;
   }
 
@@ -7143,7 +7383,7 @@ class LayoutView {
 
   #finishTransform() {
     const d = this.drag;
-    if (!d || (d.kind !== "move" && d.kind !== "axis")) return;
+    if (!d || (d.kind !== "move" && d.kind !== "axis" && d.kind !== "plane")) return;
     const doc = this.opts.getDoc();
     const objs = activeMap(doc).objects;
     for (const orig of d.origs) {
@@ -7159,18 +7399,8 @@ class LayoutView {
     }
   }
 
-  #axisDelta(p, grab, axis, start) {
-    const along = { x: grab.x, y: grab.y, z: grab.z };
-    along[axis] += 8;
-    const pa = projectPoint(grab, this.camera, this.cssW, this.cssH);
-    const pb = projectPoint(along, this.camera, this.cssW, this.cssH);
-    if (!pa.ok || !pb.ok) return null;
-    const ax = pb.sx - pa.sx;
-    const ay = pb.sy - pa.sy;
-    const alen2 = ax * ax + ay * ay;
-    if (alen2 < 16) return null;
-    const t = ((p.x - start.x) * ax + (p.y - start.y) * ay) / alen2;
-    return Math.round(t * 8);
+  #axisDelta(p, grab, axis, start, axisLen) {
+    return gizmoAxisDragDelta(p, grab, axis, start, axisLen, this.camera, this.cssW, this.cssH);
   }
 
   #applyFaceDelta(obj, orig, side, delta) {
@@ -7280,7 +7510,7 @@ class LayoutView {
     }
 
     if (d.kind === "axis") {
-      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start, d.gizmoAxisLen ?? GIZMO_FALLBACK_LEN);
       if (delta == null) return;
       for (const orig of d.origs) {
         const obj = objs.find((o) => o.id === orig.id);
@@ -7292,6 +7522,34 @@ class LayoutView {
         const obj = objs.find((o) => o.id === orig.id);
         if (!obj) continue;
         obj[d.axis] = orig[d.axis] + delta;
+        clampObject(obj);
+      }
+      return;
+    }
+
+    if (d.kind === "plane") {
+      const hit = intersectPlane(ray.origin, ray.dir, d.grab, d.planeN);
+      if (!hit) return;
+      let dx = Math.round(hit.point.x - d.grab.x);
+      let dy = Math.round(hit.point.y - d.grab.y);
+      let dz = Math.round(hit.point.z - d.grab.z);
+      if (d.plane === "xy") dz = 0;
+      else if (d.plane === "xz") dy = 0;
+      else if (d.plane === "yz") dx = 0;
+      for (const orig of d.origs) {
+        const obj = objs.find((o) => o.id === orig.id);
+        if (!obj) continue;
+        obj.x = orig.x + dx;
+        obj.y = orig.y + dy;
+        obj.z = orig.z + dz;
+        clampObject(obj);
+      }
+      for (const orig of d.contents) {
+        const obj = objs.find((o) => o.id === orig.id);
+        if (!obj) continue;
+        obj.x = orig.x + dx;
+        obj.y = orig.y + dy;
+        obj.z = orig.z + dz;
         clampObject(obj);
       }
       return;
@@ -7328,7 +7586,7 @@ class LayoutView {
       const orig = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
       const obj = objs.find((o) => o.id === orig.id);
       if (!obj || obj.kind !== "room") return;
-      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start, d.gizmoAxisLen ?? GIZMO_FALLBACK_LEN);
       if (delta == null) return;
       applyRoomSplitDelta(obj, orig, d.key, delta * (d.scale || 1));
       clampObject(obj);
@@ -7339,7 +7597,7 @@ class LayoutView {
       const orig = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
       const obj = objs.find((o) => o.id === orig.id);
       if (!obj || KINDS[obj.kind].fixed) return;
-      const delta = this.#axisDelta(p, d.grab, d.axis, d.start);
+      const delta = this.#axisDelta(p, d.grab, d.axis, d.start, d.gizmoAxisLen ?? GIZMO_FALLBACK_LEN);
       if (delta == null) return;
       this.#applyFaceDelta(obj, orig, d.side, delta);
       if (obj.kind === "room") preserveRoomSplits(obj, orig);
@@ -7554,28 +7812,8 @@ class LayoutView {
       }
     }
     const c = aabbCenter(obj);
-    const axes = [
-      { axis: "x", p: { x: c.x + 8, y: c.y, z: c.z } },
-      { axis: "y", p: { x: c.x, y: c.y + 8, z: c.z } },
-      { axis: "z", p: { x: c.x, y: c.y, z: c.z + 8 } },
-    ];
-    const pc = projectPoint(c, cam, w, h);
-    for (const a of axes) {
-      const pa = projectPoint(a.p, cam, w, h);
-      if (!pc.ok || !pa.ok) continue;
-      if (distPointToSegment2d(mx, my, pc.sx, pc.sy, pa.sx, pa.sy) < 8) {
-        const t = closestTOnSegment2d(mx, my, pc.sx, pc.sy, pa.sx, pa.sy);
-        return {
-          kind: "axis",
-          axis: a.axis,
-          world: {
-            x: c.x + (a.p.x - c.x) * t,
-            y: c.y + (a.p.y - c.y) * t,
-            z: c.z + (a.p.z - c.z) * t,
-          },
-        };
-      }
-    }
+    const gizmoHit = hitTranslateGizmo(c, cam, w, h, mx, my, HANDLE + 1);
+    if (gizmoHit) return gizmoHit;
     if (!KINDS[obj.kind].fixed) {
       for (let i = 0; i < 8; i++) {
         const cw = cornerWorld(obj, i);
@@ -7905,9 +8143,7 @@ class LayoutView {
 
   #drawGizmo(ctx, obj, cam, w, h) {
     const c = aabbCenter(obj);
-    this.#line3(ctx, c, { x: c.x + 8, y: c.y, z: c.z }, cam, w, h, "#e55");
-    this.#line3(ctx, c, { x: c.x, y: c.y + 8, z: c.z }, cam, w, h, "#5e5");
-    this.#line3(ctx, c, { x: c.x, y: c.y, z: c.z + 8 }, cam, w, h, "#55e");
+    drawTranslateGizmo(ctx, c, cam, w, h, { hoverGizmo: this.hoverGizmo, drag: this.drag });
     if (KINDS[obj.kind].fixed) return;
     ctx.fillStyle = "#f2d36b";
     for (let i = 0; i < 8; i++) {
@@ -9057,9 +9293,6 @@ const ITEM_VERT_HIT = 10;
 const ITEM_LINE_HIT = 6;
 const ITEM_BOX_CLICK = 4;
 const ITEM_ZOOM_K = 0.008;
-const ITEM_AXIS_LEN = 2;
-const ITEM_AXIS_HIT = 9;
-const ITEM_AXIS_COLS = { x: "#e55", y: "#5e5", z: "#55e" };
 
 function clampItemDist(d) {
   return Math.max(ITEM_ORBIT_DIST_MIN, Math.min(ITEM_ORBIT_DIST_MAX, d));
@@ -9084,7 +9317,7 @@ class ItemView {
     this.drag = null;
     this.hoverVert = -1;
     this.hoverLine = -1;
-    this.hoverAxis = null;
+    this.hoverGizmo = null;
     this.selectedVerts = [];
     this.selectedLines = [];
     this.enabled = false;
@@ -9132,7 +9365,7 @@ class ItemView {
     this.selectedLines = [];
     this.hoverVert = -1;
     this.hoverLine = -1;
-    this.hoverAxis = null;
+    this.hoverGizmo = null;
   }
 
   addVertAtOrigin() {
@@ -9465,11 +9698,52 @@ class ItemView {
     return { v: { x: x / n, y: y / n, z: z / n }, indices: selected };
   }
 
-  #axisEnd(v, axis) {
-    return {
-      x: v.x + (axis === "x" ? ITEM_AXIS_LEN : 0),
-      y: v.y + (axis === "y" ? ITEM_AXIS_LEN : 0),
-      z: v.z + (axis === "z" ? ITEM_AXIS_LEN : 0),
+  #applyVertDrag(origs, applyCoord) {
+    const mesh = this.#mesh();
+    const next = mesh.verts.map((v) => ({ ...v }));
+    for (const o of origs) {
+      next[o.i].x = o.x;
+      next[o.i].y = o.y;
+      next[o.i].z = o.z;
+      applyCoord(next[o.i], o);
+    }
+    const seen = new Set();
+    for (const v of next) {
+      const k = `${v.x},${v.y},${v.z}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+    }
+    if (!this.#uniqueOk(next)) return false;
+    for (const o of origs) {
+      mesh.verts[o.i].x = next[o.i].x;
+      mesh.verts[o.i].y = next[o.i].y;
+      mesh.verts[o.i].z = next[o.i].z;
+    }
+    return true;
+  }
+
+  #gizmoDragOrigs(prim) {
+    const mesh = this.#mesh();
+    return prim.indices.map((i) => ({
+      i,
+      x: mesh.verts[i].x,
+      y: mesh.verts[i].y,
+      z: mesh.verts[i].z,
+    }));
+  }
+
+  #startGizmoDrag(gizmoHit, prim, p) {
+    this.opts.beginUndo?.();
+    this.drag = {
+      kind: gizmoHit.kind,
+      axis: gizmoHit.axis,
+      plane: gizmoHit.plane,
+      planeN: gizmoHit.planeN,
+      grab: gizmoHit.world,
+      gizmoAxisLen: gizmoHit.gizmoAxisLen ?? GIZMO_FALLBACK_LEN,
+      origs: this.#gizmoDragOrigs(prim),
+      orig: { x: prim.v.x, y: prim.v.y, z: prim.v.z },
+      start: p,
     };
   }
 
@@ -9508,26 +9782,12 @@ class ItemView {
     return best;
   }
 
-  #hitAxis(mx, my) {
-    const prim = this.#selectionAnchor();
-    if (!prim) return null;
-    const cam = this.#cam();
-    const w = this.cssW;
-    const h = this.cssH;
-    const pa = projectPoint(prim.v, cam, w, h);
-    if (!pa.ok) return null;
-    let best = null;
-    let bestD = ITEM_AXIS_HIT;
-    for (const axis of ["x", "y", "z"]) {
-      const pb = projectPoint(this.#axisEnd(prim.v, axis), cam, w, h);
-      if (!pb.ok) continue;
-      const d = distPointToSegment2d(mx, my, pa.sx, pa.sy, pb.sx, pb.sy);
-      if (d < bestD) {
-        bestD = d;
-        best = axis;
-      }
-    }
-    return best;
+  #onWheel(e) {
+    if (!this.enabled) return;
+    e.preventDefault();
+    this.orbit.dist = clampItemDist(this.orbit.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1));
+    this.opts.onViewChanged?.();
+    this.draw();
   }
 
   #occupied(mesh, x, y, z, skip = new Set()) {
@@ -9581,14 +9841,6 @@ class ItemView {
     this.opts.onSelect?.();
   }
 
-  #onWheel(e) {
-    if (!this.enabled) return;
-    e.preventDefault();
-    this.orbit.dist = clampItemDist(this.orbit.dist * (e.deltaY > 0 ? 1.1 : 1 / 1.1));
-    this.opts.onViewChanged?.();
-    this.draw();
-  }
-
   #onDown(e) {
     if (!this.enabled) return;
     this.canvas.focus();
@@ -9618,27 +9870,23 @@ class ItemView {
       return;
     }
 
+    const prim = this.#selectionAnchor();
+    const cam = this.#cam();
+    if (prim) {
+      const gizmoHit = hitTranslateGizmo(prim.v, cam, this.cssW, this.cssH, p.x, p.y);
+      if (gizmoHit) {
+        this.#startGizmoDrag(gizmoHit, prim, p);
+        this.canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+    }
+
     const vi = this.#hitVert(p.x, p.y, mesh.verts);
     if (vi >= 0) {
       this.#selectVert(vi, e.shiftKey);
       this.drag = { kind: "select" };
       this.canvas.setPointerCapture(e.pointerId);
       this.draw();
-      return;
-    }
-
-    const axis = this.#hitAxis(p.x, p.y);
-    if (axis) {
-      const prim = this.#selectionAnchor();
-      this.opts.beginUndo?.();
-      this.drag = {
-        kind: "axis",
-        axis,
-        origs: prim.indices.map((i) => ({ i, x: mesh.verts[i].x, y: mesh.verts[i].y, z: mesh.verts[i].z })),
-        orig: { x: prim.v.x, y: prim.v.y, z: prim.v.z },
-        start: p,
-      };
-      this.canvas.setPointerCapture(e.pointerId);
       return;
     }
 
@@ -9660,9 +9908,14 @@ class ItemView {
     const p = this.#eventPos(e);
     const mesh = this.#mesh();
     if (!this.drag) {
+      const prim = this.#selectionAnchor();
+      const cam = this.#cam();
       this.hoverVert = this.#hitVert(p.x, p.y, mesh.verts);
-      this.hoverAxis = this.hoverVert >= 0 ? null : this.#hitAxis(p.x, p.y);
-      this.hoverLine = this.hoverAxis || this.hoverVert >= 0 ? -1 : this.#hitLine(p.x, p.y, mesh);
+      this.hoverGizmo =
+        prim && this.hoverVert < 0
+          ? hitTranslateGizmo(prim.v, cam, this.cssW, this.cssH, p.x, p.y)
+          : null;
+      this.hoverLine = this.hoverGizmo || this.hoverVert >= 0 ? -1 : this.#hitLine(p.x, p.y, mesh);
       this.draw();
       return;
     }
@@ -9708,37 +9961,48 @@ class ItemView {
     }
     if (this.drag.kind === "axis") {
       const cam = this.#cam();
-      const orig = this.drag.orig;
-      const pa = projectPoint(orig, cam, this.cssW, this.cssH);
-      const pb = projectPoint(this.#axisEnd(orig, this.drag.axis), cam, this.cssW, this.cssH);
-      if (!pa.ok || !pb.ok) return;
-      const ax = pb.sx - pa.sx;
-      const ay = pb.sy - pa.sy;
-      const alen2 = ax * ax + ay * ay;
-      if (alen2 < 16) return;
-      const t = ((p.x - this.drag.start.x) * ax + (p.y - this.drag.start.y) * ay) / alen2;
-      const delta = Math.round(t * ITEM_AXIS_LEN);
-      const next = mesh.verts.map((v) => ({ ...v }));
-      for (const o of this.drag.origs) {
-        next[o.i].x = o.x;
-        next[o.i].y = o.y;
-        next[o.i].z = o.z;
-        next[o.i][this.drag.axis] = clampItemCoord(o[this.drag.axis] + delta);
+      const delta = gizmoAxisDragDelta(
+        p,
+        this.drag.grab,
+        this.drag.axis,
+        this.drag.start,
+        this.drag.gizmoAxisLen ?? GIZMO_FALLBACK_LEN,
+        cam,
+        this.cssW,
+        this.cssH
+      );
+      if (delta == null) return;
+      if (
+        this.#applyVertDrag(this.drag.origs, (v, o) => {
+          v[this.drag.axis] = clampItemCoord(o[this.drag.axis] + delta);
+        })
+      ) {
+        this.opts.onChange?.();
+        this.draw();
       }
-      const seen = new Set();
-      for (const v of next) {
-        const k = `${v.x},${v.y},${v.z}`;
-        if (seen.has(k)) return;
-        seen.add(k);
+      return;
+    }
+    if (this.drag.kind === "plane") {
+      const cam = this.#cam();
+      const ray = screenRay(p.x, p.y, cam, this.cssW, this.cssH);
+      const hit = intersectPlane(ray.origin, ray.dir, this.drag.grab, this.drag.planeN);
+      if (!hit) return;
+      let dx = Math.round(hit.point.x - this.drag.grab.x);
+      let dy = Math.round(hit.point.y - this.drag.grab.y);
+      let dz = Math.round(hit.point.z - this.drag.grab.z);
+      if (this.drag.plane === "xy") dz = 0;
+      else if (this.drag.plane === "xz") dy = 0;
+      else if (this.drag.plane === "yz") dx = 0;
+      if (
+        this.#applyVertDrag(this.drag.origs, (v, o) => {
+          v.x = clampItemCoord(o.x + dx);
+          v.y = clampItemCoord(o.y + dy);
+          v.z = clampItemCoord(o.z + dz);
+        })
+      ) {
+        this.opts.onChange?.();
+        this.draw();
       }
-      if (!this.#uniqueOk(next)) return;
-      for (const o of this.drag.origs) {
-        mesh.verts[o.i].x = next[o.i].x;
-        mesh.verts[o.i].y = next[o.i].y;
-        mesh.verts[o.i].z = next[o.i].z;
-      }
-      this.opts.onChange?.();
-      this.draw();
     }
   }
 
@@ -9782,7 +10046,7 @@ class ItemView {
     if (!this.enabled) return;
     const orbitEnded = this.drag?.kind === "orbit" || this.drag?.kind === "zoom" || this.drag?.kind === "pan";
     if (this.drag?.kind === "box") this.#finishBox();
-    if (this.drag?.kind === "axis") this.opts.endUndo?.();
+    if (this.drag?.kind === "axis" || this.drag?.kind === "plane") this.opts.endUndo?.();
     this.drag = null;
     if (orbitEnded) this.opts.onViewChanged?.();
     try {
@@ -9805,11 +10069,7 @@ class ItemView {
   }
 
   #drawGizmo(ctx, cam, w, h, v) {
-    for (const axis of ["x", "y", "z"]) {
-      const hi = this.hoverAxis === axis || this.drag?.axis === axis;
-      const col = hi ? "#fff" : ITEM_AXIS_COLS[axis];
-      this.#strokeSeg(ctx, cam, w, h, v, this.#axisEnd(v, axis), col, hi ? 3 : 2);
-    }
+    drawTranslateGizmo(ctx, v, cam, w, h, { hoverGizmo: this.hoverGizmo, drag: this.drag });
   }
 
   #drawForwardArrow(ctx, cam, w, h) {

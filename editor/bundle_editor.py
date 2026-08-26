@@ -13,8 +13,9 @@ OUT = ROOT / "index.html"
 JS_ORDER = [
     "js/roomGeom.js",
     "js/model.js",
-    "js/math3d.js",
-    "js/io.js",
+  "js/math3d.js",
+  "js/gizmo.js",
+  "js/io.js",
     "js/pak.js",
     "js/mdl.js",
     "js/layoutView.js",

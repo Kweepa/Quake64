@@ -26,7 +26,6 @@ import {
   elevStopBottoms,
 } from "./model.js";
 import {
-  BOX_CORNERS,
   BOX_EDGES,
   cornerWorld,
   distPointToSegment2d,
@@ -45,6 +44,77 @@ import {
   gizmoMetrics,
   hitTranslateGizmo,
 } from "./gizmo.js";
+
+/** Ramp AABB wireframe without the y=max face (open top). */
+const SLOPE_TOP = new Set([2, 3, 6, 7]);
+const SLOPE_BOX_EDGES = BOX_EDGES.filter(([i, j]) => !(SLOPE_TOP.has(i) && SLOPE_TOP.has(j)));
+
+function edgeKey(i, j) {
+  return i < j ? `${i},${j}` : `${j},${i}`;
+}
+
+/** Verticals on the low run face — phantom y=max corners, not part of the ramp. */
+function rampPhantomVerticals(obj) {
+  if (obj.axis === "x") {
+    return obj.dir === 1
+      ? [
+          [3, 0],
+          [7, 4],
+        ]
+      : [
+          [1, 2],
+          [5, 6],
+        ];
+  }
+  return obj.dir === 1
+    ? [
+        [1, 2],
+        [3, 0],
+      ]
+    : [
+        [5, 6],
+        [7, 4],
+      ];
+}
+
+function rampBoxEdges(obj) {
+  const drop = new Set(rampPhantomVerticals(obj).map(([i, j]) => edgeKey(i, j)));
+  return SLOPE_BOX_EDGES.filter(([i, j]) => !drop.has(edgeKey(i, j)));
+}
+
+function rampCorners(obj) {
+  const lowY = obj.y;
+  const highY = obj.y + obj.sy;
+  if (obj.axis === "x") {
+    const x0 = obj.dir === 1 ? obj.x : obj.x + obj.sx;
+    const x1 = obj.dir === 1 ? obj.x + obj.sx : obj.x;
+    return {
+      p0: { x: x0, y: lowY, z: obj.z },
+      p1: { x: x0, y: lowY, z: obj.z + obj.sz },
+      p2: { x: x1, y: highY, z: obj.z + obj.sz },
+      p3: { x: x1, y: highY, z: obj.z },
+    };
+  }
+  const z0 = obj.dir === 1 ? obj.z : obj.z + obj.sz;
+  const z1 = obj.dir === 1 ? obj.z + obj.sz : obj.z;
+  return {
+    p0: { x: obj.x, y: lowY, z: z0 },
+    p1: { x: obj.x + obj.sx, y: lowY, z: z0 },
+    p2: { x: obj.x + obj.sx, y: highY, z: z1 },
+    p3: { x: obj.x, y: highY, z: z1 },
+  };
+}
+
+/** Open-top AABB plus ramp surface sides and ridge. */
+function rampSegments(obj) {
+  const segs = [];
+  for (const [i, j] of rampBoxEdges(obj)) {
+    segs.push({ a: cornerWorld(obj, i), b: cornerWorld(obj, j) });
+  }
+  const { p0, p1, p2, p3 } = rampCorners(obj);
+  segs.push({ a: p0, b: p3 }, { a: p1, b: p2 }, { a: p3, b: p2 });
+  return segs;
+}
 
 const HANDLE = 7;
 const LINE_HIT = 8;
@@ -305,7 +375,6 @@ export class LayoutView {
       kind: handle.kind,
       axis: handle.axis,
       plane: handle.plane,
-      corner: handle.corner,
       key: handle.key,
       side: handle.side,
       scale: handle.scale,
@@ -463,7 +532,7 @@ export class LayoutView {
       const obj = objs.find((o) => o.id === orig.id);
       if (!obj) continue;
       if (obj.kind === "doorway") {
-        assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
+        assignDoorRooms(doc, obj, roomById(doc, obj.roomId), false);
         clampObject(obj);
       } else if (obj.kind === "switch") {
         snapSwitchToRoom(obj, roomById(doc, obj.roomId));
@@ -628,33 +697,6 @@ export class LayoutView {
       return;
     }
 
-    if (d.kind === "scale") {
-      const primary = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
-      if (!primary || KINDS[primary.kind].fixed) return;
-      const obj = objs.find((o) => o.id === primary.id);
-      if (!obj) return;
-      const c = d.corner;
-      const opp = {
-        x: c[0] ? primary.x : primary.x + primary.sx,
-        y: c[1] ? primary.y : primary.y + primary.sy,
-        z: c[2] ? primary.z : primary.z + primary.sz,
-      };
-      const hit = intersectPlane(ray.origin, ray.dir, d.grab, d.planeN);
-      if (!hit) return;
-      const px = Math.round(hit.point.x);
-      const py = Math.round(hit.point.y);
-      const pz = Math.round(hit.point.z);
-      obj.x = Math.min(opp.x, px);
-      obj.y = Math.min(opp.y, py);
-      obj.z = Math.min(opp.z, pz);
-      obj.sx = Math.max(1, Math.max(opp.x, px) - obj.x);
-      obj.sy = Math.max(1, Math.max(opp.y, py) - obj.y);
-      obj.sz = Math.max(1, Math.max(opp.z, pz) - obj.z);
-      if (obj.kind === "room") preserveRoomSplits(obj, primary);
-      clampObject(obj);
-      return;
-    }
-
     if (d.kind === "split") {
       const orig = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
       const obj = objs.find((o) => o.id === orig.id);
@@ -723,6 +765,10 @@ export class LayoutView {
       for (const s of itemMeshWorldSegs(obj, mesh)) segs.push(s);
       return segs;
     }
+    if (obj.kind === "slope") {
+      for (const s of rampSegments(obj)) segs.push(s);
+      return segs;
+    }
     for (const [i, j] of BOX_EDGES) {
       segs.push({ a: cornerWorld(obj, i), b: cornerWorld(obj, j) });
     }
@@ -732,16 +778,6 @@ export class LayoutView {
 
   #glyphSegments(obj) {
     const segs = [];
-    if (obj.kind === "doorway") {
-      const zThin = (obj.sz | 0) <= (obj.sx | 0);
-      if (zThin) {
-        segs.push({ a: cornerWorld(obj, 0), b: cornerWorld(obj, 2) });
-        segs.push({ a: cornerWorld(obj, 4), b: cornerWorld(obj, 6) });
-      } else {
-        segs.push({ a: cornerWorld(obj, 0), b: cornerWorld(obj, 7) });
-        segs.push({ a: cornerWorld(obj, 1), b: cornerWorld(obj, 6) });
-      }
-    }
     if (obj.kind === "switch") {
       const f = faceCorners(obj.face);
       const a = cornerWorld(obj, f[0]);
@@ -756,12 +792,6 @@ export class LayoutView {
       const left = { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2, z: (a.z + d.z) / 2 };
       const right = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2, z: (b.z + c.z) / 2 };
       segs.push({ a: apex, b: left }, { a: left, b: right }, { a: right, b: apex });
-    }
-    if (obj.kind === "trigger") {
-      segs.push(
-        { a: cornerWorld(obj, 0), b: cornerWorld(obj, 5) },
-        { a: cornerWorld(obj, 1), b: cornerWorld(obj, 4) }
-      );
     }
     if (obj.kind === "teleporter_dest") {
       const c = aabbCenter(obj);
@@ -781,37 +811,7 @@ export class LayoutView {
         }
       );
     }
-    if (obj.kind === "slope") {
-      const ramp = this.#rampCorners(obj);
-      segs.push(
-        { a: ramp.p1, b: ramp.p2 },
-        { a: ramp.p3, b: ramp.p0 }
-      );
-    }
     return segs;
-  }
-
-  #rampCorners(obj) {
-    const lowY = obj.y;
-    const highY = obj.y + obj.sy;
-    if (obj.axis === "x") {
-      const x0 = obj.dir === 1 ? obj.x : obj.x + obj.sx;
-      const x1 = obj.dir === 1 ? obj.x + obj.sx : obj.x;
-      return {
-        p0: { x: x0, y: lowY, z: obj.z },
-        p1: { x: x0, y: lowY, z: obj.z + obj.sz },
-        p2: { x: x1, y: highY, z: obj.z + obj.sz },
-        p3: { x: x1, y: highY, z: obj.z },
-      };
-    }
-    const z0 = obj.dir === 1 ? obj.z : obj.z + obj.sz;
-    const z1 = obj.dir === 1 ? obj.z + obj.sz : obj.z;
-    return {
-      p0: { x: obj.x, y: lowY, z: z0 },
-      p1: { x: obj.x + obj.sx, y: lowY, z: z0 },
-      p2: { x: obj.x + obj.sx, y: highY, z: z1 },
-      p3: { x: obj.x, y: highY, z: z1 },
-    };
   }
 
   #pick(doc, mx, my) {
@@ -887,16 +887,6 @@ export class LayoutView {
     const c = aabbCenter(obj);
     const gizmoHit = hitTranslateGizmo(c, cam, w, h, mx, my, HANDLE + 1);
     if (gizmoHit) return gizmoHit;
-    if (!KINDS[obj.kind].fixed) {
-      for (let i = 0; i < 8; i++) {
-        const cw = cornerWorld(obj, i);
-        const pr = projectPoint(cw, cam, w, h);
-        if (!pr.ok) continue;
-        if (Math.hypot(mx - pr.sx, my - pr.sy) < HANDLE) {
-          return { kind: "scale", corner: BOX_CORNERS[i], world: cw };
-        }
-      }
-    }
     return null;
   }
 
@@ -1169,6 +1159,10 @@ export class LayoutView {
       for (const e of g.edges) {
         this.#line3(ctx, g.verts[e.a], g.verts[e.b], cam, w, h);
       }
+    } else if (obj.kind === "slope") {
+      for (const seg of rampSegments(obj)) {
+        this.#line3(ctx, seg.a, seg.b, cam, w, h);
+      }
     } else {
       if (isGhostKind(obj.kind)) ctx.setLineDash([5, 4]);
       for (const [i, j] of BOX_EDGES) {
@@ -1218,12 +1212,6 @@ export class LayoutView {
     const c = aabbCenter(obj);
     drawTranslateGizmo(ctx, c, cam, w, h, { hoverGizmo: this.hoverGizmo, drag: this.drag });
     if (KINDS[obj.kind].fixed) return;
-    ctx.fillStyle = "#f2d36b";
-    for (let i = 0; i < 8; i++) {
-      const pr = projectPoint(cornerWorld(obj, i), cam, w, h);
-      if (!pr.ok) continue;
-      ctx.fillRect(pr.sx - 3, pr.sy - 3, 6, 6);
-    }
     ctx.fillStyle = "#7ec8e8";
     const handles = obj.kind === "room" ? roomGeometry(obj).handles : this.#aabbFaceHandles(obj);
     for (const handle of handles) {

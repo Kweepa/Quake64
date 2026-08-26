@@ -51,6 +51,37 @@ export function roomBasis(room) {
   };
 }
 
+function vecEq(a, b) {
+  return a.x === b.x && a.y === b.y && a.z === b.z;
+}
+
+function worldAxisIndex(axis) {
+  if (axis === "x") return 0;
+  if (axis === "y") return 1;
+  return 2;
+}
+
+/** +90° about world X/Y/Z on room basis vectors. */
+function worldRot90Basis(u, w, v, worldAxis) {
+  const ax = worldAxisIndex(worldAxis);
+  return { u: rot90(u, ax), w: rot90(w, ax), v: rot90(v, ax) };
+}
+
+/** Find rx/ry/rz whose applyRots matches the given orthonormal basis. */
+function encodeQuartersFromBasis(u, w, v) {
+  for (let rx = 0; rx < 4; rx++) {
+    for (let ry = 0; ry < 4; ry++) {
+      for (let rz = 0; rz < 4; rz++) {
+        const ru = applyRots({ x: 1, y: 0, z: 0 }, rx, ry, rz);
+        const rw = applyRots({ x: 0, y: 1, z: 0 }, rx, ry, rz);
+        const rv = applyRots({ x: 0, y: 0, z: 1 }, rx, ry, rz);
+        if (vecEq(ru, u) && vecEq(rw, w) && vecEq(rv, v)) return { rx, ry, rz };
+      }
+    }
+  }
+  return { rx: 0, ry: 0, rz: 0 };
+}
+
 function hatAxis(hat) {
   if (hat.x) return "x";
   if (hat.y) return "y";
@@ -1146,6 +1177,35 @@ export function snapDoorBetweenRooms(door, roomA, roomB) {
   return snapBoxToHullFace(door, best.f, DOOR_SIZE, false);
 }
 
+/** Set door face/size from nearest hull wall; keep world position (no flush snap). */
+export function orientDoorToRooms(door, roomA, roomB) {
+  if (!door) return door;
+  let best = null;
+  for (const room of [roomA, roomB]) {
+    if (!room) continue;
+    const f = bestDoorHullFace(door, room);
+    if (!f) continue;
+    const score = hullFaceScore(door, f);
+    if (!best || score < best.score) best = { f, score };
+  }
+  if (!best) return door;
+  const cx = door.x + door.sx / 2;
+  const cy = door.y + door.sy / 2;
+  const cz = door.z + door.sz / 2;
+  door.face = best.f.faceId;
+  const dims = wallDims(DOOR_SIZE, best.f);
+  door.sx = dims.sx;
+  door.sy = dims.sy;
+  door.sz = dims.sz;
+  door.x = Math.round(cx - door.sx / 2);
+  door.y = Math.round(cy - door.sy / 2);
+  door.z = Math.round(cz - door.sz / 2);
+  if (door.x < 0) door.x = 0;
+  if (door.y < 0) door.y = 0;
+  if (door.z < 0) door.z = 0;
+  return door;
+}
+
 export function snapSwitchToRoom(sw, room) {
   if (!sw || !room) return sw;
   const f = bestDoorHullFace(sw, room);
@@ -1185,12 +1245,16 @@ function permuteRoomAabb(room, axis) {
   }
 }
 
-/** Quarter-turn room orient + rigid AABB so UV footprint is not stretched. */
+/** Quarter-turn room orient about world axis; re-encode rx/ry/rz + permute AABB. */
 export function rotateRoom(room, axis, delta) {
-  const key = axis === "x" ? "rx" : axis === "y" ? "ry" : "rz";
   const steps = ((delta | 0) % 4 + 4) % 4;
   for (let i = 0; i < steps; i++) {
-    room[key] = clampQuarter((room[key] | 0) + 1);
+    const { u, w, v } = roomBasis(room);
+    const r = worldRot90Basis(u, w, v, axis);
+    const q = encodeQuartersFromBasis(r.u, r.w, r.v);
+    room.rx = q.rx;
+    room.ry = q.ry;
+    room.rz = q.rz;
     permuteRoomAabb(room, axis);
   }
   return clampRoomSplits(room);

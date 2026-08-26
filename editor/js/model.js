@@ -10,6 +10,7 @@ import {
   roomFloorY,
   snapDoorToRoom,
   snapDoorBetweenRooms,
+  orientDoorToRooms,
   snapSwitchToRoom,
   doorRoomScores,
   doorNearFaceId,
@@ -33,6 +34,7 @@ export {
   roomFloorY,
   snapDoorToRoom,
   snapDoorBetweenRooms,
+  orientDoorToRooms,
   snapSwitchToRoom,
   doorNearFaceId,
   nudgeDoorOutside,
@@ -2198,7 +2200,7 @@ export function inferDoorRoomPair(doc, door) {
   return { room: best.room, other: otherHit?.hit.room || null };
 }
 
-export function assignDoorRooms(doc, door, owner) {
+export function assignDoorRooms(doc, door, owner, snap = true) {
   if (!door || door.kind !== "doorway") return door;
   const pair = inferDoorRoomPair(doc, door);
   const a = pair.room;
@@ -2221,7 +2223,10 @@ export function assignDoorRooms(doc, door, owner) {
     door.otherRoomId = null;
   }
   if (door.otherRoomId === door.roomId) door.otherRoomId = null;
-  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
+  const roomA = roomById(doc, door.roomId);
+  const roomB = roomById(doc, door.otherRoomId);
+  if (snap) snapDoorBetweenRooms(door, roomA, roomB);
+  else orientDoorToRooms(door, roomA, roomB);
   return door;
 }
 

@@ -1074,6 +1074,37 @@ function roomBasis(room) {
   };
 }
 
+function vecEq(a, b) {
+  return a.x === b.x && a.y === b.y && a.z === b.z;
+}
+
+function worldAxisIndex(axis) {
+  if (axis === "x") return 0;
+  if (axis === "y") return 1;
+  return 2;
+}
+
+/** +90° about world X/Y/Z on room basis vectors. */
+function worldRot90Basis(u, w, v, worldAxis) {
+  const ax = worldAxisIndex(worldAxis);
+  return { u: rot90(u, ax), w: rot90(w, ax), v: rot90(v, ax) };
+}
+
+/** Find rx/ry/rz whose applyRots matches the given orthonormal basis. */
+function encodeQuartersFromBasis(u, w, v) {
+  for (let rx = 0; rx < 4; rx++) {
+    for (let ry = 0; ry < 4; ry++) {
+      for (let rz = 0; rz < 4; rz++) {
+        const ru = applyRots({ x: 1, y: 0, z: 0 }, rx, ry, rz);
+        const rw = applyRots({ x: 0, y: 1, z: 0 }, rx, ry, rz);
+        const rv = applyRots({ x: 0, y: 0, z: 1 }, rx, ry, rz);
+        if (vecEq(ru, u) && vecEq(rw, w) && vecEq(rv, v)) return { rx, ry, rz };
+      }
+    }
+  }
+  return { rx: 0, ry: 0, rz: 0 };
+}
+
 function hatAxis(hat) {
   if (hat.x) return "x";
   if (hat.y) return "y";
@@ -2169,6 +2200,35 @@ function snapDoorBetweenRooms(door, roomA, roomB) {
   return snapBoxToHullFace(door, best.f, DOOR_SIZE, false);
 }
 
+/** Set door face/size from nearest hull wall; keep world position (no flush snap). */
+function orientDoorToRooms(door, roomA, roomB) {
+  if (!door) return door;
+  let best = null;
+  for (const room of [roomA, roomB]) {
+    if (!room) continue;
+    const f = bestDoorHullFace(door, room);
+    if (!f) continue;
+    const score = hullFaceScore(door, f);
+    if (!best || score < best.score) best = { f, score };
+  }
+  if (!best) return door;
+  const cx = door.x + door.sx / 2;
+  const cy = door.y + door.sy / 2;
+  const cz = door.z + door.sz / 2;
+  door.face = best.f.faceId;
+  const dims = wallDims(DOOR_SIZE, best.f);
+  door.sx = dims.sx;
+  door.sy = dims.sy;
+  door.sz = dims.sz;
+  door.x = Math.round(cx - door.sx / 2);
+  door.y = Math.round(cy - door.sy / 2);
+  door.z = Math.round(cz - door.sz / 2);
+  if (door.x < 0) door.x = 0;
+  if (door.y < 0) door.y = 0;
+  if (door.z < 0) door.z = 0;
+  return door;
+}
+
 function snapSwitchToRoom(sw, room) {
   if (!sw || !room) return sw;
   const f = bestDoorHullFace(sw, room);
@@ -2208,12 +2268,16 @@ function permuteRoomAabb(room, axis) {
   }
 }
 
-/** Quarter-turn room orient + rigid AABB so UV footprint is not stretched. */
+/** Quarter-turn room orient about world axis; re-encode rx/ry/rz + permute AABB. */
 function rotateRoom(room, axis, delta) {
-  const key = axis === "x" ? "rx" : axis === "y" ? "ry" : "rz";
   const steps = ((delta | 0) % 4 + 4) % 4;
   for (let i = 0; i < steps; i++) {
-    room[key] = clampQuarter((room[key] | 0) + 1);
+    const { u, w, v } = roomBasis(room);
+    const r = worldRot90Basis(u, w, v, axis);
+    const q = encodeQuartersFromBasis(r.u, r.w, r.v);
+    room.rx = q.rx;
+    room.ry = q.ry;
+    room.rz = q.rz;
     permuteRoomAabb(room, axis);
   }
   return clampRoomSplits(room);
@@ -4376,7 +4440,7 @@ function inferDoorRoomPair(doc, door) {
   return { room: best.room, other: otherHit?.hit.room || null };
 }
 
-function assignDoorRooms(doc, door, owner) {
+function assignDoorRooms(doc, door, owner, snap = true) {
   if (!door || door.kind !== "doorway") return door;
   const pair = inferDoorRoomPair(doc, door);
   const a = pair.room;
@@ -4399,7 +4463,10 @@ function assignDoorRooms(doc, door, owner) {
     door.otherRoomId = null;
   }
   if (door.otherRoomId === door.roomId) door.otherRoomId = null;
-  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
+  const roomA = roomById(doc, door.roomId);
+  const roomB = roomById(doc, door.otherRoomId);
+  if (snap) snapDoorBetweenRooms(door, roomA, roomB);
+  else orientDoorToRooms(door, roomA, roomB);
   return door;
 }
 
@@ -6973,6 +7040,77 @@ function rasterWeaponFrame(mdl, frameIndex, scale, pan) {
 
 
 // ---- js/layoutView.js ----
+/** Ramp AABB wireframe without the y=max face (open top). */
+const SLOPE_TOP = new Set([2, 3, 6, 7]);
+const SLOPE_BOX_EDGES = BOX_EDGES.filter(([i, j]) => !(SLOPE_TOP.has(i) && SLOPE_TOP.has(j)));
+
+function edgeKey(i, j) {
+  return i < j ? `${i},${j}` : `${j},${i}`;
+}
+
+/** Verticals on the low run face — phantom y=max corners, not part of the ramp. */
+function rampPhantomVerticals(obj) {
+  if (obj.axis === "x") {
+    return obj.dir === 1
+      ? [
+          [3, 0],
+          [7, 4],
+        ]
+      : [
+          [1, 2],
+          [5, 6],
+        ];
+  }
+  return obj.dir === 1
+    ? [
+        [1, 2],
+        [3, 0],
+      ]
+    : [
+        [5, 6],
+        [7, 4],
+      ];
+}
+
+function rampBoxEdges(obj) {
+  const drop = new Set(rampPhantomVerticals(obj).map(([i, j]) => edgeKey(i, j)));
+  return SLOPE_BOX_EDGES.filter(([i, j]) => !drop.has(edgeKey(i, j)));
+}
+
+function rampCorners(obj) {
+  const lowY = obj.y;
+  const highY = obj.y + obj.sy;
+  if (obj.axis === "x") {
+    const x0 = obj.dir === 1 ? obj.x : obj.x + obj.sx;
+    const x1 = obj.dir === 1 ? obj.x + obj.sx : obj.x;
+    return {
+      p0: { x: x0, y: lowY, z: obj.z },
+      p1: { x: x0, y: lowY, z: obj.z + obj.sz },
+      p2: { x: x1, y: highY, z: obj.z + obj.sz },
+      p3: { x: x1, y: highY, z: obj.z },
+    };
+  }
+  const z0 = obj.dir === 1 ? obj.z : obj.z + obj.sz;
+  const z1 = obj.dir === 1 ? obj.z + obj.sz : obj.z;
+  return {
+    p0: { x: obj.x, y: lowY, z: z0 },
+    p1: { x: obj.x + obj.sx, y: lowY, z: z0 },
+    p2: { x: obj.x + obj.sx, y: highY, z: z1 },
+    p3: { x: obj.x, y: highY, z: z1 },
+  };
+}
+
+/** Open-top AABB plus ramp surface sides and ridge. */
+function rampSegments(obj) {
+  const segs = [];
+  for (const [i, j] of rampBoxEdges(obj)) {
+    segs.push({ a: cornerWorld(obj, i), b: cornerWorld(obj, j) });
+  }
+  const { p0, p1, p2, p3 } = rampCorners(obj);
+  segs.push({ a: p0, b: p3 }, { a: p1, b: p2 }, { a: p3, b: p2 });
+  return segs;
+}
+
 const HANDLE = 7;
 const LINE_HIT = 8;
 const LAYOUT_BOX_CLICK = 4;
@@ -7232,7 +7370,6 @@ class LayoutView {
       kind: handle.kind,
       axis: handle.axis,
       plane: handle.plane,
-      corner: handle.corner,
       key: handle.key,
       side: handle.side,
       scale: handle.scale,
@@ -7390,7 +7527,7 @@ class LayoutView {
       const obj = objs.find((o) => o.id === orig.id);
       if (!obj) continue;
       if (obj.kind === "doorway") {
-        assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
+        assignDoorRooms(doc, obj, roomById(doc, obj.roomId), false);
         clampObject(obj);
       } else if (obj.kind === "switch") {
         snapSwitchToRoom(obj, roomById(doc, obj.roomId));
@@ -7555,33 +7692,6 @@ class LayoutView {
       return;
     }
 
-    if (d.kind === "scale") {
-      const primary = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
-      if (!primary || KINDS[primary.kind].fixed) return;
-      const obj = objs.find((o) => o.id === primary.id);
-      if (!obj) return;
-      const c = d.corner;
-      const opp = {
-        x: c[0] ? primary.x : primary.x + primary.sx,
-        y: c[1] ? primary.y : primary.y + primary.sy,
-        z: c[2] ? primary.z : primary.z + primary.sz,
-      };
-      const hit = intersectPlane(ray.origin, ray.dir, d.grab, d.planeN);
-      if (!hit) return;
-      const px = Math.round(hit.point.x);
-      const py = Math.round(hit.point.y);
-      const pz = Math.round(hit.point.z);
-      obj.x = Math.min(opp.x, px);
-      obj.y = Math.min(opp.y, py);
-      obj.z = Math.min(opp.z, pz);
-      obj.sx = Math.max(1, Math.max(opp.x, px) - obj.x);
-      obj.sy = Math.max(1, Math.max(opp.y, py) - obj.y);
-      obj.sz = Math.max(1, Math.max(opp.z, pz) - obj.z);
-      if (obj.kind === "room") preserveRoomSplits(obj, primary);
-      clampObject(obj);
-      return;
-    }
-
     if (d.kind === "split") {
       const orig = d.origs.find((o) => o.id === d.primaryId) || d.origs[0];
       const obj = objs.find((o) => o.id === orig.id);
@@ -7650,6 +7760,10 @@ class LayoutView {
       for (const s of itemMeshWorldSegs(obj, mesh)) segs.push(s);
       return segs;
     }
+    if (obj.kind === "slope") {
+      for (const s of rampSegments(obj)) segs.push(s);
+      return segs;
+    }
     for (const [i, j] of BOX_EDGES) {
       segs.push({ a: cornerWorld(obj, i), b: cornerWorld(obj, j) });
     }
@@ -7659,16 +7773,6 @@ class LayoutView {
 
   #glyphSegments(obj) {
     const segs = [];
-    if (obj.kind === "doorway") {
-      const zThin = (obj.sz | 0) <= (obj.sx | 0);
-      if (zThin) {
-        segs.push({ a: cornerWorld(obj, 0), b: cornerWorld(obj, 2) });
-        segs.push({ a: cornerWorld(obj, 4), b: cornerWorld(obj, 6) });
-      } else {
-        segs.push({ a: cornerWorld(obj, 0), b: cornerWorld(obj, 7) });
-        segs.push({ a: cornerWorld(obj, 1), b: cornerWorld(obj, 6) });
-      }
-    }
     if (obj.kind === "switch") {
       const f = faceCorners(obj.face);
       const a = cornerWorld(obj, f[0]);
@@ -7683,12 +7787,6 @@ class LayoutView {
       const left = { x: (a.x + d.x) / 2, y: (a.y + d.y) / 2, z: (a.z + d.z) / 2 };
       const right = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2, z: (b.z + c.z) / 2 };
       segs.push({ a: apex, b: left }, { a: left, b: right }, { a: right, b: apex });
-    }
-    if (obj.kind === "trigger") {
-      segs.push(
-        { a: cornerWorld(obj, 0), b: cornerWorld(obj, 5) },
-        { a: cornerWorld(obj, 1), b: cornerWorld(obj, 4) }
-      );
     }
     if (obj.kind === "teleporter_dest") {
       const c = aabbCenter(obj);
@@ -7708,37 +7806,7 @@ class LayoutView {
         }
       );
     }
-    if (obj.kind === "slope") {
-      const ramp = this.#rampCorners(obj);
-      segs.push(
-        { a: ramp.p1, b: ramp.p2 },
-        { a: ramp.p3, b: ramp.p0 }
-      );
-    }
     return segs;
-  }
-
-  #rampCorners(obj) {
-    const lowY = obj.y;
-    const highY = obj.y + obj.sy;
-    if (obj.axis === "x") {
-      const x0 = obj.dir === 1 ? obj.x : obj.x + obj.sx;
-      const x1 = obj.dir === 1 ? obj.x + obj.sx : obj.x;
-      return {
-        p0: { x: x0, y: lowY, z: obj.z },
-        p1: { x: x0, y: lowY, z: obj.z + obj.sz },
-        p2: { x: x1, y: highY, z: obj.z + obj.sz },
-        p3: { x: x1, y: highY, z: obj.z },
-      };
-    }
-    const z0 = obj.dir === 1 ? obj.z : obj.z + obj.sz;
-    const z1 = obj.dir === 1 ? obj.z + obj.sz : obj.z;
-    return {
-      p0: { x: obj.x, y: lowY, z: z0 },
-      p1: { x: obj.x + obj.sx, y: lowY, z: z0 },
-      p2: { x: obj.x + obj.sx, y: highY, z: z1 },
-      p3: { x: obj.x, y: highY, z: z1 },
-    };
   }
 
   #pick(doc, mx, my) {
@@ -7814,16 +7882,6 @@ class LayoutView {
     const c = aabbCenter(obj);
     const gizmoHit = hitTranslateGizmo(c, cam, w, h, mx, my, HANDLE + 1);
     if (gizmoHit) return gizmoHit;
-    if (!KINDS[obj.kind].fixed) {
-      for (let i = 0; i < 8; i++) {
-        const cw = cornerWorld(obj, i);
-        const pr = projectPoint(cw, cam, w, h);
-        if (!pr.ok) continue;
-        if (Math.hypot(mx - pr.sx, my - pr.sy) < HANDLE) {
-          return { kind: "scale", corner: BOX_CORNERS[i], world: cw };
-        }
-      }
-    }
     return null;
   }
 
@@ -8096,6 +8154,10 @@ class LayoutView {
       for (const e of g.edges) {
         this.#line3(ctx, g.verts[e.a], g.verts[e.b], cam, w, h);
       }
+    } else if (obj.kind === "slope") {
+      for (const seg of rampSegments(obj)) {
+        this.#line3(ctx, seg.a, seg.b, cam, w, h);
+      }
     } else {
       if (isGhostKind(obj.kind)) ctx.setLineDash([5, 4]);
       for (const [i, j] of BOX_EDGES) {
@@ -8145,12 +8207,6 @@ class LayoutView {
     const c = aabbCenter(obj);
     drawTranslateGizmo(ctx, c, cam, w, h, { hoverGizmo: this.hoverGizmo, drag: this.drag });
     if (KINDS[obj.kind].fixed) return;
-    ctx.fillStyle = "#f2d36b";
-    for (let i = 0; i < 8; i++) {
-      const pr = projectPoint(cornerWorld(obj, i), cam, w, h);
-      if (!pr.ok) continue;
-      ctx.fillRect(pr.sx - 3, pr.sy - 3, 6, 6);
-    }
     ctx.fillStyle = "#7ec8e8";
     const handles = obj.kind === "room" ? roomGeometry(obj).handles : this.#aabbFaceHandles(obj);
     for (const handle of handles) {

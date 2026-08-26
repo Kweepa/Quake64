@@ -126,8 +126,10 @@ h2 {
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 0.75rem;
+  overflow-x: hidden;
   overflow-y: auto;
   min-height: 0;
+  min-width: 0;
 }
 
 .right {
@@ -142,6 +144,8 @@ h2 {
 .right-editors {
   flex: 1;
   min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -205,10 +209,12 @@ h2 {
   list-style: none;
   margin: 0;
   padding: 0;
+  column-count: 2;
+  column-gap: 0.5rem;
 }
 
-.export-clip-list li,
-.weapon-frame-list li {
+.export-clip-list li {
+  break-inside: avoid;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -224,13 +230,33 @@ h2 {
   padding: 0.45rem 0 0.15rem;
 }
 
+.weapon-frame-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  font-size: 0.8rem;
+}
+
+.weapon-frame-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.15rem 0;
+  font-size: 0.8rem;
+}
+
 .export-clip-list button.frame-name,
 .weapon-frame-list button.frame-name {
   flex: 1;
+  min-width: 0;
   text-align: left;
   background: transparent;
   border: none;
   padding: 0.15rem 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .export-clip-list button.frame-name.current,
@@ -368,6 +394,10 @@ button.danger {
 button:disabled {
   opacity: 0.45;
   cursor: default;
+}
+
+#draw-mode-group.inactive button {
+  pointer-events: none;
 }
 
 .item-palette {
@@ -684,6 +714,11 @@ button:disabled {
   margin-top: 0.35rem;
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
+  min-width: 0;
+}
+
+.quake-source .muted {
+  overflow-wrap: anywhere;
 }
 
 .quake-source .field input[type="range"] {
@@ -701,9 +736,10 @@ button:disabled {
   list-style: none;
   margin: 0.4rem 0 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 0.35rem;
+  row-gap: 2px;
 }
 
 .joint-row {

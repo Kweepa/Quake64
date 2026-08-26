@@ -18,6 +18,7 @@ import {
 const AXIS_LEN = 8;
 const AXIS_HIT = 9;
 const ANIM_BOX_CLICK = 4;
+const ANIM_ZOOM_K = 0.008;
 function clampAnimDist(d) {
   return Math.max(ANIM_ORBIT_DIST_MIN, Math.min(ANIM_ORBIT_DIST_MAX, d));
 }
@@ -52,6 +53,7 @@ export class AnimView {
   }
 
   resize() {
+    if (!this.enabled) return;
     const stage = this.opts.stage || this.canvas.parentElement;
     const rect = stage.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);

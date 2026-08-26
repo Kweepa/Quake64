@@ -42500,7 +42500,16 @@
           []
         ]
       },
-      "lodZ": 4
+      "lodZ": 4,
+      "exportClips": [
+        "stand",
+        "walk",
+        "run",
+        "atta",
+        "attb",
+        "attc",
+        "paina"
+      ]
     }
   ],
   "weapons": {

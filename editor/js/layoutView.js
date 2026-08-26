@@ -100,6 +100,7 @@ export class LayoutView {
   }
 
   resize() {
+    if (!this.enabled) return;
     const stage = this.opts.stage || this.canvas.parentElement;
     const rect = stage.getBoundingClientRect();
     const dpr = Math.min(2, window.devicePixelRatio || 1);

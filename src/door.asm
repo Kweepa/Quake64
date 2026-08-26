@@ -402,7 +402,8 @@ door_portal_ok
 	rts
 
 ; ------------------------------------------------------------------
-; try_room_switch — if an unlocked door's other room contains the player, switch
+; try_room_switch — cross an unlocked door hole of room_idx into the other
+; room (XZ left current, inside other). Never probes unrelated rooms.
 ; C=1 if room_idx changed
 ; ------------------------------------------------------------------
 try_room_switch
@@ -412,36 +413,35 @@ try_room_switch
 	bcs .trs_no
 	jsr door_unlocked
 	bcc .trs_n
-	+ldy_mx door_ra
-	jsr .trs_inside
-	bcs .trs_yes
-	+ldy_mx door_rb
-	jsr .trs_inside
-	bcs .trs_yes
+	+lda_mx door_ra
+	cmp room_idx
+	beq .trs_chk
+	+lda_mx door_rb
+	cmp room_idx
+	bne .trs_n
+.trs_chk
+	jsr door_hole_hit
+	bcc .trs_n
+	lda cam_xh
+	sta col_x
+	lda cam_zh
+	sta col_z
+	ldy room_idx
+	jsr col_in_room_y
+	bcs .trs_n			; still in visible room
+	jsr door_other_room
+	tay
+	jsr col_in_room_y
+	bcc .trs_n
+	tya
+	jsr set_room_idx
+	sec
+	rts
 .trs_n
 	inx
 	beq .trs_no
 	jmp .trs
 .trs_no
-	clc
-	rts
-.trs_yes
-	sec
-	rts
-.trs_inside
-	cpy room_idx
-	beq .trs_in_no
-	lda cam_xh
-	sta col_x
-	lda cam_zh
-	sta col_z
-	jsr col_in_room_y
-	bcc .trs_in_no
-	tya
-	jsr set_room_idx
-	sec
-	rts
-.trs_in_no
 	clc
 	rts
 

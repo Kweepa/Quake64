@@ -378,12 +378,15 @@ function persistMdlRigBackup() {
   const out = { ...(mdlRigBackupRaw() || {}) };
   for (const e of doc.enemies || []) {
     const jv = e.mdlRig?.jointVerts;
-    if (!Array.isArray(jv) || !jv.some((list) => list.length)) continue;
+    if (!Array.isArray(jv) || !jv.some((list) => list.length)) {
+      delete out[e.name];
+      continue;
+    }
     out[e.name] = jv.map((list) => [...list]);
   }
-  if (!Object.keys(out).length) return;
   try {
-    localStorage.setItem(MDL_RIG_BACKUP_KEY, JSON.stringify(out));
+    if (!Object.keys(out).length) localStorage.removeItem(MDL_RIG_BACKUP_KEY);
+    else localStorage.setItem(MDL_RIG_BACKUP_KEY, JSON.stringify(out));
   } catch {
     /* private mode / quota */
   }
@@ -575,6 +578,7 @@ async function saveNow(okMsg = "Saved") {
       return;
     }
     markClean();
+    persistMdlRigBackup();
     setStatus(`${okMsg} ${docFileName()}`);
   } catch (err) {
     setStatus(String(err.message || err), true);
@@ -2593,7 +2597,6 @@ document.addEventListener("visibilitychange", () => {
 
 function applyLoadedDoc(loaded) {
   doc = normalizeDocument(loaded);
-  restoreMdlRigBackup();
   persistMdlRigBackup();
   const stored = loadEditorSettings(docFileName());
   applyEditorState(stored || loaded.editor || doc.editor);

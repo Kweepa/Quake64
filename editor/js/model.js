@@ -1,6 +1,7 @@
 import {
   ROOM_SHAPES,
   clampRoomShape,
+  clampQuarter,
   clampRoomSplits,
   applyRoomShape,
   roomGeometry,
@@ -23,6 +24,7 @@ import {
 export {
   ROOM_SHAPES,
   clampRoomShape,
+  clampQuarter,
   clampRoomSplits,
   applyRoomShape,
   roomGeometry,
@@ -1082,6 +1084,226 @@ export function aabbOverlap(a, b) {
     a.y + a.sy >= b.y &&
     a.z <= b.z + b.sz &&
     a.z + a.sz >= b.z
+  );
+}
+
+/** Interior volume overlap only; face-touch is OK. */
+export function aabbStrictOverlap(a, b) {
+  return (
+    a.x < b.x + b.sx &&
+    a.x + a.sx > b.x &&
+    a.y < b.y + b.sy &&
+    a.y + a.sy > b.y &&
+    a.z < b.z + b.sz &&
+    a.z + a.sz > b.z
+  );
+}
+
+/** +90° Y face map matching rot90({x:z,y:y,z:-x}). */
+const FACE_Y_PLUS = { "+z": "+x", "+x": "-z", "-z": "-x", "-x": "+z" };
+
+/** Rotate AABB footprint around pivot in XZ by delta quarter-turns (Y). */
+export function rotateAabbYAround(obj, pivotX, pivotZ, delta) {
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  for (let i = 0; i < steps; i++) {
+    const sx = obj.sx | 0;
+    const sz = obj.sz | 0;
+    const ox = (obj.x | 0) + sx / 2;
+    const oz = (obj.z | 0) + sz / 2;
+    const dx = ox - pivotX;
+    const dz = oz - pivotZ;
+    obj.sx = sz;
+    obj.sz = sx;
+    obj.x = Math.round(pivotX + dz - obj.sx / 2);
+    obj.z = Math.round(pivotZ - dx - obj.sz / 2);
+  }
+  return obj;
+}
+
+function rotateSlopeOrientY(obj, delta) {
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  for (let i = 0; i < steps; i++) {
+    if (obj.axis === "z" && obj.dir === 1) {
+      obj.axis = "x";
+      obj.dir = 1;
+    } else if (obj.axis === "x" && obj.dir === 1) {
+      obj.axis = "z";
+      obj.dir = -1;
+    } else if (obj.axis === "z" && obj.dir === -1) {
+      obj.axis = "x";
+      obj.dir = -1;
+    } else {
+      obj.axis = "z";
+      obj.dir = 1;
+    }
+  }
+  return obj;
+}
+
+/** Facing / slope / figure yaw for +delta Y quarter-turns. */
+export function applyYawQuarterMeta(obj, delta) {
+  if (!obj) return obj;
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  if (!steps) return obj;
+  if (obj.kind === "enemy" || obj.kind === "spawn" || obj.kind === "teleporter_dest") {
+    obj.rot = clampEnemyRot((obj.rot | 0) + 2 * steps);
+  }
+  if (obj.kind === "doorway" || obj.kind === "switch") {
+    for (let i = 0; i < steps; i++) {
+      obj.face = FACE_Y_PLUS[obj.face] || "+z";
+    }
+  }
+  if (obj.kind === "slope") rotateSlopeOrientY(obj, steps);
+  return obj;
+}
+
+function objectsOwnedByRoom(doc, roomId) {
+  const out = [];
+  for (const obj of activeMap(doc).objects) {
+    if (obj.kind === "room") continue;
+    if (obj.kind === "doorway") {
+      if (obj.roomId === roomId || obj.otherRoomId === roomId) out.push(obj);
+      continue;
+    }
+    if (obj.roomId === roomId) out.push(obj);
+  }
+  return out;
+}
+
+function resnapRoomAttachments(doc, objs) {
+  for (const obj of objs) {
+    if (obj.kind === "doorway") {
+      assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
+      clampObject(obj);
+    } else if (obj.kind === "switch") {
+      snapSwitchToRoom(obj, roomById(doc, obj.roomId));
+      clampObject(obj);
+    }
+  }
+}
+
+/** Rigid Y rotate room AABB/orient and transform owned contents + doorways. */
+export function rotateRoomY(doc, room, delta = 1) {
+  if (!room || room.kind !== "room") return room;
+  const d = delta | 0;
+  if (!d) return room;
+  const c = aabbCenter(room);
+  rotateRoom(room, "y", d);
+  const owned = objectsOwnedByRoom(doc, room.id);
+  for (const obj of owned) {
+    rotateAabbYAround(obj, c.x, c.z, d);
+    applyYawQuarterMeta(obj, d);
+    clampObject(obj);
+  }
+  clampObject(room);
+  resnapRoomAttachments(doc, owned);
+  return room;
+}
+
+function translatedRoomBox(room, dx, dz) {
+  return {
+    x: (room.x | 0) + dx,
+    y: room.y | 0,
+    z: (room.z | 0) + dz,
+    sx: room.sx | 0,
+    sy: room.sy | 0,
+    sz: room.sz | 0,
+  };
+}
+
+function blockFitsAt(rooms, outsiders, dx, dz) {
+  for (const r of rooms) {
+    const box = translatedRoomBox(r, dx, dz);
+    if (box.x < WORLD_MIN || box.z < WORLD_MIN) return false;
+    if (box.x + box.sx > WORLD_SIZE || box.z + box.sz > WORLD_SIZE) return false;
+    if (box.y < WORLD_MIN || box.y + box.sy > WORLD_SIZE) return false;
+    for (const o of outsiders) {
+      if (aabbStrictOverlap(box, o)) return false;
+    }
+  }
+  return true;
+}
+
+/** Smallest |dx|+|dz| translation (spiral) so rooms clear outsiders; face-touch OK. */
+export function findFreeRoomTranslation(rooms, outsiders) {
+  if (blockFitsAt(rooms, outsiders, 0, 0)) return { dx: 0, dz: 0 };
+  const maxR = WORLD_SIZE;
+  for (let rad = 1; rad < maxR; rad++) {
+    for (let dx = -rad; dx <= rad; dx++) {
+      for (const dz of [-rad, rad]) {
+        if (blockFitsAt(rooms, outsiders, dx, dz)) return { dx, dz };
+      }
+    }
+    for (let dz = -rad + 1; dz <= rad - 1; dz++) {
+      for (const dx of [-rad, rad]) {
+        if (blockFitsAt(rooms, outsiders, dx, dz)) return { dx, dz };
+      }
+    }
+  }
+  return { dx: 0, dz: 0 };
+}
+
+/**
+ * Pivot selected rooms (+ contents + internal doors) 90° about Y around union center.
+ * If the result overlaps outsiders, translate the set to a free spot when possible.
+ */
+export function rotateRoomsBlockY(doc, roomIds, delta = 1) {
+  const d = delta | 0;
+  if (!d) return;
+  const idSet = new Set((roomIds || []).map(String));
+  const rooms = roomsOf(doc).filter((r) => idSet.has(String(r.id)));
+  if (rooms.length < 2) return;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const r of rooms) {
+    minX = Math.min(minX, r.x | 0);
+    maxX = Math.max(maxX, (r.x | 0) + (r.sx | 0));
+    minZ = Math.min(minZ, r.z | 0);
+    maxZ = Math.max(maxZ, (r.z | 0) + (r.sz | 0));
+  }
+  const pivotX = (minX + maxX) / 2;
+  const pivotZ = (minZ + maxZ) / 2;
+
+  const moving = [];
+  for (const obj of activeMap(doc).objects) {
+    if (obj.kind === "room") {
+      if (idSet.has(String(obj.id))) moving.push(obj);
+      continue;
+    }
+    if (obj.kind === "doorway") {
+      if (idSet.has(String(obj.roomId)) && idSet.has(String(obj.otherRoomId))) moving.push(obj);
+      continue;
+    }
+    if (obj.roomId != null && idSet.has(String(obj.roomId))) moving.push(obj);
+  }
+
+  for (const obj of moving) {
+    rotateAabbYAround(obj, pivotX, pivotZ, d);
+    if (obj.kind === "room") {
+      const steps = ((d % 4) + 4) % 4;
+      obj.ry = clampQuarter((obj.ry | 0) + steps);
+      clampRoomSplits(obj);
+    } else {
+      applyYawQuarterMeta(obj, d);
+    }
+  }
+
+  const outsiders = roomsOf(doc).filter((r) => !idSet.has(String(r.id)));
+  const { dx, dz } = findFreeRoomTranslation(rooms, outsiders);
+  if (dx || dz) {
+    for (const obj of moving) {
+      obj.x = (obj.x | 0) + dx;
+      obj.z = (obj.z | 0) + dz;
+    }
+  }
+
+  for (const obj of moving) clampObject(obj);
+  resnapRoomAttachments(
+    doc,
+    moving.filter((o) => o.kind === "doorway" || o.kind === "switch")
   );
 }
 

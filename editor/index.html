@@ -2029,9 +2029,46 @@ function snapSwitchToRoom(sw, room) {
   return snapBoxToHullFace(sw, f, SWITCH_SIZE, true);
 }
 
+/** Permute AABB sizes for one +90° about axis and re-anchor around AABB center. */
+function permuteRoomAabb(room, axis) {
+  const x = room.x | 0;
+  const y = room.y | 0;
+  const z = room.z | 0;
+  const sx = room.sx | 0;
+  const sy = room.sy | 0;
+  const sz = room.sz | 0;
+  if (axis === "y") {
+    const cx = x + sx / 2;
+    const cz = z + sz / 2;
+    room.sx = sz;
+    room.sz = sx;
+    room.x = Math.round(cx - room.sx / 2);
+    room.z = Math.round(cz - room.sz / 2);
+  } else if (axis === "x") {
+    const cy = y + sy / 2;
+    const cz = z + sz / 2;
+    room.sy = sz;
+    room.sz = sy;
+    room.y = Math.round(cy - room.sy / 2);
+    room.z = Math.round(cz - room.sz / 2);
+  } else {
+    const cx = x + sx / 2;
+    const cy = y + sy / 2;
+    room.sx = sy;
+    room.sy = sx;
+    room.x = Math.round(cx - room.sx / 2);
+    room.y = Math.round(cy - room.sy / 2);
+  }
+}
+
+/** Quarter-turn room orient + rigid AABB so UV footprint is not stretched. */
 function rotateRoom(room, axis, delta) {
   const key = axis === "x" ? "rx" : axis === "y" ? "ry" : "rz";
-  room[key] = clampQuarter((room[key] | 0) + delta);
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  for (let i = 0; i < steps; i++) {
+    room[key] = clampQuarter((room[key] | 0) + 1);
+    permuteRoomAabb(room, axis);
+  }
   return clampRoomSplits(room);
 }
 
@@ -3081,6 +3118,226 @@ function aabbOverlap(a, b) {
   );
 }
 
+/** Interior volume overlap only; face-touch is OK. */
+function aabbStrictOverlap(a, b) {
+  return (
+    a.x < b.x + b.sx &&
+    a.x + a.sx > b.x &&
+    a.y < b.y + b.sy &&
+    a.y + a.sy > b.y &&
+    a.z < b.z + b.sz &&
+    a.z + a.sz > b.z
+  );
+}
+
+/** +90° Y face map matching rot90({x:z,y:y,z:-x}). */
+const FACE_Y_PLUS = { "+z": "+x", "+x": "-z", "-z": "-x", "-x": "+z" };
+
+/** Rotate AABB footprint around pivot in XZ by delta quarter-turns (Y). */
+function rotateAabbYAround(obj, pivotX, pivotZ, delta) {
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  for (let i = 0; i < steps; i++) {
+    const sx = obj.sx | 0;
+    const sz = obj.sz | 0;
+    const ox = (obj.x | 0) + sx / 2;
+    const oz = (obj.z | 0) + sz / 2;
+    const dx = ox - pivotX;
+    const dz = oz - pivotZ;
+    obj.sx = sz;
+    obj.sz = sx;
+    obj.x = Math.round(pivotX + dz - obj.sx / 2);
+    obj.z = Math.round(pivotZ - dx - obj.sz / 2);
+  }
+  return obj;
+}
+
+function rotateSlopeOrientY(obj, delta) {
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  for (let i = 0; i < steps; i++) {
+    if (obj.axis === "z" && obj.dir === 1) {
+      obj.axis = "x";
+      obj.dir = 1;
+    } else if (obj.axis === "x" && obj.dir === 1) {
+      obj.axis = "z";
+      obj.dir = -1;
+    } else if (obj.axis === "z" && obj.dir === -1) {
+      obj.axis = "x";
+      obj.dir = -1;
+    } else {
+      obj.axis = "z";
+      obj.dir = 1;
+    }
+  }
+  return obj;
+}
+
+/** Facing / slope / figure yaw for +delta Y quarter-turns. */
+function applyYawQuarterMeta(obj, delta) {
+  if (!obj) return obj;
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  if (!steps) return obj;
+  if (obj.kind === "enemy" || obj.kind === "spawn" || obj.kind === "teleporter_dest") {
+    obj.rot = clampEnemyRot((obj.rot | 0) + 2 * steps);
+  }
+  if (obj.kind === "doorway" || obj.kind === "switch") {
+    for (let i = 0; i < steps; i++) {
+      obj.face = FACE_Y_PLUS[obj.face] || "+z";
+    }
+  }
+  if (obj.kind === "slope") rotateSlopeOrientY(obj, steps);
+  return obj;
+}
+
+function objectsOwnedByRoom(doc, roomId) {
+  const out = [];
+  for (const obj of activeMap(doc).objects) {
+    if (obj.kind === "room") continue;
+    if (obj.kind === "doorway") {
+      if (obj.roomId === roomId || obj.otherRoomId === roomId) out.push(obj);
+      continue;
+    }
+    if (obj.roomId === roomId) out.push(obj);
+  }
+  return out;
+}
+
+function resnapRoomAttachments(doc, objs) {
+  for (const obj of objs) {
+    if (obj.kind === "doorway") {
+      assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
+      clampObject(obj);
+    } else if (obj.kind === "switch") {
+      snapSwitchToRoom(obj, roomById(doc, obj.roomId));
+      clampObject(obj);
+    }
+  }
+}
+
+/** Rigid Y rotate room AABB/orient and transform owned contents + doorways. */
+function rotateRoomY(doc, room, delta = 1) {
+  if (!room || room.kind !== "room") return room;
+  const d = delta | 0;
+  if (!d) return room;
+  const c = aabbCenter(room);
+  rotateRoom(room, "y", d);
+  const owned = objectsOwnedByRoom(doc, room.id);
+  for (const obj of owned) {
+    rotateAabbYAround(obj, c.x, c.z, d);
+    applyYawQuarterMeta(obj, d);
+    clampObject(obj);
+  }
+  clampObject(room);
+  resnapRoomAttachments(doc, owned);
+  return room;
+}
+
+function translatedRoomBox(room, dx, dz) {
+  return {
+    x: (room.x | 0) + dx,
+    y: room.y | 0,
+    z: (room.z | 0) + dz,
+    sx: room.sx | 0,
+    sy: room.sy | 0,
+    sz: room.sz | 0,
+  };
+}
+
+function blockFitsAt(rooms, outsiders, dx, dz) {
+  for (const r of rooms) {
+    const box = translatedRoomBox(r, dx, dz);
+    if (box.x < WORLD_MIN || box.z < WORLD_MIN) return false;
+    if (box.x + box.sx > WORLD_SIZE || box.z + box.sz > WORLD_SIZE) return false;
+    if (box.y < WORLD_MIN || box.y + box.sy > WORLD_SIZE) return false;
+    for (const o of outsiders) {
+      if (aabbStrictOverlap(box, o)) return false;
+    }
+  }
+  return true;
+}
+
+/** Smallest |dx|+|dz| translation (spiral) so rooms clear outsiders; face-touch OK. */
+function findFreeRoomTranslation(rooms, outsiders) {
+  if (blockFitsAt(rooms, outsiders, 0, 0)) return { dx: 0, dz: 0 };
+  const maxR = WORLD_SIZE;
+  for (let rad = 1; rad < maxR; rad++) {
+    for (let dx = -rad; dx <= rad; dx++) {
+      for (const dz of [-rad, rad]) {
+        if (blockFitsAt(rooms, outsiders, dx, dz)) return { dx, dz };
+      }
+    }
+    for (let dz = -rad + 1; dz <= rad - 1; dz++) {
+      for (const dx of [-rad, rad]) {
+        if (blockFitsAt(rooms, outsiders, dx, dz)) return { dx, dz };
+      }
+    }
+  }
+  return { dx: 0, dz: 0 };
+}
+
+/**
+ * Pivot selected rooms (+ contents + internal doors) 90° about Y around union center.
+ * If the result overlaps outsiders, translate the set to a free spot when possible.
+ */
+function rotateRoomsBlockY(doc, roomIds, delta = 1) {
+  const d = delta | 0;
+  if (!d) return;
+  const idSet = new Set((roomIds || []).map(String));
+  const rooms = roomsOf(doc).filter((r) => idSet.has(String(r.id)));
+  if (rooms.length < 2) return;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const r of rooms) {
+    minX = Math.min(minX, r.x | 0);
+    maxX = Math.max(maxX, (r.x | 0) + (r.sx | 0));
+    minZ = Math.min(minZ, r.z | 0);
+    maxZ = Math.max(maxZ, (r.z | 0) + (r.sz | 0));
+  }
+  const pivotX = (minX + maxX) / 2;
+  const pivotZ = (minZ + maxZ) / 2;
+
+  const moving = [];
+  for (const obj of activeMap(doc).objects) {
+    if (obj.kind === "room") {
+      if (idSet.has(String(obj.id))) moving.push(obj);
+      continue;
+    }
+    if (obj.kind === "doorway") {
+      if (idSet.has(String(obj.roomId)) && idSet.has(String(obj.otherRoomId))) moving.push(obj);
+      continue;
+    }
+    if (obj.roomId != null && idSet.has(String(obj.roomId))) moving.push(obj);
+  }
+
+  for (const obj of moving) {
+    rotateAabbYAround(obj, pivotX, pivotZ, d);
+    if (obj.kind === "room") {
+      const steps = ((d % 4) + 4) % 4;
+      obj.ry = clampQuarter((obj.ry | 0) + steps);
+      clampRoomSplits(obj);
+    } else {
+      applyYawQuarterMeta(obj, d);
+    }
+  }
+
+  const outsiders = roomsOf(doc).filter((r) => !idSet.has(String(r.id)));
+  const { dx, dz } = findFreeRoomTranslation(rooms, outsiders);
+  if (dx || dz) {
+    for (const obj of moving) {
+      obj.x = (obj.x | 0) + dx;
+      obj.z = (obj.z | 0) + dz;
+    }
+  }
+
+  for (const obj of moving) clampObject(obj);
+  resnapRoomAttachments(
+    doc,
+    moving.filter((o) => o.kind === "doorway" || o.kind === "switch")
+  );
+}
+
 function pointInAabb(p, box) {
   return (
     p.x >= box.x &&
@@ -3379,7 +3636,7 @@ const ROLE_CLIPS = {
     alert: ["stand", 2],
     run: ["run"],
     walk: ["walk"],
-    attack: ["leap"],
+    attack: ["leap", "attack"],
   },
   Scrag: {
     stand: ["hover"],
@@ -3460,6 +3717,7 @@ function findPoseClip(clips, ...names) {
 }
 
 function findPoseRole(name, clips, role) {
+  if (role === "attack") return null;
   const spec = ROLE_CLIPS[name]?.[role];
   if (!spec) return null;
   const found = findPoseClip(clips, spec[0]);
@@ -3467,6 +3725,23 @@ function findPoseRole(name, clips, role) {
   let [start, length] = found;
   if (spec[1] != null) length = Math.min(length, spec[1]);
   return [start, length];
+}
+
+/** Attack ROLE candidates present in clips (export order), up to PAIN_MAX. */
+function findPoseAttackVariants(name, clips) {
+  const names = ROLE_CLIPS[name]?.attack || [];
+  const want = new Set(names.filter((n) => typeof n === "string").map(poseClipKey));
+  const out = [];
+  for (const c of clips) {
+    if (!want.has(poseClipKey(c.name))) continue;
+    out.push([c.start | 0, c.len | 0]);
+    if (out.length >= PAIN_MAX) break;
+  }
+  if (!out.length) {
+    const stand = findPoseClip(clips, "stand", "walk", "hover");
+    if (stand) out.push([stand[0], 1]);
+  }
+  return out;
 }
 
 function findPoseVariants(clips, kind) {
@@ -3586,11 +3861,10 @@ function packedPoseBytes(enemy, clips, frames) {
   );
   const covered = Array(nLogical).fill(false);
   const keep = new Set();
-  const atk = findPoseRole(name, clipList, "attack");
-  const fire = atk ? atk[0] + (FIRE_FRAME[typeI] ?? 2) : -1;
+  const fireOff = FIRE_FRAME[typeI] ?? 2;
 
   const ranges = [];
-  for (const role of ["stand", "alert", "run", "walk", "attack"]) {
+  for (const role of ["stand", "alert", "run", "walk"]) {
     const found = findPoseRole(name, clipList, role);
     if (!found) continue;
     let [start, length] = found;
@@ -3598,6 +3872,10 @@ function packedPoseBytes(enemy, clips, frames) {
     length = Math.min(length, nLogical - start);
     ranges.push([role, start, length]);
   }
+  findPoseAttackVariants(name, clipList).forEach(([start, length], i) => {
+    if (start >= nLogical || length <= 0) return;
+    ranges.push([`attack${i}`, start, Math.min(length, nLogical - start)]);
+  });
   for (const kind of ["pain", "death"]) {
     findPoseVariants(clipList, kind).forEach(([start, length], i) => {
       if (start >= nLogical || length <= 0) return;
@@ -3605,7 +3883,10 @@ function packedPoseBytes(enemy, clips, frames) {
     });
   }
   for (const [role, start, length] of ranges) {
-    const extra = role === "attack" && fire >= 0 ? [fire] : [];
+    const extra =
+      typeof role === "string" && role.startsWith("attack") && fireOff >= 0
+        ? [start + fireOff]
+        : [];
     for (const i of poseCadenceKeep(start, length, posePickKeys(frs, start, length, extra))) {
       keep.add(i);
     }
@@ -7729,6 +8010,78 @@ class AnimView {
     };
   }
 
+  /** Frame stick/MDL verts; if none, center on origin without changing dist. */
+  focusObject() {
+    let points = null;
+    if (this.#hasStick()) {
+      const enemy = this.opts.getEnemy();
+      const frame = this.opts.getFrame();
+      points = enemy?.frames?.[frame] || enemy?.frames?.[0] || null;
+    }
+    if (!points?.length) {
+      const overlay = this.#overlay();
+      points = overlay?.verts || null;
+    }
+    if (!points?.length) {
+      this.orbit.target = { x: 0, y: 0, z: 0 };
+      this.opts.onViewChanged?.();
+      this.draw();
+      return true;
+    }
+
+    let minx = Infinity;
+    let miny = Infinity;
+    let minz = Infinity;
+    let maxx = -Infinity;
+    let maxy = -Infinity;
+    let maxz = -Infinity;
+    for (const v of points) {
+      minx = Math.min(minx, v.x);
+      miny = Math.min(miny, v.y);
+      minz = Math.min(minz, v.z);
+      maxx = Math.max(maxx, v.x);
+      maxy = Math.max(maxy, v.y);
+      maxz = Math.max(maxz, v.z);
+    }
+    const box = {
+      x: minx,
+      y: miny,
+      z: minz,
+      sx: Math.max(1e-3, maxx - minx),
+      sy: Math.max(1e-3, maxy - miny),
+      sz: Math.max(1e-3, maxz - minz),
+    };
+    const center = aabbCenter(box);
+    const { yaw, pitch } = this.orbit;
+    const { forward, right, up } = lookVectors(yaw, pitch);
+    const w = this.cssW;
+    const h = this.cssH;
+    const focal = Math.min(w, h) * 0.9;
+    const pad = 0.82;
+    const halfW = Math.max(1, w * 0.5 * pad);
+    const halfH = Math.max(1, h * 0.5 * pad);
+
+    let frameDist = 4;
+    for (let i = 0; i < 8; i++) {
+      const c = cornerWorld(box, i);
+      const rx = c.x - center.x;
+      const ry = c.y - center.y;
+      const rz = c.z - center.z;
+      const cx = rx * right.x + ry * right.y + rz * right.z;
+      const cy = rx * up.x + ry * up.y + rz * up.z;
+      const cz = rx * forward.x + ry * forward.y + rz * forward.z;
+      frameDist = Math.max(frameDist, (Math.abs(cx) * focal) / halfW - cz);
+      frameDist = Math.max(frameDist, (Math.abs(cy) * focal) / halfH - cz);
+      frameDist = Math.max(frameDist, 1 - cz);
+    }
+
+    this.orbit.target = { x: center.x, y: center.y, z: center.z };
+    this.orbit.dist = clampAnimDist(frameDist);
+    this.opts.onViewChanged?.();
+    this.draw();
+    return true;
+  }
+
   #eventPos(e) {
     const rect = this.canvas.getBoundingClientRect();
     return {
@@ -8345,58 +8698,11 @@ class WeaponView {
     this.draw();
   }
 
-  #projectedVerts() {
-    const mdl = this.opts.getMdl?.();
-    if (!mdl) return [];
-    const verts = mdlQuakeVerts(mdl, this.opts.getPreviewFrame());
-    const scale = this.opts.getScale();
-    const pan = this.opts.getPan();
-    const out = [];
-    for (let i = 0; i < verts.length; i++) {
-      const p = projectViewVert(verts[i]);
-      if (!p.ok) continue;
-      const s = toSpritePos(p.sx, p.sy, scale, pan);
-      out.push({ i, x: s.x, y: s.y, v: verts[i] });
-    }
-    return out;
-  }
-
-  #hitVertCluster(mx, my) {
-    const layout = this.#layout();
-    const pts = this.#projectedVerts();
-    let best = -1;
-    let bestD = 10;
-    for (const p of pts) {
-      const c = this.#toCanvas(layout, p.x, p.y);
-      const d = Math.hypot(mx - c.x, my - c.y);
-      if (d < bestD) {
-        bestD = d;
-        best = p.i;
-      }
-    }
-    if (best < 0) return [];
-    const hit = pts.find((p) => p.i === best);
-    const hc = this.#toCanvas(layout, hit.x, hit.y);
-    const cluster = [];
-    for (const p of pts) {
-      const c = this.#toCanvas(layout, p.x, p.y);
-      if (Math.hypot(c.x - hc.x, c.y - hc.y) <= 4) cluster.push(p.i);
-    }
-    return cluster.sort((a, b) => a - b);
-  }
-
   #onDown(e) {
     if (!this.enabled) return;
     this.canvas.focus();
     if (e.button !== 0) return;
     const p = this.#eventPos(e);
-    const cluster = this.#hitVertCluster(p.x, p.y);
-    if (cluster.length) {
-      this.opts.onSelectVerts?.(cluster, e.shiftKey);
-      this.drag = { kind: "select" };
-      return;
-    }
-    if (!e.shiftKey) this.opts.onSelectVerts?.([], false);
     const pan = this.opts.getPan();
     this.opts.beginUndo?.();
     this.drag = { kind: "pan", last: p, pan: { x: pan.x, y: pan.y } };
@@ -8517,7 +8823,6 @@ class WeaponView {
       ctx.font = "13px Segoe UI, sans-serif";
       ctx.fillText("Open shareware (pak0.pak) to load view-models", 16, 28);
       this.drawPreview();
-      this.opts.onClipWarn?.(false);
       return;
     }
 
@@ -8532,28 +8837,8 @@ class WeaponView {
       const { segs } = projectedWeaponEdges(mdl, fi, scale, pan);
       this.#strokeSegs(ctx, layout, segs, ONION, 1);
     }
-    const { segs, clipped } = projectedWeaponEdges(mdl, current, scale, pan);
+    const { segs } = projectedWeaponEdges(mdl, current, scale, pan);
     this.#strokeSegs(ctx, layout, segs, CURRENT, 1.4);
-    this.opts.onClipWarn?.(clipped);
-
-    const selected = new Set(this.opts.getSelectedVerts?.() || []);
-    const pts = this.#projectedVerts();
-    ctx.font = "10px Segoe UI, sans-serif";
-    for (const p of pts) {
-      const c = this.#toCanvas(layout, p.x, p.y);
-      const on = selected.has(p.i);
-      ctx.fillStyle = on ? "#f0c040" : "rgba(180, 190, 210, 0.7)";
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, on ? 4.5 : 2.4, 0, Math.PI * 2);
-      ctx.fill();
-      if (on) {
-        ctx.strokeStyle = "#111";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillStyle = "#f0c040";
-        ctx.fillText(String(p.i), c.x + 6, c.y - 4);
-      }
-    }
 
     ctx.fillStyle = OVERLAY;
     ctx.font = "11px Segoe UI, sans-serif";
@@ -8883,6 +9168,69 @@ class ItemView {
       yaw,
       pitch,
     };
+  }
+
+  /** Frame mesh verts; if none, center on origin without changing dist. */
+  focusObject() {
+    const points = this.#mesh().verts;
+    if (!points?.length) {
+      this.orbit.target = { x: 0, y: 0, z: 0 };
+      this.opts.onViewChanged?.();
+      this.draw();
+      return true;
+    }
+
+    let minx = Infinity;
+    let miny = Infinity;
+    let minz = Infinity;
+    let maxx = -Infinity;
+    let maxy = -Infinity;
+    let maxz = -Infinity;
+    for (const v of points) {
+      minx = Math.min(minx, v.x);
+      miny = Math.min(miny, v.y);
+      minz = Math.min(minz, v.z);
+      maxx = Math.max(maxx, v.x);
+      maxy = Math.max(maxy, v.y);
+      maxz = Math.max(maxz, v.z);
+    }
+    const box = {
+      x: minx,
+      y: miny,
+      z: minz,
+      sx: Math.max(1e-3, maxx - minx),
+      sy: Math.max(1e-3, maxy - miny),
+      sz: Math.max(1e-3, maxz - minz),
+    };
+    const center = aabbCenter(box);
+    const { yaw, pitch } = this.orbit;
+    const { forward, right, up } = lookVectors(yaw, pitch);
+    const w = this.cssW;
+    const h = this.cssH;
+    const focal = Math.min(w, h) * 0.9;
+    const pad = 0.82;
+    const halfW = Math.max(1, w * 0.5 * pad);
+    const halfH = Math.max(1, h * 0.5 * pad);
+
+    let frameDist = 4;
+    for (let i = 0; i < 8; i++) {
+      const c = cornerWorld(box, i);
+      const rx = c.x - center.x;
+      const ry = c.y - center.y;
+      const rz = c.z - center.z;
+      const cx = rx * right.x + ry * right.y + rz * right.z;
+      const cy = rx * up.x + ry * up.y + rz * up.z;
+      const cz = rx * forward.x + ry * forward.y + rz * forward.z;
+      frameDist = Math.max(frameDist, (Math.abs(cx) * focal) / halfW - cz);
+      frameDist = Math.max(frameDist, (Math.abs(cy) * focal) / halfH - cz);
+      frameDist = Math.max(frameDist, 1 - cz);
+    }
+
+    this.orbit.target = { x: center.x, y: center.y, z: center.z };
+    this.orbit.dist = clampItemDist(frameDist);
+    this.opts.onViewChanged?.();
+    this.draw();
+    return true;
   }
 
   #eventPos(e) {
@@ -9348,10 +9696,6 @@ class ItemView {
     ];
     for (const [a, b] of cube) this.#strokeSeg(ctx, cam, w, h, a, b, "#252a35");
 
-    const o = { x: 0, y: 0, z: 0 };
-    this.#strokeSeg(ctx, cam, w, h, { x: lo, y: 0, z: 0 }, { x: hi, y: 0, z: 0 }, "#a66", 2);
-    this.#strokeSeg(ctx, cam, w, h, o, { x: 0, y: hi, z: 0 }, "#6a6", 2);
-    this.#strokeSeg(ctx, cam, w, h, { x: 0, y: 0, z: lo }, { x: 0, y: 0, z: hi }, "#66a", 2);
     this.#drawForwardArrow(ctx, cam, w, h);
 
     let shownVerts = this.selectedVerts;
@@ -9443,8 +9787,6 @@ let frameLocal = 0;
 let mdlScale = DEFAULT_MDL_SCALE;
 let weaponKey = "axe";
 let weaponFrame = 0;
-let weaponClipWarn = false;
-let weaponSelectedVerts = [];
 let itemMeshKey = "backpack";
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
@@ -9580,18 +9922,6 @@ const weaponView = new WeaponView(document.getElementById("view-canvas"), {
   },
   getPreviewFrame: () => weaponFrame,
   getOnionFrames: () => selectedWeaponFrames(),
-  getSelectedVerts: () => weaponSelectedVerts,
-  onSelectVerts: (indices, additive) => {
-    if (!indices.length) {
-      if (!additive) weaponSelectedVerts = [];
-    } else if (additive) {
-      const set = new Set(weaponSelectedVerts);
-      for (const i of indices) set.add(i);
-      weaponSelectedVerts = [...set].sort((a, b) => a - b);
-    } else weaponSelectedVerts = [...indices].sort((a, b) => a - b);
-    refreshPanels();
-    if (editorMode === "weapons") weaponView.draw();
-  },
   setScale: (v) => {
     doc.weapons.scale = clampWeaponScale(v);
     syncWeaponScaleInputs();
@@ -9607,10 +9937,6 @@ const weaponView = new WeaponView(document.getElementById("view-canvas"), {
   },
   onPanEnd: () => {
     refreshWeaponClipStatus();
-  },
-  onClipWarn: (clipped) => {
-    weaponClipWarn = !!clipped;
-    if (editorMode === "weapons") refreshWeaponClipStatus();
   },
 });
 
@@ -10037,12 +10363,12 @@ function setMode(mode) {
     mode === "layout"
       ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+LMB / Alt+MMB orbit · MMB pan · Alt+RMB zoom · F focus · G drop · gizmo moves selection · Del"
       : mode === "weapons"
-        ? "LMB vertex to inspect · Shift add · click empty clears · drag empty pans · wheel scale"
+        ? "LMB drag pans · wheel scale"
         : mode === "items"
-          ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
+          ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
           : bindJoint >= 0
-            ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-            : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+            ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
+            : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
@@ -10541,12 +10867,8 @@ function syncWeaponGlobalButtons() {
 function refreshWeaponClipStatus() {
   if (editorMode !== "weapons") return;
   if (!sharewareWeapons[weaponKey]) return;
-  if (weaponClipWarn) {
-    setStatus("Current frame leaves the 48×42 window — pan this weapon to fit", true);
-  } else {
-    const n = selectedWeaponFrames().length;
-    setStatus(`${WEAPON_LABELS[weaponKey]} · ${n} export frame${n === 1 ? "" : "s"}`);
-  }
+  const n = selectedWeaponFrames().length;
+  setStatus(`${WEAPON_LABELS[weaponKey]} · ${n} export frame${n === 1 ? "" : "s"}`);
 }
 
 function pixelsToPngBlob(pixels) {
@@ -10608,7 +10930,6 @@ function renderWeaponList() {
     if (key === weaponKey) btn.className = "active";
     btn.addEventListener("click", () => {
       weaponKey = key;
-      weaponSelectedVerts = [];
       clampWeaponPreviewFrame();
       markUi();
       refreshAll();
@@ -10666,110 +10987,6 @@ function renderWeaponInspector(root) {
       },
     ])
   );
-
-  if (mdl && weaponSelectedVerts.length) {
-    const vh = document.createElement("h2");
-    vh.textContent = "Vertex";
-    root.appendChild(vh);
-    const verts = mdlQuakeVerts(mdl, weaponFrame);
-    const packed = mdl.frames[weaponFrame]?.verts;
-    const fmt = (n) => (Number.isFinite(n) ? n.toFixed(4) : "—");
-    const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-    for (const i of weaponSelectedVerts) {
-      const v = verts[i];
-      const box = document.createElement("div");
-      box.className = "weapon-vert-info";
-      const title = document.createElement("p");
-      title.textContent = `Index ${i}`;
-      box.appendChild(title);
-      if (v) {
-        const xyz = document.createElement("p");
-        xyz.className = "muted";
-        xyz.textContent = `Quake XYZ  ${fmt(v.x)}  ${fmt(v.y)}  ${fmt(v.z)}`;
-        box.appendChild(xyz);
-      }
-      if (packed && i * 3 + 2 < packed.length) {
-        const pk = document.createElement("p");
-        pk.className = "muted";
-        pk.textContent = `Packed  ${packed[i * 3]}  ${packed[i * 3 + 1]}  ${packed[i * 3 + 2]}`;
-        box.appendChild(pk);
-      }
-      const twins = [];
-      if (v) {
-        for (let j = 0; j < verts.length; j++) {
-          if (j === i) continue;
-          if (dist3(v, verts[j]) <= 1e-4) twins.push(j);
-        }
-      }
-      const tw = document.createElement("p");
-      tw.className = "muted";
-      tw.textContent = twins.length ? `Same position as  ${twins.join(", ")}` : "No coincident verts";
-      box.appendChild(tw);
-      root.appendChild(box);
-    }
-    if (weaponSelectedVerts.length === 2) {
-      const a = verts[weaponSelectedVerts[0]];
-      const b = verts[weaponSelectedVerts[1]];
-      if (a && b) {
-        const d = document.createElement("p");
-        d.className = "muted";
-        d.textContent = `Distance  ${fmt(dist3(a, b))}`;
-        root.appendChild(d);
-      }
-    }
-    if (weaponSelectedVerts.length === 3) {
-      const pts = weaponSelectedVerts.map((i) => verts[i]);
-      if (pts.every(Boolean)) {
-        const n = inspectTriNormal(pts[0], pts[1], pts[2]);
-        const box = document.createElement("p");
-        box.className = "muted";
-        box.textContent = n
-          ? `Normal  ${fmt(n.x)}  ${fmt(n.y)}  ${fmt(n.z)}  (pair if n·n ≥ ${QUAD_COPLANAR_DOT})`
-          : "Normal  degenerate triangle";
-        root.appendChild(box);
-        const asTri = (mdl.tris || []).some((t) => {
-          const s = new Set(t);
-          return weaponSelectedVerts.every((i) => s.has(i));
-        });
-        const note = document.createElement("p");
-        note.className = "muted";
-        note.textContent = asTri ? "These indices are an MDL triangle" : "Not an MDL triangle (by index)";
-        root.appendChild(note);
-      }
-    }
-    if (weaponSelectedVerts.length === 4) {
-      const pts = weaponSelectedVerts.map((i) => verts[i]);
-      if (pts.every(Boolean)) {
-        const rest = weaponFrame === 0 ? verts : mdlQuakeVerts(mdl, 0);
-        const q = inspectQuadPair(mdl.tris, weaponSelectedVerts, rest, mdlEnsureQuads(mdl));
-        const box = document.createElement("div");
-        box.className = "weapon-vert-info";
-        if (!q || q.noModelPair) {
-          const p = document.createElement("p");
-          p.className = "muted";
-          p.textContent = "Not two MDL triangles sharing an edge";
-          box.appendChild(p);
-        } else {
-          const lines = [
-            `Shared edge  ${q.shared[0]}–${q.shared[1]}`,
-            `Normal score  n·n  ${fmt(q.coplanarDot)}  (need ≥ ${QUAD_COPLANAR_DOT})`,
-            `Plane error  ${fmt(q.planeRel)}  (need < ${QUAD_PLANE_REL})`,
-            `Parallel / trap  ${fmt(q.parallelMax)}  (score only)`,
-            `Convex  ${q.convex ? "yes" : "no"}`,
-            `Diagonal split  ${q.diagonal ? "yes" : "no"}`,
-            q.paired ? "Paired in mesh" : q.pass ? "Gates pass, not paired" : "Would not pair",
-          ];
-          for (const line of lines) {
-            const p = document.createElement("p");
-            p.className = "muted";
-            p.textContent = line;
-            box.appendChild(p);
-          }
-        }
-        root.appendChild(box);
-      }
-    }
-  }
 
   const fh = document.createElement("h2");
   fh.textContent = "Export frames";
@@ -11014,6 +11231,26 @@ function renderInspector() {
       del.textContent = "Delete";
       del.addEventListener("click", deleteSelected);
       row.append(dup, del);
+      const map = activeMap(doc);
+      const selectedRooms = selectedIds
+        .map((id) => map.objects.find((o) => o.id === id))
+        .filter((o) => o && o.kind === "room");
+      if (selectedRooms.length >= 2) {
+        const rotY = document.createElement("button");
+        rotY.type = "button";
+        rotY.textContent = "Rotate Y";
+        rotY.addEventListener("click", () => {
+          pushUndo();
+          rotateRoomsBlockY(
+            doc,
+            selectedRooms.map((r) => r.id),
+            1
+          );
+          markDirty();
+          refreshAll();
+        });
+        row.append(rotY);
+      }
       root.appendChild(row);
       return;
     }
@@ -11065,18 +11302,22 @@ function renderInspector() {
       shapeSel.addEventListener("change", () => apply(() => applyRoomShape(obj, shapeSel.value)));
       root.appendChild(field("Shape", shapeSel));
 
-      if (clampRoomShape(obj.shape) !== "box") {
-        const rotRow = document.createElement("div");
-        rotRow.className = "btn-row rot-axes";
-        for (const axis of ["x", "y", "z"]) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.textContent = axis.toUpperCase();
-          btn.addEventListener("click", () => apply(() => rotateRoom(obj, axis, 1)));
-          rotRow.append(btn);
-        }
-        root.appendChild(field("Rotate", rotRow));
+      const rotAxes = clampRoomShape(obj.shape) !== "box" ? ["x", "y", "z"] : ["y"];
+      const rotRow = document.createElement("div");
+      rotRow.className = "btn-row rot-axes";
+      for (const axis of rotAxes) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = axis.toUpperCase();
+        btn.addEventListener("click", () =>
+          apply(() => {
+            if (axis === "y") rotateRoomY(doc, obj, 1);
+            else rotateRoom(obj, axis, 1);
+          })
+        );
+        rotRow.append(btn);
       }
+      root.appendChild(field("Rotate", rotRow));
     }
     if (obj.kind === "enemy") {
       const sel = document.createElement("select");
@@ -11512,8 +11753,8 @@ function updateAnimHint() {
   if (!hint) return;
   hint.textContent =
     bindJoint >= 0
-      ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+      ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
+      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
 }
 
 function assignMeshVerts(indices, additive) {
@@ -12156,12 +12397,26 @@ window.addEventListener("keydown", (e) => {
       return;
     }
   }
-  if (e.key.toLowerCase() === "f" && editorMode === "layout") {
-    if (!e.ctrlKey && !e.metaKey && !e.altKey && selectedIds.length) {
-      e.preventDefault();
-      if (layoutView.focusSelection()) setStatus("Focused selection");
+  if (e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (editorMode === "layout") {
+      if (selectedIds.length) {
+        e.preventDefault();
+        if (layoutView.focusSelection()) setStatus("Focused selection");
+      }
+      return;
     }
-    return;
+    if (editorMode === "anim") {
+      e.preventDefault();
+      animView.focusObject();
+      setStatus("Focused object");
+      return;
+    }
+    if (editorMode === "items") {
+      e.preventDefault();
+      itemView.focusObject();
+      setStatus("Focused object");
+      return;
+    }
   }
   if (e.key.toLowerCase() === "r" && editorMode === "layout") {
     const obj = selectedObject();
@@ -12210,14 +12465,6 @@ window.addEventListener("keydown", (e) => {
     }
   }
   if (editorMode === "weapons") {
-    if (e.key === "Escape") {
-      if (weaponSelectedVerts.length) {
-        e.preventDefault();
-        weaponSelectedVerts = [];
-        refreshAll();
-        return;
-      }
-    }
     if (e.key === "[" || e.key === "," || e.key === "ArrowLeft") {
       e.preventDefault();
       stepWeaponFrame(-1);

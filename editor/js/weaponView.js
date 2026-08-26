@@ -3,9 +3,6 @@ import {
   WEAPON_SPRITE_W,
   projectedWeaponEdges,
   rasterWeaponFrame,
-  mdlQuakeVerts,
-  projectViewVert,
-  toSpritePos,
 } from "./mdl.js";
 
 const ONION = "rgba(180, 170, 140, 0.28)";
@@ -91,58 +88,11 @@ export class WeaponView {
     this.draw();
   }
 
-  #projectedVerts() {
-    const mdl = this.opts.getMdl?.();
-    if (!mdl) return [];
-    const verts = mdlQuakeVerts(mdl, this.opts.getPreviewFrame());
-    const scale = this.opts.getScale();
-    const pan = this.opts.getPan();
-    const out = [];
-    for (let i = 0; i < verts.length; i++) {
-      const p = projectViewVert(verts[i]);
-      if (!p.ok) continue;
-      const s = toSpritePos(p.sx, p.sy, scale, pan);
-      out.push({ i, x: s.x, y: s.y, v: verts[i] });
-    }
-    return out;
-  }
-
-  #hitVertCluster(mx, my) {
-    const layout = this.#layout();
-    const pts = this.#projectedVerts();
-    let best = -1;
-    let bestD = 10;
-    for (const p of pts) {
-      const c = this.#toCanvas(layout, p.x, p.y);
-      const d = Math.hypot(mx - c.x, my - c.y);
-      if (d < bestD) {
-        bestD = d;
-        best = p.i;
-      }
-    }
-    if (best < 0) return [];
-    const hit = pts.find((p) => p.i === best);
-    const hc = this.#toCanvas(layout, hit.x, hit.y);
-    const cluster = [];
-    for (const p of pts) {
-      const c = this.#toCanvas(layout, p.x, p.y);
-      if (Math.hypot(c.x - hc.x, c.y - hc.y) <= 4) cluster.push(p.i);
-    }
-    return cluster.sort((a, b) => a - b);
-  }
-
   #onDown(e) {
     if (!this.enabled) return;
     this.canvas.focus();
     if (e.button !== 0) return;
     const p = this.#eventPos(e);
-    const cluster = this.#hitVertCluster(p.x, p.y);
-    if (cluster.length) {
-      this.opts.onSelectVerts?.(cluster, e.shiftKey);
-      this.drag = { kind: "select" };
-      return;
-    }
-    if (!e.shiftKey) this.opts.onSelectVerts?.([], false);
     const pan = this.opts.getPan();
     this.opts.beginUndo?.();
     this.drag = { kind: "pan", last: p, pan: { x: pan.x, y: pan.y } };
@@ -263,7 +213,6 @@ export class WeaponView {
       ctx.font = "13px Segoe UI, sans-serif";
       ctx.fillText("Open shareware (pak0.pak) to load view-models", 16, 28);
       this.drawPreview();
-      this.opts.onClipWarn?.(false);
       return;
     }
 
@@ -278,28 +227,8 @@ export class WeaponView {
       const { segs } = projectedWeaponEdges(mdl, fi, scale, pan);
       this.#strokeSegs(ctx, layout, segs, ONION, 1);
     }
-    const { segs, clipped } = projectedWeaponEdges(mdl, current, scale, pan);
+    const { segs } = projectedWeaponEdges(mdl, current, scale, pan);
     this.#strokeSegs(ctx, layout, segs, CURRENT, 1.4);
-    this.opts.onClipWarn?.(clipped);
-
-    const selected = new Set(this.opts.getSelectedVerts?.() || []);
-    const pts = this.#projectedVerts();
-    ctx.font = "10px Segoe UI, sans-serif";
-    for (const p of pts) {
-      const c = this.#toCanvas(layout, p.x, p.y);
-      const on = selected.has(p.i);
-      ctx.fillStyle = on ? "#f0c040" : "rgba(180, 190, 210, 0.7)";
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, on ? 4.5 : 2.4, 0, Math.PI * 2);
-      ctx.fill();
-      if (on) {
-        ctx.strokeStyle = "#111";
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillStyle = "#f0c040";
-        ctx.fillText(String(p.i), c.x + 6, c.y - 4);
-      }
-    }
 
     ctx.fillStyle = OVERLAY;
     ctx.font = "11px Segoe UI, sans-serif";

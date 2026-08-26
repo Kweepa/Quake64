@@ -79,6 +79,8 @@ import {
   ROOM_SHAPES,
   applyRoomShape,
   rotateRoom,
+  rotateRoomY,
+  rotateRoomsBlockY,
   roomFloorY,
   clampRoomShape,
   parseEditorState,
@@ -118,12 +120,6 @@ import {
   WEAPON_MDL_PATHS,
   WEAPON_SPRITE_W,
   WEAPON_SPRITE_H,
-  mdlQuakeVerts,
-  inspectTriNormal,
-  inspectQuadPair,
-  mdlEnsureQuads,
-  QUAD_COPLANAR_DOT,
-  QUAD_PLANE_REL,
 } from "./mdl.js";
 import { LayoutView } from "./layoutView.js";
 import { OverheadView } from "./overheadView.js";
@@ -173,8 +169,6 @@ let frameLocal = 0;
 let mdlScale = DEFAULT_MDL_SCALE;
 let weaponKey = "axe";
 let weaponFrame = 0;
-let weaponClipWarn = false;
-let weaponSelectedVerts = [];
 let itemMeshKey = "backpack";
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
@@ -310,18 +304,6 @@ const weaponView = new WeaponView(document.getElementById("view-canvas"), {
   },
   getPreviewFrame: () => weaponFrame,
   getOnionFrames: () => selectedWeaponFrames(),
-  getSelectedVerts: () => weaponSelectedVerts,
-  onSelectVerts: (indices, additive) => {
-    if (!indices.length) {
-      if (!additive) weaponSelectedVerts = [];
-    } else if (additive) {
-      const set = new Set(weaponSelectedVerts);
-      for (const i of indices) set.add(i);
-      weaponSelectedVerts = [...set].sort((a, b) => a - b);
-    } else weaponSelectedVerts = [...indices].sort((a, b) => a - b);
-    refreshPanels();
-    if (editorMode === "weapons") weaponView.draw();
-  },
   setScale: (v) => {
     doc.weapons.scale = clampWeaponScale(v);
     syncWeaponScaleInputs();
@@ -337,10 +319,6 @@ const weaponView = new WeaponView(document.getElementById("view-canvas"), {
   },
   onPanEnd: () => {
     refreshWeaponClipStatus();
-  },
-  onClipWarn: (clipped) => {
-    weaponClipWarn = !!clipped;
-    if (editorMode === "weapons") refreshWeaponClipStatus();
   },
 });
 
@@ -767,12 +745,12 @@ function setMode(mode) {
     mode === "layout"
       ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+LMB / Alt+MMB orbit · MMB pan · Alt+RMB zoom · F focus · G drop · gizmo moves selection · Del"
       : mode === "weapons"
-        ? "LMB vertex to inspect · Shift add · click empty clears · drag empty pans · wheel scale"
+        ? "LMB drag pans · wheel scale"
         : mode === "items"
-          ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
+          ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
           : bindJoint >= 0
-            ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-            : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+            ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
+            : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
@@ -1271,12 +1249,8 @@ function syncWeaponGlobalButtons() {
 function refreshWeaponClipStatus() {
   if (editorMode !== "weapons") return;
   if (!sharewareWeapons[weaponKey]) return;
-  if (weaponClipWarn) {
-    setStatus("Current frame leaves the 48×42 window — pan this weapon to fit", true);
-  } else {
-    const n = selectedWeaponFrames().length;
-    setStatus(`${WEAPON_LABELS[weaponKey]} · ${n} export frame${n === 1 ? "" : "s"}`);
-  }
+  const n = selectedWeaponFrames().length;
+  setStatus(`${WEAPON_LABELS[weaponKey]} · ${n} export frame${n === 1 ? "" : "s"}`);
 }
 
 function pixelsToPngBlob(pixels) {
@@ -1338,7 +1312,6 @@ function renderWeaponList() {
     if (key === weaponKey) btn.className = "active";
     btn.addEventListener("click", () => {
       weaponKey = key;
-      weaponSelectedVerts = [];
       clampWeaponPreviewFrame();
       markUi();
       refreshAll();
@@ -1396,110 +1369,6 @@ function renderWeaponInspector(root) {
       },
     ])
   );
-
-  if (mdl && weaponSelectedVerts.length) {
-    const vh = document.createElement("h2");
-    vh.textContent = "Vertex";
-    root.appendChild(vh);
-    const verts = mdlQuakeVerts(mdl, weaponFrame);
-    const packed = mdl.frames[weaponFrame]?.verts;
-    const fmt = (n) => (Number.isFinite(n) ? n.toFixed(4) : "—");
-    const dist3 = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-    for (const i of weaponSelectedVerts) {
-      const v = verts[i];
-      const box = document.createElement("div");
-      box.className = "weapon-vert-info";
-      const title = document.createElement("p");
-      title.textContent = `Index ${i}`;
-      box.appendChild(title);
-      if (v) {
-        const xyz = document.createElement("p");
-        xyz.className = "muted";
-        xyz.textContent = `Quake XYZ  ${fmt(v.x)}  ${fmt(v.y)}  ${fmt(v.z)}`;
-        box.appendChild(xyz);
-      }
-      if (packed && i * 3 + 2 < packed.length) {
-        const pk = document.createElement("p");
-        pk.className = "muted";
-        pk.textContent = `Packed  ${packed[i * 3]}  ${packed[i * 3 + 1]}  ${packed[i * 3 + 2]}`;
-        box.appendChild(pk);
-      }
-      const twins = [];
-      if (v) {
-        for (let j = 0; j < verts.length; j++) {
-          if (j === i) continue;
-          if (dist3(v, verts[j]) <= 1e-4) twins.push(j);
-        }
-      }
-      const tw = document.createElement("p");
-      tw.className = "muted";
-      tw.textContent = twins.length ? `Same position as  ${twins.join(", ")}` : "No coincident verts";
-      box.appendChild(tw);
-      root.appendChild(box);
-    }
-    if (weaponSelectedVerts.length === 2) {
-      const a = verts[weaponSelectedVerts[0]];
-      const b = verts[weaponSelectedVerts[1]];
-      if (a && b) {
-        const d = document.createElement("p");
-        d.className = "muted";
-        d.textContent = `Distance  ${fmt(dist3(a, b))}`;
-        root.appendChild(d);
-      }
-    }
-    if (weaponSelectedVerts.length === 3) {
-      const pts = weaponSelectedVerts.map((i) => verts[i]);
-      if (pts.every(Boolean)) {
-        const n = inspectTriNormal(pts[0], pts[1], pts[2]);
-        const box = document.createElement("p");
-        box.className = "muted";
-        box.textContent = n
-          ? `Normal  ${fmt(n.x)}  ${fmt(n.y)}  ${fmt(n.z)}  (pair if n·n ≥ ${QUAD_COPLANAR_DOT})`
-          : "Normal  degenerate triangle";
-        root.appendChild(box);
-        const asTri = (mdl.tris || []).some((t) => {
-          const s = new Set(t);
-          return weaponSelectedVerts.every((i) => s.has(i));
-        });
-        const note = document.createElement("p");
-        note.className = "muted";
-        note.textContent = asTri ? "These indices are an MDL triangle" : "Not an MDL triangle (by index)";
-        root.appendChild(note);
-      }
-    }
-    if (weaponSelectedVerts.length === 4) {
-      const pts = weaponSelectedVerts.map((i) => verts[i]);
-      if (pts.every(Boolean)) {
-        const rest = weaponFrame === 0 ? verts : mdlQuakeVerts(mdl, 0);
-        const q = inspectQuadPair(mdl.tris, weaponSelectedVerts, rest, mdlEnsureQuads(mdl));
-        const box = document.createElement("div");
-        box.className = "weapon-vert-info";
-        if (!q || q.noModelPair) {
-          const p = document.createElement("p");
-          p.className = "muted";
-          p.textContent = "Not two MDL triangles sharing an edge";
-          box.appendChild(p);
-        } else {
-          const lines = [
-            `Shared edge  ${q.shared[0]}–${q.shared[1]}`,
-            `Normal score  n·n  ${fmt(q.coplanarDot)}  (need ≥ ${QUAD_COPLANAR_DOT})`,
-            `Plane error  ${fmt(q.planeRel)}  (need < ${QUAD_PLANE_REL})`,
-            `Parallel / trap  ${fmt(q.parallelMax)}  (score only)`,
-            `Convex  ${q.convex ? "yes" : "no"}`,
-            `Diagonal split  ${q.diagonal ? "yes" : "no"}`,
-            q.paired ? "Paired in mesh" : q.pass ? "Gates pass, not paired" : "Would not pair",
-          ];
-          for (const line of lines) {
-            const p = document.createElement("p");
-            p.className = "muted";
-            p.textContent = line;
-            box.appendChild(p);
-          }
-        }
-        root.appendChild(box);
-      }
-    }
-  }
 
   const fh = document.createElement("h2");
   fh.textContent = "Export frames";
@@ -1744,6 +1613,26 @@ function renderInspector() {
       del.textContent = "Delete";
       del.addEventListener("click", deleteSelected);
       row.append(dup, del);
+      const map = activeMap(doc);
+      const selectedRooms = selectedIds
+        .map((id) => map.objects.find((o) => o.id === id))
+        .filter((o) => o && o.kind === "room");
+      if (selectedRooms.length >= 2) {
+        const rotY = document.createElement("button");
+        rotY.type = "button";
+        rotY.textContent = "Rotate Y";
+        rotY.addEventListener("click", () => {
+          pushUndo();
+          rotateRoomsBlockY(
+            doc,
+            selectedRooms.map((r) => r.id),
+            1
+          );
+          markDirty();
+          refreshAll();
+        });
+        row.append(rotY);
+      }
       root.appendChild(row);
       return;
     }
@@ -1795,18 +1684,22 @@ function renderInspector() {
       shapeSel.addEventListener("change", () => apply(() => applyRoomShape(obj, shapeSel.value)));
       root.appendChild(field("Shape", shapeSel));
 
-      if (clampRoomShape(obj.shape) !== "box") {
-        const rotRow = document.createElement("div");
-        rotRow.className = "btn-row rot-axes";
-        for (const axis of ["x", "y", "z"]) {
-          const btn = document.createElement("button");
-          btn.type = "button";
-          btn.textContent = axis.toUpperCase();
-          btn.addEventListener("click", () => apply(() => rotateRoom(obj, axis, 1)));
-          rotRow.append(btn);
-        }
-        root.appendChild(field("Rotate", rotRow));
+      const rotAxes = clampRoomShape(obj.shape) !== "box" ? ["x", "y", "z"] : ["y"];
+      const rotRow = document.createElement("div");
+      rotRow.className = "btn-row rot-axes";
+      for (const axis of rotAxes) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = axis.toUpperCase();
+        btn.addEventListener("click", () =>
+          apply(() => {
+            if (axis === "y") rotateRoomY(doc, obj, 1);
+            else rotateRoom(obj, axis, 1);
+          })
+        );
+        rotRow.append(btn);
       }
+      root.appendChild(field("Rotate", rotRow));
     }
     if (obj.kind === "enemy") {
       const sel = document.createElement("select");
@@ -2242,8 +2135,8 @@ function updateAnimHint() {
   if (!hint) return;
   hint.textContent =
     bindJoint >= 0
-      ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · RMB orbit`
-      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+      ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
+      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
 }
 
 function assignMeshVerts(indices, additive) {
@@ -2886,12 +2779,26 @@ window.addEventListener("keydown", (e) => {
       return;
     }
   }
-  if (e.key.toLowerCase() === "f" && editorMode === "layout") {
-    if (!e.ctrlKey && !e.metaKey && !e.altKey && selectedIds.length) {
-      e.preventDefault();
-      if (layoutView.focusSelection()) setStatus("Focused selection");
+  if (e.key.toLowerCase() === "f" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (editorMode === "layout") {
+      if (selectedIds.length) {
+        e.preventDefault();
+        if (layoutView.focusSelection()) setStatus("Focused selection");
+      }
+      return;
     }
-    return;
+    if (editorMode === "anim") {
+      e.preventDefault();
+      animView.focusObject();
+      setStatus("Focused object");
+      return;
+    }
+    if (editorMode === "items") {
+      e.preventDefault();
+      itemView.focusObject();
+      setStatus("Focused object");
+      return;
+    }
   }
   if (e.key.toLowerCase() === "r" && editorMode === "layout") {
     const obj = selectedObject();
@@ -2940,14 +2847,6 @@ window.addEventListener("keydown", (e) => {
     }
   }
   if (editorMode === "weapons") {
-    if (e.key === "Escape") {
-      if (weaponSelectedVerts.length) {
-        e.preventDefault();
-        weaponSelectedVerts = [];
-        refreshAll();
-        return;
-      }
-    }
     if (e.key === "[" || e.key === "," || e.key === "ArrowLeft") {
       e.preventDefault();
       stepWeaponFrame(-1);

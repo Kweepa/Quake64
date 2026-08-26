@@ -7,10 +7,12 @@ import {
   ITEM_MAX_UNIQUE,
   ITEM_ORBIT_DIST_MIN,
   ITEM_ORBIT_DIST_MAX,
+  aabbCenter,
   clampItemCoord,
   itemUniqueXZ,
 } from "./model.js";
 import {
+  cornerWorld,
   distPointToSegment2d,
   lookVectors,
   projectLine,
@@ -335,6 +337,69 @@ export class ItemView {
       yaw,
       pitch,
     };
+  }
+
+  /** Frame mesh verts; if none, center on origin without changing dist. */
+  focusObject() {
+    const points = this.#mesh().verts;
+    if (!points?.length) {
+      this.orbit.target = { x: 0, y: 0, z: 0 };
+      this.opts.onViewChanged?.();
+      this.draw();
+      return true;
+    }
+
+    let minx = Infinity;
+    let miny = Infinity;
+    let minz = Infinity;
+    let maxx = -Infinity;
+    let maxy = -Infinity;
+    let maxz = -Infinity;
+    for (const v of points) {
+      minx = Math.min(minx, v.x);
+      miny = Math.min(miny, v.y);
+      minz = Math.min(minz, v.z);
+      maxx = Math.max(maxx, v.x);
+      maxy = Math.max(maxy, v.y);
+      maxz = Math.max(maxz, v.z);
+    }
+    const box = {
+      x: minx,
+      y: miny,
+      z: minz,
+      sx: Math.max(1e-3, maxx - minx),
+      sy: Math.max(1e-3, maxy - miny),
+      sz: Math.max(1e-3, maxz - minz),
+    };
+    const center = aabbCenter(box);
+    const { yaw, pitch } = this.orbit;
+    const { forward, right, up } = lookVectors(yaw, pitch);
+    const w = this.cssW;
+    const h = this.cssH;
+    const focal = Math.min(w, h) * 0.9;
+    const pad = 0.82;
+    const halfW = Math.max(1, w * 0.5 * pad);
+    const halfH = Math.max(1, h * 0.5 * pad);
+
+    let frameDist = 4;
+    for (let i = 0; i < 8; i++) {
+      const c = cornerWorld(box, i);
+      const rx = c.x - center.x;
+      const ry = c.y - center.y;
+      const rz = c.z - center.z;
+      const cx = rx * right.x + ry * right.y + rz * right.z;
+      const cy = rx * up.x + ry * up.y + rz * up.z;
+      const cz = rx * forward.x + ry * forward.y + rz * forward.z;
+      frameDist = Math.max(frameDist, (Math.abs(cx) * focal) / halfW - cz);
+      frameDist = Math.max(frameDist, (Math.abs(cy) * focal) / halfH - cz);
+      frameDist = Math.max(frameDist, 1 - cz);
+    }
+
+    this.orbit.target = { x: center.x, y: center.y, z: center.z };
+    this.orbit.dist = clampItemDist(frameDist);
+    this.opts.onViewChanged?.();
+    this.draw();
+    return true;
   }
 
   #eventPos(e) {
@@ -800,10 +865,6 @@ export class ItemView {
     ];
     for (const [a, b] of cube) this.#strokeSeg(ctx, cam, w, h, a, b, "#252a35");
 
-    const o = { x: 0, y: 0, z: 0 };
-    this.#strokeSeg(ctx, cam, w, h, { x: lo, y: 0, z: 0 }, { x: hi, y: 0, z: 0 }, "#a66", 2);
-    this.#strokeSeg(ctx, cam, w, h, o, { x: 0, y: hi, z: 0 }, "#6a6", 2);
-    this.#strokeSeg(ctx, cam, w, h, { x: 0, y: 0, z: lo }, { x: 0, y: 0, z: hi }, "#66a", 2);
     this.#drawForwardArrow(ctx, cam, w, h);
 
     let shownVerts = this.selectedVerts;

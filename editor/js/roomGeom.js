@@ -1153,8 +1153,45 @@ export function snapSwitchToRoom(sw, room) {
   return snapBoxToHullFace(sw, f, SWITCH_SIZE, true);
 }
 
+/** Permute AABB sizes for one +90° about axis and re-anchor around AABB center. */
+function permuteRoomAabb(room, axis) {
+  const x = room.x | 0;
+  const y = room.y | 0;
+  const z = room.z | 0;
+  const sx = room.sx | 0;
+  const sy = room.sy | 0;
+  const sz = room.sz | 0;
+  if (axis === "y") {
+    const cx = x + sx / 2;
+    const cz = z + sz / 2;
+    room.sx = sz;
+    room.sz = sx;
+    room.x = Math.round(cx - room.sx / 2);
+    room.z = Math.round(cz - room.sz / 2);
+  } else if (axis === "x") {
+    const cy = y + sy / 2;
+    const cz = z + sz / 2;
+    room.sy = sz;
+    room.sz = sy;
+    room.y = Math.round(cy - room.sy / 2);
+    room.z = Math.round(cz - room.sz / 2);
+  } else {
+    const cx = x + sx / 2;
+    const cy = y + sy / 2;
+    room.sx = sy;
+    room.sy = sx;
+    room.x = Math.round(cx - room.sx / 2);
+    room.y = Math.round(cy - room.sy / 2);
+  }
+}
+
+/** Quarter-turn room orient + rigid AABB so UV footprint is not stretched. */
 export function rotateRoom(room, axis, delta) {
   const key = axis === "x" ? "rx" : axis === "y" ? "ry" : "rz";
-  room[key] = clampQuarter((room[key] | 0) + delta);
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  for (let i = 0; i < steps; i++) {
+    room[key] = clampQuarter((room[key] | 0) + 1);
+    permuteRoomAabb(room, axis);
+  }
   return clampRoomSplits(room);
 }

@@ -26,8 +26,9 @@ ENEMY_TYPE = {
     "Shambler": 5,
     "Chthon": 6,
 }
-MAP_MAX_TYPES = 3
 MAP_MAX_BYTES = 3072
+ROOM_MAX_TYPES = 2
+HDR_TYPE_SLOTS = 3  # packed header pad; unused by streaming
 ROOM_MAX = 16
 DOOR_MAX = 16
 CRATE_MAX = 16
@@ -653,11 +654,19 @@ def cook_one(level: dict, map_key: str) -> bytes:
     for t in en_type:
         if t not in type_ids:
             type_ids.append(t)
-    if len(type_ids) > MAP_MAX_TYPES:
-        raise SystemExit(
-            f"{map_key} uses {len(type_ids)} enemy types (max {MAP_MAX_TYPES})"
-        )
-    while len(type_ids) < MAP_MAX_TYPES:
+    # Per-room cap (streaming holds at most ROOM_MAX_TYPES banks).
+    by_room: dict[int, set[int]] = {}
+    for r, t in zip(en_room, en_type):
+        by_room.setdefault(r, set()).add(t)
+    for r, ts in sorted(by_room.items()):
+        if len(ts) > ROOM_MAX_TYPES:
+            raise SystemExit(
+                f"{map_key} room {r} uses {len(ts)} enemy types "
+                f"(max {ROOM_MAX_TYPES})"
+            )
+    # Header still has HDR_TYPE_SLOTS bytes; truncate/pad, no map-wide cap.
+    type_ids = type_ids[:HDR_TYPE_SLOTS]
+    while len(type_ids) < HDR_TYPE_SLOTS:
         type_ids.append(0xFF)
 
     n_ux, n_uz = len(mesh_ux), len(mesh_uz)
@@ -852,7 +861,7 @@ SWITCH_MAX	= 16
 ELEV_MAX	= 4
 TRIG_MAX	= 16
 DEST_MAX	= 16
-MAP_MAX_TYPES	= 3
+ROOM_MAX_TYPES	= 2
 MAP_MAX_BYTES	= 3072
 ENEMY_POSE_MAX	= 4096
 MAP_NLEVELS	= 8

@@ -45,55 +45,57 @@ HP_QUAKE = {
     "Chthon": 400,
 }
 
+# Single roles: (clip_name, len_override|None). Attack: list of candidate names
+# present after exportClips — all matching clips become variants (like pain/death).
 ROLE_CLIPS = {
     "Grunt": {
         "stand": ("stand", None),
         "alert": ("load", None),
         "run": ("run", None),
         "walk": ("prowl", None),
-        "attack": ("shoot", None),
+        "attack": ["shoot"],
     },
     "Knight": {
         "stand": ("stand", None),
         "alert": ("standing", None),
         "run": ("runb", None),
         "walk": ("walk", None),
-        "attack": ("attackb", None),
+        "attack": ["attackb"],
     },
     "Rottweiler": {
         "stand": ("stand", None),
         "alert": ("stand", 2),
         "run": ("run", None),
         "walk": ("walk", None),
-        "attack": ("leap", None),
+        "attack": ["leap", "attack"],
     },
     "Scrag": {
         "stand": ("hover", None),
         "alert": ("hover", 4),
         "run": ("fly", None),
         "walk": ("fly", None),
-        "attack": ("magatt", None),
+        "attack": ["magatt"],
     },
     "Ogre": {
         "stand": ("stand", None),
         "alert": ("stand", 4),
         "run": ("run", None),
         "walk": ("walk", None),
-        "attack": ("smash", None),
+        "attack": ["smash"],
     },
     "Shambler": {
         "stand": ("stand", None),
         "alert": ("stand", 4),
         "run": ("run", None),
         "walk": ("walk", None),
-        "attack": ("smash", None),
+        "attack": ["smash"],
     },
     "Chthon": {
         "stand": ("walk", 8),
         "alert": ("walk", 4),
         "run": ("walk", None),
         "walk": ("walk", None),
-        "attack": ("attack", None),
+        "attack": ["attack"],
     },
 }
 
@@ -112,8 +114,11 @@ def find_clip(enemy: dict, *names: str) -> tuple[int, int] | None:
 
 
 def find_role(enemy: dict, role: str) -> tuple[int, int] | None:
+    """Single-window roles only (stand/alert/run/walk). Attack uses find_attack_clips."""
+    if role == "attack":
+        return None
     spec = ROLE_CLIPS.get(enemy["name"], {}).get(role)
-    if spec is None:
+    if spec is None or not isinstance(spec, tuple):
         return None
     name, len_override = spec
     found = find_clip(enemy, name)
@@ -136,6 +141,29 @@ def require_role(enemy: dict, role: str) -> tuple[int, int]:
     if clips:
         return int(clips[0]["start"]), max(1, int(clips[0]["len"]))
     raise SystemExit(f"{enemy['name']}: no {role} clip (and no fallback)")
+
+
+def find_attack_clips(enemy: dict) -> list[tuple[int, int]]:
+    """All ROLE attack candidate names present in clips (export order), up to PAIN_MAX."""
+    names = ROLE_CLIPS.get(enemy["name"], {}).get("attack") or []
+    want = {clip_key(n) for n in names if isinstance(n, str)}
+    out: list[tuple[int, int]] = []
+    for c in enemy.get("clips") or []:
+        if clip_key(c.get("name", "")) not in want:
+            continue
+        out.append((int(c["start"]), int(c["len"])))
+        if len(out) >= PAIN_MAX:
+            break
+    if not out:
+        stand = find_clip(enemy, "stand", "walk", "hover")
+        if stand is None:
+            clips = enemy.get("clips") or []
+            if not clips:
+                raise SystemExit(f"{enemy['name']}: no attack clip")
+            out.append((int(clips[0]["start"]), 1))
+        else:
+            out.append((stand[0], 1))
+    return out
 
 
 def apply_export_clips(enemy: dict) -> None:
@@ -276,13 +304,16 @@ def acc_at(frs: list[list[int]], i: int) -> int:
 
 def clip_ranges(enemy: dict, nframes: int) -> list[tuple[str, int, int]]:
     out: list[tuple[str, int, int]] = []
-    for role in ("stand", "alert", "run", "walk", "attack"):
+    for role in ("stand", "alert", "run", "walk"):
         found = find_role(enemy, role)
         if found is None:
             continue
         start, length = found
         if start < nframes and length > 0:
             out.append((role, start, min(length, nframes - start)))
+    for i, (start, length) in enumerate(find_attack_clips(enemy)):
+        if start < nframes and length > 0:
+            out.append((f"attack{i}", start, min(length, nframes - start)))
     for what, key in (("pain", PAIN_KEY), ("death", DEATH_KEY)):
         for i, (start, length) in enumerate(find_variant_clips(enemy, key, what)):
             if start < nframes and length > 0:
@@ -366,10 +397,11 @@ def pack_poses(
     frs = frames_xyz(gx, gy, gz, nframes)
     covered = [False] * nframes
     keep: set[int] = set()
-    atk = find_role(enemy, "attack")
-    fire = (atk[0] + FIRE_FRAME[type_i]) if atk else -1
+    fire_off = FIRE_FRAME[type_i]
     for name, start, length in clip_ranges(enemy, nframes):
-        extra = (fire,) if name == "attack" and fire >= 0 else ()
+        extra: tuple[int, ...] = ()
+        if name.startswith("attack") and fire_off >= 0:
+            extra = (start + fire_off,)
         keep |= cadence_keep(start, length, pick_keys(frs, start, length, extra))
         for i in range(start, start + length):
             covered[i] = True
@@ -424,9 +456,10 @@ def main() -> None:
         "run_len": [],
         "walk_start": [],
         "walk_len": [],
-        "attack_start": [],
-        "attack_len": [],
     }
+    attack_n: list[int] = []
+    attack_start: list[int] = []
+    attack_len: list[int] = []
     pain_n: list[int] = []
     pain_start: list[int] = []
     pain_len: list[int] = []
@@ -463,12 +496,23 @@ def main() -> None:
         lod_z_list.append(max(0, min(255, lod)))
         n_lerp = sum(1 for v in pose_map if v == 0xFF)
         print(f"{name}: logical={nframes} stored={n_stored} lerp={n_lerp} bytes={len(payload)} lodZ={lod_z_list[-1]}")
-        for role in ("stand", "alert", "run", "walk", "attack"):
+        for role in ("stand", "alert", "run", "walk"):
             start, length = require_role(enemy, role)
             if start + length > nframes:
                 length = max(1, nframes - start)
             roles[f"{role}_start"].append(start)
             roles[f"{role}_len"].append(length)
+        atk = []
+        for s, ln in find_attack_clips(enemy):
+            if s >= nframes or ln <= 0:
+                continue
+            atk.append((s, min(ln, nframes - s)))
+        if not atk:
+            atk = [(0, 1)]
+        n, starts, lens = pad_variants(atk)
+        attack_n.append(n)
+        attack_start.extend(starts)
+        attack_len.extend(lens)
         n, starts, lens = pad_variants(find_variant_clips(enemy, PAIN_KEY, "pain"))
         pain_n.append(n)
         pain_start.extend(starts)
@@ -503,8 +547,9 @@ def main() -> None:
     parts.append("enemy_run_len		!byte " + ", ".join(str(n) for n in roles["run_len"]))
     parts.append("enemy_walk_start		!byte " + ", ".join(str(n) for n in roles["walk_start"]))
     parts.append("enemy_walk_len		!byte " + ", ".join(str(n) for n in roles["walk_len"]))
-    parts.append("enemy_attack_start	!byte " + ", ".join(str(n) for n in roles["attack_start"]))
-    parts.append("enemy_attack_len	!byte " + ", ".join(str(n) for n in roles["attack_len"]))
+    parts.append("enemy_attack_n		!byte " + ", ".join(str(n) for n in attack_n))
+    parts.append("enemy_attack_start	!byte " + ", ".join(str(n) for n in attack_start))
+    parts.append("enemy_attack_len	!byte " + ", ".join(str(n) for n in attack_len))
     parts.append("enemy_pain_n		!byte " + ", ".join(str(n) for n in pain_n))
     parts.append("enemy_pain_start	!byte " + ", ".join(str(n) for n in pain_start))
     parts.append("enemy_pain_len		!byte " + ", ".join(str(n) for n in pain_len))

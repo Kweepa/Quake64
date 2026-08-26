@@ -52,7 +52,7 @@ import {
   formatMapLoadTitle,
   packedPoseBytes,
   ENEMY_POSE_MAX,
-  MAP_MAX_TYPES,
+  ROOM_MAX_TYPES,
   canAddEnemyType,
   clipForFrame,
   dummyFrameFor,
@@ -884,8 +884,8 @@ function finishPaletteDrop(e) {
   const p = layoutView.placeAtScreen(mx, my, kind);
   pushUndo();
   const owner = kind === "room" ? null : placementRoom();
-  if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy)) {
-    setStatus(`Max ${MAP_MAX_TYPES} enemy types per map`, true);
+  if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
+    setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
     return;
   }
   const extra = place.enemy ? { enemy: place.enemy } : {};
@@ -1819,9 +1819,9 @@ function renderInspector() {
       }
       sel.addEventListener("change", () => {
         const next = sel.value;
-        if (next !== obj.enemy && !canAddEnemyType(activeMap(doc), next)) {
+        if (next !== obj.enemy && !canAddEnemyType(activeMap(doc), next, obj.roomId)) {
           sel.value = obj.enemy || "Grunt";
-          setStatus(`Max ${MAP_MAX_TYPES} enemy types per map`, true);
+          setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
           return;
         }
         apply(() => (obj.enemy = next));

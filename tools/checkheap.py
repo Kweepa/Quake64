@@ -5,11 +5,10 @@ Heap grows down from SCR_A. LoadLevel: map, RELOC_MAX (then drop), then pose
 banks. heap_alloc fails when new top <= end_game, so need must be strictly less
 than SCR_A - end_game.
 
-With per-room streaming the pose banks resident at any moment are only those of
-the room being played, so the gate is the worst SINGLE ROOM, not the sum of the
-level types. tools/perroom.py extracts the per-room sets by replaying bind_map
-over the packed payload, and validates what it finds before this acts on it.
-
+Streaming holds at most ROOM_MAX_TYPES banks — the types that cohabit in the
+room being played. The gate is the worst SINGLE ROOM pose sum, not a map-wide
+pair of the heaviest types. tools/perroom.py extracts per-room sets by
+replaying bind_map over the packed payload.
 """
 
 from __future__ import annotations
@@ -21,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mkreloc import parse_labels, parse_mem_const
-from perroom import per_room_types
+from perroom import ROOM_MAX_TYPES, per_room_types
 
 ROOT = Path(__file__).resolve().parents[1]
 MAP_DIR = ROOT / "maps"
@@ -31,7 +30,7 @@ ENEMY_SIZES = ROOT / "src" / "enemy_sizes.asm"
 LEVEL_NAMES = [f"E1M{i}" for i in range(1, 9)]
 DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon"]
 ENEMY_NTYPES = len(DOS_NAME)
-MAP_MAX_TYPES = 3
+HDR_TYPE_SLOTS = 3
 TYPE_OFF = 11  # packed header: 11 count bytes, then type0..2
 
 
@@ -72,17 +71,11 @@ def enemy_sizes() -> list[int]:
     return sizes
 
 
-def map_types(payload: bytes) -> list[int]:
-    if len(payload) < TYPE_OFF + MAP_MAX_TYPES:
-        raise SystemExit("map payload shorter than packed header")
-    types: list[int] = []
-    for t in payload[TYPE_OFF : TYPE_OFF + MAP_MAX_TYPES]:
-        if t == 0xFF:
-            continue
-        if t >= ENEMY_NTYPES:
-            raise SystemExit(f"map type id {t} out of range")
-        types.append(t)
-    return types
+def used_types(per_room: dict[int, set[int]]) -> list[int]:
+    out: set[int] = set()
+    for ts in per_room.values():
+        out |= ts
+    return sorted(out)
 
 
 def main() -> None:
@@ -113,8 +106,10 @@ def main() -> None:
         f"heap  GAME ${locode:04X}-${end_game:04X}  "
         f"avail {avail}  reloc_max {reloc_max}"
     )
-    print("      per-room model: the gate is the worst SINGLE ROOM, since")
-    print("      streaming holds only the types in the room being played.")
+    print(
+        f"      per-room model (max {ROOM_MAX_TYPES} types/room): "
+        "gate is the worst room's pose sum."
+    )
 
     failed = False
     any_level = False
@@ -126,7 +121,18 @@ def main() -> None:
         if not payload:
             continue
         any_level = True
-        types = map_types(payload)
+
+        per_room = per_room_types(payload)
+        for room, ts in sorted(per_room.items()):
+            if len(ts) > ROOM_MAX_TYPES:
+                print(
+                    f"{key}: room {room} has {len(ts)} types "
+                    f"(max {ROOM_MAX_TYPES})",
+                    file=sys.stderr,
+                )
+                failed = True
+
+        types = used_types(per_room)
         for t in types:
             if poses[t] == 0:
                 print(
@@ -135,12 +141,8 @@ def main() -> None:
                 )
                 failed = True
 
-        # Level-wide sum, kept only to show what streaming is saving.
         level_sum = sum(poses[t] for t in types)
 
-        # The gate: the worst single room. Only that room's types are
-        # resident at once, so that is the real peak.
-        per_room = per_room_types(payload)
         worst_room, worst_sum, worst_names = -1, 0, []
         for room in sorted(per_room):
             s = sum(poses[t] for t in per_room[room])

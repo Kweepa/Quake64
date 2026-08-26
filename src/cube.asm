@@ -45,7 +45,7 @@ ent_set_ptrs
 	sta gz_ptr+1
 	rts
 
-; X = enemy. A preserved. Y = type * PAIN_MAX + en_pain_i (pain or death variant)
+; X = enemy. A preserved. Y = type * PAIN_MAX + en_pain_i (pain/death/attack variant)
 !if PAIN_MAX != 4 {
 	!error "pain_var_off assumes PAIN_MAX=4"
 }
@@ -119,9 +119,9 @@ ent_set_pose
 	jmp .esp_off
 .esp_atk
 	lda en_frame,x
-	ldx ent_type
+	jsr pain_var_off
 	clc
-	adc enemy_attack_start,x
+	adc enemy_attack_start,y
 	tay
 	jmp .esp_off
 .esp_pain

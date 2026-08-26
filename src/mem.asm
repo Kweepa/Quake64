@@ -476,12 +476,17 @@ wpn_flash_en	= $CC42
 wpn_flash_dy	= $CC43
 wpn_tmp0	= $CC44
 ws_slot		= $CC45			; WS_EMUZ / WS_SPLAT during start_world_spr
-; $CC46–$CC4A free (was flash5 timer + emuz on/ms)
+; Pose stream scratch (was flash5 timer + emuz on/ms)
+need0		= $CC46			; type id or $FF
+need1		= $CC47			; type id or $FF
+pose_dump	= $CC48			; type being dumped
+pose_keep	= $CC49			; surviving type while dumping ($FF = none)
+; $CC4A free
 emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
 item_spin	= $CC4C			; world powerup yaw (0..255)
 item_spin_l	= $CC4D			; 8.8 fraction
 map_sv_a	= $CC4E			; heap_alloc size hi scratch
-map_sv_y	= $CC4F			; load_map_enemies slot index
+map_sv_y	= $CC4F			; enemy slot / keep type scratch
 bind_cur	= $CC50			; word: bind_map cursor
 heap_top	= $CC52			; word: next LOAD dest (grows down from SCR_A)
 map_base	= $CC54			; word: packed map payload
@@ -602,7 +607,7 @@ fx_ox		= $CE99			; world origin (int)
 fx_oy		= $CE9A
 fx_oz		= $CE9B
 ; $CE9C free (was fx_skip)
-en_pain_i	= $CE9D			; ENEMY_MAX: pain/death variant index
+en_pain_i	= $CE9D			; ENEMY_MAX: pain/death/attack variant index
 sample_ms_chk	= $CEAD			; shadow of sample_ms (init_irq); tripwire restore
 spd_trip	= $CEAE			; sample_ms corruption count (IRQ .top)
 ; Grenade SoA — 4 slots × 27 bytes + 1 scratch, $CEAF–$CF03

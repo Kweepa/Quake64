@@ -301,6 +301,7 @@ eu_approach
 	sta en_state,x
 	lda #0
 	sta en_frame,x
+	jsr pick_attack_var
 	jsr enemy_face_player
 	jmp eu_next
 
@@ -480,6 +481,7 @@ enemy_anim_step
 	+ldy_mx en_type
 .eas_atlen_go
 	pla
+	jsr pain_var_off
 	cmp enemy_attack_len,y
 	bcs +
 	jmp .eas_n
@@ -516,6 +518,7 @@ enemy_anim_step
 	sta en_state,x
 	lda #0
 	sta en_frame,x
+	jsr pick_attack_var
 	jsr enemy_face_player
 	jmp .eas_n
 .eas_die
@@ -1614,6 +1617,12 @@ pick_pain_var
 pick_death_var
 	+ldy_mx en_type
 	lda enemy_death_n,y
+	jmp pick_var_n
+
+; X = enemy. Pick en_pain_i = rnd8 % enemy_attack_n[type].
+pick_attack_var
+	+ldy_mx en_type
+	lda enemy_attack_n,y
 	jmp pick_var_n
 
 ; ------------------------------------------------------------------

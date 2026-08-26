@@ -3354,7 +3354,7 @@ function mapDisplayName(map, key) {
 
 /** Soft cap: 8-bit object indices / editor budget. */
 const MAX_MAP_OBJECTS = 255;
-const MAP_MAX_TYPES = 3;
+const ROOM_MAX_TYPES = 2;
 const MAP_MAX_BYTES = 3072;
 const ENEMY_POSE_MAX = 4096;
 const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
@@ -3640,6 +3640,21 @@ function packedPoseBytes(enemy, clips, frames) {
   return { bytes, nLogical, nStored };
 }
 
+/** Unique enemy type names in one room (unknown names count as Grunt). */
+function roomEnemyTypeNames(map, roomId) {
+  const names = [];
+  if (roomId == null) return names;
+  const rid = String(roomId);
+  for (const obj of map?.objects || []) {
+    if (obj.kind !== "enemy") continue;
+    if (String(obj.roomId) !== rid) continue;
+    const raw = obj.enemy || "Grunt";
+    const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
 /** Unique enemy type names placed on a map (unknown names count as Grunt). */
 function mapEnemyTypeNames(map) {
   const names = [];
@@ -3652,13 +3667,13 @@ function mapEnemyTypeNames(map) {
   return names;
 }
 
-/** True if placing/changing to typeName would stay within MAP_MAX_TYPES. */
-function canAddEnemyType(map, typeName) {
-  const names = mapEnemyTypeNames(map);
+/** True if placing/changing to typeName in roomId stays within ROOM_MAX_TYPES. */
+function canAddEnemyType(map, typeName, roomId) {
+  const names = roomEnemyTypeNames(map, roomId);
   const raw = typeName || "Grunt";
   const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
   if (names.includes(name)) return true;
-  return names.length < MAP_MAX_TYPES;
+  return names.length < ROOM_MAX_TYPES;
 }
 
 /**
@@ -3722,15 +3737,40 @@ function mapStats(doc) {
   c64Bytes += mapText || 1; // dummy NUL if no message triggers
   const enemyTypes = mapEnemyTypeNames(map);
   const enemyTypeCount = enemyTypes.length;
-  const overTypes = enemyTypeCount > MAP_MAX_TYPES;
-  let poseBytes = 0;
-  const poseParts = [];
-  for (const name of enemyTypes) {
+  let overTypes = false;
+  const roomTypeCounts = new Map();
+  for (const obj of map.objects) {
+    if (obj.kind !== "enemy") continue;
+    const rid = obj.roomId != null ? String(obj.roomId) : "";
+    const raw = obj.enemy || "Grunt";
+    const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
+    let set = roomTypeCounts.get(rid);
+    if (!set) {
+      set = new Set();
+      roomTypeCounts.set(rid, set);
+    }
+    set.add(name);
+  }
+  for (const set of roomTypeCounts.values()) {
+    if (set.size > ROOM_MAX_TYPES) {
+      overTypes = true;
+      break;
+    }
+  }
+  // Pose peak = worst room's cohabiting types (streaming holds ≤ ROOM_MAX_TYPES).
+  const poseSize = (name) => {
     const e = (doc.enemies || []).find((en) => en.name === name);
-    if (!e) continue;
-    const n = packedPoseBytes(e).bytes;
-    poseBytes += n;
-    poseParts.push(`${name} ${n}`);
+    return e ? packedPoseBytes(e).bytes : 0;
+  };
+  let poseBytes = 0;
+  let poseParts = [];
+  for (const set of roomTypeCounts.values()) {
+    const names = [...set].sort();
+    const sum = names.reduce((s, n) => s + poseSize(n), 0);
+    if (sum > poseBytes) {
+      poseBytes = sum;
+      poseParts = names.map((n) => `${n} ${poseSize(n)}`);
+    }
   }
   const loadBytes = c64Bytes + poseBytes;
   return {
@@ -3785,7 +3825,7 @@ function formatMapStats(stats) {
     const one = KINDS[kind]?.label?.toLowerCase() || kind;
     parts.push(`${n} ${n === 1 ? one : plurals[kind] || `${one}s`}`);
   }
-  parts.push(`${stats.enemyTypeCount}/${MAP_MAX_TYPES} types`);
+  parts.push(`≤${ROOM_MAX_TYPES} types/room`);
   return parts.join(" · ");
 }
 
@@ -10114,8 +10154,8 @@ function finishPaletteDrop(e) {
   const p = layoutView.placeAtScreen(mx, my, kind);
   pushUndo();
   const owner = kind === "room" ? null : placementRoom();
-  if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy)) {
-    setStatus(`Max ${MAP_MAX_TYPES} enemy types per map`, true);
+  if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
+    setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
     return;
   }
   const extra = place.enemy ? { enemy: place.enemy } : {};
@@ -11049,9 +11089,9 @@ function renderInspector() {
       }
       sel.addEventListener("change", () => {
         const next = sel.value;
-        if (next !== obj.enemy && !canAddEnemyType(activeMap(doc), next)) {
+        if (next !== obj.enemy && !canAddEnemyType(activeMap(doc), next, obj.roomId)) {
           sel.value = obj.enemy || "Grunt";
-          setStatus(`Max ${MAP_MAX_TYPES} enemy types per map`, true);
+          setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
           return;
         }
         apply(() => (obj.enemy = next));

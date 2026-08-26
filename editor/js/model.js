@@ -1358,7 +1358,7 @@ export function mapDisplayName(map, key) {
 
 /** Soft cap: 8-bit object indices / editor budget. */
 export const MAX_MAP_OBJECTS = 255;
-export const MAP_MAX_TYPES = 3;
+export const ROOM_MAX_TYPES = 2;
 export const MAP_MAX_BYTES = 3072;
 export const ENEMY_POSE_MAX = 4096;
 export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
@@ -1383,7 +1383,7 @@ const ROLE_CLIPS = {
     alert: ["stand", 2],
     run: ["run"],
     walk: ["walk"],
-    attack: ["leap"],
+    attack: ["leap", "attack"],
   },
   Scrag: {
     stand: ["hover"],
@@ -1464,6 +1464,7 @@ function findPoseClip(clips, ...names) {
 }
 
 function findPoseRole(name, clips, role) {
+  if (role === "attack") return null;
   const spec = ROLE_CLIPS[name]?.[role];
   if (!spec) return null;
   const found = findPoseClip(clips, spec[0]);
@@ -1471,6 +1472,23 @@ function findPoseRole(name, clips, role) {
   let [start, length] = found;
   if (spec[1] != null) length = Math.min(length, spec[1]);
   return [start, length];
+}
+
+/** Attack ROLE candidates present in clips (export order), up to PAIN_MAX. */
+function findPoseAttackVariants(name, clips) {
+  const names = ROLE_CLIPS[name]?.attack || [];
+  const want = new Set(names.filter((n) => typeof n === "string").map(poseClipKey));
+  const out = [];
+  for (const c of clips) {
+    if (!want.has(poseClipKey(c.name))) continue;
+    out.push([c.start | 0, c.len | 0]);
+    if (out.length >= PAIN_MAX) break;
+  }
+  if (!out.length) {
+    const stand = findPoseClip(clips, "stand", "walk", "hover");
+    if (stand) out.push([stand[0], 1]);
+  }
+  return out;
 }
 
 function findPoseVariants(clips, kind) {
@@ -1590,11 +1608,10 @@ export function packedPoseBytes(enemy, clips, frames) {
   );
   const covered = Array(nLogical).fill(false);
   const keep = new Set();
-  const atk = findPoseRole(name, clipList, "attack");
-  const fire = atk ? atk[0] + (FIRE_FRAME[typeI] ?? 2) : -1;
+  const fireOff = FIRE_FRAME[typeI] ?? 2;
 
   const ranges = [];
-  for (const role of ["stand", "alert", "run", "walk", "attack"]) {
+  for (const role of ["stand", "alert", "run", "walk"]) {
     const found = findPoseRole(name, clipList, role);
     if (!found) continue;
     let [start, length] = found;
@@ -1602,6 +1619,10 @@ export function packedPoseBytes(enemy, clips, frames) {
     length = Math.min(length, nLogical - start);
     ranges.push([role, start, length]);
   }
+  findPoseAttackVariants(name, clipList).forEach(([start, length], i) => {
+    if (start >= nLogical || length <= 0) return;
+    ranges.push([`attack${i}`, start, Math.min(length, nLogical - start)]);
+  });
   for (const kind of ["pain", "death"]) {
     findPoseVariants(clipList, kind).forEach(([start, length], i) => {
       if (start >= nLogical || length <= 0) return;
@@ -1609,7 +1630,10 @@ export function packedPoseBytes(enemy, clips, frames) {
     });
   }
   for (const [role, start, length] of ranges) {
-    const extra = role === "attack" && fire >= 0 ? [fire] : [];
+    const extra =
+      typeof role === "string" && role.startsWith("attack") && fireOff >= 0
+        ? [start + fireOff]
+        : [];
     for (const i of poseCadenceKeep(start, length, posePickKeys(frs, start, length, extra))) {
       keep.add(i);
     }
@@ -1644,6 +1668,21 @@ export function packedPoseBytes(enemy, clips, frames) {
   return { bytes, nLogical, nStored };
 }
 
+/** Unique enemy type names in one room (unknown names count as Grunt). */
+export function roomEnemyTypeNames(map, roomId) {
+  const names = [];
+  if (roomId == null) return names;
+  const rid = String(roomId);
+  for (const obj of map?.objects || []) {
+    if (obj.kind !== "enemy") continue;
+    if (String(obj.roomId) !== rid) continue;
+    const raw = obj.enemy || "Grunt";
+    const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
 /** Unique enemy type names placed on a map (unknown names count as Grunt). */
 export function mapEnemyTypeNames(map) {
   const names = [];
@@ -1656,13 +1695,13 @@ export function mapEnemyTypeNames(map) {
   return names;
 }
 
-/** True if placing/changing to typeName would stay within MAP_MAX_TYPES. */
-export function canAddEnemyType(map, typeName) {
-  const names = mapEnemyTypeNames(map);
+/** True if placing/changing to typeName in roomId stays within ROOM_MAX_TYPES. */
+export function canAddEnemyType(map, typeName, roomId) {
+  const names = roomEnemyTypeNames(map, roomId);
   const raw = typeName || "Grunt";
   const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
   if (names.includes(name)) return true;
-  return names.length < MAP_MAX_TYPES;
+  return names.length < ROOM_MAX_TYPES;
 }
 
 /**
@@ -1726,15 +1765,40 @@ export function mapStats(doc) {
   c64Bytes += mapText || 1; // dummy NUL if no message triggers
   const enemyTypes = mapEnemyTypeNames(map);
   const enemyTypeCount = enemyTypes.length;
-  const overTypes = enemyTypeCount > MAP_MAX_TYPES;
-  let poseBytes = 0;
-  const poseParts = [];
-  for (const name of enemyTypes) {
+  let overTypes = false;
+  const roomTypeCounts = new Map();
+  for (const obj of map.objects) {
+    if (obj.kind !== "enemy") continue;
+    const rid = obj.roomId != null ? String(obj.roomId) : "";
+    const raw = obj.enemy || "Grunt";
+    const name = ENEMY_TYPES.some((t) => t.name === raw) ? raw : "Grunt";
+    let set = roomTypeCounts.get(rid);
+    if (!set) {
+      set = new Set();
+      roomTypeCounts.set(rid, set);
+    }
+    set.add(name);
+  }
+  for (const set of roomTypeCounts.values()) {
+    if (set.size > ROOM_MAX_TYPES) {
+      overTypes = true;
+      break;
+    }
+  }
+  // Pose peak = worst room's cohabiting types (streaming holds ≤ ROOM_MAX_TYPES).
+  const poseSize = (name) => {
     const e = (doc.enemies || []).find((en) => en.name === name);
-    if (!e) continue;
-    const n = packedPoseBytes(e).bytes;
-    poseBytes += n;
-    poseParts.push(`${name} ${n}`);
+    return e ? packedPoseBytes(e).bytes : 0;
+  };
+  let poseBytes = 0;
+  let poseParts = [];
+  for (const set of roomTypeCounts.values()) {
+    const names = [...set].sort();
+    const sum = names.reduce((s, n) => s + poseSize(n), 0);
+    if (sum > poseBytes) {
+      poseBytes = sum;
+      poseParts = names.map((n) => `${n} ${poseSize(n)}`);
+    }
   }
   const loadBytes = c64Bytes + poseBytes;
   return {
@@ -1789,7 +1853,7 @@ export function formatMapStats(stats) {
     const one = KINDS[kind]?.label?.toLowerCase() || kind;
     parts.push(`${n} ${n === 1 ? one : plurals[kind] || `${one}s`}`);
   }
-  parts.push(`${stats.enemyTypeCount}/${MAP_MAX_TYPES} types`);
+  parts.push(`≤${ROOM_MAX_TYPES} types/room`);
   return parts.join(" · ");
 }
 

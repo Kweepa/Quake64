@@ -240,53 +240,67 @@ LoadLevel
 	rts
 
 ; --- per-room pose streaming ----------------------------------------------
-; Load only the pose banks the CURRENT room needs, instead of every type the
-; level uses. The budget stops being "all types in this level" and becomes
-; "the types in one room", which is what buys the headroom.
+; At most ROOM_MAX_TYPES (2) banks below map_base. Keep types still needed;
+; orphans stay loaded when the new room is a subset (AB→A keeps B for a cheap
+; double-back). Only dump orphans when a missing type must be loaded (AB→AC
+; dumps B). Compacting: dump at heap_top raises it; dump snug with the map
+; moves the survivor up. Pose data is draw-only (cube.asm filters en_room).
 ;
-; This is safe because pose data is read ONLY by the draw path (cube.asm),
-; which already filters on en_room == room_idx. enemy.asm's update path never
-; touches it, so enemies left behind in other rooms keep ticking their state
-; machines normally and simply never look at the banks we swapped out. They do
-; NOT need killing off.
-;
-; The pose region is a clean sub-heap: LoadLevel leaves heap_top = map_base and
-; these pack downward from there, so reclaiming is just resetting heap_top.
-;
-; DELIBERATELY NOT DONE: keeping the old room resident while the new one loads.
-; That needs heap for both at once, which defeats the whole point. A room swap
-; is a full swap. The cost is a ~0.5 s stall on a door crossing, which is a
-; level-design problem -- a short enemy-free corridor between heavy rooms hides
-; it completely, and is Kweepa's call to make, not ours.
+; Bank base for type T = pose_map[T] - 2. First load sits under map_base; the
+; second packs below it (heap_top).
 
-; C=0 if every type this room needs is already resident, so the swap can be
-; skipped entirely. Makes doubling back through a door free, and makes rooms
-; that add no new types cost nothing.
-room_types_resident
+; Distinct types in room_idx → need0/need1 ($FF = empty). Cap 2 by tooling.
+collect_room_need
+	lda #$ff
+	sta need0
+	sta need1
 	ldx #0
-.rtr_lp
+.crn_lp
 	cpx map_nenemies
-	bcs .rtr_yes
+	bcs .crn_rts
 	+lda_mx en_room
 	cmp room_idx
-	bne .rtr_n
-	+ldy_mx en_type
-	lda pose_map_hi,y			; 0 = not loaded (heap never reaches page 0)
-	beq .rtr_no
-.rtr_n
+	bne .crn_n
+	+lda_mx en_type
+	cmp need0
+	beq .crn_n
+	cmp need1
+	beq .crn_n
+	ldy need0
+	cpy #$ff
+	bne .crn_slot1
+	sta need0
+	jmp .crn_n
+.crn_slot1
+	sta need1
+.crn_n
 	inx
-	jmp .rtr_lp
-.rtr_yes
+	jmp .crn_lp
+.crn_rts
+	rts
+
+; C=0 if every needed type is already resident (orphans OK — AB→A is free).
+room_need_resident
+	ldy need0
+	cpy #$ff
+	beq .rnr1
+	lda pose_map_hi,y
+	beq .rnr_no
+.rnr1
+	ldy need1
+	cpy #$ff
+	beq .rnr_yes
+	lda pose_map_hi,y
+	beq .rnr_no
+.rnr_yes
 	clc
 	rts
-.rtr_no
+.rnr_no
 	sec
 	rts
 
-; Mark every type as not-resident. room_types_resident uses pose_map_hi as the
-; "is it loaded" flag, so this MUST run before the first residency test of a
-; level -- otherwise it reads whatever was left in BSS, concludes the types are
-; already present, and the enemies draw through junk pointers.
+; Mark every type as not-resident. MUST run before the first residency test of
+; a level — otherwise BSS garbage looks like live banks.
 clear_pose_ptrs
 	ldx #0
 	txa
@@ -304,72 +318,259 @@ clear_pose_ptrs
 	bcc .cpp
 	rts
 
-; Reclaim the pose sub-heap and load every distinct type in room_idx.
-; C=0 ok, C=1 out of heap.
-stream_room_enemies
-	jsr clear_pose_ptrs
-	lda map_base				; reclaim everything below the map
+; Zero pose ptrs for type A.
+clear_one_pose
+	tax
+	lda #0
+	sta enemy_gx_lo,x
+	sta enemy_gx_hi,x
+	sta enemy_gy_lo,x
+	sta enemy_gy_hi,x
+	sta enemy_gz_lo,x
+	sta enemy_gz_hi,x
+	sta pose_map_lo,x
+	sta pose_map_hi,x
+	rts
+
+; src_ptr → dst_ptr, size A=lo Y=hi. dst > src; overlap-safe (copy high→low).
+copy_block_up
+	sta bind_n
+	sty map_sv_a
+	clc
+	lda src_ptr
+	adc bind_n
+	sta src_ptr
+	lda src_ptr+1
+	adc map_sv_a
+	sta src_ptr+1
+	sec
+	lda src_ptr
+	sbc #1
+	sta src_ptr
+	lda src_ptr+1
+	sbc #0
+	sta src_ptr+1
+	clc
+	lda dst_ptr
+	adc bind_n
+	sta dst_ptr
+	lda dst_ptr+1
+	adc map_sv_a
+	sta dst_ptr+1
+	sec
+	lda dst_ptr
+	sbc #1
+	sta dst_ptr
+	lda dst_ptr+1
+	sbc #0
+	sta dst_ptr+1
+.cbu_lp
+	lda bind_n
+	ora map_sv_a
+	beq .cbu_rts
+	ldy #0
+	lda (src_ptr),y
+	sta (dst_ptr),y
+	lda src_ptr
+	bne .cbu_sd
+	dec src_ptr+1
+.cbu_sd
+	dec src_ptr
+	lda dst_ptr
+	bne .cbu_dd
+	dec dst_ptr+1
+.cbu_dd
+	dec dst_ptr
+	lda bind_n
+	bne .cbu_cd
+	dec map_sv_a
+.cbu_cd
+	dec bind_n
+	jmp .cbu_lp
+.cbu_rts
+	rts
+
+; Dump type pose_dump. Compacts if a keeper sits below the dumped bank.
+dump_pose_type
+	lda #$ff
+	sta pose_keep
+	ldx #0
+.dpt_find
+	cpx pose_dump
+	beq .dpt_fn
+	lda pose_map_hi,x
+	beq .dpt_fn
+	stx pose_keep
+.dpt_fn
+	inx
+	cpx #ENEMY_NTYPES
+	bcc .dpt_find
+	lda pose_keep
+	cmp #$ff
+	bne .dpt_keep
+	lda map_base
 	sta heap_top
 	lda map_base+1
 	sta heap_top+1
+	lda pose_dump
+	jmp clear_one_pose
 
-	ldx #0
-.sre_lp
-	cpx map_nenemies
-	bcs .sre_ok
-	+lda_mx en_room
-	cmp room_idx
-	bne .sre_n
-	+ldy_mx en_type
+.dpt_keep
+	; dump_base = pose_map[dump]-2 → src_ptr
+	ldy pose_dump
+	sec
+	lda pose_map_lo,y
+	sbc #2
+	sta src_ptr
 	lda pose_map_hi,y
-	bne .sre_n				; already loaded this pass
+	sbc #0
+	sta src_ptr+1
+	; keep_base = pose_map[keep]-2 → dst_ptr (scratch)
+	ldy pose_keep
+	sec
+	lda pose_map_lo,y
+	sbc #2
+	sta dst_ptr
+	lda pose_map_hi,y
+	sbc #0
+	sta dst_ptr+1
+	; dump_base < keep_base ⇒ dump is at heap_top
+	lda src_ptr
+	cmp dst_ptr
+	lda src_ptr+1
+	sbc dst_ptr+1
+	bcc .dpt_lower
+
+	; Dump snug with map: move keep up to map_base - size[keep]
+	ldy pose_keep
+	lda enemy_size_lo,y
+	sta bind_n
+	lda enemy_size_hi,y
+	sta map_sv_a
+	sec
+	lda map_base
+	sbc bind_n
+	sta load_dest
+	lda map_base+1
+	sbc map_sv_a
+	sta load_dest+1
+	lda dst_ptr
+	sta src_ptr
+	lda dst_ptr+1
+	sta src_ptr+1
+	lda load_dest
+	sta dst_ptr
+	lda load_dest+1
+	sta dst_ptr+1
+	lda bind_n
+	ldy map_sv_a
+	jsr copy_block_up
+	ldy pose_keep
 	sty load_type
-	stx map_sv_y
+	jsr patch_enemy_gx
+	lda load_dest
+	sta heap_top
+	lda load_dest+1
+	sta heap_top+1
+	lda pose_dump
+	jmp clear_one_pose
+
+.dpt_lower
+	; Raise heap_top past the dumped bank
+	ldy pose_dump
+	clc
+	lda src_ptr
+	adc enemy_size_lo,y
+	sta heap_top
+	lda src_ptr+1
+	adc enemy_size_hi,y
+	sta heap_top+1
+	lda pose_dump
+	jmp clear_one_pose
+
+; A = type or $FF. Load if absent. C=0 ok, C=1 fail.
+load_pose_if_needed
+	cmp #$ff
+	beq .lpi_ok
+	tay
+	lda pose_map_hi,y
+	bne .lpi_ok
+	sty load_type
 	lda enemy_size_lo,y
 	ora enemy_size_hi,y
-	beq .sre_err
+	beq .lpi_err
 	lda enemy_size_lo,y
 	pha
 	lda enemy_size_hi,y
 	tay
 	pla
 	jsr heap_alloc
-	bcs .sre_err
+	bcs .lpi_err
 	ldy load_type
 	lda en_name_lo,y
 	tax
 	lda en_name_hi,y
 	tay
 	jsr LoadPrg
-	bcs .sre_err
+	bcs .lpi_err
 	jsr patch_enemy_gx
-	ldx map_sv_y
-.sre_n
+.lpi_ok
+	clc
+	rts
+.lpi_err
+	sec
+	rts
+
+; Dump orphans then load missing. Only reached when need ⊈ resident, so at
+; least one LoadPrg runs. C=0 ok, C=1 out of heap / load fail.
+stream_room_enemies
+	ldx #0
+.sre_dump
+	lda pose_map_hi,x
+	beq .sre_dn
+	txa
+	cmp need0
+	beq .sre_dn
+	cmp need1
+	beq .sre_dn
+	stx pose_dump
+	txa
+	pha
+	jsr dump_pose_type
+	pla
+	tax
+.sre_dn
 	inx
-	jmp .sre_lp
-.sre_ok
+	cpx #ENEMY_NTYPES
+	bcc .sre_dump
+
+	lda need0
+	jsr load_pose_if_needed
+	bcs .sre_err
+	lda need1
+	jsr load_pose_if_needed
+	bcs .sre_err
 	clc
 	rts
 .sre_err
 	sec
 	rts
 
-; Call once per frame after movement, exactly like maybe_room_palette.
-; Placed after it in the main loop so the swap completes before the next
-; frame's draw_enemies runs against the new room_idx.
+; After movement, before draw_enemies. AB→A keeps orphans and skips the swap.
 maybe_stream_room
 	lda room_idx
 	cmp stream_room
 	beq .msr_rts
-	jsr room_types_resident
+	jsr collect_room_need
+	jsr room_need_resident
 	bcc .msr_mark
-	php					; the load banks $01 and sets I
-	sei					; hold IRQ off for blank + load + restore
+	php
+	sei
 	lda $01
 	pha
 	lda #BANK_IO
 	sta $01
-	lda #0				; black viewport (HUD colour RAM untouched)
+	lda #0
 	sta col_bg
 	sta col_line
 	jsr fill_viewport_colour
@@ -390,7 +591,7 @@ maybe_stream_room
 .msr_rts
 	rts
 .msr_fail
-	jmp load_fail_hang			; standing rule: crash, never degrade
+	jmp load_fail_hang
 
 ; dest in load_dest; type in load_type.
 ; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…]

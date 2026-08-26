@@ -31,6 +31,7 @@ MAP_BSS = ROOT / "src" / "map_bss.asm"
 
 HDR_LEN = 24
 ENEMY_NTYPES = 7
+ROOM_MAX_TYPES = 2
 
 
 def header_symbols() -> list[str]:
@@ -152,4 +153,10 @@ def per_room_types(payload: bytes) -> dict[int, set[int]]:
     out: dict[int, set[int]] = {}
     for r, t in zip(rooms, types):
         out.setdefault(r, set()).add(t)
+    for r, ts in sorted(out.items()):
+        if len(ts) > ROOM_MAX_TYPES:
+            raise SystemExit(
+                f"perroom: room {r} has {len(ts)} enemy types "
+                f"(max {ROOM_MAX_TYPES})"
+            )
     return out

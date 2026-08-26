@@ -84,11 +84,15 @@ def main() -> None:
   <main class="layout">
     <aside class="left">
       <section id="layout-left">
-        <section id="level-list"></section>
-        <h2>Place</h2>
-        <div id="item-palette" class="item-palette"></div>
-        <h2>Objects</h2>
-        <ul id="object-list" class="object-list"></ul>
+        <div class="layout-left-fixed">
+          <section id="level-list"></section>
+          <h2>Place</h2>
+          <div id="item-palette" class="item-palette"></div>
+        </div>
+        <div class="layout-left-scroll">
+          <h2>Objects</h2>
+          <ul id="object-list" class="object-list"></ul>
+        </div>
       </section>
       <section id="anim-left" hidden>
         <h2>Enemies</h2>

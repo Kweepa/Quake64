@@ -777,6 +777,7 @@ function setMode(mode) {
   document.getElementById("btn-mode-weapons").classList.toggle("active", mode === "weapons");
   document.getElementById("btn-mode-items")?.classList.toggle("active", mode === "items");
   document.getElementById("layout-left").hidden = mode !== "layout";
+  document.querySelector(".left")?.classList.toggle("left-map", mode === "layout");
   document.getElementById("anim-left").hidden = mode !== "anim";
   document.getElementById("weapons-left").hidden = mode !== "weapons";
   const itemsLeft = document.getElementById("items-left");

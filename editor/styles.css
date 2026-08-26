@@ -13,6 +13,26 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) var(--panel);
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--panel);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--btn-hover);
 }
 
 html,
@@ -132,6 +152,37 @@ h2 {
   min-width: 0;
 }
 
+.left.left-map {
+  overflow-y: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.left.left-map #layout-left {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.layout-left-fixed {
+  flex: 0 0 auto;
+}
+
+.layout-left-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-left-scroll .object-list {
+  margin-bottom: 0;
+}
+
 .right {
   border-right: none;
   border-left: 1px solid var(--border);
@@ -202,7 +253,10 @@ h2 {
   margin: 0;
   padding: 0;
   max-height: 18rem;
+  overflow-x: hidden;
   overflow-y: auto;
+  column-count: 2;
+  column-gap: 0.5rem;
 }
 
 .export-clip-list {
@@ -223,6 +277,7 @@ h2 {
 }
 
 .weapon-frame-list .clip-head {
+  column-span: all;
   color: var(--muted);
   text-transform: uppercase;
   font-size: 0.7rem;
@@ -231,14 +286,7 @@ h2 {
 }
 
 .weapon-frame-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.15rem 0;
-  font-size: 0.8rem;
-}
-
-.weapon-frame-list li {
+  break-inside: avoid;
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -522,8 +570,10 @@ button:disabled {
 .level-list button {
   width: 100%;
   text-align: left;
-  line-height: 1.15;
-  min-height: 2.2rem;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  min-height: 0;
 }
 
 .panel .muted,

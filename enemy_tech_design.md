@@ -8,4 +8,4 @@ With 45° baked rotation tables, budget is roughly **65 bytes per pose** (13×3 
 
 `tools/genenemies.py` writes the full Grunt and Rottweiler clip sets into `src/enemy_data.asm`. Role windows (stand / alert / walk / attack / …) are looked up by clip name. Pain and death are per-type variant tables (`PAIN_MAX` slots); AI rolls among `enemy_pain_n` / `enemy_death_n` exported clips.
 
-Each level will have 3 enemy types selected from Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon.
+Each level will have 3 enemy types selected from Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon, Zombie.

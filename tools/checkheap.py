@@ -28,7 +28,7 @@ ENEMY_DIR = ROOT / "enemies"
 ENEMY_SIZES = ROOT / "src" / "enemy_sizes.asm"
 
 LEVEL_NAMES = [f"E1M{i}" for i in range(1, 9)]
-DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon"]
+DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
 ENEMY_NTYPES = len(DOS_NAME)
 HDR_TYPE_SLOTS = 3
 TYPE_OFF = 11  # packed header: 11 count bytes, then type0..2

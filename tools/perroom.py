@@ -30,7 +30,7 @@ LOADER = ROOT / "src" / "loader.asm"
 MAP_BSS = ROOT / "src" / "map_bss.asm"
 
 HDR_LEN = 24
-ENEMY_NTYPES = 7
+ENEMY_NTYPES = 8
 ROOM_MAX_TYPES = 2
 
 

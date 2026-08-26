@@ -101,6 +101,9 @@ def main() -> None:
           <input type="range" id="mdl-scale" min="0.1" max="2" step="0.01" value="0.7" />
           <input type="number" id="mdl-scale-num" min="0.1" max="2" step="0.01" value="0.7" />
         </label>
+        <div class="btn-row">
+          <button type="button" id="btn-anim-folder">Open shareware folder</button>
+        </div>
       </section>
       <section id="weapons-left" hidden>
         <h2>Weapons</h2>

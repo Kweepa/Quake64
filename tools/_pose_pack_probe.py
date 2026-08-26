@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 doc = json.loads((ROOT / "editor" / "quake64.json").read_text(encoding="utf-8"))
 NIB = (-8, 7)
-TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon"]
+TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon", "Zombie"]
 
 
 def s_frame(fr):

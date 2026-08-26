@@ -1238,10 +1238,13 @@ function syncWeaponScaleInputs() {
   if (num && document.activeElement !== num && num.value !== shown) num.value = shown;
 }
 
-function syncWeaponGlobalButtons() {
+function syncSharewareFolderButtons() {
   const folder = sharewareFolderName();
-  const openBtn = document.getElementById("btn-weapon-folder");
-  if (openBtn) openBtn.textContent = folder ? "Change folder…" : "Open shareware folder";
+  const label = folder ? "Change folder…" : "Open shareware folder";
+  const weaponBtn = document.getElementById("btn-weapon-folder");
+  if (weaponBtn) weaponBtn.textContent = label;
+  const animBtn = document.getElementById("btn-anim-folder");
+  if (animBtn) animBtn.textContent = label;
   const exportBtn = document.getElementById("btn-weapon-export");
   if (exportBtn) exportBtn.disabled = !Object.keys(sharewareWeapons).length;
 }
@@ -1931,16 +1934,6 @@ function renderInspector() {
   const h = document.createElement("h2");
   h.textContent = e.name;
   root.appendChild(h);
-  const name = document.createElement("input");
-  name.type = "text";
-  name.value = e.name;
-  name.addEventListener("change", () => {
-    pushUndo();
-    e.name = name.value.slice(0, 24) || "Enemy";
-    markDirty();
-    refreshAll();
-  });
-  root.appendChild(field("Name", name));
 
   const lodInp = document.createElement("input");
   lodInp.type = "number";
@@ -1972,7 +1965,7 @@ function renderInspector() {
       listLbl.textContent = "Export clips";
       root.appendChild(listLbl);
       const ul = document.createElement("ul");
-      ul.className = "weapon-frame-list";
+      ul.className = "export-clip-list";
       timeline.forEach((c, i) => {
         const li = document.createElement("li");
         const chk = document.createElement("input");
@@ -2028,12 +2021,8 @@ function renderInspector() {
       root.appendChild(field("Clip", clipSel));
     }
 
-    const frameName = clip.frameNames?.[frameLocal] || `${clip.name}${frameLocal}`;
-    const sliderRow = document.createElement("label");
-    sliderRow.className = "field block";
-    const sliderLbl = document.createElement("span");
-    sliderLbl.id = "anim-frame-label";
-    sliderLbl.textContent = frameName;
+    const transport = document.createElement("div");
+    transport.className = "anim-transport";
     const slider = document.createElement("input");
     slider.id = "anim-frame-slider";
     slider.type = "range";
@@ -2042,34 +2031,32 @@ function renderInspector() {
     slider.value = String(frameLocal);
     slider.addEventListener("input", () => {
       frameLocal = Number(slider.value) | 0;
-      sliderLbl.textContent = clip.frameNames?.[frameLocal] || `${clip.name}${frameLocal}`;
       applyFrameLocal();
       markUi();
       animView.draw();
     });
-    sliderRow.append(sliderLbl, slider);
-    root.appendChild(sliderRow);
+    transport.appendChild(slider);
 
     const playRow = document.createElement("div");
-    playRow.className = "btn-row";
+    playRow.className = "btn-row anim-transport-btns";
     const playBtn = document.createElement("button");
     playBtn.id = "btn-anim-play";
     playBtn.type = "button";
     playBtn.textContent = animPlaying ? "Pause" : "Play";
     if (animPlaying) playBtn.className = "active";
     playBtn.addEventListener("click", toggleAnimPlay);
-    const loopLbl = document.createElement("label");
-    loopLbl.className = "check-inline";
-    const loopChk = document.createElement("input");
-    loopChk.id = "anim-loop";
-    loopChk.type = "checkbox";
-    loopChk.checked = animLoop;
-    loopChk.addEventListener("change", () => {
-      animLoop = loopChk.checked;
+    const loopBtn = document.createElement("button");
+    loopBtn.id = "btn-anim-loop";
+    loopBtn.type = "button";
+    loopBtn.textContent = "Loop";
+    if (animLoop) loopBtn.className = "active";
+    loopBtn.addEventListener("click", () => {
+      animLoop = !animLoop;
+      updateLoopButton();
     });
-    loopLbl.append(loopChk, document.createTextNode(" Loop"));
-    playRow.append(playBtn, loopLbl);
-    root.appendChild(playRow);
+    playRow.append(playBtn, loopBtn);
+    transport.appendChild(playRow);
+    root.appendChild(transport);
   }
 
   const counts = document.createElement("p");
@@ -2078,8 +2065,7 @@ function renderInspector() {
   const stick = stickClipFor(e, clip);
   const stickFrame = stick ? stick.start + frameLocal : 0;
   const height = frameHeight(e.frames[stickFrame] || e.frames[0]);
-  const frameTotal = e.clips?.length ? e.frames.length : timeline.length ? "MDL preview" : 1;
-  counts.textContent = `13 verts · 13 lines · ${clip?.name || "rest"} · height ${height} · ${frameTotal} frames`;
+  counts.textContent = `13 verts · 13 lines · height ${height}`;
   root.appendChild(counts);
 
   const editRow = document.createElement("div");
@@ -2295,15 +2281,6 @@ function renderQuakeSource(root, e) {
   }
   wrap.appendChild(status);
 
-  const openRow = document.createElement("div");
-  openRow.className = "btn-row";
-  const openBtn = document.createElement("button");
-  openBtn.type = "button";
-  openBtn.textContent = folder ? "Change folder…" : "Open shareware folder";
-  openBtn.addEventListener("click", () => void openSharewareFolder());
-  openRow.appendChild(openBtn);
-  wrap.appendChild(openRow);
-
   if (mdl && mdl.clips?.length) {
     const copyAllBtn = document.createElement("button");
     copyAllBtn.type = "button";
@@ -2326,6 +2303,7 @@ function renderQuakeSource(root, e) {
     const label = document.createElement("span");
     label.className = "joint-name";
     const n = rig.jointVerts[i].length;
+    label.classList.toggle("unbound", !n);
     label.textContent = n ? `${name} · ${n}` : name;
     const bindBtn = document.createElement("button");
     bindBtn.type = "button";
@@ -2383,13 +2361,8 @@ function advanceFrame(d) {
 }
 
 function syncPlayUi() {
-  const clip = activeTimelineClip();
   const slider = document.getElementById("anim-frame-slider");
-  const lbl = document.getElementById("anim-frame-label");
-  if (clip && slider) {
-    slider.value = String(frameLocal);
-    if (lbl) lbl.textContent = clip.frameNames?.[frameLocal] || `${clip.name}${frameLocal}`;
-  }
+  if (slider) slider.value = String(frameLocal);
   if (editorMode === "anim") animView.draw();
 }
 
@@ -2454,6 +2427,12 @@ function stopAnimPlay() {
     clearInterval(animPlayTimer);
     animPlayTimer = null;
   }
+}
+
+function updateLoopButton() {
+  const loopBtn = document.getElementById("btn-anim-loop");
+  if (!loopBtn) return;
+  loopBtn.classList.toggle("active", animLoop);
 }
 
 function updatePlayButton() {
@@ -2557,7 +2536,7 @@ function refreshPanels() {
   renderItemList();
   renderInspector();
   syncWeaponScaleInputs();
-  syncWeaponGlobalButtons();
+  syncSharewareFolderButtons();
   overheadView.draw();
   if (editorMode === "layout") layoutView.draw();
   if (editorMode === "anim") animView.draw();
@@ -2615,6 +2594,7 @@ document.getElementById("weapon-scale-num").addEventListener("change", (e) => {
   refreshAll();
 });
 document.getElementById("btn-weapon-folder")?.addEventListener("click", () => void openSharewareFolder());
+document.getElementById("btn-anim-folder")?.addEventListener("click", () => void openSharewareFolder());
 document.getElementById("btn-weapon-export")?.addEventListener("click", () => {
   exportWeaponPngs().catch((err) => setStatus(String(err.message || err), true));
 });

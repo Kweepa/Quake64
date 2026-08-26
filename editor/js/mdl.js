@@ -10,6 +10,7 @@ export const ENEMY_MDL_PATHS = {
   Ogre: "progs/ogre.mdl",
   Shambler: "progs/shambler.mdl",
   Chthon: "progs/boss.mdl",
+  Zombie: "progs/zombie.mdl",
 };
 
 function cstr(view, offset, len) {

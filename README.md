@@ -2,7 +2,7 @@
 
 A Commodore 64 *Quake* demake: a 3D line-drawn world in custom character graphics, with portal rooms, stick-figure enemies, and sprite weapons.
 
-The playable binary is **`quake64.d64`** (download from the repo). Autostart it in VICE. A hires menu boots into **E1M1**. The layout is in: doors, ramps, elevators, switches, pickups, and combat.
+The playable binary is `quake64.d64` (download from the repo). Autostart it in VICE. A hires menu boots into **E1M1**. The layout is in: doors, ramps, elevators, switches, pickups, and combat.
 
 ## Display
 
@@ -26,7 +26,7 @@ There’s an editor for maps (Unity-style orbit in the viewport), item meshes, w
 
 ## Entities
 
-Enemies are **13 vertices / 13 lines** on a shared skeleton (Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon — three types per level). Poses live in local space as signed offsets from the creature base. All animations are imported from the original data by retargeting the vertex animation to the skeleton. A few KB of poses per type, plus one line layout.
+Enemies are **13 vertices / 13 lines** on a shared skeleton (Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon, Zombie). Poses live in local space as signed offsets from the creature base. All animations are imported from the original data by retargeting the vertex animation to the skeleton. A few KB of poses per type, plus one line layout.
 
 They run a room-scoped state machine (idle / patrol / alert / approach / attack / pain / death). Grunt and Rottweiler behaviour is in; the others still share the skeleton and clips. E1M1 places Grunts and a rottweiler.
 
@@ -49,3 +49,4 @@ run-editor.bat     :: local map / skeleton / item editor
 ```
 
 Keys: **WASD** move / strafe, **J/L** turn, **K** use, **SPACE** fire, **1–4** axe / shotgun / nailgun / grenade launcher. Enable the mouse in Options to turn and shoot from port 1.
+

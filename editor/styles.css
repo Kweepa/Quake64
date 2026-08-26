@@ -201,6 +201,13 @@ h2 {
   overflow-y: auto;
 }
 
+.export-clip-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.export-clip-list li,
 .weapon-frame-list li {
   display: flex;
   align-items: center;
@@ -217,6 +224,7 @@ h2 {
   padding: 0.45rem 0 0.15rem;
 }
 
+.export-clip-list button.frame-name,
 .weapon-frame-list button.frame-name {
   flex: 1;
   text-align: left;
@@ -225,8 +233,22 @@ h2 {
   padding: 0.15rem 0.25rem;
 }
 
+.export-clip-list button.frame-name.current,
 .weapon-frame-list button.frame-name.current {
   color: var(--accent);
+}
+
+.anim-transport {
+  margin-top: 0.35rem;
+}
+
+.anim-transport input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.anim-transport-btns {
+  margin-top: 0.25rem;
 }
 
 .anim-mem {
@@ -699,6 +721,10 @@ button:disabled {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--text);
+}
+
+.joint-name.unbound {
+  color: #e07070;
 }
 
 .joint-row button {

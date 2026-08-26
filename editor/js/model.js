@@ -89,6 +89,7 @@ export const ENEMY_LOD_Z_BY_NAME = {
   Ogre: 10,
   Shambler: 4,
   Chthon: 4,
+  Zombie: 4,
 };
 export const DEFAULT_WEAPON_SCALE = 0.4;
 export const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
@@ -1043,6 +1044,11 @@ export const ENEMY_TYPES = [
       12: [8, -2, 5],
     },
   },
+  {
+    name: "Zombie",
+    scale: [1, 1.05, 1],
+    rest: { 12: [0, 8, 6] },
+  },
 ];
 
 export const FACES = [
@@ -1589,7 +1595,7 @@ export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 export const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 4, 4, 6, 4, 4, 8];
+const FIRE_FRAME = [2, 4, 4, 6, 4, 4, 8, 4];
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {
   Grunt: { stand: ["stand"], alert: ["load"], run: ["run"], walk: ["prowl"], attack: ["shoot"] },
@@ -1634,6 +1640,13 @@ const ROLE_CLIPS = {
     run: ["walk"],
     walk: ["walk"],
     attack: ["attack"],
+  },
+  Zombie: {
+    stand: ["stand"],
+    alert: ["stand", 4],
+    run: ["run"],
+    walk: ["walk"],
+    attack: ["atta", "attb", "attc"],
   },
 };
 

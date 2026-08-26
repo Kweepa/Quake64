@@ -249,7 +249,7 @@ export const KINDS = {
     label: "Spawn",
     color: "#3ee06a",
     defaultSize: [2, 4, 2],
-    fixed: false,
+    fixed: true,
     slope: false,
   },
   trigger: {
@@ -2560,6 +2560,7 @@ export function defaultEditorState() {
     orthoMode: "top",
     collapsedRooms: [],
     activeLevel: null,
+    layoutCameras: {},
     item: "backpack",
     itemOrbit: { yaw: 0.6, pitch: 0.35, dist: 16, target: { x: 0, y: 0, z: 0 } },
   };
@@ -2618,6 +2619,17 @@ function num(v, fallback) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function parseLayoutCamera(raw, fallback) {
+  return {
+    x: num(raw?.x, fallback.x),
+    y: num(raw?.y, fallback.y),
+    z: num(raw?.z, fallback.z),
+    yaw: num(raw?.yaw, fallback.yaw),
+    pitch: num(raw?.pitch, fallback.pitch),
+    speed: Math.max(6, Math.min(80, num(raw?.speed, fallback.speed))),
+  };
+}
+
 export function parseEditorState(raw) {
   const d = defaultEditorState();
   if (!raw || typeof raw !== "object") return d;
@@ -2633,14 +2645,22 @@ export function parseEditorState(raw) {
     d.selectedVerts = raw.selectedVerts.map((i) => i | 0).filter((i) => i >= 0 && i < 13);
   }
   const cam = raw.layoutCamera || {};
-  d.layoutCamera = {
-    x: num(cam.x, d.layoutCamera.x),
-    y: num(cam.y, d.layoutCamera.y),
-    z: num(cam.z, d.layoutCamera.z),
-    yaw: num(cam.yaw, d.layoutCamera.yaw),
-    pitch: num(cam.pitch, d.layoutCamera.pitch),
-    speed: Math.max(6, Math.min(80, num(cam.speed, d.layoutCamera.speed))),
-  };
+  d.layoutCamera = parseLayoutCamera(cam, d.layoutCamera);
+  d.layoutCameras = {};
+  if (raw.layoutCameras && typeof raw.layoutCameras === "object") {
+    for (const name of LEVEL_NAMES) {
+      if (raw.layoutCameras[name]) {
+        d.layoutCameras[name] = parseLayoutCamera(raw.layoutCameras[name], d.layoutCamera);
+      }
+    }
+  }
+  const camLevel =
+    typeof raw.activeLevel === "string" && LEVEL_NAMES.includes(raw.activeLevel)
+      ? raw.activeLevel
+      : d.activeLevel || LEVEL_NAMES[0];
+  if (raw.layoutCamera && !d.layoutCameras[camLevel]) {
+    d.layoutCameras[camLevel] = { ...d.layoutCamera };
+  }
   const orb = raw.animOrbit || {};
   d.animOrbit = {
     yaw: num(orb.yaw, d.animOrbit.yaw),

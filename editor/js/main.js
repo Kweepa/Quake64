@@ -2,9 +2,7 @@ import {
   KINDS,
   PALETTE_ORDER,
   ENEMY_TYPES,
-  ENEMY_FACINGS,
   JOINT_NAMES,
-  clampEnemyRot,
   cycleEnemyRot,
   cycleSlopeOrient,
   clampObject,
@@ -456,8 +454,51 @@ function markUi() {
   schedulePersistEditor();
 }
 
-function collectEditorState() {
+/** Per-map layout cameras (E1M1 …). */
+let layoutCamerasByLevel = {};
+
+function snapshotLayoutCamera() {
   const cam = layoutView.camera;
+  return {
+    x: cam.x,
+    y: cam.y,
+    z: cam.z,
+    yaw: cam.yaw,
+    pitch: cam.pitch,
+    speed: cam.speed,
+  };
+}
+
+function applyLayoutCamera(cam) {
+  const c = layoutView.camera;
+  c.x = cam.x;
+  c.y = cam.y;
+  c.z = cam.z;
+  c.yaw = cam.yaw;
+  c.pitch = cam.pitch;
+  c.speed = cam.speed;
+}
+
+function defaultLayoutCamera() {
+  return parseEditorState(null).layoutCamera;
+}
+
+function mergeLayoutCamerasFromEditor(ed) {
+  layoutCamerasByLevel = { ...(ed.layoutCameras || {}) };
+  const level =
+    ed.activeLevel && LEVEL_NAMES.includes(ed.activeLevel) ? ed.activeLevel : doc.activeLevel;
+  if (ed.layoutCamera && !layoutCamerasByLevel[level]) {
+    layoutCamerasByLevel[level] = { ...ed.layoutCamera };
+  }
+}
+
+function restoreLayoutCameraForLevel(level) {
+  applyLayoutCamera(layoutCamerasByLevel[level] || defaultLayoutCamera());
+}
+
+function collectEditorState() {
+  layoutCamerasByLevel[doc.activeLevel] = snapshotLayoutCamera();
+  const cam = layoutCamerasByLevel[doc.activeLevel];
   const orb = animView.orbit;
   const iorb = itemView.orbit;
   const enemy = doc.enemies[enemyIndex];
@@ -471,14 +512,8 @@ function collectEditorState() {
     clipIndex,
     frameLocal,
     selectedVerts: [...selectedVerts],
-    layoutCamera: {
-      x: cam.x,
-      y: cam.y,
-      z: cam.z,
-      yaw: cam.yaw,
-      pitch: cam.pitch,
-      speed: cam.speed,
-    },
+    layoutCamera: { ...cam },
+    layoutCameras: { ...layoutCamerasByLevel },
     animOrbit: { yaw: orb.yaw, pitch: orb.pitch, dist: orb.dist },
     mdlScale,
     weapon: weaponKey,
@@ -519,14 +554,9 @@ function applyEditorState(ed) {
   ed = parseEditorState(ed);
   applyingEditor = true;
   try {
-    const cam = layoutView.camera;
-    const lc = ed.layoutCamera;
-    cam.x = lc.x;
-    cam.y = lc.y;
-    cam.z = lc.z;
-    cam.yaw = lc.yaw;
-    cam.pitch = lc.pitch;
-    cam.speed = lc.speed;
+    mergeLayoutCamerasFromEditor(ed);
+    if (ed.activeLevel && LEVEL_NAMES.includes(ed.activeLevel)) doc.activeLevel = ed.activeLevel;
+    restoreLayoutCameraForLevel(doc.activeLevel);
     const orb = animView.orbit;
     orb.yaw = ed.animOrbit.yaw;
     orb.pitch = ed.animOrbit.pitch;
@@ -547,7 +577,6 @@ function applyEditorState(ed) {
     setOrthoMode(ed.orthoMode);
     collapsedRooms.clear();
     for (const id of ed.collapsedRooms) collapsedRooms.add(id);
-    if (ed.activeLevel && LEVEL_NAMES.includes(ed.activeLevel)) doc.activeLevel = ed.activeLevel;
     itemMeshKey = ALL_MESH_KEYS.includes(ed.item) ? ed.item : "backpack";
     const iorb = itemView.orbit;
     iorb.yaw = ed.itemOrbit.yaw;
@@ -788,10 +817,11 @@ function setMode(mode) {
   }
   document.getElementById("overhead-panel").hidden = mode !== "layout";
   document.getElementById("weapon-preview-panel").hidden = mode !== "weapons";
+  if (mode !== "layout") clearPaletteDrag();
   updateCenterChrome();
   document.getElementById("hint").textContent =
     mode === "layout"
-      ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+LMB / Alt+MMB orbit · MMB pan · Alt+RMB zoom · F focus · G drop · gizmo moves selection · Del"
+      ? "Drag palette to place · LMB box/click-select · Shift add · WASD/wheel fly · Q/E up · RMB look · Alt+LMB / Alt+MMB orbit · MMB pan · Alt+RMB zoom · F focus · G drop · Ctrl+D dup · gizmo moves selection · Del"
       : mode === "weapons"
         ? "LMB drag pans · wheel scale"
         : mode === "items"
@@ -854,6 +884,50 @@ function setNeighbourDraw(on, redraw = true) {
   }
 }
 
+function canvasClientToScreen(e) {
+  const canvas = document.getElementById("view-canvas");
+  const rect = canvas.getBoundingClientRect();
+  const over =
+    e.clientX >= rect.left &&
+    e.clientX <= rect.right &&
+    e.clientY >= rect.top &&
+    e.clientY <= rect.bottom;
+  return {
+    over,
+    mx: ((e.clientX - rect.left) / rect.width) * layoutView.cssW,
+    my: ((e.clientY - rect.top) / rect.height) * layoutView.cssH,
+  };
+}
+
+function previewObjectAtScreen(place, mx, my) {
+  const kind = place.kind;
+  const p = layoutView.placeAtScreen(mx, my, kind);
+  const owner = kind === "room" ? null : placementRoom();
+  const extra = place.enemy ? { enemy: place.enemy } : {};
+  if (owner) extra.roomId = owner.id;
+  const obj = createObject(kind, p.x, p.y, p.z, extra);
+  if (owner && kind !== "room" && kind !== "doorway") {
+    obj.y = roomFloorY(owner, obj.x + obj.sx / 2, obj.z + obj.sz / 2);
+  }
+  clampObject(obj);
+  return obj;
+}
+
+function clearPaletteDrag() {
+  document.body.classList.remove("palette-dragging");
+  layoutView.clearPlacePreview();
+  pendingPlace = null;
+  if (editorMode === "layout") layoutView.draw();
+}
+
+function updatePaletteDrag(e) {
+  if (!pendingPlace || pendingPlace.pointerId !== e.pointerId || editorMode !== "layout") return;
+  const { over, mx, my } = canvasClientToScreen(e);
+  if (over) layoutView.setPlacePreview(previewObjectAtScreen(pendingPlace, mx, my), true);
+  else layoutView.setPlacePreview(null, false);
+  layoutView.draw();
+}
+
 function buildPalette() {
   const root = document.getElementById("item-palette");
   root.innerHTML = "";
@@ -881,50 +955,43 @@ function paletteButton(label, color, payload) {
     e.preventDefault();
     pendingPlace = { ...payload, pointerId: e.pointerId };
     el.setPointerCapture(e.pointerId);
+    document.body.classList.add("palette-dragging");
     setStatus(`Drop ${label} on the map…`);
+  });
+  el.addEventListener("pointermove", (e) => {
+    updatePaletteDrag(e);
   });
   el.addEventListener("pointerup", (e) => {
     if (!pendingPlace || pendingPlace.pointerId !== e.pointerId) return;
     finishPaletteDrop(e);
   });
-  el.addEventListener("pointercancel", () => {
-    pendingPlace = null;
+  el.addEventListener("pointercancel", (e) => {
+    if (pendingPlace?.pointerId === e.pointerId) clearPaletteDrag();
   });
   return el;
 }
 
 function finishPaletteDrop(e) {
   const place = pendingPlace;
+  document.body.classList.remove("palette-dragging");
+  layoutView.clearPlacePreview();
   pendingPlace = null;
   if (!place || editorMode !== "layout") return;
-  const canvas = document.getElementById("view-canvas");
-  const rect = canvas.getBoundingClientRect();
-  if (
-    e.clientX < rect.left ||
-    e.clientX > rect.right ||
-    e.clientY < rect.top ||
-    e.clientY > rect.bottom
-  ) {
+  const { over, mx, my } = canvasClientToScreen(e);
+  if (!over) {
+    layoutView.draw();
     setStatus("Place cancelled", true);
     return;
   }
-  const mx = ((e.clientX - rect.left) / rect.width) * layoutView.cssW;
-  const my = ((e.clientY - rect.top) / rect.height) * layoutView.cssH;
   const kind = place.kind;
-  const p = layoutView.placeAtScreen(mx, my, kind);
-  pushUndo();
   const owner = kind === "room" ? null : placementRoom();
   if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
+    layoutView.draw();
     setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
     return;
   }
-  const extra = place.enemy ? { enemy: place.enemy } : {};
-  if (owner) extra.roomId = owner.id;
-  const obj = createObject(kind, p.x, p.y, p.z, extra);
-  if (owner && kind !== "room" && kind !== "doorway") {
-    obj.y = roomFloorY(owner, obj.x + obj.sx / 2, obj.z + obj.sz / 2);
-  }
-  clampObject(obj);
+  pushUndo();
+  const obj = previewObjectAtScreen(place, mx, my);
   activeMap(doc).objects.push(obj);
   if (kind === "doorway") {
     assignDoorRooms(doc, obj, owner);
@@ -994,12 +1061,17 @@ function deleteSelected() {
 }
 
 function duplicateSelected() {
-  if (!selectedIds.length) return;
+  if (!selectedIds.length || editorMode !== "layout") return;
   pushUndo();
   const created = [];
+  let skipped = 0;
   for (const id of selectedIds) {
     const obj = activeMap(doc).objects.find((o) => o.id === id);
     if (!obj) continue;
+    if (obj.kind === "enemy" && !canAddEnemyType(activeMap(doc), obj.enemy, obj.roomId)) {
+      skipped++;
+      continue;
+    }
     const copy = clampObject({
       ...obj,
       id: uid(),
@@ -1009,9 +1081,20 @@ function duplicateSelected() {
     activeMap(doc).objects.push(copy);
     created.push(copy.id);
   }
+  if (!created.length) {
+    endUndo();
+    undoStack.pop();
+    updateUndoButtons();
+    setStatus(
+      skipped ? `Max ${ROOM_MAX_TYPES} enemy types per room` : "Nothing to duplicate",
+      true
+    );
+    return;
+  }
   selectedIds = created;
   markDirty();
   refreshAll();
+  setStatus(skipped ? `Duplicated ${created.length} (${skipped} skipped)` : `Duplicated ${created.length}`);
 }
 
 function dropSelectedToFloor() {
@@ -1040,7 +1123,9 @@ function dropSelectedToFloor() {
 
 function switchLevel(name) {
   if (!LEVEL_NAMES.includes(name) || name === doc.activeLevel) return;
+  layoutCamerasByLevel[doc.activeLevel] = snapshotLayoutCamera();
   doc.activeLevel = name;
+  restoreLayoutCameraForLevel(name);
   selectedIds = [];
   lastRoomId = null;
   collapsedRooms.clear();
@@ -1484,18 +1569,21 @@ function field(label, input) {
   return row;
 }
 
-function rotateRow(labelText, onClick) {
-  const wrap = document.createElement("div");
-  wrap.className = "vec3-inputs";
+function toggleField(label, active, onToggle) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = label;
+  btn.classList.toggle("active", !!active);
+  btn.addEventListener("click", () => onToggle(btn));
+  return field(label, btn);
+}
+
+function rotateRow(onClick) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = "Rotate";
   btn.addEventListener("click", onClick);
-  const lbl = document.createElement("span");
-  lbl.className = "rot-label";
-  lbl.textContent = labelText;
-  wrap.append(btn, lbl);
-  return field("Rotate", wrap);
+  return field("Rotate", btn);
 }
 
 function vec3Field(label, specs) {
@@ -1656,23 +1744,13 @@ function renderInspector() {
       p.className = "muted";
       p.textContent = `${selectedIds.length} selected`;
       root.appendChild(p);
-      const row = document.createElement("div");
-      row.className = "btn-row";
-      const dup = document.createElement("button");
-      dup.type = "button";
-      dup.textContent = "Duplicate";
-      dup.addEventListener("click", duplicateSelected);
-      const del = document.createElement("button");
-      del.type = "button";
-      del.className = "danger";
-      del.textContent = "Delete";
-      del.addEventListener("click", deleteSelected);
-      row.append(dup, del);
       const map = activeMap(doc);
       const selectedRooms = selectedIds
         .map((id) => map.objects.find((o) => o.id === id))
         .filter((o) => o && o.kind === "room");
       if (selectedRooms.length >= 2) {
+        const row = document.createElement("div");
+        row.className = "btn-row";
         const rotY = document.createElement("button");
         rotY.type = "button";
         rotY.textContent = "Rotate Y";
@@ -1687,8 +1765,8 @@ function renderInspector() {
           refreshAll();
         });
         row.append(rotY);
+        root.appendChild(row);
       }
-      root.appendChild(row);
       return;
     }
     if (!obj) {
@@ -1728,16 +1806,21 @@ function renderInspector() {
       root.appendChild(field("Name", nameInp));
       root.appendChild(roomPaletteEditor(obj, apply));
 
-      const shapeSel = document.createElement("select");
+      const shapeRow = document.createElement("div");
+      shapeRow.className = "btn-row shape-picker";
+      const curShape = clampRoomShape(obj.shape);
       for (const s of ROOM_SHAPES) {
-        const opt = document.createElement("option");
-        opt.value = s;
-        opt.textContent = s === "box" ? "Box" : s;
-        if (clampRoomShape(obj.shape) === s) opt.selected = true;
-        shapeSel.appendChild(opt);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = s === "box" ? "Box" : s;
+        btn.classList.toggle("active", curShape === s);
+        btn.addEventListener("click", () => {
+          if (clampRoomShape(obj.shape) === s) return;
+          apply(() => applyRoomShape(obj, s));
+        });
+        shapeRow.append(btn);
       }
-      shapeSel.addEventListener("change", () => apply(() => applyRoomShape(obj, shapeSel.value)));
-      root.appendChild(field("Shape", shapeSel));
+      root.appendChild(field("Shape", shapeRow));
 
       const rotAxes = clampRoomShape(obj.shape) !== "box" ? ["x", "y", "z"] : ["y"];
       const rotRow = document.createElement("div");
@@ -1757,35 +1840,18 @@ function renderInspector() {
       root.appendChild(field("Rotate", rotRow));
     }
     if (obj.kind === "enemy") {
-      const sel = document.createElement("select");
-      for (const t of ENEMY_TYPES) {
-        const opt = document.createElement("option");
-        opt.value = t.name;
-        opt.textContent = t.name;
-        if (obj.enemy === t.name) opt.selected = true;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener("change", () => {
-        const next = sel.value;
-        if (next !== obj.enemy && !canAddEnemyType(activeMap(doc), next, obj.roomId)) {
-          sel.value = obj.enemy || "Grunt";
-          setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
-          return;
-        }
-        apply(() => (obj.enemy = next));
-      });
-      root.appendChild(field("Type", sel));
-      const chk = document.createElement("input");
-      chk.type = "checkbox";
-      chk.checked = !!obj.patrol;
-      chk.addEventListener("change", () => apply(() => (obj.patrol = chk.checked)));
-      root.appendChild(field("Patrol", chk));
+      root.appendChild(
+        toggleField("Patrol", !!obj.patrol, (btn) =>
+          apply(() => {
+            obj.patrol = !obj.patrol;
+            btn.classList.toggle("active", obj.patrol);
+          })
+        )
+      );
     }
     if (isFigureObject(obj) || obj.kind === "teleporter_dest") {
       root.appendChild(
-        rotateRow(ENEMY_FACINGS[clampEnemyRot(obj.rot ?? 0)], () =>
-          apply(() => (obj.rot = cycleEnemyRot(obj.rot ?? 0)))
-        )
+        rotateRow(() => apply(() => (obj.rot = cycleEnemyRot(obj.rot ?? 0))))
       );
     }
     if (obj.kind === "trigger") {
@@ -1831,23 +1897,23 @@ function renderInspector() {
       root.appendChild(field("Tag", tagInp));
     }
     if (obj.kind === "elevator") {
-      const autoChk = document.createElement("input");
-      autoChk.type = "checkbox";
-      autoChk.checked = elevHeightsAuto(obj);
-      autoChk.addEventListener("change", () =>
-        apply(() => {
-          obj.elevAuto = autoChk.checked;
-          if (!obj.elevAuto) {
-            const room = roomById(doc, obj.roomId);
-            const floorY = room ? room.y | 0 : 0;
-            const stops = elevStopBottoms(doc, { ...obj, elevAuto: true });
-            obj.elevLow = stops.dest - floorY;
-            obj.elevHigh = stops.home - floorY;
-            clampElevHeights(obj);
-          }
-        })
+      root.appendChild(
+        toggleField("Auto heights", elevHeightsAuto(obj), (btn) =>
+          apply(() => {
+            obj.elevAuto = !elevHeightsAuto(obj);
+            btn.classList.toggle("active", obj.elevAuto);
+            if (!obj.elevAuto) {
+              const room = roomById(doc, obj.roomId);
+              const floorY = room ? room.y | 0 : 0;
+              const stops = elevStopBottoms(doc, { ...obj, elevAuto: true });
+              obj.elevLow = stops.dest - floorY;
+              obj.elevHigh = stops.home - floorY;
+              clampElevHeights(obj);
+            }
+            refreshPanels();
+          })
+        )
       );
-      root.appendChild(field("Auto heights", autoChk));
       if (!elevHeightsAuto(obj)) {
         clampElevHeights(obj);
         const lowInp = document.createElement("input");
@@ -1887,11 +1953,14 @@ function renderInspector() {
       root.appendChild(field("Contains", sel));
     }
     if (obj.kind === "platform") {
-      const chk = document.createElement("input");
-      chk.type = "checkbox";
-      chk.checked = obj.collide !== false;
-      chk.addEventListener("change", () => apply(() => (obj.collide = chk.checked)));
-      root.appendChild(field("Collide", chk));
+      root.appendChild(
+        toggleField("Collide", obj.collide !== false, (btn) =>
+          apply(() => {
+            obj.collide = !obj.collide;
+            btn.classList.toggle("active", obj.collide !== false);
+          })
+        )
+      );
     }
     if (obj.kind !== "room") {
       const sel = document.createElement("select");
@@ -1963,22 +2032,8 @@ function renderInspector() {
       : `Size ${obj.sx}×${obj.sy}×${obj.sz}`;
     root.appendChild(sizeP);
     if (obj.kind === "slope") {
-      const axis = (obj.axis === "x" ? "X" : "Z") + (obj.dir === 1 ? "+" : "−");
-      root.appendChild(rotateRow(axis, () => apply(() => cycleSlopeOrient(obj))));
+      root.appendChild(rotateRow(() => apply(() => cycleSlopeOrient(obj))));
     }
-    const row = document.createElement("div");
-    row.className = "btn-row";
-    const dup = document.createElement("button");
-    dup.type = "button";
-    dup.textContent = "Duplicate";
-    dup.addEventListener("click", duplicateSelected);
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "danger";
-    del.textContent = "Delete";
-    del.addEventListener("click", deleteSelected);
-    row.append(dup, del);
-    root.appendChild(row);
     return;
   }
 
@@ -2695,6 +2750,11 @@ window.addEventListener("keydown", (e) => {
     redo();
     return;
   }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && editorMode === "layout") {
+    e.preventDefault();
+    duplicateSelected();
+    return;
+  }
   if (editorMode === "items" && (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
     e.preventDefault();
     itemView.copySelection();
@@ -2814,10 +2874,6 @@ window.addEventListener("keydown", (e) => {
       stepWeaponFrame(1);
       return;
     }
-  }
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "d" && editorMode === "layout") {
-    e.preventDefault();
-    duplicateSelected();
   }
 });
 

@@ -71,6 +71,8 @@ export class LayoutView {
     this.hoverId = null;
     this.drag = null;
     this.gridY = 0;
+    this.placePreview = null;
+    this.placePreviewOverCanvas = false;
     this.enabled = true;
     this._ro = new ResizeObserver(() => this.resize());
     this._ro.observe(opts.stage || canvas.parentElement);
@@ -114,6 +116,16 @@ export class LayoutView {
     this.cssW = w;
     this.cssH = h;
     this.draw();
+  }
+
+  setPlacePreview(obj, overCanvas) {
+    this.placePreview = obj;
+    this.placePreviewOverCanvas = overCanvas;
+  }
+
+  clearPlacePreview() {
+    this.placePreview = null;
+    this.placePreviewOverCanvas = false;
   }
 
   #focused() {
@@ -1044,6 +1056,12 @@ export class LayoutView {
       const sel = selected.has(obj.id);
       const hi = sel || obj.id === this.hoverId;
       this.#drawObject(ctx, doc, obj, cam, w, h, hi, sel, obj.id === primary);
+    }
+
+    if (this.placePreview && this.placePreviewOverCanvas) {
+      ctx.globalAlpha = 0.85;
+      this.#drawObject(ctx, doc, this.placePreview, cam, w, h, true, false, false);
+      ctx.globalAlpha = 1;
     }
 
     const selIds = this.#selectedIds();

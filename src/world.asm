@@ -1120,25 +1120,33 @@ room_cols_inset1
 	rts
 
 ; ------------------------------------------------------------------
+; in_room_inset — col_x/col_z inside room_idx colliders (PLAYER_R inset)?
+; C=1 yes. No door holes.
+; ------------------------------------------------------------------
+in_room_inset
+	lda room_idx
+	jsr room_mul3
+	tax
+	jsr rc_inset_ok
+	bcs .iri_yes
+	inx
+	jsr rc_inset_ok
+	bcs .iri_yes
+	inx
+	jsr rc_inset_ok
+.iri_yes
+	rts
+
+; ------------------------------------------------------------------
 ; in_room_or_portal — col_x/col_z allowed for room_idx?
 ; Inside a collider inset by PLAYER_R (shared faces not inset), or open door hole.
 ; C=1 allowed
 ; ------------------------------------------------------------------
 in_room_or_portal
-	lda room_idx
-	jsr room_mul3
-	tax
-	jsr rc_inset_ok
-	bcs .irp_yes
-	inx
-	jsr rc_inset_ok
-	bcs .irp_yes
-	inx
-	jsr rc_inset_ok
+	jsr in_room_inset
 	bcs .irp_yes
 	jmp door_portal_ok
 .irp_yes
-	sec
 	rts
 
 ; ------------------------------------------------------------------

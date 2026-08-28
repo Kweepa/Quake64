@@ -16,9 +16,9 @@ reloc_dos_name
 	!byte 0
 
 en_name_lo
-	!byte <en_n0, <en_n1, <en_n2, <en_n3, <en_n4, <en_n5, <en_n6
+	!byte <en_n0, <en_n1, <en_n2, <en_n3, <en_n4, <en_n5, <en_n6, <en_n7
 en_name_hi
-	!byte >en_n0, >en_n1, >en_n2, >en_n3, >en_n4, >en_n5, >en_n6
+	!byte >en_n0, >en_n1, >en_n2, >en_n3, >en_n4, >en_n5, >en_n6, >en_n7
 en_n0	!text "GRUNT"
 	!byte 0
 en_n1	!text "KNIGHT"
@@ -32,6 +32,8 @@ en_n4	!text "OGRE"
 en_n5	!text "SHAMBL"
 	!byte 0
 en_n6	!text "CHTHON"
+	!byte 0
+en_n7	!text "ZOMBIE"
 	!byte 0
 
 ; FormatDosName — E1MN from level_num (1..8); 1541 names are PETSCII A–Z
@@ -748,6 +750,7 @@ bind_map
 	+bind_add slope_dir, map_nslopes
 	+bind_add slope_room, map_nslopes
 	+bind_add slope_id, map_nslopes
+	+bind_add slope_flags, map_nslopes
 
 	+bind_add plat_x, map_nplats
 	+bind_add plat_y, map_nplats

@@ -930,12 +930,12 @@ blit_world
 	pla
 	jmp unpack_fx
 
-; A = tip viewport sx, Y = tip viewport sy. Depth = CAM_ZH+12.
+; A = tip viewport sx, Y = tip viewport sy. Depth = rot1 (CAM_ZH of tip vert).
 start_enemy_muzzle
 	pha
 	tya
 	pha
-	lda CAM_ZH+12
+	lda rot1
 	ldx #WS_EMUZ
 	jmp start_world_spr
 

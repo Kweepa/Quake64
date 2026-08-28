@@ -325,6 +325,14 @@ export function cycleEnemyRot(n, delta = 1) {
   return clampEnemyRot((n | 0) + delta);
 }
 
+/** Ramp surface horizontals: bit0 = low end, bit1 = high end. */
+export const SLOPE_FLAG_BOTTOM = 1;
+export const SLOPE_FLAG_TOP = 2;
+
+export function clampSlopeFlags(n) {
+  return (n | 0) & (SLOPE_FLAG_BOTTOM | SLOPE_FLAG_TOP);
+}
+
 /** (z,+1) → (z,−1) → (x,+1) → (x,−1) → … */
 export function cycleSlopeOrient(obj) {
   if (!obj || obj.kind !== "slope") return obj;
@@ -491,6 +499,9 @@ export const DOOR_LOCK_LABELS = {
   silver: "Silver key",
   gold: "Gold key",
 };
+/** Discrete AABB scales of the 4×5×1 doorway. Thickness stays 1. */
+export const DOOR_SCALES = [1, 1.5, 2];
+export const DOOR_SCALE_LABELS = { 1: "1.0", 1.5: "1.5", 2: "2.0" };
 
 /** Height / base-side = φ. Fixed backpack: 1.5 tall. */
 export const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
@@ -519,6 +530,21 @@ export function clampDoorType(s) {
   if (lower === "arch") return "Arch";
   if (lower === "tri") return "Tri";
   return "Tech";
+}
+
+export function clampDoorScale(s) {
+  const n = Number(s);
+  if (n === 2) return 2;
+  if (n === 1.5) return 1.5;
+  return 1;
+}
+
+/** Width × height × thickness for a doorway scale (1 / 1.5 / 2). */
+export function doorSizeForScale(scale) {
+  const s = clampDoorScale(scale);
+  if (s === 2) return [8, 10, 1];
+  if (s === 1.5) return [6, 8, 1];
+  return [4, 5, 1];
 }
 
 export function isDoorMeshKey(key) {
@@ -1338,17 +1364,17 @@ export function aabbCenter(box) {
   };
 }
 
-export function sizeForFace(kind, faceId) {
+export function sizeForFace(kind, faceId, scale) {
   const def = KINDS[kind];
   const face = FACES.find((f) => f.id === faceId) || FACES[0];
-  const [a, b, thick] = def.defaultSize;
+  const [a, b, thick] = kind === "doorway" ? doorSizeForScale(scale) : def.defaultSize;
   if (face.axis === "x") return { sx: thick, sy: b, sz: a };
   return { sx: a, sy: b, sz: thick };
 }
 
 export function applyFaceSize(obj) {
   if (obj.kind !== "doorway" && obj.kind !== "switch") return obj;
-  const s = sizeForFace(obj.kind, obj.face);
+  const s = sizeForFace(obj.kind, obj.face, obj.doorScale);
   obj.sx = s.sx;
   obj.sy = s.sy;
   obj.sz = s.sz;
@@ -1381,6 +1407,7 @@ export function clampObject(obj) {
   obj.x = clampByte(obj.x);
   obj.y = clampByte(obj.y);
   obj.z = clampByte(obj.z);
+  if (obj.kind === "doorway") obj.doorScale = clampDoorScale(obj.doorScale);
   if (obj.kind === "doorway" || obj.kind === "switch") {
     applyFaceSize(obj);
   } else if (obj.kind === "pickup") {
@@ -1390,6 +1417,7 @@ export function clampObject(obj) {
     obj.sy = clampSize(obj.y, obj.sy);
     obj.sz = clampSize(obj.z, obj.sz);
     applySlopeConstraint(obj);
+    obj.flags = clampSlopeFlags(obj.flags);
   } else {
     obj.sx = clampSize(obj.x, obj.sx);
     obj.sy = clampSize(obj.y, obj.sy);
@@ -1455,6 +1483,7 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.sx = 4;
     obj.sy = 2;
     obj.sz = 4;
+    obj.flags = extra.flags;
   }
   if (kind === "spawn" || kind === "enemy" || kind === "teleporter_dest") {
     obj.rot = clampEnemyRot(extra.rot ?? 0);
@@ -1500,6 +1529,7 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (kind === "doorway") {
     obj.lockKey = clampDoorLock(extra.lockKey ?? (extra.locked ? "silver" : "unlocked"));
     obj.doorType = clampDoorType(extra.doorType);
+    obj.doorScale = clampDoorScale(extra.doorScale);
     if (extra.otherRoomId) obj.otherRoomId = String(extra.otherRoomId);
   }
   if (kind === "platform") obj.collide = extra.collide !== false;
@@ -1597,7 +1627,7 @@ export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 export const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 4, 4, 6, 4, 4, 8, 4];
+const FIRE_FRAME = [2, 4, 4, 6, 2, 4, 8, 4];
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {
   Grunt: { stand: ["stand"], alert: ["load"], run: ["run"], walk: ["prowl"], attack: ["shoot"] },
@@ -1624,10 +1654,10 @@ const ROLE_CLIPS = {
   },
   Ogre: {
     stand: ["stand"],
-    alert: ["stand", 4],
+    alert: ["pull"],
     run: ["run"],
     walk: ["walk"],
-    attack: ["smash"],
+    attack: ["swing", "shoot"],
   },
   Shambler: {
     stand: ["stand"],
@@ -1949,7 +1979,7 @@ export const C64_OBJECT_BYTES = {
   room: 11,
   doorway: 13,
   crate: 8,
-  slope: 10,
+  slope: 11,
   platform: 8,
   elevator: 11,
   switch: 10,
@@ -2433,6 +2463,7 @@ function parseObjects(list) {
       face: o.face,
       axis: o.axis,
       dir: o.dir,
+      flags: o.flags,
       enemy: o.enemy,
       patrol: o.patrol,
       rot: o.rot,
@@ -2442,6 +2473,7 @@ function parseObjects(list) {
       tag: o.tag,
       lockKey: o.lockKey,
       doorType: o.doorType,
+      doorScale: o.doorScale,
       locked: o.locked,
       keyTag: o.keyTag,
       elevAuto: o.elevAuto,

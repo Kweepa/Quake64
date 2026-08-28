@@ -5,6 +5,8 @@ import {
   JOINT_NAMES,
   cycleEnemyRot,
   cycleSlopeOrient,
+  SLOPE_FLAG_BOTTOM,
+  SLOPE_FLAG_TOP,
   clampObject,
   clampTriggerText,
   clampName,
@@ -32,9 +34,12 @@ import {
   DOOR_TYPES,
   DOOR_LOCKS,
   DOOR_LOCK_LABELS,
+  DOOR_SCALES,
+  DOOR_SCALE_LABELS,
   clampPickupType,
   clampDoorLock,
   clampDoorType,
+  clampDoorScale,
   isDoorMeshKey,
   ITEM_MAX_UNIQUE,
   itemMeshStats,
@@ -208,7 +213,6 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   onStatus: setStatus,
   beginUndo,
   endUndo,
-  getPlaceRoom: () => placementRoom(),
 });
 
 const overheadView = new OverheadView(document.getElementById("overhead-canvas"), {
@@ -899,10 +903,17 @@ function canvasClientToScreen(e) {
   };
 }
 
+/** Owner room for palette drop: doorway → selected/last; else ray-hit room, miss → selected/last. */
+function placeOwner(kind, hitRoom) {
+  if (kind === "room") return null;
+  if (kind === "doorway") return placementRoom();
+  return hitRoom || placementRoom();
+}
+
 function previewObjectAtScreen(place, mx, my) {
   const kind = place.kind;
   const p = layoutView.placeAtScreen(mx, my, kind);
-  const owner = kind === "room" ? null : placementRoom();
+  const owner = placeOwner(kind, p.room);
   const extra = place.enemy ? { enemy: place.enemy } : {};
   if (owner) extra.roomId = owner.id;
   const obj = createObject(kind, p.x, p.y, p.z, extra);
@@ -984,7 +995,8 @@ function finishPaletteDrop(e) {
     return;
   }
   const kind = place.kind;
-  const owner = kind === "room" ? null : placementRoom();
+  const p = layoutView.placeAtScreen(mx, my, kind);
+  const owner = placeOwner(kind, p.room);
   if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
     layoutView.draw();
     setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
@@ -2024,6 +2036,23 @@ function renderInspector() {
       }
       typeSel.addEventListener("change", () => apply(() => (obj.doorType = typeSel.value)));
       root.appendChild(field("Type", typeSel));
+      const scaleSel = document.createElement("select");
+      for (const t of DOOR_SCALES) {
+        const opt = document.createElement("option");
+        opt.value = String(t);
+        opt.textContent = DOOR_SCALE_LABELS[t];
+        if (clampDoorScale(obj.doorScale) === t) opt.selected = true;
+        scaleSel.appendChild(opt);
+      }
+      scaleSel.addEventListener("change", () =>
+        apply(() => {
+          const floorY = obj.y | 0;
+          obj.doorScale = clampDoorScale(scaleSel.value);
+          assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
+          obj.y = floorY;
+        })
+      );
+      root.appendChild(field("Scale", scaleSel));
     }
     const sizeP = document.createElement("p");
     sizeP.className = "muted";
@@ -2033,6 +2062,23 @@ function renderInspector() {
     root.appendChild(sizeP);
     if (obj.kind === "slope") {
       root.appendChild(rotateRow(() => apply(() => cycleSlopeOrient(obj))));
+      const flags = obj.flags | 0;
+      root.appendChild(
+        toggleField("Bottom", !!(flags & SLOPE_FLAG_BOTTOM), (btn) =>
+          apply(() => {
+            obj.flags = (obj.flags | 0) ^ SLOPE_FLAG_BOTTOM;
+            btn.classList.toggle("active", !!(obj.flags & SLOPE_FLAG_BOTTOM));
+          })
+        )
+      );
+      root.appendChild(
+        toggleField("Top", !!(flags & SLOPE_FLAG_TOP), (btn) =>
+          apply(() => {
+            obj.flags = (obj.flags | 0) ^ SLOPE_FLAG_TOP;
+            btn.classList.toggle("active", !!(obj.flags & SLOPE_FLAG_TOP));
+          })
+        )
+      );
     }
     return;
   }

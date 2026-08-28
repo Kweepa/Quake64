@@ -47,7 +47,7 @@ Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and
 | `$F600`–`$F7FF` | 512 | `negsqhi` |
 | `$F800`–`$FFFF` | 2048 | UI charset (`UI_CHARSET`, disk `fnt`). `$FFFA–$FFFF` = NMI/RESET/IRQ (char 255 unused) |
 
-`$D018` pointers: matrix A `$C000` / B `$C400`; viewport charsets `$D000`/`$D800` vs `$E000`/`$E800` (mid-screen split); HUD uses `$F800`. Quarter-square tables (`sqlo` / `sqhi` / `negsqlo` / `negsqhi`) load at `$F000` (disk `sqt`, under KERNAL). Game PRG is `$0900`–`< $C000`. Heap grows down from `$C000` (map, then reloc overlay, then poses reclaim reloc). Boot is `$0801`; menu overlay is overwritten by game. Selectors `effects_vol` / `game_complete` / `difficulty` sit at `$08FD–$08FF`. Play BSS next free `$06D5`.
+`$D018` pointers: matrix A `$C000` / B `$C400`; viewport charsets `$D000`/`$D800` vs `$E000`/`$E800` (mid-screen split); HUD uses `$F800`. Quarter-square tables (`sqlo` / `sqhi` / `negsqlo` / `negsqhi`) load at `$F000` (disk `sqt`, under KERNAL). Game PRG is `$0900`–`< $C000`. Heap grows down from `$C000` (map, then reloc overlay, then poses reclaim reloc). Boot is `$0801`; menu overlay is overwritten by game. Selectors `effects_vol` / `game_complete` / `difficulty` sit at `$08FD–$08FF`. Play BSS next free `$06D7`.
 
 A-side LUTs (`SINTAB`, `invzl`, `ALOGTAB`) sit under I/O; math runs with `$01=$30`.
 

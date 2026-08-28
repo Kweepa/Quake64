@@ -1116,6 +1116,14 @@ export function nudgeDoorOutside(door, room) {
 const DOOR_SIZE = [4, 5, 1];
 const SWITCH_SIZE = [2, 3, 1];
 
+/** Keep in sync with doorSizeForScale in model.js. */
+function doorSnapSize(door) {
+  const s = Number(door?.doorScale);
+  if (s === 2) return [8, 10, 1];
+  if (s === 1.5) return [6, 8, 1];
+  return DOOR_SIZE;
+}
+
 function wallDims(size, face) {
   const [a, b, thick] = size;
   if (face.axis === "x") return { sx: thick, sy: b, sz: a };
@@ -1126,8 +1134,8 @@ function wallDims(size, face) {
  * Keep Y (and off-face lateral) so a door at the bottom of a shaft does not jump to another fragment. */
 function snapBoxToHullFace(obj, f, size, inside) {
   const cx = obj.x + obj.sx / 2;
-  const cy = obj.y + obj.sy / 2;
   const cz = obj.z + obj.sz / 2;
+  const floorY = obj.y | 0;
   const dims = wallDims(size, f);
   obj.face = f.faceId;
   obj.sx = dims.sx;
@@ -1137,7 +1145,7 @@ function snapBoxToHullFace(obj, f, size, inside) {
     if (inside) return sign > 0 ? plane - thick : plane;
     return sign > 0 ? plane : plane - thick;
   };
-  obj.y = Math.round(cy - obj.sy / 2);
+  obj.y = floorY;
   if (f.axis === "x") {
     obj.x = along(f.sign, f.plane, obj.sx);
     obj.z = Math.round(cz - obj.sz / 2);
@@ -1160,7 +1168,7 @@ function snapBoxToHullFace(obj, f, size, inside) {
 export function snapDoorToRoom(door, room) {
   const f = bestDoorHullFace(door, room);
   if (!f) return door;
-  return snapBoxToHullFace(door, f, DOOR_SIZE, false);
+  return snapBoxToHullFace(door, f, doorSnapSize(door), false);
 }
 
 export function snapDoorBetweenRooms(door, roomA, roomB) {
@@ -1174,7 +1182,7 @@ export function snapDoorBetweenRooms(door, roomA, roomB) {
     if (!best || score < best.score) best = { f, score };
   }
   if (!best) return door;
-  return snapBoxToHullFace(door, best.f, DOOR_SIZE, false);
+  return snapBoxToHullFace(door, best.f, doorSnapSize(door), false);
 }
 
 /** Set door face/size from nearest hull wall; keep world position (no flush snap). */
@@ -1190,15 +1198,15 @@ export function orientDoorToRooms(door, roomA, roomB) {
   }
   if (!best) return door;
   const cx = door.x + door.sx / 2;
-  const cy = door.y + door.sy / 2;
+  const floorY = door.y | 0;
   const cz = door.z + door.sz / 2;
   door.face = best.f.faceId;
-  const dims = wallDims(DOOR_SIZE, best.f);
+  const dims = wallDims(doorSnapSize(door), best.f);
   door.sx = dims.sx;
   door.sy = dims.sy;
   door.sz = dims.sz;
   door.x = Math.round(cx - door.sx / 2);
-  door.y = Math.round(cy - door.sy / 2);
+  door.y = floorY;
   door.z = Math.round(cz - door.sz / 2);
   if (door.x < 0) door.x = 0;
   if (door.y < 0) door.y = 0;

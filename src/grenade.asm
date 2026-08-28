@@ -1,6 +1,6 @@
 ; Bouncing grenades: player GL + ogre. Faction owner (contact skips allies;
 ; splash does not). One explosion at a time via fx_on.
-; Compact bounce/splash/view-dart (no wrist, no last-vel).
+; Ogre spawn: Wrist L world 8.8. Compact bounce/splash/view-dart.
 !zone grenade
 
 init_grenades
@@ -113,16 +113,11 @@ spawn_player_grenade
 
 spawn_ogre_grenade
 	ldx enemy_idx
-	lda #0
-	sta org_xl
-	sta org_yl
-	sta org_zl
-	+lda_mx en_x
-	sta org_xh
-	+lda_mx en_y
-	sta org_yh
-	+lda_mx en_z
-	sta org_zh
+	stx obj_i
+	+lda_mx en_type
+	sta ent_type
+	ldy #GREN_WRIST_L
+	jsr ent_vert_world
 	jsr gren_alloc
 	bcc .sog_rts
 	stx obj_i

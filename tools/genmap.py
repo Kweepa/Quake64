@@ -42,6 +42,8 @@ TRIG_MAX = 16
 DEST_MAX = 16
 BP_MAX = 32
 FACE = {"+z": 0, "-z": 1, "+x": 2, "-x": 3}
+# Width × height × thickness; keep in sync with editor/js/model.js doorSizeForScale.
+DOOR_SIZE_BY_SCALE = {1: (4, 5, 1), 1.5: (6, 8, 1), 2: (8, 10, 1)}
 ROOM_BG_DEFAULT = 9
 ROOM_LINE_DEFAULT = 7
 ROOM_FX_DEFAULT = 1
@@ -59,6 +61,41 @@ def norm_color(val, default: int) -> int:
     except (TypeError, ValueError):
         pass
     return default
+
+
+def clamp_door_scale(val) -> float:
+    try:
+        n = float(val)
+    except (TypeError, ValueError):
+        return 1.0
+    if n == 2:
+        return 2.0
+    if n == 1.5:
+        return 1.5
+    return 1.0
+
+
+def door_size_for_scale(scale) -> tuple[int, int, int]:
+    return DOOR_SIZE_BY_SCALE[clamp_door_scale(scale)]
+
+
+def apply_door_scale_aabb(d: dict) -> None:
+    """Bake doorScale + face into sx/sy/sz. Keep floor Y and grow width about centre."""
+    w, h, t = door_size_for_scale(d.get("doorScale"))
+    face = d.get("face") or "+z"
+    old_sx = int(d.get("sx") or w)
+    old_sz = int(d.get("sz") or t)
+    if face in ("+x", "-x"):
+        sx, sy, sz = t, h, w
+        d["z"] = int(d.get("z") or 0) + (old_sz - sz) // 2
+    else:
+        sx, sy, sz = w, h, t
+        d["x"] = int(d.get("x") or 0) + (old_sx - sx) // 2
+    if int(d["x"]) < 0:
+        d["x"] = 0
+    if int(d.get("z") or 0) < 0:
+        d["z"] = 0
+    d["sx"], d["sy"], d["sz"] = sx, sy, sz
 
 
 def aabb_overlap(a: dict, b: dict) -> bool:
@@ -223,6 +260,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     id_to_room = {r.get("id"): r for r in rooms}
     doors = [o for o in objs if o["kind"] == "doorway"]
     for d in doors:
+        apply_door_scale_aabb(d)
         room = id_to_room.get(d.get("roomId")) or id_to_room.get(d.get("otherRoomId"))
         if room:
             nudge_door_outside(d, room)
@@ -452,7 +490,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     slope_x, slope_y, slope_z = [], [], []
     slope_sx, slope_sy, slope_sz = [], [], []
     slope_axis, slope_dir, slope_room = [], [], []
-    slope_id = []
+    slope_id, slope_flags = [], []
     for s in slopes:
         ri = room_index(rooms, s, "slope")
         slope_x.append(s["x"])
@@ -465,6 +503,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
         slope_dir.append(1 if s.get("dir", 1) >= 0 else 0)  # 1=+ 0=-
         slope_room.append(ri)
         slope_id.append(map_id[id(s)])
+        slope_flags.append(int(s.get("flags") or 0) & 3)
 
     # Platforms (horizontal floor quads)
     plat_x, plat_y, plat_z = [], [], []
@@ -787,6 +826,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(slope_dir)
     add(slope_room)
     add(slope_id)
+    add(slope_flags)
     add(plat_x)
     add(plat_y)
     add(plat_z)

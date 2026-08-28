@@ -890,31 +890,14 @@ export class LayoutView {
     return null;
   }
 
-  /** Drop position from screen coords: selected room floor, else grid plane. */
+  /** Drop pose from screen: nearest ray-hit room floor (except room/doorway), else grid. */
   placeAtScreen(mx, my, kind) {
     const doc = this.opts.getDoc();
     const ray = screenRay(mx, my, this.camera, this.cssW, this.cssH);
     const def = KINDS[kind] || KINDS.crate;
     const sx = def.defaultSize[0];
     const sz = def.defaultSize[2];
-    const placeRoom = kind === "room" || kind === "doorway" ? null : this.opts.getPlaceRoom?.() || null;
-    if (placeRoom) {
-      const g = roomGeometry(placeRoom);
-      let bestHit = null;
-      for (const c of g.colliders) {
-        const hit = rayAabb(ray.origin, ray.dir, c);
-        if (hit && hit.t >= 0 && (!bestHit || hit.t < bestHit.t)) bestHit = hit;
-      }
-      const fy = roomFloorY(placeRoom, placeRoom.x + placeRoom.sx / 2, placeRoom.z + placeRoom.sz / 2);
-      const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: fy, z: 0 }, { x: 0, y: 1, z: 0 });
-      const pt = floor?.point || bestHit?.point || aabbCenter(placeRoom);
-      return {
-        x: Math.round(pt.x - sx / 2),
-        y: fy,
-        z: Math.round(pt.z - sz / 2),
-      };
-    }
-    if (kind !== "doorway") {
+    if (kind !== "room" && kind !== "doorway") {
       let bestRoom = null;
       let bestT = Infinity;
       for (const room of roomsOf(doc)) {
@@ -934,6 +917,7 @@ export class LayoutView {
           x: Math.round(pt.x - sx / 2),
           y: fy,
           z: Math.round(pt.z - sz / 2),
+          room: bestRoom.room,
         };
       }
     }

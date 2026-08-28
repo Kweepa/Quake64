@@ -167,26 +167,26 @@ RELOC_MAX	= $0800			; heap reserve for reloc overlay
 }
 
 ; Play BSS: default VIC matrix / leftover boot. VIC matrix in play is $C000.
-; map_bss.asm occupies $0400–$051D. $08F9–$08FF is reboot stub + selectors.
+; map_bss.asm occupies $0400–$051F. $08F9–$08FF is reboot stub + selectors.
 FRAME13_N	= 106			; offsets 0..105
-frame13_lo	= $051E
-frame13_hi	= $0588
-enemy_gx_lo	= $05F2
-enemy_gx_hi	= $05F9
-enemy_gy_lo	= $0600
-enemy_gy_hi	= $0607
-enemy_gz_lo	= $060E
-enemy_gz_hi	= $0615
-box_vis_edges	= $061C			; 24
-box_vis_vert	= $0634			; 12
-room_pack_edges	= $0640			; 64
-room_pack_vert	= $0680			; 32
-pose_gx		= $06A0			; 13 — lerp scratch (ent_set_pose)
-pose_gy		= $06AD			; 13
-pose_gz		= $06BA			; 13
-pose_map_lo	= $06C7			; 7 — patched at pose load (logical → packed)
-pose_map_hi	= $06CE			; 7
-; next free $06D5
+frame13_lo	= $0520
+frame13_hi	= $058A
+enemy_gx_lo	= $05F4
+enemy_gx_hi	= $05FB
+enemy_gy_lo	= $0602
+enemy_gy_hi	= $0609
+enemy_gz_lo	= $0610
+enemy_gz_hi	= $0617
+box_vis_edges	= $061E			; 24
+box_vis_vert	= $0636			; 12
+room_pack_edges	= $0642			; 64
+room_pack_vert	= $0682			; 32
+pose_gx		= $06A2			; 13 — lerp scratch (ent_set_pose)
+pose_gy		= $06AF			; 13
+pose_gz		= $06BC			; 13
+pose_map_lo	= $06C9			; 7 — patched at pose load (logical → packed)
+pose_map_hi	= $06D0			; 7
+; next free $06D7
 
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
@@ -293,6 +293,9 @@ PATROL_MIN	= 6			; min clear cells along a cardinal before walking
 PATROL_SCAN	= 32		; max cells probed when picking a patrol point
 PATROL_WAIT_MS	= 1000		; idle after arriving; + rnd*4 → ~1–2s
 GRUNT_BACKOFF	= 8		; Chebyshev ≤ this → weight dodge away from player
+OGRE_MELEE_R	= 6		; chainsaw Chebyshev; grenade uses enemy_range
+OGRE_SWING_FIRE	= 4		; clip-local hit; shoot uses enemy_fire_frame
+OGRE_SAW_DMG	= 6		; 6–9 with rnd&3
 AXE_DMG		= 4			; Quake axe 20 ÷ 5
 AXE_HIT_R		= 3			; XZ chebyshev radius for axe hit test
 SHOT_DMG_MAX	= 11		; Quake SSG 14×4=56 ÷ 5

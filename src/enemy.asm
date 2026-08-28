@@ -286,15 +286,37 @@ eu_approach
 .eu_ap_atk
 	lda en_timer,x
 	ora en_timer_h,x
-	bne eu_next
+	beq .eu_ap_ready
+	jmp eu_next
+.eu_ap_ready
+	cpy #ENT_OGRE
+	beq .eu_ap_ogre
 	jsr enemy_get_class
 	beq .eu_ap_glos
 	jsr enemy_same_floor
-	bcc eu_next			; dog — no bite through a hole
-	jmp .eu_ap_doatk
+	bcs .eu_ap_doatk
+	jmp eu_next			; dog — no bite through a hole
+.eu_ap_ogre
+	jsr enemy_chebyshev
+	cmp #OGRE_MELEE_R + 1
+	bcs .eu_ap_ogre_g
+	jsr enemy_same_floor
+	bcc .eu_ap_ogre_g		; ledge — grenade if LOS
+	lda #0				; swing
+	jsr enemy_enter_ogre_attack
+	jmp eu_next
+.eu_ap_ogre_g
+	jsr enemy_shot_clear
+	bcs .eu_ap_ogre_sh
+	jmp eu_next
+.eu_ap_ogre_sh
+	lda #1				; shoot
+	jsr enemy_enter_ogre_attack
+	jmp eu_next
 .eu_ap_glos
 	jsr enemy_shot_clear
-	bcc eu_next			; corner / hole in the way
+	bcs .eu_ap_doatk
+	jmp eu_next			; corner / hole in the way
 .eu_ap_doatk
 	ldx enemy_idx
 	lda #EN_ATTACK
@@ -450,28 +472,43 @@ enemy_anim_step
 	jmp .eas_n
 .eas_atlen
 	; Latch hit if we landed on / skipped past fire frame: old < fire <= new
+	cpy #ENT_OGRE
+	bne .eas_ff_tbl
+	lda en_pain_i,x
+	bne .eas_ff_tbl			; shoot uses table
+	lda #OGRE_SWING_FIRE
+	bne .eas_ff
+.eas_ff_tbl
 	lda enemy_fire_frame,y
+.eas_ff
 	bmi .eas_atlen_go			; $ff = none
 	cmp rot2
 	beq .eas_atlen_go			; already were on fire frame
 	bcc .eas_atlen_go			; fire < old → already past
+	sta rot1
 	pla
 	pha
-	cmp enemy_fire_frame,y
+	cmp rot1
 	bcc .eas_atlen_go			; new < fire → not yet
 	jsr enemy_get_class
 	bne .eas_bite			; Rottweiler — leap bite
-	lda enemy_idx
-	sta emuz_pending
 	+ldy_mx en_type
 	cpy #ENT_OGRE
 	bne .eas_gun
+	lda en_pain_i,x
+	bne .eas_ogre_g
+	jsr enemy_saw
+	jmp .eas_atk_rest
+.eas_ogre_g
+	lda enemy_idx
+	sta emuz_pending
 	jsr spawn_ogre_grenade
-	ldx enemy_idx
-	+ldy_mx en_type
-	jmp .eas_atlen_go
+	jmp .eas_atk_rest
 .eas_gun
+	lda enemy_idx
+	sta emuz_pending
 	jsr enemy_gunshot
+.eas_atk_rest
 	ldx enemy_idx
 	+ldy_mx en_type
 	jmp .eas_atlen_go
@@ -486,8 +523,23 @@ enemy_anim_step
 	bcs +
 	jmp .eas_n
 +
+	; Ogre: re-swing if still in melee; grenade always back to chase.
 	; Grunt 50% re-shoot; Rott always re-bite if still in range
 	ldx enemy_idx
+	+ldy_mx en_type
+	cpy #ENT_OGRE
+	bne .eas_not_ogre
+	lda en_pain_i,x
+	bne .eas_to_ap
+	jsr enemy_same_floor
+	bcc .eas_to_ap
+	jsr enemy_chebyshev
+	cmp #OGRE_MELEE_R + 1
+	bcs .eas_to_ap
+	lda #0
+	jsr enemy_enter_ogre_attack
+	jmp .eas_n
+.eas_not_ogre
 	jsr enemy_get_class
 	bne .eas_rng_chk
 	jsr rnd8
@@ -717,6 +769,8 @@ select_dodge_dir
 	ldx enemy_idx
 	jsr enemy_get_class
 	bne .sdd_zig
+	cpy #ENT_OGRE
+	beq .sdd_zig			; ogre closes, doesn't back off
 	jsr enemy_chebyshev
 	cmp #GRUNT_BACKOFF + 1
 	bcs .sdd_zig
@@ -834,6 +888,22 @@ enemy_enter_alert
 	lda #SOUND_DOGBARK
 	jmp play_sound
 
+; A = attack variant (0=swing, 1=shoot). Face player; saw rev on swing.
+enemy_enter_ogre_attack
+	ldx enemy_idx
+	sta en_pain_i,x
+	lda #EN_ATTACK
+	sta en_state,x
+	lda #0
+	sta en_frame,x
+	lda en_pain_i,x
+	bne .eeoa_face
+	lda #SOUND_SAWFUL
+	jsr play_sound
+	ldx enemy_idx
+.eeoa_face
+	jmp enemy_face_player
+
 ; Enter approach: grunt APPROACH_MIN; Rott DOG_REPATH. Zero step; pick dodge.
 enemy_enter_approach
 	stx enemy_idx
@@ -921,6 +991,30 @@ enemy_bite
 	lda enemy_idx
 	sta bite_splat_i
 .eb_rts
+	rts
+
+; Ogre chainsaw — recheck melee range, 6–9 HP.
+enemy_saw
+	ldx enemy_idx
+	jsr enemy_same_floor
+	bcc .esaw_rts
+	jsr enemy_chebyshev
+	cmp #OGRE_MELEE_R + 1
+	bcs .esaw_rts
+	jsr rnd8
+	and #3
+	clc
+	adc #OGRE_SAW_DMG
+	sta rot0
+	lda player_hp
+	beq .esaw_rts
+	lda rot0
+	jsr take_damage
+	lda enemy_idx
+	sta bite_splat_i
+	lda #SOUND_SAWHIT
+	jmp play_sound
+.esaw_rts
 	rts
 
 ; Grunt fire frame: recheck LOS, distance-scaled hit roll, 8–15 HP.

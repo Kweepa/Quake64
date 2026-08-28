@@ -23,7 +23,7 @@ PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
 DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 # Clip-local fire frames (matches enemy_fire_frame). Pinned as an attack key.
-FIRE_FRAME = [2, 4, 4, 6, 4, 4, 8, 4]
+FIRE_FRAME = [2, 4, 4, 6, 2, 4, 8, 4]
 # Mid-distance stick LOD threshold (CAM_ZH); Ogre needs more for chainsaw tip.
 DEFAULT_LOD_Z = {
     "Grunt": 4,
@@ -80,10 +80,10 @@ ROLE_CLIPS = {
     },
     "Ogre": {
         "stand": ("stand", None),
-        "alert": ("stand", 4),
+        "alert": ("pull", None),
         "run": ("run", None),
         "walk": ("walk", None),
-        "attack": ["smash"],
+        "attack": ["swing", "shoot"],
     },
     "Shambler": {
         "stand": ("stand", None),
@@ -565,12 +565,12 @@ def main() -> None:
     parts.append("enemy_death_n		!byte " + ", ".join(str(n) for n in death_n))
     parts.append("enemy_death_start	!byte " + ", ".join(str(n) for n in death_start))
     parts.append("enemy_death_len		!byte " + ", ".join(str(n) for n in death_len))
-    parts.append("enemy_range		!byte 30, 30, 4, 24, 20, 16, 40, 30")
+    parts.append("enemy_range		!byte 30, 30, 4, 24, 30, 16, 40, 30")
     hp_bytes = ", ".join(str(min(255, HP_QUAKE[t] // 5)) for t in TYPES)
     parts.append(f"enemy_hp_init		!byte {hp_bytes}")
     parts.append("enemy_pain_chance	!byte $80, $80, $c0, $80, $80, $80, $80, $80")
     parts.append("enemy_drop_type	!byte 7, $ff, $ff, $ff, 4, $ff, $ff, $ff")
-    parts.append("enemy_fire_frame	!byte 2, 4, 4, 6, 4, 4, 8, 4")
+    parts.append("enemy_fire_frame	!byte 2, 4, 4, 6, 2, 4, 8, 4")
     parts.append("enemy_class		!byte 0, 0, 1, 0, 0, 0, 0, 0")
     parts.append("; LOD Z by type: " + ", ".join(TYPES))
     parts.append(

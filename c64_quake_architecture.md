@@ -57,7 +57,7 @@
 * **Enemies:** one origin transform, then `enemy_in_view`: `z ≥ 0`, `|x| ≤ z+ENEMY_CULL_R` (2), `|y| ≤ z+ENEMY_CULL_H` (6, figure height). Miss skips rotate/project/draw. Same-floor figures almost always pass Y; the win is stacked floors in a tall room.
 
 ### Axis-Aligned Mechanical Elements
-* **Ramps:** Rise/run come from the AABB (`sy` vs `sx` or `sz` on the slope axis). Floor height is 8.8: `Height = slope_y + (local_8.8 * sy) / run`. The mesh strokes only the two side hypotenuses; room floors and landings already draw the top and bottom.
+* **Ramps:** Rise/run come from the AABB (`sy` vs `sx` or `sz` on the slope axis). Floor height is 8.8: `Height = slope_y + (local_8.8 * sy) / run`. The mesh always strokes the two side hypotenuses; `slope_flags` bit0 / bit1 add the low-end and high-end horizontals.
 * **Dynamic Interactive Elements:** Elevators (translating Y-axis base planes), switches (proximity check targets), and crates (solid vertical obstacle boxes) utilize a singular uniform bounding-box logic routine, allowing multi-object processing under a unified assembly subroutine loops.
 * **Switch → Elevator:** In the editor, a switch is bound to its elevator(s) by a **tag** string. Export compiles tags to **indices** (switch *n* toggles elevator *m*). The game never stores or compares tag strings. Same tag/index pattern as trigger purposes.
 * **Message Triggers:** Covered by trigger purpose **message** — undrawn AABB, one HUD line while the player is inside. Hurt / end of level / teleport / elevator are other purposes on the same volume type.

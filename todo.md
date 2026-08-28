@@ -2,8 +2,8 @@
 
 - [x] Nailgun shots
 - [x] Grenade projectile - needs tweaking (stronger gravity, less shot upward)
-- [x] More optimization for the grenade FX — only simulate 1/4 of the particles and use 90° Y rotates to fill out the other 3/4. Keep the sin and cos components of each for rotation, like the rooms and items do, to reduce rotation costs.
-- [ ] Ogre behaviour
+- [x] Grenade FX: billboard particles (bake view-local vels; project root + scale offsets).
+- [x] Ogre behaviour
 - [ ] Knight behaviour
 - [ ] Shambler behaviour
 - [ ] Scrag behaviour (flying)

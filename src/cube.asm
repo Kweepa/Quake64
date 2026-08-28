@@ -402,6 +402,78 @@ ent_rotate
 	rts
 }
 
+; Y = local vert. obj_i = enemy, ent_type set. org_* = world 8.8 of that bone.
+; Facing rotate only (same smul8_88 / scale_s8_88 as ent_rotate).
+ent_vert_world
+	sty gidx
+	jsr ent_set_pose
+	ldx obj_i
+	+lda_mx en_rot
+	tay
+	lda COSTAB,y
+	jsr mulset_a
+	lda SINTAB,y
+	jsr mulset_b
+	ldy gidx
+	lda (gx_ptr),y
+	sta lx_b
+	lda (gz_ptr),y
+	sta lz_b
+	lda lx_b
+	jsr smul8_88a
+	lda nlo
+	sta e0x
+	lda nhi
+	sta e0xh
+	lda lz_b
+	jsr smul8_88b
+	sec
+	lda e0x
+	sbc nlo
+	sta e0x
+	lda e0xh
+	sbc nhi
+	sta e0xh
+	lda lx_b
+	jsr smul8_88b
+	lda nlo
+	sta e1z
+	lda nhi
+	sta e1zh
+	lda lz_b
+	jsr smul8_88a
+	clc
+	lda e1z
+	adc nlo
+	sta e1z
+	lda e1zh
+	adc nhi
+	sta e1zh
+	ldx obj_i
+	clc
+	lda e0x
+	sta org_xl
+	+lda_mx en_x
+	adc e0xh
+	sta org_xh
+	clc
+	lda e1z
+	sta org_zl
+	+lda_mx en_z
+	adc e1zh
+	sta org_zh
+	ldy gidx
+	lda (gy_ptr),y
+	jsr scale_s8_88
+	clc
+	lda nlo
+	sta org_yl
+	ldx obj_i
+	+lda_mx en_y
+	adc nhi
+	sta org_yh
+	rts
+
 ; Y = vert index. C=1 if culled by mesh_vmask (skip transform/project).
 .vert_skip
 	lda mesh_vmask
@@ -2361,17 +2433,24 @@ try_bite_splat
 	rts
 
 ; If this enemy is on its ranged fire frame (or latched pending), claim sprite-6 muzzle at tip.
+; Grunt: weapon (12). Ogre shoot: Wrist L. Depth in rot1 for start_enemy_muzzle.
 try_enemy_muzzle
 	jsr enemy_muzzle_want
 	bcc .temz_rts
-	lda CAM_ZH+12
+	ldx #12
+	cpy #ENT_OGRE
+	bne .temz_tip
+	ldx #GREN_WRIST_L
+.temz_tip
+	lda CAM_ZH,x
 	bmi .temz_rts
-	lda PROJ_X+12
-	ldy PROJ_XH+12
+	sta rot1
+	lda PROJ_X,x
+	ldy PROJ_XH,x
 	jsr .to_sx
 	sta rot2				; tip sx
-	lda PROJ_Y+12
-	ldy PROJ_YH+12
+	lda PROJ_Y,x
+	ldy PROJ_YH,x
 	jsr .to_sy
 	tay
 	lda #$ff
@@ -2389,6 +2468,11 @@ enemy_muzzle_want
 	bne .emw_no
 	jsr enemy_get_class
 	bne .emw_no			; Rottweiler — leap bite, no muzzle
+	cpy #ENT_OGRE
+	bne .emw_ff
+	lda en_pain_i,x
+	beq .emw_no			; swing — no muzzle
+.emw_ff
 	lda enemy_fire_frame,y
 	bmi .emw_no			; $ff = none
 	lda emuz_pending

@@ -26,7 +26,7 @@ MAP_FIELDS = {
     "crate_x", "crate_y", "crate_z", "crate_sx", "crate_sy", "crate_sz",
     "crate_room", "crate_id",
     "slope_x", "slope_y", "slope_z", "slope_sx", "slope_sy", "slope_sz",
-    "slope_axis", "slope_dir", "slope_room", "slope_id",
+    "slope_axis", "slope_dir", "slope_room", "slope_id", "slope_flags",
     "plat_x", "plat_y", "plat_z", "plat_sx", "plat_sz",
     "plat_room", "plat_solid", "plat_id",
     "elev_x", "elev_y0", "elev_z", "elev_sx", "elev_sy", "elev_sz",

@@ -33,8 +33,8 @@ const AXIS_BASIS = {
   ],
 };
 
-const CONE_FRAC = 0.2;
-const CONE_RADIUS = 0.085;
+const CONE_FRAC = 0.1;
+const CONE_RADIUS = 0.04;
 const CONE_SEGS = 10;
 
 function gizmoPlaneCorners(c, plane, planeLen) {

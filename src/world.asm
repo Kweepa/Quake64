@@ -136,8 +136,8 @@ init_drops
 	rts
 
 ; ------------------------------------------------------------------
-; point_in_aabb_xz — col_x/col_z vs box at Y index in tables via box_* zp
-; C=1 inside (exclusive max)
+; point_in_box_xz — col_x/col_z vs box_*  C=1 inside (exclusive max)
+; point_in_floor_xz — same, inclusive max (walkables; T-junction seams)
 ; ------------------------------------------------------------------
 point_in_box_xz
 	lda col_x
@@ -158,6 +158,25 @@ point_in_box_xz
 	cmp col_z
 	bcc .pib_no
 	beq .pib_no
+	sec
+	rts
+point_in_floor_xz
+	lda col_x
+	cmp box_x
+	bcc .pib_no
+	clc
+	lda box_x
+	adc box_sx
+	cmp col_x
+	bcc .pib_no
+	lda col_z
+	cmp box_z
+	bcc .pib_no
+	clc
+	lda box_z
+	adc box_sz
+	cmp col_z
+	bcc .pib_no
 	sec
 	rts
 .pib_no
@@ -360,7 +379,7 @@ update_floor
 	sta col_x
 	lda cam_zh
 	sta col_z
-	jsr point_in_box_xz
+	jsr point_in_floor_xz
 	bcc .uf_cn
 	clc
 	+lda_mx crate_y
@@ -403,7 +422,7 @@ update_floor
 	sta col_x
 	lda cam_zh
 	sta col_z
-	jsr point_in_box_xz
+	jsr point_in_floor_xz
 	bcc .uf_pn
 	+lda_mx plat_y
 	cmp floor_y
@@ -455,7 +474,7 @@ update_floor
 	sta col_x
 	lda cam_zh
 	sta col_z
-	jsr point_in_box_xz
+	jsr point_in_floor_xz
 	bcs .uf_sxz
 	jmp .uf_sn
 .uf_sxz
@@ -555,15 +574,17 @@ update_floor
 	sta floor_y
 	lda rot0
 	sta floor_yl
+	lda #0
+	sta floor_slope
 	lda proc_tmp0
 	cmp col_y
-	bcc .uf_done			; step-up — .ufl_up snaps
+	bcc .uf_sn			; step-up — .ufl_up snaps
 	sbc col_y			; downward gap (C=1)
 	cmp #FALL_LEDGE + 1
-	bcs .uf_done			; start fall; .ufl_air lands
+	bcs .uf_sn			; start fall; .ufl_air lands
 	lda #1
 	sta floor_slope
-	jmp .uf_done
+	jmp .uf_sn
 .uf_sn
 	inx
 	jmp .uf_s

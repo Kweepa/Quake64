@@ -2139,6 +2139,14 @@ function nudgeDoorOutside(door, room) {
 const DOOR_SIZE = [4, 5, 1];
 const SWITCH_SIZE = [2, 3, 1];
 
+/** Keep in sync with doorSizeForScale in model.js. */
+function doorSnapSize(door) {
+  const s = Number(door?.doorScale);
+  if (s === 2) return [8, 10, 1];
+  if (s === 1.5) return [6, 8, 1];
+  return DOOR_SIZE;
+}
+
 function wallDims(size, face) {
   const [a, b, thick] = size;
   if (face.axis === "x") return { sx: thick, sy: b, sz: a };
@@ -2149,8 +2157,8 @@ function wallDims(size, face) {
  * Keep Y (and off-face lateral) so a door at the bottom of a shaft does not jump to another fragment. */
 function snapBoxToHullFace(obj, f, size, inside) {
   const cx = obj.x + obj.sx / 2;
-  const cy = obj.y + obj.sy / 2;
   const cz = obj.z + obj.sz / 2;
+  const floorY = obj.y | 0;
   const dims = wallDims(size, f);
   obj.face = f.faceId;
   obj.sx = dims.sx;
@@ -2160,7 +2168,7 @@ function snapBoxToHullFace(obj, f, size, inside) {
     if (inside) return sign > 0 ? plane - thick : plane;
     return sign > 0 ? plane : plane - thick;
   };
-  obj.y = Math.round(cy - obj.sy / 2);
+  obj.y = floorY;
   if (f.axis === "x") {
     obj.x = along(f.sign, f.plane, obj.sx);
     obj.z = Math.round(cz - obj.sz / 2);
@@ -2183,7 +2191,7 @@ function snapBoxToHullFace(obj, f, size, inside) {
 function snapDoorToRoom(door, room) {
   const f = bestDoorHullFace(door, room);
   if (!f) return door;
-  return snapBoxToHullFace(door, f, DOOR_SIZE, false);
+  return snapBoxToHullFace(door, f, doorSnapSize(door), false);
 }
 
 function snapDoorBetweenRooms(door, roomA, roomB) {
@@ -2197,7 +2205,7 @@ function snapDoorBetweenRooms(door, roomA, roomB) {
     if (!best || score < best.score) best = { f, score };
   }
   if (!best) return door;
-  return snapBoxToHullFace(door, best.f, DOOR_SIZE, false);
+  return snapBoxToHullFace(door, best.f, doorSnapSize(door), false);
 }
 
 /** Set door face/size from nearest hull wall; keep world position (no flush snap). */
@@ -2213,15 +2221,15 @@ function orientDoorToRooms(door, roomA, roomB) {
   }
   if (!best) return door;
   const cx = door.x + door.sx / 2;
-  const cy = door.y + door.sy / 2;
+  const floorY = door.y | 0;
   const cz = door.z + door.sz / 2;
   door.face = best.f.faceId;
-  const dims = wallDims(DOOR_SIZE, best.f);
+  const dims = wallDims(doorSnapSize(door), best.f);
   door.sx = dims.sx;
   door.sy = dims.sy;
   door.sz = dims.sz;
   door.x = Math.round(cx - door.sx / 2);
-  door.y = Math.round(cy - door.sy / 2);
+  door.y = floorY;
   door.z = Math.round(cz - door.sz / 2);
   if (door.x < 0) door.x = 0;
   if (door.y < 0) door.y = 0;
@@ -2565,6 +2573,14 @@ function cycleEnemyRot(n, delta = 1) {
   return clampEnemyRot((n | 0) + delta);
 }
 
+/** Ramp surface horizontals: bit0 = low end, bit1 = high end. */
+const SLOPE_FLAG_BOTTOM = 1;
+const SLOPE_FLAG_TOP = 2;
+
+function clampSlopeFlags(n) {
+  return (n | 0) & (SLOPE_FLAG_BOTTOM | SLOPE_FLAG_TOP);
+}
+
 /** (z,+1) → (z,−1) → (x,+1) → (x,−1) → … */
 function cycleSlopeOrient(obj) {
   if (!obj || obj.kind !== "slope") return obj;
@@ -2731,6 +2747,9 @@ const DOOR_LOCK_LABELS = {
   silver: "Silver key",
   gold: "Gold key",
 };
+/** Discrete AABB scales of the 4×5×1 doorway. Thickness stays 1. */
+const DOOR_SCALES = [1, 1.5, 2];
+const DOOR_SCALE_LABELS = { 1: "1.0", 1.5: "1.5", 2: "2.0" };
 
 /** Height / base-side = φ. Fixed backpack: 1.5 tall. */
 const GOLDEN_RATIO = (1 + Math.sqrt(5)) / 2;
@@ -2759,6 +2778,21 @@ function clampDoorType(s) {
   if (lower === "arch") return "Arch";
   if (lower === "tri") return "Tri";
   return "Tech";
+}
+
+function clampDoorScale(s) {
+  const n = Number(s);
+  if (n === 2) return 2;
+  if (n === 1.5) return 1.5;
+  return 1;
+}
+
+/** Width × height × thickness for a doorway scale (1 / 1.5 / 2). */
+function doorSizeForScale(scale) {
+  const s = clampDoorScale(scale);
+  if (s === 2) return [8, 10, 1];
+  if (s === 1.5) return [6, 8, 1];
+  return [4, 5, 1];
 }
 
 function isDoorMeshKey(key) {
@@ -3578,17 +3612,17 @@ function aabbCenter(box) {
   };
 }
 
-function sizeForFace(kind, faceId) {
+function sizeForFace(kind, faceId, scale) {
   const def = KINDS[kind];
   const face = FACES.find((f) => f.id === faceId) || FACES[0];
-  const [a, b, thick] = def.defaultSize;
+  const [a, b, thick] = kind === "doorway" ? doorSizeForScale(scale) : def.defaultSize;
   if (face.axis === "x") return { sx: thick, sy: b, sz: a };
   return { sx: a, sy: b, sz: thick };
 }
 
 function applyFaceSize(obj) {
   if (obj.kind !== "doorway" && obj.kind !== "switch") return obj;
-  const s = sizeForFace(obj.kind, obj.face);
+  const s = sizeForFace(obj.kind, obj.face, obj.doorScale);
   obj.sx = s.sx;
   obj.sy = s.sy;
   obj.sz = s.sz;
@@ -3621,6 +3655,7 @@ function clampObject(obj) {
   obj.x = clampByte(obj.x);
   obj.y = clampByte(obj.y);
   obj.z = clampByte(obj.z);
+  if (obj.kind === "doorway") obj.doorScale = clampDoorScale(obj.doorScale);
   if (obj.kind === "doorway" || obj.kind === "switch") {
     applyFaceSize(obj);
   } else if (obj.kind === "pickup") {
@@ -3630,6 +3665,7 @@ function clampObject(obj) {
     obj.sy = clampSize(obj.y, obj.sy);
     obj.sz = clampSize(obj.z, obj.sz);
     applySlopeConstraint(obj);
+    obj.flags = clampSlopeFlags(obj.flags);
   } else {
     obj.sx = clampSize(obj.x, obj.sx);
     obj.sy = clampSize(obj.y, obj.sy);
@@ -3695,6 +3731,7 @@ function createObject(kind, x, y, z, extra = {}) {
     obj.sx = 4;
     obj.sy = 2;
     obj.sz = 4;
+    obj.flags = extra.flags;
   }
   if (kind === "spawn" || kind === "enemy" || kind === "teleporter_dest") {
     obj.rot = clampEnemyRot(extra.rot ?? 0);
@@ -3740,6 +3777,7 @@ function createObject(kind, x, y, z, extra = {}) {
   if (kind === "doorway") {
     obj.lockKey = clampDoorLock(extra.lockKey ?? (extra.locked ? "silver" : "unlocked"));
     obj.doorType = clampDoorType(extra.doorType);
+    obj.doorScale = clampDoorScale(extra.doorScale);
     if (extra.otherRoomId) obj.otherRoomId = String(extra.otherRoomId);
   }
   if (kind === "platform") obj.collide = extra.collide !== false;
@@ -3837,7 +3875,7 @@ const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 4, 4, 6, 4, 4, 8, 4];
+const FIRE_FRAME = [2, 4, 4, 6, 2, 4, 8, 4];
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {
   Grunt: { stand: ["stand"], alert: ["load"], run: ["run"], walk: ["prowl"], attack: ["shoot"] },
@@ -3864,10 +3902,10 @@ const ROLE_CLIPS = {
   },
   Ogre: {
     stand: ["stand"],
-    alert: ["stand", 4],
+    alert: ["pull"],
     run: ["run"],
     walk: ["walk"],
-    attack: ["smash"],
+    attack: ["swing", "shoot"],
   },
   Shambler: {
     stand: ["stand"],
@@ -4189,7 +4227,7 @@ const C64_OBJECT_BYTES = {
   room: 11,
   doorway: 13,
   crate: 8,
-  slope: 10,
+  slope: 11,
   platform: 8,
   elevator: 11,
   switch: 10,
@@ -4673,6 +4711,7 @@ function parseObjects(list) {
       face: o.face,
       axis: o.axis,
       dir: o.dir,
+      flags: o.flags,
       enemy: o.enemy,
       patrol: o.patrol,
       rot: o.rot,
@@ -4682,6 +4721,7 @@ function parseObjects(list) {
       tag: o.tag,
       lockKey: o.lockKey,
       doorType: o.doorType,
+      doorScale: o.doorScale,
       locked: o.locked,
       keyTag: o.keyTag,
       elevAuto: o.elevAuto,
@@ -5305,8 +5345,8 @@ const AXIS_BASIS = {
   ],
 };
 
-const CONE_FRAC = 0.2;
-const CONE_RADIUS = 0.085;
+const CONE_FRAC = 0.1;
+const CONE_RADIUS = 0.04;
 const CONE_SEGS = 10;
 
 function gizmoPlaneCorners(c, plane, planeLen) {
@@ -7885,31 +7925,14 @@ class LayoutView {
     return null;
   }
 
-  /** Drop position from screen coords: selected room floor, else grid plane. */
+  /** Drop pose from screen: nearest ray-hit room floor (except room/doorway), else grid. */
   placeAtScreen(mx, my, kind) {
     const doc = this.opts.getDoc();
     const ray = screenRay(mx, my, this.camera, this.cssW, this.cssH);
     const def = KINDS[kind] || KINDS.crate;
     const sx = def.defaultSize[0];
     const sz = def.defaultSize[2];
-    const placeRoom = kind === "room" || kind === "doorway" ? null : this.opts.getPlaceRoom?.() || null;
-    if (placeRoom) {
-      const g = roomGeometry(placeRoom);
-      let bestHit = null;
-      for (const c of g.colliders) {
-        const hit = rayAabb(ray.origin, ray.dir, c);
-        if (hit && hit.t >= 0 && (!bestHit || hit.t < bestHit.t)) bestHit = hit;
-      }
-      const fy = roomFloorY(placeRoom, placeRoom.x + placeRoom.sx / 2, placeRoom.z + placeRoom.sz / 2);
-      const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: fy, z: 0 }, { x: 0, y: 1, z: 0 });
-      const pt = floor?.point || bestHit?.point || aabbCenter(placeRoom);
-      return {
-        x: Math.round(pt.x - sx / 2),
-        y: fy,
-        z: Math.round(pt.z - sz / 2),
-      };
-    }
-    if (kind !== "doorway") {
+    if (kind !== "room" && kind !== "doorway") {
       let bestRoom = null;
       let bestT = Infinity;
       for (const room of roomsOf(doc)) {
@@ -7929,6 +7952,7 @@ class LayoutView {
           x: Math.round(pt.x - sx / 2),
           y: fy,
           z: Math.round(pt.z - sz / 2),
+          room: bestRoom.room,
         };
       }
     }
@@ -10348,7 +10372,6 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   onStatus: setStatus,
   beginUndo,
   endUndo,
-  getPlaceRoom: () => placementRoom(),
 });
 
 const overheadView = new OverheadView(document.getElementById("overhead-canvas"), {
@@ -11039,10 +11062,17 @@ function canvasClientToScreen(e) {
   };
 }
 
+/** Owner room for palette drop: doorway → selected/last; else ray-hit room, miss → selected/last. */
+function placeOwner(kind, hitRoom) {
+  if (kind === "room") return null;
+  if (kind === "doorway") return placementRoom();
+  return hitRoom || placementRoom();
+}
+
 function previewObjectAtScreen(place, mx, my) {
   const kind = place.kind;
   const p = layoutView.placeAtScreen(mx, my, kind);
-  const owner = kind === "room" ? null : placementRoom();
+  const owner = placeOwner(kind, p.room);
   const extra = place.enemy ? { enemy: place.enemy } : {};
   if (owner) extra.roomId = owner.id;
   const obj = createObject(kind, p.x, p.y, p.z, extra);
@@ -11124,7 +11154,8 @@ function finishPaletteDrop(e) {
     return;
   }
   const kind = place.kind;
-  const owner = kind === "room" ? null : placementRoom();
+  const p = layoutView.placeAtScreen(mx, my, kind);
+  const owner = placeOwner(kind, p.room);
   if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
     layoutView.draw();
     setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
@@ -12164,6 +12195,23 @@ function renderInspector() {
       }
       typeSel.addEventListener("change", () => apply(() => (obj.doorType = typeSel.value)));
       root.appendChild(field("Type", typeSel));
+      const scaleSel = document.createElement("select");
+      for (const t of DOOR_SCALES) {
+        const opt = document.createElement("option");
+        opt.value = String(t);
+        opt.textContent = DOOR_SCALE_LABELS[t];
+        if (clampDoorScale(obj.doorScale) === t) opt.selected = true;
+        scaleSel.appendChild(opt);
+      }
+      scaleSel.addEventListener("change", () =>
+        apply(() => {
+          const floorY = obj.y | 0;
+          obj.doorScale = clampDoorScale(scaleSel.value);
+          assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
+          obj.y = floorY;
+        })
+      );
+      root.appendChild(field("Scale", scaleSel));
     }
     const sizeP = document.createElement("p");
     sizeP.className = "muted";
@@ -12173,6 +12221,23 @@ function renderInspector() {
     root.appendChild(sizeP);
     if (obj.kind === "slope") {
       root.appendChild(rotateRow(() => apply(() => cycleSlopeOrient(obj))));
+      const flags = obj.flags | 0;
+      root.appendChild(
+        toggleField("Bottom", !!(flags & SLOPE_FLAG_BOTTOM), (btn) =>
+          apply(() => {
+            obj.flags = (obj.flags | 0) ^ SLOPE_FLAG_BOTTOM;
+            btn.classList.toggle("active", !!(obj.flags & SLOPE_FLAG_BOTTOM));
+          })
+        )
+      );
+      root.appendChild(
+        toggleField("Top", !!(flags & SLOPE_FLAG_TOP), (btn) =>
+          apply(() => {
+            obj.flags = (obj.flags | 0) ^ SLOPE_FLAG_TOP;
+            btn.classList.toggle("active", !!(obj.flags & SLOPE_FLAG_TOP));
+          })
+        )
+      );
     }
     return;
   }

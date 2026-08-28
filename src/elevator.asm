@@ -164,7 +164,7 @@ elev_update_floor
 	sta col_x
 	lda cam_zh
 	sta col_z
-	jsr point_in_box_xz
+	jsr point_in_floor_xz
 	bcc .euf_n
 	; on elevator footprint — floor = elev_y + sy
 	; reject only if under the car (feet < elev_y); top is sy above elev_y

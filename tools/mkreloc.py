@@ -84,7 +84,9 @@ def main() -> None:
 
     labels = parse_labels(Path(args.labels))
     max_id = 255
-    last = "door_type" if "door_type" in labels else "map_text"
+    last = "slope_flags" if "slope_flags" in labels else (
+        "door_type" if "door_type" in labels else "map_text"
+    )
     if "room_x" in labels and last in labels:
         max_id = (labels[last] - labels["room_x"]) // 2
         if max_id < 0 or max_id > 255:

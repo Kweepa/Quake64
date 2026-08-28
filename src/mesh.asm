@@ -7,9 +7,21 @@ box_edges
 	!byte 4,5, 5,6, 6,7, 7,4
 	!byte 0,4, 1,5, 2,6, 3,7
 
-; Ramp hypotenuses (no top/bottom — room/platform already draw those)
-ramp_side_edges
+; Ramp hypotenuses always; top/bottom caps from slope_flags bits 0/1
+ramp_e00
 	!byte 1,2, 3,0
+ramp_e01
+	!byte 1,2, 3,0, 0,1
+ramp_e10
+	!byte 1,2, 3,0, 2,3
+ramp_e11
+	!byte 1,2, 3,0, 0,1, 2,3
+ramp_ne_tab
+	!byte 2, 3, 3, 4
+ramp_ed_lo
+	!byte <ramp_e00, <ramp_e01, <ramp_e10, <ramp_e11
+ramp_ed_hi
+	!byte >ramp_e00, >ramp_e01, >ramp_e10, >ramp_e11
 ; Platform quad, switch triangle
 quad_edges
 	!byte 0,1, 1,2, 2,3, 3,0
@@ -20,7 +32,7 @@ tri_edges
 box_edge_vert
 	!byte 0,0,0,0, 0,0,0,0, 1,1,1,1
 ramp_side_vert
-	!byte 0,0
+	!byte 0,0, 0,0
 quad_vert
 	!byte 0,0,0,0
 tri_vert
@@ -580,11 +592,15 @@ draw_slope_mesh
 	jsr fill_slope_verts
 	lda #4
 	sta mesh_nv
-	lda #2
+	ldx obj_i
+	+lda_mx slope_flags
+	and #3
+	tax
+	lda ramp_ne_tab,x
 	sta mesh_ne
-	lda #<ramp_side_edges
+	lda ramp_ed_lo,x
 	sta edge_ptr
-	lda #>ramp_side_edges
+	lda ramp_ed_hi,x
 	sta edge_ptr+1
 	lda #<ramp_side_vert
 	sta edge_vert_ptr
@@ -740,6 +756,46 @@ fill_item_verts
 	sta ent_rot
 	jmp xform_item_spin
 
+; Face width 4/6/8 → rot1 = ×1 / ×1.5 / ×2 (nearest bucket).
+door_mesh_scale
+	ldx obj_i
+	lda door_vface,x
+	cmp #FACE_PX
+	bcc .dms_z
+	lda door_vsz,x
+	jmp .dms_w
+.dms_z
+	lda door_vsx,x
+.dms_w
+	ldx #0
+	cmp #5
+	bcc .dms_set
+	inx
+	cmp #7
+	bcc .dms_set
+	inx
+.dms_set
+	stx rot1
+	rts
+
+; A = signed local coord. rot1: 0=×1, 1=×3/2, 2=×2. Y preserved.
+scale_door_u
+	ldx rot1
+	beq .sdu_rts
+	dex
+	beq .sdu_15
+	asl
+	rts
+.sdu_15
+	sta pv4
+	asl
+	clc
+	adc pv4
+	cmp #$80
+	ror
+.sdu_rts
+	rts
+
 ; Door type mesh: local X across, Y up, Z thickness. Origin = face bottom-centre.
 fill_door_type_verts
 	ldx obj_i
@@ -762,6 +818,8 @@ fill_door_type_verts
 	lda door_nz,y
 	sta mesh_nz
 	sty rot0
+	jsr door_mesh_scale
+	ldy rot0
 	clc
 	lda #<door_ux
 	adc door_uo,y
@@ -774,6 +832,7 @@ fill_door_type_verts
 	cpy mesh_nx
 	bcs .fdt_uz
 	lda (src_ptr),y
+	jsr scale_door_u
 	sta UX,y
 	iny
 	bne .fdt_ux
@@ -807,8 +866,9 @@ fill_door_type_verts
 .fdt_vyl
 	cpy mesh_nv
 	bcs .fdt_ptr
-	clc
 	lda (src_ptr),y
+	jsr scale_door_u
+	clc
 	adc box_y
 	sta VY,y
 	iny
@@ -1046,7 +1106,7 @@ fill_switch_verts
 	sta mesh_nv
 	jmp xform_mesh_xz
 
-; Four ramp corners; stroke uses the two hypotenuses only
+; Four ramp corners; stroke uses hypotenuses plus optional top/bottom
 fill_slope_verts
 	ldx obj_i
 	+lda_mx slope_axis

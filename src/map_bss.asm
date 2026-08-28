@@ -1,5 +1,5 @@
 ; Runtime map header + SoA pointers (filled by bind_map).
-; Labels are RAM at $0400 (not emitted in GAME). From room_x through door_type
+; Labels are RAM at $0400 (not emitted in GAME). From room_x through slope_flags
 ; they are pointers into the packed map — columns only via +lda_mx / +sta_mx /
 ; +cmp_mx / *_my (mapacc.asm). Never lda en_x,x (that loads the pointer word).
 !zone map_bss
@@ -166,10 +166,11 @@ bp_id	= $0516
 map_name	= $0518
 map_text	= $051A
 door_type	= $051C
-!if (door_type - room_x) & 1 {
+slope_flags	= $051E
+!if (slope_flags - room_x) & 1 {
 	!error "map pointer table is not aligned words"
 }
-!if (door_type - room_x) / 2 > 255 {
+!if (slope_flags - room_x) / 2 > 255 {
 	!error "map pointer table exceeds 256 fields"
 }
-; MAP_BSS_END = $051E  size=286
+; MAP_BSS_END = $0520  size=288

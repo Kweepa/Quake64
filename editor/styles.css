@@ -718,6 +718,18 @@ button:disabled {
   border-color: #fff;
 }
 
+.room-color-channel.mixed {
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--bg),
+    var(--bg) 3px,
+    var(--panel) 3px,
+    var(--panel) 6px
+  );
+  color: var(--muted);
+  text-shadow: none;
+}
+
 .color-swatches {
   display: flex;
   flex-wrap: nowrap;

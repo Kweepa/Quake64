@@ -1025,6 +1025,20 @@ function selectedObject() {
   return activeMap(doc).objects.find((o) => o.id === selectedIds[0]) || null;
 }
 
+function selectedLayoutObjects() {
+  const map = activeMap(doc);
+  return selectedIds.map((id) => map.objects.find((o) => o.id === id)).filter(Boolean);
+}
+
+function unanimous(objs, get) {
+  if (!objs.length) return undefined;
+  const v0 = get(objs[0]);
+  for (let i = 1; i < objs.length; i++) {
+    if (get(objs[i]) !== v0) return undefined;
+  }
+  return v0;
+}
+
 function rememberSelectedRoom() {
   for (let i = selectedIds.length - 1; i >= 0; i--) {
     const obj = activeMap(doc).objects.find((o) => o.id === selectedIds[i]);
@@ -1622,6 +1636,92 @@ function numInput(value, onChange, min, max) {
   return inp;
 }
 
+function textInputMixed(current, { maxLength, placeholder, onChange }) {
+  const inp = document.createElement("input");
+  inp.type = "text";
+  if (maxLength != null) inp.maxLength = maxLength;
+  if (current === undefined) {
+    inp.value = "";
+    inp.placeholder = "Mixed";
+  } else {
+    inp.value = current;
+    if (placeholder) inp.placeholder = placeholder;
+  }
+  inp.addEventListener("change", () => onChange(inp.value));
+  return inp;
+}
+
+function textareaMixed(current, { rows, maxLength, placeholder, onChange }) {
+  const ta = document.createElement("textarea");
+  ta.rows = rows;
+  if (maxLength != null) ta.maxLength = maxLength;
+  if (current === undefined) {
+    ta.value = "";
+    ta.placeholder = "Mixed";
+  } else {
+    ta.value = current;
+    if (placeholder) ta.placeholder = placeholder;
+  }
+  ta.addEventListener("change", () => onChange(ta.value));
+  return ta;
+}
+
+function numberInputMixed(current, onChange) {
+  const inp = document.createElement("input");
+  inp.type = "number";
+  inp.step = "1";
+  if (current === undefined) {
+    inp.value = "";
+    inp.placeholder = "Mixed";
+  } else {
+    inp.value = String(current);
+  }
+  inp.addEventListener("change", () => onChange(inp.value | 0));
+  return inp;
+}
+
+function selectMixed(current, items, onChange) {
+  const sel = document.createElement("select");
+  if (current === undefined) {
+    const mixed = document.createElement("option");
+    mixed.value = "__mixed";
+    mixed.textContent = "Mixed";
+    mixed.selected = true;
+    sel.appendChild(mixed);
+  }
+  for (const it of items) {
+    const opt = document.createElement("option");
+    opt.value = it.value;
+    opt.textContent = it.text;
+    if (current !== undefined && String(current) === String(it.value)) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener("change", () => {
+    if (sel.value === "__mixed") return;
+    onChange(sel.value);
+  });
+  return sel;
+}
+
+function layoutInspectorTitle(objs) {
+  const kind = objs[0].kind;
+  let label;
+  if (kind === "enemy") {
+    const name = unanimous(objs, (o) => o.enemy || "Enemy");
+    label = name === undefined ? "Enemy" : name;
+  } else {
+    label = KINDS[kind].label;
+  }
+  return objs.length > 1 ? `${label} (${objs.length})` : label;
+}
+
+function roomItems() {
+  return [
+    { value: "", text: "(none)" },
+    ...roomsOf(doc).map((r) => ({ value: r.id, text: r.name ? `Room  ${r.name}` : "Room" })),
+  ];
+}
+
 /** @type {"bg"|"line"|"fx"|"wpn"} */
 let roomColorChannel = "bg";
 
@@ -1632,7 +1732,7 @@ const ROOM_COLOR_CHANNELS = [
   { id: "wpn", label: "Weapon", get: (o) => o.weaponColor ?? ROOM_WPN_DEFAULT, set: (o, v) => (o.weaponColor = v) },
 ];
 
-function roomPaletteEditor(obj, apply) {
+function roomPaletteEditor(objs, apply) {
   const wrap = document.createElement("div");
   wrap.className = "field color-field room-palette";
   const span = document.createElement("span");
@@ -1643,10 +1743,14 @@ function roomPaletteEditor(obj, apply) {
   for (const ch of ROOM_COLOR_CHANNELS) {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "room-color-channel" + (ch.id === active.id ? " active" : "");
-    const val = ch.get(obj);
-    btn.title = `${ch.label}: ${val} ${C64_NAMES[val]}`;
-    btn.style.background = C64_HEX[val];
+    const val = unanimous(objs, ch.get);
+    btn.className = "room-color-channel" + (ch.id === active.id ? " active" : "") + (val === undefined ? " mixed" : "");
+    if (val === undefined) {
+      btn.title = `${ch.label}: Mixed`;
+    } else {
+      btn.title = `${ch.label}: ${val} ${C64_NAMES[val]}`;
+      btn.style.background = C64_HEX[val];
+    }
     const lbl = document.createElement("span");
     lbl.textContent = ch.label;
     btn.appendChild(lbl);
@@ -1658,22 +1762,356 @@ function roomPaletteEditor(obj, apply) {
   }
   const row = document.createElement("div");
   row.className = "color-swatches";
-  const cur = active.get(obj);
+  const cur = unanimous(objs, active.get);
   for (let i = 0; i < 16; i++) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "swatch" + (i === cur ? " selected" : "");
     btn.title = `${i}: ${C64_NAMES[i]}`;
     btn.style.background = C64_HEX[i];
-    btn.addEventListener("click", () =>
-      apply(() => {
-        active.set(obj, i);
-      })
-    );
+    btn.addEventListener("click", () => apply((obj) => active.set(obj, i)));
     row.appendChild(btn);
   }
   wrap.append(span, channels, row);
   return wrap;
+}
+
+function appendMixedKindStub(root, objs) {
+  const p = document.createElement("p");
+  p.className = "muted";
+  p.textContent = `${objs.length} selected`;
+  root.appendChild(p);
+  const selectedRooms = objs.filter((o) => o.kind === "room");
+  if (selectedRooms.length < 2) return;
+  const row = document.createElement("div");
+  row.className = "btn-row";
+  const rotY = document.createElement("button");
+  rotY.type = "button";
+  rotY.textContent = "Rotate Y";
+  rotY.addEventListener("click", () => {
+    pushUndo();
+    rotateRoomsBlockY(
+      doc,
+      selectedRooms.map((r) => r.id),
+      1
+    );
+    markDirty();
+    refreshAll();
+  });
+  row.append(rotY);
+  root.appendChild(row);
+}
+
+function renderLayoutObjectFields(root, objs) {
+  const kind = objs[0].kind;
+  const apply = (fn) => {
+    pushUndo();
+    for (const obj of objs) {
+      fn(obj);
+      clampObject(obj);
+    }
+    markDirty();
+    refreshAll();
+  };
+
+  if (kind === "room") {
+    const nameCur = unanimous(objs, (o) => o.name || "");
+    root.appendChild(
+      field(
+        "Name",
+        textInputMixed(nameCur, {
+          maxLength: MAX_NAME_LEN,
+          placeholder: "Display name",
+          onChange: (v) => apply((obj) => (obj.name = clampName(v))),
+        })
+      )
+    );
+    root.appendChild(roomPaletteEditor(objs, apply));
+
+    const shapeRow = document.createElement("div");
+    shapeRow.className = "btn-row shape-picker";
+    const curShape = unanimous(objs, (o) => clampRoomShape(o.shape));
+    for (const s of ROOM_SHAPES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = s === "box" ? "Box" : s;
+      btn.classList.toggle("active", curShape === s);
+      btn.addEventListener("click", () => {
+        if (curShape === s) return;
+        apply((obj) => {
+          if (clampRoomShape(obj.shape) === s) return;
+          applyRoomShape(obj, s);
+        });
+      });
+      shapeRow.append(btn);
+    }
+    root.appendChild(field("Shape", shapeRow));
+
+    const allNonBox = objs.every((o) => clampRoomShape(o.shape) !== "box");
+    const rotAxes = allNonBox ? ["x", "y", "z"] : ["y"];
+    const rotRow = document.createElement("div");
+    rotRow.className = "btn-row rot-axes";
+    for (const axis of rotAxes) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = axis.toUpperCase();
+      btn.addEventListener("click", () => {
+        if (axis === "y" && objs.length >= 2) {
+          pushUndo();
+          rotateRoomsBlockY(
+            doc,
+            objs.map((o) => o.id),
+            1
+          );
+          markDirty();
+          refreshAll();
+          return;
+        }
+        apply((obj) => {
+          if (axis === "y") rotateRoomY(doc, obj, 1);
+          else rotateRoom(obj, axis, 1);
+        });
+      });
+      rotRow.append(btn);
+    }
+    root.appendChild(field("Rotate", rotRow));
+  }
+
+  if (kind === "enemy") {
+    const allOn = objs.every((o) => !!o.patrol);
+    root.appendChild(
+      toggleField("Patrol", allOn, () => apply((obj) => (obj.patrol = !allOn)))
+    );
+  }
+
+  if (isFigureObject(objs[0]) || kind === "teleporter_dest") {
+    root.appendChild(rotateRow(() => apply((obj) => (obj.rot = cycleEnemyRot(obj.rot ?? 0)))));
+  }
+
+  if (kind === "trigger") {
+    const purpose = unanimous(objs, (o) => clampTriggerPurpose(o.purpose));
+    root.appendChild(
+      field(
+        "Purpose",
+        selectMixed(
+          purpose,
+          TRIGGER_PURPOSES.map((p) => ({ value: p, text: TRIGGER_PURPOSE_LABELS[p] })),
+          (v) => apply((obj) => (obj.purpose = v))
+        )
+      )
+    );
+    if (purpose === "message") {
+      const textCur = unanimous(objs, (o) => o.text || "");
+      const row = field(
+        "Text",
+        textareaMixed(textCur, {
+          rows: 3,
+          maxLength: MAX_TRIGGER_TEXT,
+          placeholder: "Shown while inside",
+          onChange: (v) => apply((obj) => (obj.text = clampTriggerText(v))),
+        })
+      );
+      row.classList.add("block");
+      root.appendChild(row);
+    }
+    if (purpose !== undefined && triggerUsesTag(purpose)) {
+      const tagCur = unanimous(objs, (o) => o.tag || "");
+      root.appendChild(
+        field(
+          "Tag",
+          textInputMixed(tagCur, {
+            maxLength: MAX_TAG_LEN,
+            placeholder: "destination tag",
+            onChange: (v) => apply((obj) => (obj.tag = clampTag(v))),
+          })
+        )
+      );
+    }
+  }
+
+  if (usesLinkTag(kind)) {
+    const tagCur = unanimous(objs, (o) => o.tag || "");
+    root.appendChild(
+      field(
+        "Tag",
+        textInputMixed(tagCur, {
+          maxLength: MAX_TAG_LEN,
+          placeholder: kind === "switch" || kind === "elevator" ? "elevator link" : "destination tag",
+          onChange: (v) => apply((obj) => (obj.tag = clampTag(v))),
+        })
+      )
+    );
+  }
+
+  if (kind === "elevator") {
+    const allAuto = objs.every((o) => elevHeightsAuto(o));
+    root.appendChild(
+      toggleField("Auto heights", allAuto, () =>
+        apply((obj) => {
+          obj.elevAuto = !allAuto;
+          if (!obj.elevAuto) {
+            const room = roomById(doc, obj.roomId);
+            const floorY = room ? room.y | 0 : 0;
+            const stops = elevStopBottoms(doc, { ...obj, elevAuto: true });
+            obj.elevLow = stops.dest - floorY;
+            obj.elevHigh = stops.home - floorY;
+            clampElevHeights(obj);
+          }
+        })
+      )
+    );
+    const auto = unanimous(objs, (o) => elevHeightsAuto(o));
+    if (auto === false) {
+      for (const obj of objs) clampElevHeights(obj);
+      const lowCur = unanimous(objs, (o) => o.elevLow | 0);
+      const highCur = unanimous(objs, (o) => o.elevHigh | 0);
+      root.appendChild(
+        field(
+          "Low (vs room)",
+          numberInputMixed(lowCur, (n) =>
+            apply((obj) => {
+              obj.elevLow = n;
+              clampElevHeights(obj);
+            })
+          )
+        )
+      );
+      root.appendChild(
+        field(
+          "High (vs room)",
+          numberInputMixed(highCur, (n) =>
+            apply((obj) => {
+              obj.elevHigh = n;
+              clampElevHeights(obj);
+            })
+          )
+        )
+      );
+    }
+  }
+
+  if (kind === "pickup") {
+    const cur = unanimous(objs, (o) => clampPickupType(o.pickup));
+    root.appendChild(
+      field(
+        "Contains",
+        selectMixed(
+          cur,
+          PICKUP_TYPES.map((t) => ({ value: t, text: t })),
+          (v) => apply((obj) => (obj.pickup = v))
+        )
+      )
+    );
+  }
+
+  if (kind === "platform") {
+    const allOn = objs.every((o) => o.collide !== false);
+    root.appendChild(
+      toggleField("Collide", allOn, () => apply((obj) => (obj.collide = !allOn)))
+    );
+  }
+
+  if (kind !== "room") {
+    const roomCur = unanimous(objs, (o) => o.roomId || "");
+    root.appendChild(
+      field(
+        "Room",
+        selectMixed(roomCur, roomItems(), (v) =>
+          apply((obj) => {
+            obj.roomId = v || null;
+            if (obj.kind === "doorway") assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
+            if (obj.kind === "switch") snapSwitchToRoom(obj, roomById(doc, obj.roomId));
+          })
+        )
+      )
+    );
+  }
+
+  if (kind === "doorway") {
+    const otherCur = unanimous(objs, (o) => o.otherRoomId || "");
+    root.appendChild(
+      field(
+        "Other room",
+        selectMixed(otherCur, roomItems(), (v) =>
+          apply((obj) => {
+            obj.otherRoomId = v || null;
+            snapDoorBetweenRooms(obj, roomById(doc, obj.roomId), roomById(doc, obj.otherRoomId));
+          })
+        )
+      )
+    );
+    const lockCur = unanimous(objs, (o) => clampDoorLock(o.lockKey));
+    root.appendChild(
+      field(
+        "Lock",
+        selectMixed(
+          lockCur,
+          DOOR_LOCKS.map((t) => ({ value: t, text: DOOR_LOCK_LABELS[t] })),
+          (v) => apply((obj) => (obj.lockKey = v))
+        )
+      )
+    );
+    const typeCur = unanimous(objs, (o) => clampDoorType(o.doorType));
+    root.appendChild(
+      field(
+        "Type",
+        selectMixed(
+          typeCur,
+          DOOR_TYPES.map((t) => ({ value: t, text: t })),
+          (v) => apply((obj) => (obj.doorType = v))
+        )
+      )
+    );
+    const scaleCur = unanimous(objs, (o) => clampDoorScale(o.doorScale));
+    root.appendChild(
+      field(
+        "Scale",
+        selectMixed(
+          scaleCur,
+          DOOR_SCALES.map((t) => ({ value: String(t), text: DOOR_SCALE_LABELS[t] })),
+          (v) =>
+            apply((obj) => {
+              const floorY = obj.y | 0;
+              obj.doorScale = clampDoorScale(v);
+              assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
+              obj.y = floorY;
+            })
+        )
+      )
+    );
+  }
+
+  const sizeP = document.createElement("p");
+  sizeP.className = "muted";
+  const sizeStr = unanimous(objs, (o) => `${o.sx}×${o.sy}×${o.sz}`);
+  if (sizeStr === undefined) {
+    sizeP.textContent = "Size mixed";
+  } else {
+    sizeP.textContent = KINDS[kind].fixed ? `Fixed size ${sizeStr}` : `Size ${sizeStr}`;
+  }
+  root.appendChild(sizeP);
+
+  if (kind === "slope") {
+    root.appendChild(rotateRow(() => apply((obj) => cycleSlopeOrient(obj))));
+    const allBottom = objs.every((o) => !!((o.flags | 0) & SLOPE_FLAG_BOTTOM));
+    const allTop = objs.every((o) => !!((o.flags | 0) & SLOPE_FLAG_TOP));
+    root.appendChild(
+      toggleField("Bottom", allBottom, () =>
+        apply((obj) => {
+          if (allBottom) obj.flags = (obj.flags | 0) & ~SLOPE_FLAG_BOTTOM;
+          else obj.flags = (obj.flags | 0) | SLOPE_FLAG_BOTTOM;
+        })
+      )
+    );
+    root.appendChild(
+      toggleField("Top", allTop, () =>
+        apply((obj) => {
+          if (allTop) obj.flags = (obj.flags | 0) & ~SLOPE_FLAG_TOP;
+          else obj.flags = (obj.flags | 0) | SLOPE_FLAG_TOP;
+        })
+      )
+    );
+  }
 }
 
 function renderInspector() {
@@ -1743,45 +2181,18 @@ function renderInspector() {
     return;
   }
   if (editorMode === "layout") {
-    const obj = selectedObject();
+    const objs = selectedLayoutObjects();
     const h = document.createElement("h2");
-    h.textContent = obj
-      ? obj.kind === "enemy"
-        ? obj.enemy || "Enemy"
-        : KINDS[obj.kind].label
-      : "Inspector";
-    root.appendChild(h);
-    if (selectedIds.length > 1) {
-      const p = document.createElement("p");
-      p.className = "muted";
-      p.textContent = `${selectedIds.length} selected`;
-      root.appendChild(p);
-      const map = activeMap(doc);
-      const selectedRooms = selectedIds
-        .map((id) => map.objects.find((o) => o.id === id))
-        .filter((o) => o && o.kind === "room");
-      if (selectedRooms.length >= 2) {
-        const row = document.createElement("div");
-        row.className = "btn-row";
-        const rotY = document.createElement("button");
-        rotY.type = "button";
-        rotY.textContent = "Rotate Y";
-        rotY.addEventListener("click", () => {
-          pushUndo();
-          rotateRoomsBlockY(
-            doc,
-            selectedRooms.map((r) => r.id),
-            1
-          );
-          markDirty();
-          refreshAll();
-        });
-        row.append(rotY);
-        root.appendChild(row);
-      }
+    const kind = objs.length ? unanimous(objs, (o) => o.kind) : undefined;
+    if (objs.length > 1 && kind === undefined) {
+      h.textContent = "Inspector";
+      root.appendChild(h);
+      appendMixedKindStub(root, objs);
       return;
     }
-    if (!obj) {
+    if (!objs.length) {
+      h.textContent = "Inspector";
+      root.appendChild(h);
       const map = activeMap(doc);
       const p = document.createElement("p");
       p.className = "muted";
@@ -1801,285 +2212,9 @@ function renderInspector() {
       root.appendChild(field("Name", nameInp));
       return;
     }
-    const apply = (fn) => {
-      pushUndo();
-      fn();
-      clampObject(obj);
-      markDirty();
-      refreshAll();
-    };
-    if (obj.kind === "room") {
-      const nameInp = document.createElement("input");
-      nameInp.type = "text";
-      nameInp.maxLength = MAX_NAME_LEN;
-      nameInp.value = obj.name || "";
-      nameInp.placeholder = "Display name";
-      nameInp.addEventListener("change", () => apply(() => (obj.name = clampName(nameInp.value))));
-      root.appendChild(field("Name", nameInp));
-      root.appendChild(roomPaletteEditor(obj, apply));
-
-      const shapeRow = document.createElement("div");
-      shapeRow.className = "btn-row shape-picker";
-      const curShape = clampRoomShape(obj.shape);
-      for (const s of ROOM_SHAPES) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = s === "box" ? "Box" : s;
-        btn.classList.toggle("active", curShape === s);
-        btn.addEventListener("click", () => {
-          if (clampRoomShape(obj.shape) === s) return;
-          apply(() => applyRoomShape(obj, s));
-        });
-        shapeRow.append(btn);
-      }
-      root.appendChild(field("Shape", shapeRow));
-
-      const rotAxes = clampRoomShape(obj.shape) !== "box" ? ["x", "y", "z"] : ["y"];
-      const rotRow = document.createElement("div");
-      rotRow.className = "btn-row rot-axes";
-      for (const axis of rotAxes) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.textContent = axis.toUpperCase();
-        btn.addEventListener("click", () =>
-          apply(() => {
-            if (axis === "y") rotateRoomY(doc, obj, 1);
-            else rotateRoom(obj, axis, 1);
-          })
-        );
-        rotRow.append(btn);
-      }
-      root.appendChild(field("Rotate", rotRow));
-    }
-    if (obj.kind === "enemy") {
-      root.appendChild(
-        toggleField("Patrol", !!obj.patrol, (btn) =>
-          apply(() => {
-            obj.patrol = !obj.patrol;
-            btn.classList.toggle("active", obj.patrol);
-          })
-        )
-      );
-    }
-    if (isFigureObject(obj) || obj.kind === "teleporter_dest") {
-      root.appendChild(
-        rotateRow(() => apply(() => (obj.rot = cycleEnemyRot(obj.rot ?? 0))))
-      );
-    }
-    if (obj.kind === "trigger") {
-      const sel = document.createElement("select");
-      for (const p of TRIGGER_PURPOSES) {
-        const opt = document.createElement("option");
-        opt.value = p;
-        opt.textContent = TRIGGER_PURPOSE_LABELS[p];
-        if (clampTriggerPurpose(obj.purpose) === p) opt.selected = true;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener("change", () => apply(() => (obj.purpose = sel.value)));
-      root.appendChild(field("Purpose", sel));
-      if (clampTriggerPurpose(obj.purpose) === "message") {
-        const ta = document.createElement("textarea");
-        ta.rows = 3;
-        ta.maxLength = MAX_TRIGGER_TEXT;
-        ta.value = obj.text || "";
-        ta.placeholder = "Shown while inside";
-        ta.addEventListener("change", () => apply(() => (obj.text = clampTriggerText(ta.value))));
-        const row = field("Text", ta);
-        row.classList.add("block");
-        root.appendChild(row);
-      }
-      if (triggerUsesTag(obj.purpose)) {
-        const tagInp = document.createElement("input");
-        tagInp.type = "text";
-        tagInp.maxLength = MAX_TAG_LEN;
-        tagInp.value = obj.tag || "";
-        tagInp.placeholder = "destination tag";
-        tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
-        root.appendChild(field("Tag", tagInp));
-      }
-    }
-    if (usesLinkTag(obj.kind)) {
-      const tagInp = document.createElement("input");
-      tagInp.type = "text";
-      tagInp.maxLength = MAX_TAG_LEN;
-      tagInp.value = obj.tag || "";
-      tagInp.placeholder =
-        obj.kind === "switch" || obj.kind === "elevator" ? "elevator link" : "destination tag";
-      tagInp.addEventListener("change", () => apply(() => (obj.tag = clampTag(tagInp.value))));
-      root.appendChild(field("Tag", tagInp));
-    }
-    if (obj.kind === "elevator") {
-      root.appendChild(
-        toggleField("Auto heights", elevHeightsAuto(obj), (btn) =>
-          apply(() => {
-            obj.elevAuto = !elevHeightsAuto(obj);
-            btn.classList.toggle("active", obj.elevAuto);
-            if (!obj.elevAuto) {
-              const room = roomById(doc, obj.roomId);
-              const floorY = room ? room.y | 0 : 0;
-              const stops = elevStopBottoms(doc, { ...obj, elevAuto: true });
-              obj.elevLow = stops.dest - floorY;
-              obj.elevHigh = stops.home - floorY;
-              clampElevHeights(obj);
-            }
-            refreshPanels();
-          })
-        )
-      );
-      if (!elevHeightsAuto(obj)) {
-        clampElevHeights(obj);
-        const lowInp = document.createElement("input");
-        lowInp.type = "number";
-        lowInp.step = "1";
-        lowInp.value = String(obj.elevLow);
-        lowInp.addEventListener("change", () =>
-          apply(() => {
-            obj.elevLow = lowInp.value | 0;
-            clampElevHeights(obj);
-          })
-        );
-        root.appendChild(field("Low (vs room)", lowInp));
-        const highInp = document.createElement("input");
-        highInp.type = "number";
-        highInp.step = "1";
-        highInp.value = String(obj.elevHigh);
-        highInp.addEventListener("change", () =>
-          apply(() => {
-            obj.elevHigh = highInp.value | 0;
-            clampElevHeights(obj);
-          })
-        );
-        root.appendChild(field("High (vs room)", highInp));
-      }
-    }
-    if (obj.kind === "pickup") {
-      const sel = document.createElement("select");
-      for (const t of PICKUP_TYPES) {
-        const opt = document.createElement("option");
-        opt.value = t;
-        opt.textContent = t;
-        if (clampPickupType(obj.pickup) === t) opt.selected = true;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener("change", () => apply(() => (obj.pickup = sel.value)));
-      root.appendChild(field("Contains", sel));
-    }
-    if (obj.kind === "platform") {
-      root.appendChild(
-        toggleField("Collide", obj.collide !== false, (btn) =>
-          apply(() => {
-            obj.collide = !obj.collide;
-            btn.classList.toggle("active", obj.collide !== false);
-          })
-        )
-      );
-    }
-    if (obj.kind !== "room") {
-      const sel = document.createElement("select");
-      const none = document.createElement("option");
-      none.value = "";
-      none.textContent = "(none)";
-      sel.appendChild(none);
-      for (const r of roomsOf(doc)) {
-        const opt = document.createElement("option");
-        opt.value = r.id;
-        opt.textContent = r.name ? `Room  ${r.name}` : "Room";
-        if (r.id === obj.roomId) opt.selected = true;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener("change", () =>
-        apply(() => {
-          obj.roomId = sel.value || null;
-          if (obj.kind === "doorway") assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
-          if (obj.kind === "switch") snapSwitchToRoom(obj, roomById(doc, obj.roomId));
-        })
-      );
-      root.appendChild(field("Room", sel));
-    }
-    if (obj.kind === "doorway") {
-      const sel = document.createElement("select");
-      const none = document.createElement("option");
-      none.value = "";
-      none.textContent = "(none)";
-      sel.appendChild(none);
-      for (const r of roomsOf(doc)) {
-        const opt = document.createElement("option");
-        opt.value = r.id;
-        opt.textContent = r.name ? `Room  ${r.name}` : "Room";
-        if (r.id === obj.otherRoomId) opt.selected = true;
-        sel.appendChild(opt);
-      }
-      sel.addEventListener("change", () =>
-        apply(() => {
-          obj.otherRoomId = sel.value || null;
-          snapDoorBetweenRooms(obj, roomById(doc, obj.roomId), roomById(doc, obj.otherRoomId));
-        })
-      );
-      root.appendChild(field("Other room", sel));
-      const lockSel = document.createElement("select");
-      for (const t of DOOR_LOCKS) {
-        const opt = document.createElement("option");
-        opt.value = t;
-        opt.textContent = DOOR_LOCK_LABELS[t];
-        if (clampDoorLock(obj.lockKey) === t) opt.selected = true;
-        lockSel.appendChild(opt);
-      }
-      lockSel.addEventListener("change", () => apply(() => (obj.lockKey = lockSel.value)));
-      root.appendChild(field("Lock", lockSel));
-      const typeSel = document.createElement("select");
-      for (const t of DOOR_TYPES) {
-        const opt = document.createElement("option");
-        opt.value = t;
-        opt.textContent = t;
-        if (clampDoorType(obj.doorType) === t) opt.selected = true;
-        typeSel.appendChild(opt);
-      }
-      typeSel.addEventListener("change", () => apply(() => (obj.doorType = typeSel.value)));
-      root.appendChild(field("Type", typeSel));
-      const scaleSel = document.createElement("select");
-      for (const t of DOOR_SCALES) {
-        const opt = document.createElement("option");
-        opt.value = String(t);
-        opt.textContent = DOOR_SCALE_LABELS[t];
-        if (clampDoorScale(obj.doorScale) === t) opt.selected = true;
-        scaleSel.appendChild(opt);
-      }
-      scaleSel.addEventListener("change", () =>
-        apply(() => {
-          const floorY = obj.y | 0;
-          obj.doorScale = clampDoorScale(scaleSel.value);
-          assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
-          obj.y = floorY;
-        })
-      );
-      root.appendChild(field("Scale", scaleSel));
-    }
-    const sizeP = document.createElement("p");
-    sizeP.className = "muted";
-    sizeP.textContent = KINDS[obj.kind].fixed
-      ? `Fixed size ${obj.sx}×${obj.sy}×${obj.sz}`
-      : `Size ${obj.sx}×${obj.sy}×${obj.sz}`;
-    root.appendChild(sizeP);
-    if (obj.kind === "slope") {
-      root.appendChild(rotateRow(() => apply(() => cycleSlopeOrient(obj))));
-      const flags = obj.flags | 0;
-      root.appendChild(
-        toggleField("Bottom", !!(flags & SLOPE_FLAG_BOTTOM), (btn) =>
-          apply(() => {
-            obj.flags = (obj.flags | 0) ^ SLOPE_FLAG_BOTTOM;
-            btn.classList.toggle("active", !!(obj.flags & SLOPE_FLAG_BOTTOM));
-          })
-        )
-      );
-      root.appendChild(
-        toggleField("Top", !!(flags & SLOPE_FLAG_TOP), (btn) =>
-          apply(() => {
-            obj.flags = (obj.flags | 0) ^ SLOPE_FLAG_TOP;
-            btn.classList.toggle("active", !!(obj.flags & SLOPE_FLAG_TOP));
-          })
-        )
-      );
-    }
+    h.textContent = layoutInspectorTitle(objs);
+    root.appendChild(h);
+    renderLayoutObjectFields(root, objs);
     return;
   }
 
@@ -2864,19 +2999,25 @@ window.addEventListener("keydown", (e) => {
     }
   }
   if (e.key.toLowerCase() === "r" && editorMode === "layout") {
-    const obj = selectedObject();
-    if (obj && (isFigureObject(obj) || obj.kind === "teleporter_dest")) {
+    const objs = selectedLayoutObjects();
+    const kind = objs.length ? unanimous(objs, (o) => o.kind) : undefined;
+    if (kind && (isFigureObject(objs[0]) || kind === "teleporter_dest")) {
       e.preventDefault();
       pushUndo();
-      obj.rot = cycleEnemyRot(obj.rot ?? 0);
+      for (const obj of objs) {
+        obj.rot = cycleEnemyRot(obj.rot ?? 0);
+        clampObject(obj);
+      }
       markDirty();
       refreshAll();
     }
-    if (obj && obj.kind === "slope") {
+    if (kind === "slope") {
       e.preventDefault();
       pushUndo();
-      cycleSlopeOrient(obj);
-      clampObject(obj);
+      for (const obj of objs) {
+        cycleSlopeOrient(obj);
+        clampObject(obj);
+      }
       markDirty();
       refreshAll();
     }

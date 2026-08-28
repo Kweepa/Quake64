@@ -422,13 +422,16 @@ FLASH_YEL_MS	= 60
 FLASH_RED_MS	= 60
 SPLAT_MS		= FLASH_YEL_MS + FLASH_RED_MS	; same total as muzzle flash
 FX_N			= 24			; one explosion, 24 pixels
-EXPLODE_MS		= 768			; 3×; elapsed/3 then dir>>5 → ~4 units at end
+EXPLODE_MS		= 768			; ~3× frame budget for particle expand
+FX_START_MS		= 100			; spawn elapsed head-start (skip origin speck)
+FX_VEL_SPEED		= 32			; (dir*speed)>>7 → ~±31 into 8.8
 GREN_MAX		= 4
 GREN_OWN_PL		= 0
 GREN_OWN_EN		= 1
 GREN_F_BOUNCE		= 1			; fuse running
 GREN_F_PEND		= 2			; waiting on fx_on
 GREN_TICK_MS		= 32
+GREN_FLOOR_XZ_ASR	= 1			; /2 XZ per floor hop
 GREN_GRAV		= $01EC			; 60 u/s² × 32ms as 8.8
 GREN_SPEED		= 30			; horizontal
 GREN_SPEED_Y		= 10		; upward (was 20; ~22° not 45°)
@@ -602,8 +605,10 @@ have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD / HAVE_EARTH
 pu_kind		= $CE93			; 0 or BP_QUAD / BP_PENT / BP_RING
 pu_ms_l		= $CE94
 pu_ms_h		= $CE95
-; $CE96–$CE98 free (was fx on/ms)
-fx_ox		= $CE99			; world origin (int)
+fx_oxl		= $CE96			; world origin 8.8 (same as grenade)
+fx_oyl		= $CE97
+fx_ozl		= $CE98
+fx_ox		= $CE99
 fx_oy		= $CE9A
 fx_oz		= $CE9B
 ; $CE9C free (was fx_skip)
@@ -677,7 +682,10 @@ fx_ms_h		= fxh_explode + FXH_MS_H
 ; genuinely-free space above the effect timers -- NOT in the $CE82 hole that
 ; memorymap.md claims is unused, because en_pat_n and the grenade SoA are there.
 stream_room	= $CF20
-; $CF21+ free
+; Explosion particle vel — FX_N × vx/vy s8 (integrated at draw)
+fx_vx		= $CF21			; 24
+fx_vy		= $CF39			; 24
+; $CF51+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

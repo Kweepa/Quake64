@@ -303,6 +303,27 @@ gren_bounce
 .gmb_rts
 	rts
 
+; Signed ASR vx and vz (floor hop only).
+gren_floor_xz
+	ldx obj_i
+	ldy #GREN_FLOOR_XZ_ASR
+.gfx
+	lda gr_vxh,x
+	cmp #$80
+	ror gr_vxh,x
+	ror gr_vxl,x
+	dey
+	bne .gfx
+	ldy #GREN_FLOOR_XZ_ASR
+.gfz
+	lda gr_vzh,x
+	cmp #$80
+	ror gr_vzh,x
+	ror gr_vzl,x
+	dey
+	bne .gfz
+	rts
+
 gren_move_x
 	ldx obj_i
 	lda gr_vxl,x
@@ -359,13 +380,13 @@ gren_xz_done
 	sta gr_xl,x
 	lda save_xh
 	sta gr_xh,x
-	jmp gren_try_room
+	rts
 .sz
 	lda save_xl
 	sta gr_zl,x
 	lda save_xh
 	sta gr_zh,x
-	jmp gren_try_room
+	rts
 
 gren_move_y
 	ldx obj_i
@@ -411,6 +432,7 @@ gren_move_y
 	sta gr_yl,x
 	lda proc_tmp2
 	sta gr_yh,x
+	jsr gren_floor_xz
 	lda #<gr_vyl
 	ldy #<gr_vyh
 	jmp gren_bounce
@@ -447,9 +469,9 @@ gren_col_xz
 	sta col_z
 	rts
 
-; C=1 allowed
+; C=1 allowed (room colliders only — door holes bounce)
 gren_pos_ok
-	jsr in_room_or_portal
+	jsr in_room_inset
 	bcc .gpo_no
 	jsr gren_solid_at
 	bcs .gpo_no
@@ -471,26 +493,6 @@ gren_solid_at
 	jsr solid_at
 	pla
 	sta cam_yh
-	rts
-
-gren_try_room
-	ldx obj_i
-	lda cam_xh
-	pha
-	lda cam_zh
-	pha
-	lda gr_xh,x
-	sta cam_xh
-	lda gr_zh,x
-	sta cam_zh
-	jsr try_room_switch
-	ldx obj_i
-	lda room_idx
-	sta gr_room,x
-	pla
-	sta cam_zh
-	pla
-	sta cam_xh
 	rts
 
 gren_contact
@@ -597,11 +599,20 @@ gren_explode
 	sta gr_flags,x
 	rts
 .gex_go
+	lda gr_xl,x
+	sta fx_oxl
 	lda gr_xh,x
+	sta fx_ox
 	sta ent_wx
+	lda gr_yl,x
+	sta fx_oyl
 	lda gr_yh,x
+	sta fx_oy
 	sta ent_wy
+	lda gr_zl,x
+	sta fx_ozl
 	lda gr_zh,x
+	sta fx_oz
 	sta ent_wz
 	jsr gren_splash
 	jsr start_explosion

@@ -976,7 +976,19 @@ def main() -> None:
         sizes.append(len(payload))
         cooked.append(f"{key} {len(payload)}B")
 
-    COUNTS_OUT.write_text(ENUMS, encoding="utf-8")
+    active = doc.get("activeLevel")
+    if active not in LEVEL_NAMES:
+        active = LEVEL_NAMES[0]
+    start_idx = LEVEL_NAMES.index(active)
+    if sizes[start_idx] == 0:
+        start_idx = next((i for i, s in enumerate(sizes) if s), 0)
+    start_level = start_idx + 1
+    counts = ENUMS.replace(
+        "MAP_NLEVELS\t= 8\n",
+        f"MAP_NLEVELS\t= 8\nSTART_LEVEL\t= {start_level}\n",
+        1,
+    )
+    COUNTS_OUT.write_text(counts, encoding="utf-8")
     size_lo = ",".join(str(s & 0xFF) for s in sizes)
     size_hi = ",".join(str((s >> 8) & 0xFF) for s in sizes)
     SIZES_OUT.write_text(
@@ -985,7 +997,8 @@ def main() -> None:
         f"map_size_hi\t!byte {size_hi}\n",
         encoding="utf-8",
     )
-    print("Wrote map_counts.asm + map_sizes.asm" + (f": {', '.join(cooked)}" if cooked else ""))
+    extra = f": {', '.join(cooked)}" if cooked else ""
+    print(f"Wrote map_counts.asm + map_sizes.asm{extra} START_LEVEL {LEVEL_NAMES[start_idx]}")
 
 
 if __name__ == "__main__":

@@ -7460,18 +7460,84 @@ class LayoutView {
     const cam = this.camera;
     const doc = this.opts.getDoc();
     const id = this.#primaryId();
-    const obj = id ? activeMap(doc).objects.find((o) => o.id === id) : null;
-    let dist = Math.max(48, cam.speed * 2.5);
+    let obj = id ? activeMap(doc).objects.find((o) => o.id === id) : null;
+    if (!obj) {
+      const hit = this.#pick(doc, p.x, p.y);
+      if (hit) obj = activeMap(doc).objects.find((o) => o.id === hit.id) || null;
+    }
+    if (!obj) obj = this.#closestRoomToCursor(doc, p.x, p.y);
+    let target;
     if (obj) {
-      const c = aabbCenter(obj);
-      dist = Math.hypot(c.x - cam.x, c.y - cam.y, c.z - cam.z);
-      if (dist < 1) dist = 1;
+      target = aabbCenter(obj);
     } else {
       const ray = screenRay(p.x, p.y, cam, this.cssW, this.cssH);
       const hit = intersectPlane(ray.origin, ray.dir, { x: 0, y: this.gridY, z: 0 }, { x: 0, y: 1, z: 0 });
-      if (hit && hit.t >= 1) dist = Math.min(400, Math.max(24, hit.t));
+      if (hit && hit.t >= 1) {
+        target = hit.point;
+      } else {
+        const dist = Math.max(48, cam.speed * 2.5);
+        const { forward } = lookVectors(cam.yaw, cam.pitch);
+        target = { x: cam.x + forward.x * dist, y: cam.y + forward.y * dist, z: cam.z + forward.z * dist };
+      }
     }
-    return { last: p, dist };
+    const local = worldToCamera(target, cam);
+    if (local.z < 1) local.z = 1;
+    return { last: p, target, local };
+  }
+
+  #setCamFromTarget(target, local) {
+    const cam = this.camera;
+    const { forward, right, up } = lookVectors(cam.yaw, cam.pitch);
+    cam.x = target.x - right.x * local.x - up.x * local.y - forward.x * local.z;
+    cam.y = target.y - right.y * local.x - up.y * local.y - forward.y * local.z;
+    cam.z = target.z - right.z * local.x - up.z * local.y - forward.z * local.z;
+  }
+
+  #screenDistToAabb(box, mx, my, cam, w, h) {
+    let minx = Infinity;
+    let miny = Infinity;
+    let maxx = -Infinity;
+    let maxy = -Infinity;
+    let any = false;
+    for (let i = 0; i < 8; i++) {
+      const pr = projectPoint(cornerWorld(box, i), cam, w, h);
+      if (!pr.ok) continue;
+      any = true;
+      minx = Math.min(minx, pr.sx);
+      miny = Math.min(miny, pr.sy);
+      maxx = Math.max(maxx, pr.sx);
+      maxy = Math.max(maxy, pr.sy);
+    }
+    if (!any) return Infinity;
+    const dx = mx < minx ? minx - mx : mx > maxx ? mx - maxx : 0;
+    const dy = my < miny ? miny - my : my > maxy ? my - maxy : 0;
+    return Math.hypot(dx, dy);
+  }
+
+  #closestRoomToCursor(doc, mx, my) {
+    const cam = this.camera;
+    const w = this.cssW;
+    const h = this.cssH;
+    let best = null;
+    let bestD = Infinity;
+    let bestDepth = Infinity;
+    for (const obj of this.#visibleObjects(doc)) {
+      if (obj.kind !== "room") continue;
+      let d = Infinity;
+      for (const c of roomGeometry(obj).colliders) {
+        const cd = this.#screenDistToAabb(c, mx, my, cam, w, h);
+        if (cd < d) d = cd;
+      }
+      if (d === Infinity) continue;
+      const c = aabbCenter(obj);
+      const depth = (c.x - cam.x) ** 2 + (c.y - cam.y) ** 2 + (c.z - cam.z) ** 2;
+      if (d < bestD - 0.01 || (Math.abs(d - bestD) < 0.01 && depth < bestDepth)) {
+        bestD = d;
+        bestDepth = depth;
+        best = obj;
+      }
+    }
+    return best;
   }
 
   #applyOrbit(p) {
@@ -7482,17 +7548,9 @@ class LayoutView {
     o.last = p;
     if (!dx && !dy) return;
 
-    const dist = o.dist;
-    const { forward } = lookVectors(cam.yaw, cam.pitch);
-    const px = cam.x + forward.x * dist;
-    const py = cam.y + forward.y * dist;
-    const pz = cam.z + forward.z * dist;
     cam.yaw += dx * 0.008;
     cam.pitch = Math.max(-1.4, Math.min(1.4, cam.pitch - dy * 0.008));
-    const f2 = lookVectors(cam.yaw, cam.pitch).forward;
-    cam.x = px - f2.x * dist;
-    cam.y = py - f2.y * dist;
-    cam.z = pz - f2.z * dist;
+    this.#setCamFromTarget(o.target, o.local);
   }
 
   #applyPan(p) {
@@ -7504,7 +7562,7 @@ class LayoutView {
     if (!dx && !dy) return;
 
     const focal = Math.min(this.cssW, this.cssH) * 0.9;
-    const scale = pan.dist / focal;
+    const scale = pan.local.z / focal;
     const { right, up } = lookVectors(cam.yaw, cam.pitch);
     cam.x += (-right.x * dx + up.x * dy) * scale;
     cam.y += (-right.y * dx + up.y * dy) * scale;
@@ -7519,15 +7577,8 @@ class LayoutView {
     const delta = dx + dy;
     if (!delta) return;
 
-    const cam = this.camera;
-    const { forward } = lookVectors(cam.yaw, cam.pitch);
-    const px = cam.x + forward.x * z.dist;
-    const py = cam.y + forward.y * z.dist;
-    const pz = cam.z + forward.z * z.dist;
-    z.dist = Math.max(1, z.dist * Math.exp(-delta * ZOOM_K));
-    cam.x = px - forward.x * z.dist;
-    cam.y = py - forward.y * z.dist;
-    cam.z = pz - forward.z * z.dist;
+    z.local.z = Math.max(1, z.local.z * Math.exp(-delta * ZOOM_K));
+    this.#setCamFromTarget(z.target, z.local);
   }
 
   #onMove(e) {

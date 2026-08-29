@@ -1460,6 +1460,7 @@ export function clampObject(obj) {
     obj.sy = 1;
     obj.collide = obj.collide !== false;
   }
+  if (obj.kind === "spawn") obj.enabled = !!obj.enabled;
   return obj;
 }
 
@@ -1488,6 +1489,7 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (kind === "spawn" || kind === "enemy" || kind === "teleporter_dest") {
     obj.rot = clampEnemyRot(extra.rot ?? 0);
   }
+  if (kind === "spawn") obj.enabled = extra.enabled === true;
   if (kind === "enemy") {
     const name = extra.enemy || "Grunt";
     obj.enemy = ENEMY_TYPES.some((t) => t.name === name) ? name : "Grunt";
@@ -1557,6 +1559,21 @@ export function isFigureObject(obj) {
   return obj.kind === "enemy" || obj.kind === "spawn";
 }
 
+/** Exactly one spawn `enabled` when any exist. None marked → first in list (old maps). */
+export function ensureSpawnExclusive(objects) {
+  const spawns = (objects || []).filter((o) => o.kind === "spawn");
+  if (!spawns.length) return;
+  const on = spawns.filter((s) => s.enabled);
+  const keep = on[0] || spawns[0];
+  for (const s of spawns) s.enabled = s === keep;
+}
+
+export function enableSpawn(objects, spawnId) {
+  for (const o of objects || []) {
+    if (o.kind === "spawn") o.enabled = o.id === spawnId;
+  }
+}
+
 /** Objects-panel label: type only (no XYZ). Rooms may include display name. */
 export function objectLabel(obj) {
   if (!obj || !KINDS[obj.kind]) return "?";
@@ -1566,6 +1583,7 @@ export function objectLabel(obj) {
   if (obj.kind === "enemy") return obj.enemy || "Enemy";
   if (obj.kind === "pickup") return `Pickup (${clampPickupType(obj.pickup)})`;
   if (obj.kind === "doorway") return `Doorway (${clampDoorType(obj.doorType)})`;
+  if (obj.kind === "spawn" && !obj.enabled) return "Spawn (off)";
   return KINDS[obj.kind].label;
 }
 
@@ -2483,6 +2501,7 @@ function parseObjects(list) {
       backpack: o.backpack,
       order: o.order,
       collide: o.collide,
+      enabled: o.enabled,
       bgColor: o.bgColor ?? o.skyColor,
       skyColor: o.skyColor,
       lineColor: o.lineColor,
@@ -2558,8 +2577,10 @@ function parseObjects(list) {
       if (o.otherRoomId != null) obj.otherRoomId = String(o.otherRoomId);
     }
     if (o.kind === "platform" && o.collide != null) obj.collide = o.collide !== false;
+    if (o.kind === "spawn") obj.enabled = o.enabled === true;
     out.push(clampObject(obj));
   }
+  ensureSpawnExclusive(out);
   return out;
 }
 

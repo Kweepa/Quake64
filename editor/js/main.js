@@ -60,6 +60,8 @@ import {
   clipForFrame,
   dummyFrameFor,
   isFigureObject,
+  enableSpawn,
+  ensureSpawnExclusive,
   objectLabel,
   objectTree,
   roomUnderObject,
@@ -916,6 +918,9 @@ function previewObjectAtScreen(place, mx, my) {
   const owner = placeOwner(kind, p.room);
   const extra = place.enemy ? { enemy: place.enemy } : {};
   if (owner) extra.roomId = owner.id;
+  if (kind === "spawn") {
+    extra.enabled = !activeMap(doc).objects.some((o) => o.kind === "spawn");
+  }
   const obj = createObject(kind, p.x, p.y, p.z, extra);
   if (owner && kind !== "room" && kind !== "doorway") {
     obj.y = roomFloorY(owner, obj.x + obj.sx / 2, obj.z + obj.sz / 2);
@@ -1079,6 +1084,7 @@ function deleteSelected() {
       if (o.otherRoomId && drop.has(o.otherRoomId)) o.otherRoomId = null;
     }
     activeMap(doc).objects = activeMap(doc).objects.filter((o) => !drop.has(o.id));
+    ensureSpawnExclusive(activeMap(doc).objects);
     selectedIds = [];
     markDirty();
     refreshAll();
@@ -1104,6 +1110,7 @@ function duplicateSelected() {
       x: obj.x + 2,
       z: obj.z + 2,
     });
+    if (copy.kind === "spawn") copy.enabled = false;
     activeMap(doc).objects.push(copy);
     created.push(copy.id);
   }
@@ -1881,6 +1888,18 @@ function renderLayoutObjectFields(root, objs) {
     const allOn = objs.every((o) => !!o.patrol);
     root.appendChild(
       toggleField("Patrol", allOn, () => apply((obj) => (obj.patrol = !allOn)))
+    );
+  }
+
+  if (kind === "spawn") {
+    const allOn = objs.every((o) => !!o.enabled);
+    root.appendChild(
+      toggleField("Enabled", allOn, () => {
+        pushUndo();
+        enableSpawn(activeMap(doc).objects, objs[0].id);
+        markDirty();
+        refreshAll();
+      })
     );
   }
 

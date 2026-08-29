@@ -1114,8 +1114,13 @@ export class LayoutView {
   }
 
   #drawObject(ctx, doc, obj, cam, w, h, highlight, selected, primary) {
-    const color =
-      highlight ? "#f2d36b" : obj.kind === "room" ? colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT) : KINDS[obj.kind].color;
+    const color = highlight
+      ? "#f2d36b"
+      : obj.kind === "room"
+        ? colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT)
+        : obj.kind === "spawn" && !obj.enabled
+          ? "#1a7a3c"
+          : KINDS[obj.kind].color;
     ctx.lineWidth = selected ? 2 : 1;
     ctx.strokeStyle = color;
 

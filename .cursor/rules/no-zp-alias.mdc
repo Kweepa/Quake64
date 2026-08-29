@@ -1,0 +1,15 @@
+---
+description: Don't hijack ZP for unrelated scratch; add named BSS instead
+globs: src/**/*.asm
+alwaysApply: true
+---
+
+# ZP is not a spare register file
+
+`src/zp.asm` is partitioned so nested routines never share scratch. Do not park a new value in `rot0`/`rot1`/`rot2`, `proc_tmp*`, `col_y`, `pv*`, or any other ZP cell that already means something else in a caller that can `jsr` you.
+
+A hang from this looks like: callee writes `rot2` for `floor_below`, caller (`select_dodge_dir`) still uses `rot2` as a 0..4 loop index across that `jsr`.
+
+- New persistent or cross-`jsr` state: a **named BSS** label in `src/mem.asm` (next to the other game vars, e.g. `floor_slope`, `en_step`). Name it for the job (`fb_probe_y`, `dodge_i`), not `tmp7`.
+- Documented aliases in `zp.asm` that are the **same** job and proven not live together (`rest_cnt = save_x`) stay. Do not add new cross-subsystem overlays.
+- Before a `sta` to ZP from a nested routine, check who in the call stack still needs that label.

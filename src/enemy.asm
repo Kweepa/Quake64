@@ -1157,6 +1157,8 @@ enemy_try_step
 	+sta_mx en_x
 	lda col_z
 	+sta_mx en_z
+	lda proc_tmp2
+	+sta_mx en_y
 	lda en_dir,x
 	jsr enemy_set_geom
 	jsr enemy_clamp_room
@@ -1174,6 +1176,8 @@ enemy_patrol_step
 	+sta_mx en_x
 	lda col_z
 	+sta_mx en_z
+	lda proc_tmp2
+	+sta_mx en_y
 	lda en_dir,x
 	jsr enemy_set_geom
 	jsr enemy_clamp_room
@@ -1472,7 +1476,7 @@ clamp_to_box_inset1
 .cbi_rts
 	rts
 
-; col_x/col_z proposed. C=1 ok (inset + solid + same-elevation floor + cutout).
+; col_x/col_z proposed. C=1 ok (inset + solid + dest floor within STEP_UP + cutout).
 ; Uses enemy Y via cam hack for solid_at.
 enemy_pos_ok
 	ldx enemy_idx
@@ -1485,6 +1489,7 @@ enemy_pos_ok
 	clc
 	adc #EYE_HEIGHT
 	sta cam_yh
+	ldy #1
 	jsr solid_at
 	pla
 	sta cam_yh
@@ -1496,11 +1501,15 @@ enemy_pos_ok
 	clc
 	rts
 
-; Dest lowest rc_y vs en_y. C=1 if |floor − en_y| ≤ FALL_LEDGE.
+; Dest walkable ≤ en_y+STEP_UP (rc floor, crate top, solid plat).
+; C=1 if |proc_tmp2 − en_y| ≤ STEP_UP. Leaves dest Y in proc_tmp2.
 enemy_floor_ok
 	ldx enemy_idx
-	+ldy_mx en_room
-	jsr peek_rc_floor
+	clc
+	+lda_mx en_y
+	adc #STEP_UP
+	sta fb_probe_y
+	jsr floor_below
 	bcc .efl_no
 	ldx enemy_idx
 	lda proc_tmp2
@@ -1514,7 +1523,7 @@ enemy_floor_ok
 	sec
 	+sbc_mx en_y
 .efl_cmp
-	cmp #FALL_LEDGE + 1
+	cmp #STEP_UP + 1
 	bcc .efl_yes
 .efl_no
 	clc

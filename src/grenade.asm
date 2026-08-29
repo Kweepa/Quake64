@@ -414,7 +414,7 @@ gren_move_y
 	jsr gren_col_xz
 	ldx obj_i
 	lda gr_yh,x
-	sta rot2
+	sta fb_probe_y
 	jsr floor_below
 	bcc gren_try_y
 	lda proc_tmp2
@@ -485,6 +485,7 @@ gren_solid_at
 	lda gr_yh,x
 	adc #EYE_HEIGHT
 	sta cam_yh
+	ldy #0
 	jsr solid_at
 	pla
 	sta cam_yh

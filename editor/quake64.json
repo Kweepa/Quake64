@@ -1,6 +1,6 @@
 {
   "version": 9,
-  "activeLevel": "E1M3",
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -194,21 +194,6 @@
               "sv": 12
             }
           ]
-        },
-        {
-          "id": "cba58a11-acb7-4f28-9eba-39a459657721",
-          "kind": "spawn",
-          "x": 131,
-          "y": 65,
-          "z": 73,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 6,
-          "roomId": "fe882475-4577-4b90-b224-f631a99db34d"
         },
         {
           "id": "7512297f-f012-47f8-b276-c7258bd560c0",
@@ -1113,6 +1098,38 @@
           "text": "",
           "tag": "",
           "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04"
+        },
+        {
+          "id": "375bfbcb-197a-4421-8ddb-a5b9fa46b68d",
+          "kind": "spawn",
+          "x": 3,
+          "y": 105,
+          "z": 119,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 2,
+          "enabled": true,
+          "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434"
+        },
+        {
+          "id": "adae47d1-b6c2-4e8a-8d2d-76293dea4a67",
+          "kind": "spawn",
+          "x": 126,
+          "y": 65,
+          "z": 73,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 6,
+          "enabled": false,
+          "roomId": "fe882475-4577-4b90-b224-f631a99db34d"
         }
       ]
     },
@@ -1271,6 +1288,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 0,
+          "enabled": true,
           "roomId": "0e15ffe3-9bc5-4237-8af7-48366c877a92"
         },
         {
@@ -2600,6 +2618,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 2,
+          "enabled": true,
           "roomId": "9d1ada4a-b970-45f5-857b-8d98e65e879a"
         },
         {

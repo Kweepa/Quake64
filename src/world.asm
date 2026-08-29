@@ -253,14 +253,14 @@ peek_rc_floor
 	clc
 	rts
 
-; col_x/col_z/room_idx set. rot2 = probe Y inclusive.
-; C=1, proc_tmp2 = highest walkable ≤ rot2 (rc floor, crate top, solid plat).
+; col_x/col_z/room_idx set. fb_probe_y = probe Y inclusive.
+; C=1, proc_tmp2 = highest walkable ≤ fb_probe_y (rc floor, crate top, solid plat).
 floor_below
 	ldy room_idx
 	jsr peek_rc_floor
 	bcc .fb_surf
 	lda proc_tmp2
-	cmp rot2
+	cmp fb_probe_y
 	beq .fb_surf
 	bcc .fb_surf
 	lda #0
@@ -324,7 +324,7 @@ floor_below
 	clc
 	rts
 .fb_cand
-	cmp rot2
+	cmp fb_probe_y
 	beq .fb_ok
 	bcs .fb_skip
 .fb_ok
@@ -392,7 +392,15 @@ update_floor
 	lda cam_yh
 	sbc #EYE_HEIGHT			; feet
 	cmp col_y
-	bcc .uf_cn			; feet < top — overhead
+	beq .uf_c_adopt			; same height
+	bcs .uf_c_adopt			; feet > top — standing on it
+	sta proc_tmp0			; feet
+	lda col_y
+	sec
+	sbc proc_tmp0			; rise
+	cmp #STEP_UP + 1
+	bcs .uf_cn			; too high — walk under
+.uf_c_adopt
 	lda col_y
 	sta floor_y
 .uf_cn
@@ -730,7 +738,8 @@ update_fall
 
 ; ------------------------------------------------------------------
 ; solid_at — col_x/col_z blocked by crate, solid platform, or closed door?
-; C=1 blocked
+; C=1 blocked. Y=1: crate rise <= STEP_UP is not a wall (player/enemy).
+; Y=0: crate volume always solid (grenade).
 ; ------------------------------------------------------------------
 solid_at
 	; crates — solid on Y overlap (not when on/above top or under)
@@ -747,6 +756,20 @@ solid_at
 	sta box_sy
 	jsr player_overlaps_y
 	bcc .sa_cn
+	cpy #0
+	beq .sa_cwall			; grenade — volume wall
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT			; feet
+	sta col_y
+	clc
+	lda box_y
+	adc box_sy			; crate_top
+	sec
+	sbc col_y			; rise (overlap => top > feet)
+	cmp #STEP_UP + 1
+	bcc .sa_cn			; step-up — not a wall
+.sa_cwall
 	+lda_mx crate_x
 	sta box_x
 	+lda_mx crate_z
@@ -1176,6 +1199,7 @@ in_room_or_portal
 pos_ok
 	jsr in_room_or_portal
 	bcc .po_no
+	ldy #1
 	jsr solid_at
 	bcs .po_no
 	jmp step_up_ok

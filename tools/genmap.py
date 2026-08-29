@@ -277,7 +277,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
 
     if not spawns:
         raise SystemExit(f"{map_key} needs a spawn")
-    spawn = spawns[0]
+    enabled = [o for o in spawns if o.get("enabled")]
+    spawn = enabled[0] if enabled else spawns[0]
 
     if len(objs) > 256:
         raise SystemExit(f"{map_key} has {len(objs)} objects; map id is u8")

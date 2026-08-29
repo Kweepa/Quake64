@@ -581,7 +581,8 @@ emuz_vx		= $CE0E			; VIC X lo staged (IRQ apply_en)
 emuz_vy		= $CE0F			; VIC Y staged
 emuz_col		= $CE10			; sprite colour staged from col_fx
 emuz_pending	= $CE11			; enemy idx waiting to muzzle, $ff = none
-; $CE12–$CE15 free (was emuz_skip + splat on/ms)
+fb_probe_y	= $CE12			; floor_below: inclusive max walkable Y
+; $CE13–$CE15 free (was emuz_skip + splat on/ms)
 splat_xmsb	= $CE16			; $d010 bit7 when X>=256
 splat_vx		= $CE17
 splat_vy		= $CE18

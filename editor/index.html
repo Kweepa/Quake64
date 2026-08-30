@@ -7459,12 +7459,8 @@ class LayoutView {
   #beginOrbit(p) {
     const cam = this.camera;
     const doc = this.opts.getDoc();
-    const id = this.#primaryId();
-    let obj = id ? activeMap(doc).objects.find((o) => o.id === id) : null;
-    if (!obj) {
-      const hit = this.#pick(doc, p.x, p.y);
-      if (hit) obj = activeMap(doc).objects.find((o) => o.id === hit.id) || null;
-    }
+    const hit = this.#pick(doc, p.x, p.y);
+    let obj = hit ? activeMap(doc).objects.find((o) => o.id === hit.id) || null : null;
     if (!obj) obj = this.#closestRoomToCursor(doc, p.x, p.y);
     let target;
     if (obj) {

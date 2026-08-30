@@ -1,6 +1,6 @@
 {
   "version": 9,
-  "activeLevel": "E1M2",
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -1817,7 +1817,7 @@
           "id": "486e7247-6a3e-4551-bea1-78db519ad754",
           "kind": "switch",
           "x": 53,
-          "y": 99,
+          "y": 97,
           "z": 166,
           "sx": 2,
           "sy": 3,
@@ -2420,7 +2420,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "rot": 0,
+          "rot": 2,
           "enabled": true,
           "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c"
         }

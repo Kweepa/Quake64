@@ -55,6 +55,7 @@ import {
   formatMapLoadTitle,
   packedPoseBytes,
   ENEMY_POSE_MAX,
+  ROOM_MAX,
   ROOM_MAX_TYPES,
   canAddEnemyType,
   clipForFrame,
@@ -1002,6 +1003,11 @@ function finishPaletteDrop(e) {
   const kind = place.kind;
   const p = layoutView.placeAtScreen(mx, my, kind);
   const owner = placeOwner(kind, p.room);
+  if (kind === "room" && roomsOf(doc).length >= ROOM_MAX) {
+    layoutView.draw();
+    setStatus(`Max ${ROOM_MAX} rooms`, true);
+    return;
+  }
   if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
     layoutView.draw();
     setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
@@ -1097,11 +1103,18 @@ function duplicateSelected() {
   pushUndo();
   const created = [];
   let skipped = 0;
+  let skipReason = "";
   for (const id of selectedIds) {
     const obj = activeMap(doc).objects.find((o) => o.id === id);
     if (!obj) continue;
+    if (obj.kind === "room" && roomsOf(doc).length >= ROOM_MAX) {
+      skipped++;
+      skipReason = `Max ${ROOM_MAX} rooms`;
+      continue;
+    }
     if (obj.kind === "enemy" && !canAddEnemyType(activeMap(doc), obj.enemy, obj.roomId)) {
       skipped++;
+      skipReason = `Max ${ROOM_MAX_TYPES} enemy types per room`;
       continue;
     }
     const copy = clampObject({
@@ -1118,10 +1131,7 @@ function duplicateSelected() {
     endUndo();
     undoStack.pop();
     updateUndoButtons();
-    setStatus(
-      skipped ? `Max ${ROOM_MAX_TYPES} enemy types per room` : "Nothing to duplicate",
-      true
-    );
+    setStatus(skipped ? skipReason : "Nothing to duplicate", true);
     return;
   }
   selectedIds = created;

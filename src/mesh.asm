@@ -759,13 +759,13 @@ fill_item_verts
 ; Face width 4/6/8 → rot1 = ×1 / ×1.5 / ×2 (nearest bucket).
 door_mesh_scale
 	ldx obj_i
-	lda door_vface,x
+	+lda_mx door_face
 	cmp #FACE_PX
 	bcc .dms_z
-	lda door_vsz,x
+	+lda_mx door_sz
 	jmp .dms_w
 .dms_z
-	lda door_vsx,x
+	+lda_mx door_sx
 .dms_w
 	ldx #0
 	cmp #5
@@ -914,10 +914,10 @@ fill_door_type_verts
 	jsr fill_door_origin
 	jmp xform_item_at
 
-; ent_wx/wy/wz = door AABB bottom-centre on the outward face; ent_rot from vface.
+; ent_wx/wy/wz = door AABB bottom-centre on the outward face; ent_rot from face.
 fill_door_origin
 	ldx obj_i
-	lda door_vface,x
+	+lda_mx door_face
 	cmp #FACE_PX
 	bcc .fdo_z
 	cmp #FACE_MX
@@ -958,7 +958,7 @@ fill_door_origin
 	lda box_y
 	sta ent_wy
 	ldx obj_i
-	lda door_vface,x
+	+lda_mx door_face
 	and #3
 	tay
 	lda door_face_rot,y
@@ -1409,39 +1409,33 @@ draw_world
 	beq .dw_d
 	jmp .dw_c
 .dw_d
-	; doors: static type mesh on the outward face
-	ldx #0
+	; doors: static type mesh on the outward face (this room's slice)
+	jsr door_slice
+	ldx door_i0
 .dw_door
-	cpx	map_ndoors
+	cpx door_i1
 	bcs .dw_sw
-	+lda_mx door_ra
-	cmp room_idx
-	beq .dw_doku
-	+lda_mx door_rb
-	cmp room_idx
-	bne .dw_dn
-.dw_doku
 	stx obj_i
 	jsr door_front
 	bcc .dw_dn0
-	lda door_vx,x
+	ldx obj_i
+	+lda_mx door_x
 	sta box_x
 	+lda_mx door_y
 	sta box_y
-	lda door_vz,x
+	+lda_mx door_z
 	sta box_z
-	lda door_vsx,x
+	+lda_mx door_sx
 	sta box_sx
 	+lda_mx door_sy
 	sta box_sy
-	lda door_vsz,x
+	+lda_mx door_sz
 	sta box_sz
 	jsr frustum_hits
 	bcc .dw_dn0
 	jsr draw_door_mesh
 .dw_dn0
 	ldx obj_i
-.dw_dn
 	inx
 	beq .dw_sw
 	jmp .dw_door

@@ -201,9 +201,6 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CE1E` | 1 | `hurt_flash_h` | Remaining red-border ms hi |
 | `$CE1F` | 1 | `bite_splat_i` | |
 | `$CE20` | 2 | `status_ms_l/h` | Status HUD remaining ms |
-| `$CE22` | 16 | `door_open` | `MAP_NDOORS` ≤ `DOOR_MAX` (16) |
-| `$CE32` | 16 | `door_vx` | Oriented door SoA |
-| `$CE42` | 16 | `door_vz` | |
-| `$CE52` | 16 | `door_vsx` | |
-| `$CE62` | 16 | `door_vsz` | |
-| `$CE72` | 16 | `door_vface` | Last used scratch byte `$CE81` |
+| `$CE22` | 1 | `door_i0` | Room door slice start |
+| `$CE23` | 1 | `door_i1` | Exclusive end |
+| `$CE24`–`$CE81` | 94 | — | Free (was door runtime SoA) |

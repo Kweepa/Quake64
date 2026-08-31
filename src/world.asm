@@ -1932,7 +1932,7 @@ near_box_xz
 ; update_triggers — first 3D overlap in the active room: XZ plus
 ; [box_y, box_y+sy) vs the player feet–eye line (player_overlaps_y).
 ; Message: HUD while inside. Hurt: 10 HP on enter, then every HURT_MS.
-; End of level / teleport / elevator: once on entry until leave.
+; End of level / teleport / elevator / summon: once on entry until leave.
 ; ------------------------------------------------------------------
 update_triggers
 	ldx #0
@@ -2047,6 +2047,8 @@ trig_enter
 	beq .te_tele
 	cmp #TRIG_ELEV
 	beq .te_elev
+	cmp #TRIG_SUMMON
+	beq .te_summon
 	cmp #TRIG_END
 	bne .te_rts
 	jmp next_level
@@ -2069,6 +2071,10 @@ trig_enter
 	+lda_mx tr_arg
 	tax
 	jmp elev_activate
+.te_summon
+	+lda_mx tr_arg
+	tax
+	jmp elev_summon
 .te_tele
 	lda map_ndests
 	beq .te_tele_rts

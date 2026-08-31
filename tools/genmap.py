@@ -27,11 +27,10 @@ ENEMY_TYPE = {
     "Chthon": 6,
     "Zombie": 7,
 }
-MAP_MAX_BYTES = 3072
+MAP_MAX_BYTES = 4096
 ROOM_MAX_TYPES = 2
 HDR_TYPE_SLOTS = 3  # packed header pad; unused by streaming
-ROOM_MAX = 16
-DOOR_MAX = 16
+ROOM_MAX = 20  # keep in sync with editor/js/model.js
 CRATE_MAX = 16
 SLOPE_MAX = 16
 PLAT_MAX = 16
@@ -165,6 +164,54 @@ def door_rooms(rooms: list[dict], d: dict) -> tuple[int, int]:
     if ra == 255:
         raise SystemExit(f"doorway at {d.get('x')},{d.get('y')},{d.get('z')} has no owner room")
     return ra, rb
+
+
+def _xz_overlap(ax: int, asx: int, bx: int, bsx: int) -> bool:
+    """Strict overlap matching door.asm .oo_ovx / .oo_ovz (face-touch alone = no)."""
+    return ax + asx > bx and bx + bsx > ax
+
+
+def bake_door_face(door: dict, cols: list[dict]) -> int:
+    """Nearer slab plane toward room collider centre (matches door.asm orient_one_door)."""
+    dx, dz = int(door["x"]), int(door["z"])
+    dsx, dsz = int(door["sx"]), int(door["sz"])
+    if dsz <= dsx:
+        chosen = None
+        for c in cols:
+            if int(c["sx"]) == 0:
+                continue
+            if _xz_overlap(int(c["x"]), int(c["sx"]), dx, dsx):
+                chosen = c
+                break
+        if chosen is None:
+            for c in cols:
+                if int(c["sx"]) != 0:
+                    chosen = c
+                    break
+        if chosen is None:
+            return FACE["+z"]
+        cz = int(chosen["z"]) + (int(chosen["sz"]) >> 1)
+        d0 = abs(cz - dz)
+        d1 = abs(cz - (dz + dsz))
+        return FACE["+z"] if d1 < d0 else FACE["-z"]
+    chosen = None
+    for c in cols:
+        if int(c["sx"]) == 0:
+            continue
+        if _xz_overlap(int(c["z"]), int(c["sz"]), dz, dsz):
+            chosen = c
+            break
+    if chosen is None:
+        for c in cols:
+            if int(c["sx"]) != 0:
+                chosen = c
+                break
+    if chosen is None:
+        return FACE["+x"]
+    cx = int(chosen["x"]) + (int(chosen["sx"]) >> 1)
+    d0 = abs(cx - dx)
+    d1 = abs(cx - (dx + dsx))
+    return FACE["+x"] if d1 < d0 else FACE["-x"]
 
 
 def xz_aabb_gap(a: dict, b: dict) -> int:
@@ -314,12 +361,14 @@ def cook_one(level: dict, map_key: str) -> bytes:
     TRIG_HURT = 2
     TRIG_TELE = 3
     TRIG_ELEV = 4
+    TRIG_SUMMON = 5
     TRIG_PURPOSE = {
         "message": TRIG_MSG,
         "end_level": TRIG_END,
         "hurt": TRIG_HURT,
         "teleport": TRIG_TELE,
         "elevator": TRIG_ELEV,
+        "summon": TRIG_SUMMON,
     }
 
     # Rooms SoA
@@ -441,36 +490,76 @@ def cook_one(level: dict, map_key: str) -> bytes:
             mesh_evert.append(1 if e["vert"] else 0)
             mesh_efaces.append(int(e["faces"]) & 0xFF)
 
-    # Doors
-    door_x, door_y, door_z = [], [], []
-    door_sx, door_sy, door_sz = [], [], []
-    door_ra, door_rb, door_home_y, door_face, door_key, door_type = [], [], [], [], [], []
-    door_id = []
+    # Doors — one baked instance per owning room, face toward that room
+    room_cols: list[list[dict]] = []
+    for r in rooms:
+        cols = room_geometry(r)["colliders"]
+        while len(cols) < 3:
+            cols.append({"x": 0, "y": 0, "z": 0, "sx": 0, "sy": 0, "sz": 0})
+        room_cols.append(cols[:3])
+
+    by_room: list[list[dict]] = [[] for _ in rooms]
     for d in doors:
         ra, rb = door_rooms(rooms, d)
-        door_x.append(d["x"])
-        door_y.append(d["y"])
-        door_z.append(d["z"])
-        door_sx.append(d["sx"])
-        door_sy.append(d["sy"])
-        door_sz.append(d["sz"])
-        door_home_y.append(d["y"])
-        door_ra.append(ra)
-        door_rb.append(rb)
-        door_face.append(FACE.get(d.get("face") or "+z", 0))
         lk = str(d.get("lockKey") or "").strip().lower()
         if lk == "gold":
-            door_key.append(2)
+            key = 2
         elif lk == "silver":
-            door_key.append(1)
+            key = 1
         elif d.get("locked"):
             tag = str(d.get("keyTag") or "").lower()
-            door_key.append(2 if "gold" in tag else 1)
+            key = 2 if "gold" in tag else 1
         else:
-            door_key.append(0)
+            key = 0
         dt = str(d.get("doorType") or "Tech").strip()
-        door_type.append({"Tech": 0, "Arch": 1, "Tri": 2, "tech": 0, "arch": 1, "tri": 2}.get(dt, 0))
-        door_id.append(map_id[id(d)])
+        dtype = {"Tech": 0, "Arch": 1, "Tri": 2, "tech": 0, "arch": 1, "tri": 2}.get(dt, 0)
+        did = map_id[id(d)]
+        base = {
+            "x": d["x"],
+            "y": d["y"],
+            "z": d["z"],
+            "sx": d["sx"],
+            "sy": d["sy"],
+            "sz": d["sz"],
+            "key": key,
+            "type": dtype,
+            "id": did,
+        }
+        by_room[ra].append({**base, "face": bake_door_face(d, room_cols[ra]), "other": rb})
+        if rb != 255:
+            by_room[rb].append({**base, "face": bake_door_face(d, room_cols[rb]), "other": ra})
+
+    door_x: list[int] = []
+    door_y: list[int] = []
+    door_z: list[int] = []
+    door_sx: list[int] = []
+    door_sy: list[int] = []
+    door_sz: list[int] = []
+    door_face: list[int] = []
+    door_key: list[int] = []
+    door_type: list[int] = []
+    door_id: list[int] = []
+    door_other: list[int] = []
+    room_door_o: list[int] = []
+    room_ndoor: list[int] = []
+    for lst in by_room:
+        room_door_o.append(len(door_x))
+        room_ndoor.append(len(lst))
+        for inst in lst:
+            door_x.append(inst["x"])
+            door_y.append(inst["y"])
+            door_z.append(inst["z"])
+            door_sx.append(inst["sx"])
+            door_sy.append(inst["sy"])
+            door_sz.append(inst["sz"])
+            door_face.append(inst["face"])
+            door_key.append(inst["key"])
+            door_type.append(inst["type"])
+            door_id.append(inst["id"])
+            door_other.append(inst["other"])
+
+    if len(door_x) > 255:
+        raise SystemExit(f"{map_key} has {len(door_x)} baked doors (max 255)")
 
     # Crates
     crate_x, crate_y, crate_z = [], [], []
@@ -636,10 +725,11 @@ def cook_one(level: dict, map_key: str) -> bytes:
             if tag not in dest_by_tag:
                 raise SystemExit(f"teleport trigger tag {tag!r} has no destination")
             arg = dest_by_tag[tag]
-        elif purpose == TRIG_ELEV:
+        elif purpose in (TRIG_ELEV, TRIG_SUMMON):
             tag = (t.get("tag") or "").strip()
+            kind = "elevator" if purpose == TRIG_ELEV else "summon"
             if tag not in elev_by_tag:
-                raise SystemExit(f"elevator trigger tag {tag!r} has no elevator")
+                raise SystemExit(f"{kind} trigger tag {tag!r} has no elevator")
             arg = elev_by_tag[tag]
         tr_x.append(t["x"])
         tr_y.append(t["y"])
@@ -676,7 +766,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
 
     caps = [
         (rooms, ROOM_MAX, "rooms"),
-        (doors, DOOR_MAX, "doors"),
         (crates, CRATE_MAX, "crates"),
         (slopes, SLOPE_MAX, "slopes"),
         (plats, PLAT_MAX, "platforms"),
@@ -725,7 +814,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     payload.extend(
         [
             len(rooms),
-            len(doors),
+            len(door_x),
             len(crates),
             len(slopes),
             len(plats),
@@ -786,6 +875,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(room_nz)
     add(room_uo)
     add(room_zo)
+    add(room_door_o)
+    add(room_ndoor)
     add(mesh_ux)
     add(mesh_uz)
     add(mesh_vy)
@@ -802,13 +893,11 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(door_sx)
     add(door_sy)
     add(door_sz)
-    add(door_ra)
-    add(door_rb)
-    add(door_home_y)
     add(door_face)
     add(door_key)
     add(door_type)
     add(door_id)
+    add(door_other)
     add(crate_x)
     add(crate_y)
     add(crate_z)
@@ -895,7 +984,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
 
 
 ENUMS = """; Generated by tools/genmap.py — counts / types (runtime n* live in BSS)
-ROOM_MAX	= 16
+ROOM_MAX	= 20
 CRATE_MAX	= 16
 SLOPE_MAX	= 16
 PLAT_MAX	= 16
@@ -904,7 +993,7 @@ ELEV_MAX	= 4
 TRIG_MAX	= 16
 DEST_MAX	= 16
 ROOM_MAX_TYPES	= 2
-MAP_MAX_BYTES	= 3072
+MAP_MAX_BYTES	= 4096
 ENEMY_POSE_MAX	= 4096
 MAP_NLEVELS	= 8
 TRIG_MSG	= 0
@@ -912,6 +1001,7 @@ TRIG_END	= 1
 TRIG_HURT	= 2
 TRIG_TELE	= 3
 TRIG_ELEV	= 4
+TRIG_SUMMON	= 5
 FACE_PZ	= 0
 FACE_MZ	= 1
 FACE_PX	= 2

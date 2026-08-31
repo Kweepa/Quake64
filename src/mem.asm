@@ -596,14 +596,10 @@ bite_splat_i	= $CE1F			; dog idx pending blood splat, $ff = none
 status_ms_l	= $CE20			; status HUD remaining ms
 status_ms_h	= $CE21
 
-; Door runtime SoA — 16 slots (map had 11; 8 overflowed into VOC / door 0)
-DOOR_MAX	= 16
-door_open	= $CE22			; MAP_NDOORS (≤ DOOR_MAX)
-door_vx		= $CE32			; oriented AABB (canonical door_* in map)
-door_vz		= $CE42
-door_vsx	= $CE52
-door_vsz	= $CE62
-door_vface	= $CE72			; last byte $CE81
+; $CE22–$CE81 free (was door runtime SoA)
+door_i0		= $CE22			; room door slice start
+door_i1		= $CE23			; exclusive end
+; $CE24–$CE81 free
 en_pat_n	= $CE82			; ENEMY_MAX: patrol remaining cells
 have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD / HAVE_EARTH
 pu_kind		= $CE93			; 0 or BP_QUAD / BP_PENT / BP_RING

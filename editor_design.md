@@ -33,7 +33,8 @@
   * **End of level** — fires once on entry; no HUD. Level transitions come later.
   * **Hurt player** — 10% health on enter, then every 2 seconds while inside (no tag).
   * **Teleport** — destination **tag** targets a **teleport dest**; stepping in warps to that pose (including another room).
-  * **Activate elevator** — destination **tag** targets an elevator; fires on entry if that elevator is not busy.
+  * **Activate elevator** — destination **tag** targets an elevator; toggles to the other stop on entry if that elevator is idle.
+  * **Summon elevator** — destination **tag** targets an elevator; on entry, if idle, sends it to the stop nearer the player’s feet (no-op if already there or moving).
 * There is no separate teleporter entry object — teleport entry is a trigger with purpose **Teleport**.
 * **Teleport dest** stays its own placeable (exit point + facing + tag). The dest object's room is the arrival room. Editor marks the dest; the game does not draw it.
 

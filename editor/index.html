@@ -2550,14 +2550,15 @@ function usesLinkTag(kind) {
   return kind === "switch" || kind === "elevator" || kind === "teleporter_dest";
 }
 
-/** Trigger purposes. Tag is only used for teleport / elevator. */
-const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator"];
+/** Trigger purposes. Tag is used for teleport / elevator / summon. */
+const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator", "summon"];
 const TRIGGER_PURPOSE_LABELS = {
   message: "Display message",
   end_level: "End of level",
   hurt: "Hurt player",
   teleport: "Teleport",
   elevator: "Activate elevator",
+  summon: "Summon elevator",
 };
 
 function clampTriggerPurpose(s) {
@@ -2566,7 +2567,7 @@ function clampTriggerPurpose(s) {
 
 function triggerUsesTag(purpose) {
   const p = clampTriggerPurpose(purpose);
-  return p === "teleport" || p === "elevator";
+  return p === "teleport" || p === "elevator" || p === "summon";
 }
 
 /** Layout placements draw the first stick frame at this fraction of anim units (Grunt ~4 world high). */
@@ -3451,46 +3452,33 @@ function applyYawQuarterMeta(obj, delta) {
   return obj;
 }
 
-function objectsOwnedByRoom(doc, roomId) {
-  const out = [];
-  for (const obj of activeMap(doc).objects) {
-    if (obj.kind === "room") continue;
-    if (obj.kind === "doorway") {
-      if (obj.roomId === roomId || obj.otherRoomId === roomId) out.push(obj);
-      continue;
-    }
-    if (obj.roomId === roomId) out.push(obj);
+/** +90° Y: (x,z) → (pivotX+dz, pivotZ-dx), matching rotateAabbYAround. */
+function yawPoint(x, z, pivotX, pivotZ, delta) {
+  const steps = ((delta | 0) % 4 + 4) % 4;
+  let px = x;
+  let pz = z;
+  for (let i = 0; i < steps; i++) {
+    const dx = px - pivotX;
+    const dz = pz - pivotZ;
+    px = pivotX + dz;
+    pz = pivotZ - dx;
   }
-  return out;
+  return { x: px, z: pz };
 }
 
-function resnapRoomAttachments(doc, objs) {
-  for (const obj of objs) {
-    if (obj.kind === "doorway") {
-      assignDoorRooms(doc, obj, roomById(doc, obj.roomId));
-      clampObject(obj);
-    } else if (obj.kind === "switch") {
-      snapSwitchToRoom(obj, roomById(doc, obj.roomId));
-      clampObject(obj);
-    }
-  }
+/** Selected owner for a doorway: roomId if in the set, else otherRoomId. */
+function doorAnchorRoomId(door, idSet) {
+  const a = door.roomId != null ? String(door.roomId) : "";
+  const b = door.otherRoomId != null ? String(door.otherRoomId) : "";
+  if (idSet.has(a)) return a;
+  if (idSet.has(b)) return b;
+  return null;
 }
 
 /** Rigid Y rotate room AABB/orient and transform owned contents + doorways. */
 function rotateRoomY(doc, room, delta = 1) {
   if (!room || room.kind !== "room") return room;
-  const d = delta | 0;
-  if (!d) return room;
-  const c = aabbCenter(room);
-  rotateRoom(room, "y", d);
-  const owned = objectsOwnedByRoom(doc, room.id);
-  for (const obj of owned) {
-    rotateAabbYAround(obj, c.x, c.z, d);
-    applyYawQuarterMeta(obj, d);
-    clampObject(obj);
-  }
-  clampObject(room);
-  resnapRoomAttachments(doc, owned);
+  rotateRoomsBlockY(doc, [room.id], delta);
   return room;
 }
 
@@ -3538,21 +3526,25 @@ function findFreeRoomTranslation(rooms, outsiders) {
 }
 
 /**
- * Pivot selected rooms (+ contents + internal doors) 90° about Y around union center.
- * If the result overlaps outsiders, translate the set to a free spot when possible.
+ * World-Y rotate each selected room about its AABB center (contents + attached
+ * doors), then translate so room centers orbit the union XZ pivot. Doors keep
+ * IDs and yawed face (no re-pair). If the set overlaps outsiders, nudge it.
  */
 function rotateRoomsBlockY(doc, roomIds, delta = 1) {
   const d = delta | 0;
   if (!d) return;
   const idSet = new Set((roomIds || []).map(String));
   const rooms = roomsOf(doc).filter((r) => idSet.has(String(r.id)));
-  if (rooms.length < 2) return;
+  if (!rooms.length) return;
 
   let minX = Infinity;
   let maxX = -Infinity;
   let minZ = Infinity;
   let maxZ = -Infinity;
+  const origCenter = new Map();
   for (const r of rooms) {
+    const c = aabbCenter(r);
+    origCenter.set(String(r.id), { x: c.x, z: c.z });
     minX = Math.min(minX, r.x | 0);
     maxX = Math.max(maxX, (r.x | 0) + (r.sx | 0));
     minZ = Math.min(minZ, r.z | 0);
@@ -3561,29 +3553,65 @@ function rotateRoomsBlockY(doc, roomIds, delta = 1) {
   const pivotX = (minX + maxX) / 2;
   const pivotZ = (minZ + maxZ) / 2;
 
-  const moving = [];
+  const byRoom = new Map();
+  const doors = [];
   for (const obj of activeMap(doc).objects) {
-    if (obj.kind === "room") {
-      if (idSet.has(String(obj.id))) moving.push(obj);
-      continue;
-    }
+    if (obj.kind === "room") continue;
     if (obj.kind === "doorway") {
-      if (idSet.has(String(obj.roomId)) && idSet.has(String(obj.otherRoomId))) moving.push(obj);
+      const anchor = doorAnchorRoomId(obj, idSet);
+      if (anchor) doors.push({ obj, anchor });
       continue;
     }
-    if (obj.roomId != null && idSet.has(String(obj.roomId))) moving.push(obj);
+    if (obj.roomId != null && idSet.has(String(obj.roomId))) {
+      const k = String(obj.roomId);
+      if (!byRoom.has(k)) byRoom.set(k, []);
+      byRoom.get(k).push(obj);
+    }
   }
 
-  for (const obj of moving) {
-    rotateAabbYAround(obj, pivotX, pivotZ, d);
-    if (obj.kind === "room") {
-      const steps = ((d % 4) + 4) % 4;
-      obj.ry = clampQuarter((obj.ry | 0) + steps);
-      clampRoomSplits(obj);
-    } else {
+  for (const room of rooms) {
+    const c = origCenter.get(String(room.id));
+    rotateRoom(room, "y", d);
+    for (const obj of byRoom.get(String(room.id)) || []) {
+      rotateAabbYAround(obj, c.x, c.z, d);
       applyYawQuarterMeta(obj, d);
     }
   }
+  for (const { obj, anchor } of doors) {
+    const c = origCenter.get(anchor);
+    rotateAabbYAround(obj, c.x, c.z, d);
+    applyYawQuarterMeta(obj, d);
+  }
+
+  const shift = new Map();
+  for (const room of rooms) {
+    const orig = origCenter.get(String(room.id));
+    const target = yawPoint(orig.x, orig.z, pivotX, pivotZ, d);
+    const destX = Math.round(target.x - (room.sx | 0) / 2);
+    const destZ = Math.round(target.z - (room.sz | 0) / 2);
+    const dx = destX - (room.x | 0);
+    const dz = destZ - (room.z | 0);
+    shift.set(String(room.id), { dx, dz });
+    if (dx || dz) {
+      room.x = (room.x | 0) + dx;
+      room.z = (room.z | 0) + dz;
+      for (const obj of byRoom.get(String(room.id)) || []) {
+        obj.x = (obj.x | 0) + dx;
+        obj.z = (obj.z | 0) + dz;
+      }
+    }
+  }
+  for (const { obj, anchor } of doors) {
+    const s = shift.get(anchor);
+    if (s && (s.dx || s.dz)) {
+      obj.x = (obj.x | 0) + s.dx;
+      obj.z = (obj.z | 0) + s.dz;
+    }
+  }
+
+  const moving = [...rooms];
+  for (const list of byRoom.values()) moving.push(...list);
+  for (const { obj } of doors) moving.push(obj);
 
   const outsiders = roomsOf(doc).filter((r) => !idSet.has(String(r.id)));
   const { dx, dz } = findFreeRoomTranslation(rooms, outsiders);
@@ -3595,10 +3623,6 @@ function rotateRoomsBlockY(doc, roomIds, delta = 1) {
   }
 
   for (const obj of moving) clampObject(obj);
-  resnapRoomAttachments(
-    doc,
-    moving.filter((o) => o.kind === "doorway" || o.kind === "switch")
-  );
 }
 
 function pointInAabb(p, box) {
@@ -3896,8 +3920,9 @@ function mapDisplayName(map, key) {
 
 /** Soft cap: 8-bit object indices / editor budget. */
 const MAX_MAP_OBJECTS = 255;
+const ROOM_MAX = 20; // keep in sync with tools/genmap.py
 const ROOM_MAX_TYPES = 2;
-const MAP_MAX_BYTES = 3072;
+const MAP_MAX_BYTES = 4096;
 const ENEMY_POSE_MAX = 4096;
 const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 
@@ -4255,7 +4280,7 @@ function canAddEnemyType(map, typeName, roomId) {
  */
 const C64_OBJECT_BYTES = {
   room: 11,
-  doorway: 13,
+  doorway: 11, // one baked instance; +11 if otherRoomId (see mapStats)
   crate: 8,
   slope: 11,
   platform: 8,
@@ -4288,10 +4313,14 @@ function mapStats(doc) {
       continue;
     }
     c64Bytes += C64_OBJECT_BYTES[kind] ?? 8;
+    if (kind === "doorway" && obj.otherRoomId) {
+      c64Bytes += 11; // second baked instance for the far room
+    }
     if (kind === "room") {
       c64Bytes += 18; // three collider slots (3×6)
       c64Bytes += 12; // two cutout slots (2×6), always padded
       c64Bytes += 8; // nv/ne/vo/eo/nx/nz/uo/zo (zeros on box)
+      c64Bytes += 2; // room_door_o + room_ndoor
       if (clampRoomShape(obj.shape) !== "box") {
         const g = roomGeometry(obj);
         const nx = new Set(g.verts.map((v) => v.x)).size;
@@ -4357,7 +4386,8 @@ function mapStats(doc) {
     enemyTypes,
     enemyTypeCount,
     overTypes,
-    overBudget: overTypes,
+    overRooms: (byKind.room || 0) > ROOM_MAX,
+    overBudget: overTypes || (byKind.room || 0) > ROOM_MAX,
   };
 }
 
@@ -4396,7 +4426,12 @@ function formatMapStats(stats) {
     const n = stats.byKind[kind];
     if (!n) continue;
     const one = KINDS[kind]?.label?.toLowerCase() || kind;
-    parts.push(`${n} ${n === 1 ? one : plurals[kind] || `${one}s`}`);
+    const label = n === 1 ? one : plurals[kind] || `${one}s`;
+    if (kind === "room") {
+      parts.push(`${n}/${ROOM_MAX} ${label}`);
+      continue;
+    }
+    parts.push(`${n} ${label}`);
   }
   parts.push(`≤${ROOM_MAX_TYPES} types/room`);
   return parts.join(" · ");
@@ -11244,6 +11279,11 @@ function finishPaletteDrop(e) {
   const kind = place.kind;
   const p = layoutView.placeAtScreen(mx, my, kind);
   const owner = placeOwner(kind, p.room);
+  if (kind === "room" && roomsOf(doc).length >= ROOM_MAX) {
+    layoutView.draw();
+    setStatus(`Max ${ROOM_MAX} rooms`, true);
+    return;
+  }
   if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
     layoutView.draw();
     setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
@@ -11339,11 +11379,18 @@ function duplicateSelected() {
   pushUndo();
   const created = [];
   let skipped = 0;
+  let skipReason = "";
   for (const id of selectedIds) {
     const obj = activeMap(doc).objects.find((o) => o.id === id);
     if (!obj) continue;
+    if (obj.kind === "room" && roomsOf(doc).length >= ROOM_MAX) {
+      skipped++;
+      skipReason = `Max ${ROOM_MAX} rooms`;
+      continue;
+    }
     if (obj.kind === "enemy" && !canAddEnemyType(activeMap(doc), obj.enemy, obj.roomId)) {
       skipped++;
+      skipReason = `Max ${ROOM_MAX_TYPES} enemy types per room`;
       continue;
     }
     const copy = clampObject({
@@ -11360,10 +11407,7 @@ function duplicateSelected() {
     endUndo();
     undoStack.pop();
     updateUndoButtons();
-    setStatus(
-      skipped ? `Max ${ROOM_MAX_TYPES} enemy types per room` : "Nothing to duplicate",
-      true
-    );
+    setStatus(skipped ? skipReason : "Nothing to duplicate", true);
     return;
   }
   selectedIds = created;

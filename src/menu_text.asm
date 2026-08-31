@@ -9,7 +9,7 @@ control_text
 	!scr "^1234....^ Change weapon",0
 	!scr " ",0
 	!scr "If you have a mouse in port 1 and",0
-	!scr "you have enabled it in the Options,",0
+	!scr "you have enabled it in the options,",0
 	!scr "you can turn and shoot with it.",0
 	!scr " ",0
 	!scr "Walk into doors to open them.",0
@@ -31,30 +31,30 @@ CREDITS_PAGES = 3
 
 credits1_text
 	!scr "Quake is a trademark of",0
-	!scr "ID Software LLC/Zenimax Media Inc.",0
+	!scr "id software llc/zenimax media inc.",0
 	!scr " ",0
-	!scr "Unofficial Commodore 64 fan port",0
-	!scr "created by Steve McCrea in 2026.",0
+	!scr "Unofficial commodore 64 fan port",0
+	!scr "created by steve mccrea in 2026.",0
 	!scr " ",0
 	!scr "Not affiliated with or endorsed",0
-	!scr "by ID Software or Zenimax.",0
+	!scr "by id software or zenimax.",0
 	!scr " ",0
 	!scr "For non-commercial/fan use only.",0
 	!byte 0
 
 credits2_text
 	!scr "Quake was created by",0
-	!scr "John Carmack, Michael Abrash,",0
-	!scr "John Cash, John Romero,",0
-	!scr "American McGee, Sandy Petersen,",0
-	!scr "Tim Willits, Adrian Carmack,",0
-	!scr "Kevin Cloud, Paul Steed,",0
-	!scr "Trent Reznor & Nine Inch Nails.",0
+	!scr "john carmack, michael abrash,",0
+	!scr "john cash, john romero,",0
+	!scr "american mcgee, sandy petersen,",0
+	!scr "tim willits, adrian carmack,",0
+	!scr "kevin cloud, paul steed,",0
+	!scr "trent reznor & nine inch nails.",0
 	!byte 0
 
 credits3_text
-	!scr "Loader: Krill / Plush.",0
-	!scr "Loader integration by Chris Masiero.",0
+	!scr "Loader: krill / plush.",0
+	!scr "Loader integration by chris masiero.",0
 	!scr " ",0
 	!scr "Thanks all!",0
 	!scr " ",0
@@ -69,38 +69,38 @@ credits_hi
 READTHIS_PAGES = 6
 
 readthis1_text
-	!scr "You get the phone call at 4 a.m. By",0
+	!scr "You get the phone call at 4a.m. by",0
 	!scr "5:30 you're in the secret installation.",0
-	!scr "The commander explains tersely:",0
-	!scr "\"It's about the slipgate device.",0
-	!scr "Once we perfect these, we'll be able",0
+	!scr "the commander explains tersely:",0
+	!scr "\"it's about the slipgate device.",0
+	!scr "once we perfect these, we'll be able",0
 	!scr "to use them to transport people and",0
 	!scr "cargo from one place to another",0
 	!scr "instantly.",0
 	!byte 0
 
 readthis2_text
-	!scr "\"An enemy codenamed Quake is using his",0
+	!scr "\"An enemy codenamed quake is using his",0
 	!scr "own slipgates to insert death squads",0
-	!scr "inside our bases to kill, steal, and",0
-	!scr "kidnap.\"",0
+	!scr "inside our bases to kidnap, steal,",0
+	!scr "and kill.\"",0
 	!byte 0
 
 readthis3_text
 	!scr "\"The hell of it is we have no idea",0
-	!scr "where he's from. Our top scientists",0
-	!scr "think Quake's not from Earth, but",0
-	!scr "another dimension. They say Quake's",0
+	!scr "where he's from. our top scientists",0
+	!scr "think quake's not from earth, but",0
+	!scr "another dimension. They say he's",0
 	!scr "preparing to unleash his real army,",0
 	!scr "whatever that is.\"",0
 	!byte 0
 
 readthis4_text
-	!scr "\"You're our best man. This is Operation",0
-	!scr "Counterstrike and you're in charge.",0
-	!scr "Find Quake, and stop him... or it...",0
-	!scr "You have full authority to requisition",0
-	!scr "anything you need. If the eggheads are",0
+	!scr "\"You're our best man. this is operation",0
+	!scr "counterstrike and you're in charge.",0
+	!scr "Find quake, and stop him... or it...",0
+	!scr "you have full authority to requisition",0
+	!scr "anything you need. if the eggheads are",0
 	!scr "right, all our lives are expendable.\"",0
 	!byte 0
 
@@ -108,23 +108,23 @@ readthis5_text
 	!scr "PRELUDE TO DESTRUCTION",0
 	!scr " ",0
 	!scr "While scouting the neighborhood, you",0
-	!scr "hear shots back at the base. Damn,",0
-	!scr "that Quake bastard works fast! He heard",0
-	!scr "about Operation Counterstrike, and hit",0
-	!scr "first. Racing back, you see the place",0
-	!scr "is overrun. You are almost certainly the",0
-	!scr "only survivor. Operation Counterstrike",0
-	!scr "is over. Except for you.",0
+	!scr "hear shots back at the base. damn,",0
+	!scr "that quake bastard works fast! He heard",0
+	!scr "about operation counterstrike, and hit",0
+	!scr "first. racing back, you see the place",0
+	!scr "is overrun. you are almost certainly the",0
+	!scr "only survivor. operation counterstrike",0
+	!scr "is over. except for you.",0
 	!byte 0
 
 readthis6_text
 	!scr "You know that the heart of the",0
-	!scr "installation holds a slipgate. Since",0
-	!scr "Quake's killers came through, it is",0
-	!scr "still set to his dimension. You can",0
+	!scr "installation holds a slipgate. since",0
+	!scr "quake's killers came through, it's",0
+	!scr "still set to his dimension. you can",0
 	!scr "use it to get loose in his hometown.",0
-	!scr "Maybe you can get to the asshole",0
-	!scr "personally. You pump a round into",0
+	!scr "maybe you can get to the asshole",0
+	!scr "personally. you pump a round into",0
 	!scr "your shotgun, and get moving.",0
 	!byte 0
 
@@ -137,18 +137,18 @@ ENDING_PAGES = 2
 
 ending1_text
 	!scr "As the corpse of the monstrous entity",0
-	!scr "Chthon sinks back into the lava whence",0
-	!scr "it rose, you grip the Rune of Earth Magic",0
-	!scr "tightly. Now that you have conquered",0
-	!scr "the Dimension of the Doomed, realm of",0
-	!scr "Earth Magic, you are ready to complete",0
+	!scr "chthon sinks back into the lava whence",0
+	!scr "it rose, you grip the rune of earth magic",0
+	!scr "tightly. now that you have conquered",0
+	!scr "the dimension of the doomed, realm of",0
+	!scr "earth magic, you are ready to complete",0
 	!scr "your task.",0
 	!byte 0
 
 ending2_text
-	!scr "A Rune of magic power lies at the end",0
-	!scr "of each haunted land of Quake. Go forth",0
-	!scr "and seek the totality of the four Runes!",0
+	!scr "A rune of magic power lies at the end",0
+	!scr "of each haunted land of quake. go forth",0
+	!scr "and seek the totality of the four runes!",0
 	!byte 0
 
 ending_lo

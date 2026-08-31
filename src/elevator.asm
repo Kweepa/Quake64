@@ -24,15 +24,8 @@ elev_init
 ; one-shot to the other stop (home ↔ dest)
 ; ------------------------------------------------------------------
 elev_activate
-	stx proc_tmp5			; local SoA
-	+lda_mx elev_id
-	sta proc_tmp1			; world id for busy / PROC_A
-	jsr proc_target_busy
-	bcs .ea_fail
-	jsr proc_count_free
-	cmp #1
-	bcc .ea_fail
-	ldx proc_tmp5
+	jsr elev_prep
+	bcs .ea_rts
 	lda elev_y,x
 	+cmp_mx elev_home
 	bne .ea_up
@@ -40,27 +33,104 @@ elev_activate
 	sta proc_tmp0
 	+lda_mx elev_dest
 	sta proc_tmp2
-	jmp .ea_go
+	jmp elev_start_motion
 .ea_up
 	lda #PROC_RAISE_ELEV
 	sta proc_tmp0
 	+lda_mx elev_home
 	sta proc_tmp2
-.ea_go
+	jmp elev_start_motion
+.ea_rts
+	rts
+
+; ------------------------------------------------------------------
+; elev_summon — X = elev SoA index; C=0 if a thinker was started
+; idle car → stop nearer player feet (tie → home)
+; ------------------------------------------------------------------
+elev_summon
+	jsr elev_prep
+	bcs .es_rts
+	sec
+	lda cam_yh
+	sbc #EYE_HEIGHT
+	sta proc_tmp3			; feet
+	+lda_mx elev_dest
+	jsr elev_u8abs
+	sta proc_tmp4			; |feet-dest|
+	+lda_mx elev_home
+	jsr elev_u8abs			; |feet-home|
+	cmp proc_tmp4
+	bcc .es_home
+	beq .es_home
+	+lda_mx elev_dest
+	jmp .es_tgt
+.es_home
+	+lda_mx elev_home
+.es_tgt
+	sta proc_tmp2
+	ldx proc_tmp5
+	lda elev_y,x
+	cmp proc_tmp2
+	beq .es_rts			; already there (C=1)
+	bcc .es_raise
+	lda #PROC_LOWER_ELEV
+	sta proc_tmp0
+	jmp elev_start_motion
+.es_raise
+	lda #PROC_RAISE_ELEV
+	sta proc_tmp0
+	jmp elev_start_motion
+.es_rts
+	rts
+
+; busy + free slot; X restored to SoA. C=1 fail
+elev_prep
+	stx proc_tmp5
+	+lda_mx elev_id
+	sta proc_tmp1
+	jsr proc_target_busy
+	bcs .ep_fail
+	jsr proc_count_free
+	cmp #1
+	bcc .ep_fail
+	ldx proc_tmp5
+	clc
+	rts
+.ep_fail
+	sec
+	ldx proc_tmp5
+	rts
+
+; A vs proc_tmp3 → |A - proc_tmp3|
+elev_u8abs
+	cmp proc_tmp3
+	bcs .eu_ge
+	eor #$ff
+	sec
+	adc proc_tmp3
+	rts
+.eu_ge
+	sec
+	sbc proc_tmp3
+	rts
+
+; proc_tmp0=kind tmp2=target Y tmp5=SoA. C=0 success
+elev_start_motion
+	ldx proc_tmp5
 	+lda_mx elev_id
 	sta proc_tmp1
 	lda #0
 	sta proc_tmp3
 	sta proc_tmp4
 	jsr proc_alloc
-	bcs .ea_fail
+	bcs elev_act_fail
 	lda proc_tmp5
 	sta PROC_L,y
 	jsr elev_noise_on
 	clc
 	ldx proc_tmp5
 	rts
-.ea_fail
+elev_act_fail
 	sec
 	ldx proc_tmp5
 	rts

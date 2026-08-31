@@ -706,6 +706,8 @@ bind_map
 	+bind_add room_nz, map_nrooms
 	+bind_add room_uo, map_nrooms
 	+bind_add room_zo, map_nrooms
+	+bind_add room_door_o, map_nrooms
+	+bind_add room_ndoor, map_nrooms
 	+bind_add room_ux, map_nux
 	+bind_add room_uz, map_nuz
 	+bind_add room_vy, map_nvert
@@ -723,13 +725,11 @@ bind_map
 	+bind_add door_sx, map_ndoors
 	+bind_add door_sy, map_ndoors
 	+bind_add door_sz, map_ndoors
-	+bind_add door_ra, map_ndoors
-	+bind_add door_rb, map_ndoors
-	+bind_add door_home_y, map_ndoors
 	+bind_add door_face, map_ndoors
 	+bind_add door_key, map_ndoors
 	+bind_add door_type, map_ndoors
 	+bind_add door_id, map_ndoors
+	+bind_add door_other, map_ndoors
 
 	+bind_add crate_x, map_ncrates
 	+bind_add crate_y, map_ncrates

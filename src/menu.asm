@@ -25,7 +25,15 @@ HINT_GAP	= 8			; px between key sprite and label
 HINT_SPR_Y	= 228			; 21px sprite centered on row 23
 MUX_LOGO_RASTER	= 30
 MUX_HINT_RASTER	= 90
-; 5+6+24 sprites × 64 just under SCREEN ($5C00)
+; 5+6+24 sprites × 64 just under SCREEN ($5C00); WIP one slot below
+WIP_SPR_RAM	= $5300
+WIP_SPR_PTR0	= (WIP_SPR_RAM - VIC_BANK1) / 64
+WIP_COL		= 1			; white
+WIP_X_MIN	= 24
+WIP_X_MAX	= 320
+WIP_Y_MIN	= 50
+WIP_Y_MAX	= 229
+WIP_SPR_EN_BIT	= %00000001		; sprite 0 (frontmost)
 LOGO_SPR_RAM	= $5340
 LOGO_SPR_PTR0	= (LOGO_SPR_RAM - VIC_BANK1) / 64
 HINT_SPR_RAM	= LOGO_SPR_RAM + TITLE_SPR_COUNT * 64
@@ -214,6 +222,7 @@ run_menu
 	lda #15
 	sta effects_vol
 	jsr copy_menu_sprites
+	jsr setup_wip_spr
 	jsr menu_sfx_init
 	jsr detect_mouse
 	jsr clear_screen_all
@@ -1384,14 +1393,46 @@ copy_menu_sprites
 	sta CURSOR_SPR_RAM + $500,x
 	inx
 	bne .cms4
+	ldx #0
+.cms_w
+	lda menu_wip_spr,x
+	sta WIP_SPR_RAM,x
+	inx
+	cpx #(WIP_SPR_COUNT * 64)
+	bne .cms_w
 	rts
 
-; Raster IRQ A — white QUAKE highlights (sprites 0–4) until cursor/hint mux.
+; Sprite 0: WIP watermark. Mux never touches ptr/X/Y/colour.
+setup_wip_spr
+	lda #WIP_SPR_PTR0
+	sta SCREEN + $3f8
+	lda #WIP_COL
+	sta $d027
+	lda #40
+	sta wip_x
+	lda #70
+	sta wip_y
+	lda #0
+	sta wip_spr_xmsb
+	lda #1
+	sta wip_dx
+	sta wip_dy
+	lda #WIP_SPR_EN_BIT
+	sta wip_spr_en
+	lda wip_x
+	sta $d000
+	lda wip_y
+	sta $d001
+	lda wip_spr_xmsb
+	sta $d010
+	rts
+
+; Raster IRQ A — white QUAKE highlights on sprites 1–5 (WIP stays 0).
 mux_logo_spr
 	ldx #0
 	lda #LOGO_SPR_PTR0
 .mlp
-	sta SCREEN + $3f8,x
+	sta SCREEN + $3f9,x
 	clc
 	adc #1
 	inx
@@ -1400,12 +1441,12 @@ mux_logo_spr
 	lda #HILITE_COL
 	ldx #0
 .mlcol
-	sta $d027,x
+	sta $d028,x
 	inx
 	cpx #TITLE_SPR_COUNT
 	bne .mlcol
 	ldx #0
-	ldy #0
+	ldy #2
 .mlx
 	lda title_spr_x,x
 	sta $d000,y
@@ -1414,11 +1455,9 @@ mux_logo_spr
 	inx
 	cpx #TITLE_SPR_COUNT
 	bne .mlx
-	lda title_spr_xmsb
-	sta $d010
 	lda #50 + BAR_TOP * 8 + MENU_TITLE_PAD_Y
 	ldx #0
-	ldy #1
+	ldy #3
 .mly
 	sta $d000,y
 	iny
@@ -1427,10 +1466,16 @@ mux_logo_spr
 	cpx #TITLE_SPR_COUNT
 	bne .mly
 	lda #%00011111
+	asl					; sprites 1–5
+	ora wip_spr_en
 	sta $d015
+	lda title_spr_xmsb
+	asl					; sprite 4 → 5
+	ora wip_spr_xmsb
+	sta $d010
 	rts
 
-; Raster IRQ mid — spinning Q (4 colour layers × 6 frames).
+; Raster IRQ mid — spinning Q on sprites 1–4 (WIP stays 0).
 mux_cursor_spr
 	lda cursor_spr_en
 	bne .mc_go
@@ -1443,7 +1488,7 @@ mux_cursor_spr
 	adc #CURSOR_SPR_PTR0
 	ldx #0
 .mcp
-	sta SCREEN + $3f8,x
+	sta SCREEN + $3f9,x
 	clc
 	adc #1
 	inx
@@ -1452,27 +1497,31 @@ mux_cursor_spr
 	ldx #0
 .mccol
 	lda cursor_spr_cols,x
-	sta $d027,x
+	sta $d028,x
 	inx
 	cpx #CURSOR_SPR_COUNT
 	bne .mccol
+	ldx #0
+	ldy #2
+.mcxy
 	lda cursor_spr_x
-	sta $d000
-	sta $d002
-	sta $d004
-	sta $d006
-	lda #0
-	sta $d010
+	sta $d000,y
 	lda cursor_spr_y
-	sta $d001
-	sta $d003
-	sta $d005
-	sta $d007
+	sta $d001,y
+	iny
+	iny
+	inx
+	cpx #CURSOR_SPR_COUNT
+	bne .mcxy
 	lda #%00001111
+	asl					; sprites 1–4
+	ora wip_spr_en
 	sta $d015
+	lda wip_spr_xmsb
+	sta $d010
 	rts
 
-; Raster IRQ late — WS / AD / RETURN key pairs (white in front of black).
+; Raster IRQ late — WS / AD / RETURN on sprites 1–6 (WIP stays 0).
 mux_hint_spr
 	lda hint_spr_en
 	bne .mh_go
@@ -1481,22 +1530,22 @@ mux_hint_spr
 	ldx #0
 	lda #HINT_SPR_PTR0
 .mhp
-	sta SCREEN + $3f8,x
+	sta SCREEN + $3f9,x
 	clc
 	adc #1
 	inx
 	cpx #HINT_SPR_COUNT
 	bne .mhp
 	lda #HILITE_COL
-	sta $d027
-	sta $d029
-	sta $d02b
-	lda #0
 	sta $d028
 	sta $d02a
 	sta $d02c
+	lda #0
+	sta $d029
+	sta $d02b
+	sta $d02d
 	ldx #0
-	ldy #0
+	ldy #2
 .mhx
 	lda hint_spr_x,x
 	sta $d000,y
@@ -1508,17 +1557,19 @@ mux_hint_spr
 	inx
 	cpx #3
 	bne .mhx
-	lda #0
-	sta $d010
 	lda #HINT_SPR_Y
-	sta $d001
 	sta $d003
 	sta $d005
 	sta $d007
 	sta $d009
 	sta $d00b
+	sta $d00d
 	lda #%00111111
+	asl					; sprites 1–6
+	ora wip_spr_en
 	sta $d015
+	lda wip_spr_xmsb
+	sta $d010
 	rts
 
 fill_option_box
@@ -2305,6 +2356,7 @@ menu_unblank
 	ora #%00010000				; DEN on
 	sta $d011
 	lda #%01111111
+	ora wip_spr_en
 	sta $d015
 	rts
 
@@ -2322,6 +2374,7 @@ wait_frame
 .wf_lo
 	lda $d011
 	bmi .wf_lo
+	jsr update_wip_spr
 	inc cursor_tick
 	lda cursor_tick
 	cmp #5				; ~10 Hz on PAL, same as Quake menudot
@@ -2335,6 +2388,76 @@ wait_frame
 	lda #0
 	sta cursor_frame
 .wf_rts
+	rts
+
+; DVD bounce on sprite 0. X is 16-bit (low + $d010 bit 0).
+update_wip_spr
+	lda wip_dx
+	bpl .uw_xp
+	lda wip_x
+	bne .uw_xd
+	dec wip_spr_xmsb
+.uw_xd
+	dec wip_x
+	jmp .uw_xc
+.uw_xp
+	inc wip_x
+	bne .uw_xc
+	inc wip_spr_xmsb
+.uw_xc
+	lda wip_spr_xmsb
+	bne .uw_xh
+	lda wip_x
+	cmp #WIP_X_MIN
+	bcs .uw_xh
+	lda #1
+	sta wip_dx
+	lda #WIP_X_MIN
+	sta wip_x
+	lda #0
+	sta wip_spr_xmsb
+	jmp .uw_y
+.uw_xh
+	lda wip_spr_xmsb
+	beq .uw_y
+	lda wip_x
+	cmp #<(WIP_X_MAX + 1)
+	bcc .uw_y
+	lda #$ff
+	sta wip_dx
+	lda #<WIP_X_MAX
+	sta wip_x
+	lda #>WIP_X_MAX
+	sta wip_spr_xmsb
+.uw_y
+	lda wip_y
+	clc
+	adc wip_dy
+	sta wip_y
+	cmp #WIP_Y_MIN
+	bcc .uw_yl
+	cmp #WIP_Y_MAX + 1
+	bcc .uw_hw
+	lda #$ff
+	sta wip_dy
+	lda #WIP_Y_MAX
+	sta wip_y
+	jmp .uw_hw
+.uw_yl
+	lda #1
+	sta wip_dy
+	lda #WIP_Y_MIN
+	sta wip_y
+.uw_hw
+	lda wip_spr_en
+	beq .uw_rts
+	lda wip_x
+	sta $d000
+	lda wip_y
+	sta $d001
+	lda wip_spr_xmsb
+	sta $d010
+.uw_rts
 	rts
 
 wait_frames_x
@@ -2464,6 +2587,12 @@ menu_stack_d	!byte 0
 menu_can_ret	!byte 0
 hint_spr_en	!byte 0
 cursor_spr_en	!byte 0
+wip_spr_en	!byte 0
+wip_spr_xmsb	!byte 0
+wip_x		!byte 0
+wip_y		!byte 0
+wip_dx		!byte 0
+wip_dy		!byte 0
 cursor_frame	!byte 0
 cursor_tick	!byte 0
 menu_mux_phase	!byte 0
@@ -2570,6 +2699,7 @@ menu_str_hi
 !source "menu_title.asm"
 !source "menu_hint_spr.asm"
 !source "menu_cursor_spr.asm"
+!source "menu_wip_spr.asm"
 !source "uifont_data.asm"
 !source "menu_playsound.asm"
 !source "menu_sfx.asm"
@@ -2577,6 +2707,6 @@ menu_str_hi
 !source "menu_pcsfreq.asm"
 
 end_menu = *
-!if end_menu > LOGO_SPR_RAM {
-	!error "Menu overlaps LOGO_SPR_RAM; end=$", end_menu
+!if end_menu > WIP_SPR_RAM {
+	!error "Menu overlaps WIP_SPR_RAM; end=$", end_menu
 }

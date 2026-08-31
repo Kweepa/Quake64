@@ -1,47 +1,47 @@
-You get the phone call at 4 a.m. By
+You get the phone call at 4a.m. by
 5:30 you're in the secret installation.
-The commander explains tersely:
-"It's about the slipgate device.
-Once we perfect these, we'll be able
+the commander explains tersely:
+"it's about the slipgate device.
+once we perfect these, we'll be able
 to use them to transport people and
 cargo from one place to another
 instantly.
 ^
-"An enemy codenamed Quake is using his
+"An enemy codenamed quake is using his
 own slipgates to insert death squads
-inside our bases to kill, steal, and
-kidnap."
+inside our bases to kidnap, steal,
+and kill."
 ^
 "The hell of it is we have no idea
-where he's from. Our top scientists
-think Quake's not from Earth, but
-another dimension. They say Quake's
+where he's from. our top scientists
+think quake's not from earth, but
+another dimension. They say he's
 preparing to unleash his real army,
 whatever that is."
 ^
-"You're our best man. This is Operation
-Counterstrike and you're in charge.
-Find Quake, and stop him... or it...
-You have full authority to requisition
-anything you need. If the eggheads are
+"You're our best man. this is operation
+counterstrike and you're in charge.
+Find quake, and stop him... or it...
+you have full authority to requisition
+anything you need. if the eggheads are
 right, all our lives are expendable."
 ^
 PRELUDE TO DESTRUCTION
 
 While scouting the neighborhood, you
-hear shots back at the base. Damn,
-that Quake bastard works fast! He heard
-about Operation Counterstrike, and hit
-first. Racing back, you see the place
-is overrun. You are almost certainly the
-only survivor. Operation Counterstrike
-is over. Except for you.
+hear shots back at the base. damn,
+that quake bastard works fast! He heard
+about operation counterstrike, and hit
+first. racing back, you see the place
+is overrun. you are almost certainly the
+only survivor. operation counterstrike
+is over. except for you.
 ^
 You know that the heart of the
-installation holds a slipgate. Since
-Quake's killers came through, it is
-still set to his dimension. You can
+installation holds a slipgate. since
+quake's killers came through, it's
+still set to his dimension. you can
 use it to get loose in his hometown.
-Maybe you can get to the asshole
-personally. You pump a round into
+maybe you can get to the asshole
+personally. you pump a round into
 your shotgun, and get moving.

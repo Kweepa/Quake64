@@ -44,12 +44,13 @@ CURSOR_SPR_PTR0	= (CURSOR_SPR_RAM - VIC_BANK1) / 64
 TEXT_COL	= 7			; yellow options
 HILITE_COL	= 1			; white selected
 TITLE_COL	= 7			; yellow titles
-MENU_BORDER	= 8			; orange
-COL_MAIN	= 8			; orange surround
+MENU_BORDER	= 0			; black
+COL_MAIN	= 0			; black surround
 COL_BAR		= 0			; black title strip
 COL_BOX		= 9			; brown option box
 COL_TITLE_INK	= 11			; dark grey QUAKE letters in the bar
-STORY_BG	= 8			; orange around story panel
+HINT_KEY_COL	= 11			; dark grey key glyphs
+STORY_BG	= 0			; black around story panel
 STORY_BOX	= 15			; light grey story panel
 STORY_TEXT	= 0			; black story text
 STORY_GREY_TOP	= BRAND_KEEP_ROWS + 1	; panel area starts one row below brand
@@ -671,8 +672,18 @@ draw_menu
 	sta cursor_spr_en
 	jmp menu_unblank
 
-; Title two lines above the box
+; Title two lines above the box. Empty string (main menu) = no heading.
 draw_section_title
+	ldy menu_id
+	lda section_lo,y
+	sta ui_str_l
+	lda section_hi,y
+	sta ui_str_h
+	ldy #0
+	lda (ui_str_l),y
+	bne .dst_go
+	rts
+.dst_go
 	lda box_top
 	sec
 	sbc #2
@@ -681,12 +692,8 @@ draw_section_title
 	sta cell_bg
 	lda #TITLE_COL
 	sta ui_text_col
-	ldy menu_id
-	lda section_lo,y
-	pha
-	lda section_hi,y
-	tay
-	pla
+	lda ui_str_l
+	ldy ui_str_h
 	jmp print_centered
 
 ; Key sprites + "move / adjust / select" on HINT_ROW.
@@ -981,7 +988,7 @@ show_text_screen
 	sta pr_setcol
 	jmp .sts_body
 
-; Read This! / endings: orange surround, light-grey panel, black text. Restores COL_MAIN.
+; Read This! / endings: black surround, light-grey panel, black text. Restores COL_MAIN.
 show_ending_pages
 	ldx #0
 .sep
@@ -1129,7 +1136,7 @@ calc_text_box
 	sta ui_str_h
 	rts
 
-; Story pages: leave one orange row under the brand, center panel in brown.
+; Story pages: leave one black row under the brand, center panel in brown.
 apply_story_layout
 	lda clear_bg
 	cmp #STORY_BG
@@ -1540,7 +1547,7 @@ mux_hint_spr
 	sta $d028
 	sta $d02a
 	sta $d02c
-	lda #0
+	lda #HINT_KEY_COL
 	sta $d029
 	sta $d02b
 	sta $d02d
@@ -2328,7 +2335,7 @@ str_skip
 	rts
 
 ; Hide full redraws: DEN off fills the screen with $d020. Sprites off.
-; Menus/credits: orange border. Story: orange (STORY_BG).
+; Menus/credits: black border. Story: black (STORY_BG).
 menu_blank
 	lda $d011
 	and #%11101111				; DEN off
@@ -2484,8 +2491,10 @@ wait_key
 
 ; Any key (full keyboard matrix) — text screens.
 ; Wait for release + a few quiet frames so Return-to-enter doesn't bounce-dismiss.
+; wait_frame each poll so the WIP sprite keeps bouncing.
 wait_any_key
 .wau
+	jsr wait_frame
 	lda #0
 	sta $dc00
 	lda $dc01
@@ -2502,12 +2511,14 @@ wait_any_key
 	dex
 	bne .wau_s
 .wad
+	jsr wait_frame
 	lda #0
 	sta $dc00
 	lda $dc01
 	cmp #$ff
 	beq .wad
 .war
+	jsr wait_frame
 	lda #0
 	sta $dc00
 	lda $dc01
@@ -2665,7 +2676,7 @@ str_dhm		!scr "Normal",0
 str_hmp		!scr "Hard",0
 str_uv		!scr "Nightmare",0
 
-str_sec_main	!scr "Options",0
+str_sec_main	!byte 0				; main: no heading, box is already centered
 str_sec_new	!scr "Which episode to play?",0
 str_sec_skill	!scr "Skill",0
 str_sec_sound	!scr "Options",0

@@ -53,7 +53,7 @@ credits2_text
 	!byte 0
 
 credits3_text
-	!scr "Loader: krill / plush.",0
+	!scr "Loader by krill / plush.",0
 	!scr "Loader integration by chris masiero.",0
 	!scr " ",0
 	!scr "Thanks all!",0

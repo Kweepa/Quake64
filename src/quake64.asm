@@ -13,6 +13,9 @@ IRQ_DEBUG_SPLIT	= 0				; 1 = $d020 stripe at mid-split (tune 186)
 !source "zp.asm"
 !source "map_counts.asm"
 !source "mapacc.asm"
+!if ENEMY_PTR_N != ENEMY_NTYPES {
+	!error "mem.asm ENEMY_PTR_N must equal ENEMY_NTYPES"
+}
 
 *= LOCODE_BASE
 start

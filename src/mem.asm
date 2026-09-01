@@ -169,24 +169,25 @@ RELOC_MAX	= $0800			; heap reserve for reloc overlay
 ; Play BSS: default VIC matrix / leftover boot. VIC matrix in play is $C000.
 ; map_bss.asm occupies $0400–$051F. $08F9–$08FF is reboot stub + selectors.
 FRAME13_N	= 106			; offsets 0..105
+ENEMY_PTR_N	= 8			; must == ENEMY_NTYPES (quake64.asm asserts)
 frame13_lo	= $0520
 frame13_hi	= $058A
 enemy_gx_lo	= $05F4
-enemy_gx_hi	= $05FB
-enemy_gy_lo	= $0602
-enemy_gy_hi	= $0609
-enemy_gz_lo	= $0610
-enemy_gz_hi	= $0617
-box_vis_edges	= $061E			; 24
-box_vis_vert	= $0636			; 12
-room_pack_edges	= $0642			; 64
-room_pack_vert	= $0682			; 32
-pose_gx		= $06A2			; 13 — lerp scratch (ent_set_pose)
-pose_gy		= $06AF			; 13
-pose_gz		= $06BC			; 13
-pose_map_lo	= $06C9			; 7 — patched at pose load (logical → packed)
-pose_map_hi	= $06D0			; 7
-; next free $06D7
+enemy_gx_hi	= enemy_gx_lo + ENEMY_PTR_N
+enemy_gy_lo	= enemy_gx_hi + ENEMY_PTR_N
+enemy_gy_hi	= enemy_gy_lo + ENEMY_PTR_N
+enemy_gz_lo	= enemy_gy_hi + ENEMY_PTR_N
+enemy_gz_hi	= enemy_gz_lo + ENEMY_PTR_N
+box_vis_edges	= enemy_gz_hi + ENEMY_PTR_N	; 24
+box_vis_vert	= box_vis_edges + 24		; 12
+room_pack_edges	= box_vis_vert + 12		; 64
+room_pack_vert	= room_pack_edges + 64		; 32
+pose_gx		= room_pack_vert + 32		; 13 — lerp scratch (ent_set_pose)
+pose_gy		= pose_gx + 13
+pose_gz		= pose_gy + 13
+pose_map_lo	= pose_gz + 13			; patched at pose load (logical → packed)
+pose_map_hi	= pose_map_lo + ENEMY_PTR_N
+; next free pose_map_hi + ENEMY_PTR_N  ($06DF)
 
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.

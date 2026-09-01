@@ -1,5 +1,6 @@
 ; Quake64 disposable boot — fits LOADER_BASE..REBOOT_STUB-1.
-; MENU @ $0900 → JSR menu → TAB stage + JSR copy_tab (+3) → file_tab → JMP $0900.
+; LOAD splashc @ $4000 → JSR do_splash (koala colour then pixels, Krill install)
+; → Krill MENU @ $0900 → JSR menu → TAB + JSR copy_tab (+3) → file_tab → JMP $0900.
 ; Per file: SETNAM / SETLFS / LOAD / CLOSE only.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
 !cpu 6502
@@ -16,34 +17,26 @@ boot_start
 	sta $01
 	jsr $ff84				; IOINIT
 	lda $d011
-	and #%11101111				; DEN off — IOINIT restores bank 0
+	and #%11101111				; DEN off until colour is in
 	sta $d011
 	lda #0
 	sta $d020				; border shows even with DEN=0
 	cli
 
-	; --- bring up the Krill fastloader ---------------------------------
-	; These two are the LAST KERNAL loads. LOADER carries its own address
-	; ($EE08, under the KERNAL — LOAD writes go to RAM there); INSTALL sits
-	; at $2000 and is transient, overwritten by MENU and GAME afterwards.
-	lda #6
-	ldx #<name_loader
-	ldy #>name_loader
-	jsr load_sa1
-	bcs .fail
 	lda #7
-	ldx #<name_install
-	ldy #>name_install
+	ldx #<name_splashc
+	ldy #>name_splashc
 	jsr load_sa1
 	bcs .fail
-	jsr KRILL_INSTALL			; C=1 → no fallback, hang loudly
-	bcs .fail
+	jsr do_splash
 
 	; MENU → $0900 (header address), run difficulty select
 	ldx #<name_menu
 	ldy #>name_menu
 	jsr krill_load
 	bcs .fail
+	lda #%00000010			; Krill loadraw RMW of $dd00; keep bank 1
+	sta $dd00
 	jsr LOCODE_BASE
 
 	; TAB → $8000 (header address), copy into charset tails via MENU+3
@@ -88,7 +81,7 @@ boot_start
 	jmp .hang
 
 ; KERNAL LOAD, SA=1 (address from the PRG header). A=len, X/Y=name.
-; Only used for LOADER and INSTALL, before Krill is up.
+; Only used for SPLASHC, before Krill is up (do_splash installs it).
 load_sa1
 	jsr $ffbd
 	lda #1
@@ -140,12 +133,8 @@ name_menu
 name_tab
 	!text "TAB"
 	!byte 0
-name_loader
-	!text "LOADER"
-	!byte 0
-name_install
-	!text "INSTALL"
-	!byte 0
+name_splashc
+	!text "SPLASHC"
 
 end_boot = *
 !if end_boot > REBOOT_STUB {

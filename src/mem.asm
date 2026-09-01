@@ -8,7 +8,7 @@
 ; Game PRG $0900–<$C000. Heap grows down from $C000 (map, reloc, poses).
 ; $FFFA–$FFFF overlay unused UI char 255 (init_irq).
 ;
-; Boot $0801, menu overlay then game at $0900.
+; Boot $0801: koala cover (splashc/splash), then menu overlay, then game at $0900.
 ; Survives GAME load: reboot stub $08F9, level_num $08FC, selectors $08FD–$08FF.
 ; $01: $30 = 64K RAM (game / copy_tab). $36 = I/O + KERNAL, BASIC out (init/IRQ).
 ; $34 is not I/O — PLA gives RAM at $D000 when LORAM=HIRAM=0.
@@ -49,6 +49,19 @@ SCREEN		= $5C00			; colour matrix (was $4000)
 BITMAP		= $6000
 BITMAP_SIZE	= 8000
 BITMAP_END	= BITMAP + BITMAP_SIZE
+; Boot splash: koala split. splashc stages matrix+colour at $4000; do_splash
+; copies matrix → SCREEN and colour → $D800 so MENU can grow past $4000
+; without flashing the cover. Bitmap $6000, same as menu.
+SPLASH_MAT	= VIC_BANK1		; $4000 staging
+SPLASH_COL	= SPLASH_MAT + 1000	; $43E8
+SPLASH_COL_SIZE	= 1000
+SPLASH_BG	= SPLASH_COL + SPLASH_COL_SIZE	; $47D0
+do_splash	= SPLASH_BG + 1		; $47D1 — helpers ride on splashc.prg tail
+KOALA_COL_RAM	= $d800
+KOALA_TAIL	= 1000 - 768		; 232
+!if SPLASH_BG + 1 > BITMAP {
+	!error "splash colour staging overlaps bitmap; bg=$", SPLASH_BG
+}
 
 TAB_STAGING	= $8000			; tab.prg load; copy_tab unpacks tails
 TAB_ALOG	= TAB_STAGING		; 512

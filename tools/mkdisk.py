@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Build quake64.d64 from boot/menu/tab/fnt/scr/sqt/game/reloc PRGs via c1541.
+"""Build quake64.d64 from boot/splash/menu/tab/fnt/scr/sqt/game/reloc PRGs via c1541.
 
 reloc.prg comes from tools/mkreloc.py after GAME assemble (see build.bat).
 Boot does not load RELOC; GAME LoadLevel does.
 
-krill/loader.prg and krill/install.prg are prebuilt Krill v194 binaries checked
-in under krill/ (see krill/README.md). Boot KERNAL-loads both, runs INSTALL
-once, and every load after that goes through the fastloader.
+Directory order is colour then pixels then Krill then menu: boot KERNAL-loads
+splashc + splash (koala cover), splashc installs Krill, then MENU and the rest
+go through the fastloader. krill/loader.prg and krill/install.prg are prebuilt
+Krill v194 binaries checked in under krill/ (see krill/README.md).
 
 DOS names are deliberately LOWERCASE. c1541 maps uppercase ASCII into the
 shifted PETSCII range $c1-$da, which a C64 typing LOAD"NAME" can never match.
@@ -24,6 +25,8 @@ from typing import Optional
 
 FILES = (
     ("boot.prg", "quake64"),
+    ("splashc.prg", "splashc,p"),
+    ("splash.prg", "splash,p"),
     ("krill/loader.prg", "loader,p"),
     ("krill/install.prg", "install,p"),
     ("menu.prg", "menu,p"),

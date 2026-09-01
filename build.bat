@@ -40,6 +40,8 @@ python tools\gen_menu_title.py
 if errorlevel 1 exit /b 1
 python tools\gen_menu_wip_sprite.py
 if errorlevel 1 exit /b 1
+python tools\gen_splash.py
+if errorlevel 1 exit /b 1
 
 pushd src
 "%ACME%" tables.asm
@@ -77,6 +79,11 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
+"%ACME%" splashc.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 popd
 
 if exist src\tab.prg move /y src\tab.prg tab.prg >nul
@@ -86,6 +93,7 @@ if exist src\scr.prg move /y src\scr.prg scr.prg >nul
 if exist src\game.prg move /y src\game.prg game.prg >nul
 if exist src\menu.prg move /y src\menu.prg menu.prg >nul
 if exist src\boot.prg move /y src\boot.prg boot.prg >nul
+if exist src\splashc.prg move /y src\splashc.prg splashc.prg >nul
 
 python tools\mkreloc.py
 if errorlevel 1 exit /b 1

@@ -10,8 +10,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "editor" / "quake64.json"
 OUT = ROOT / "src" / "item_mesh.asm"
 
-ITEM_MIN = -4
-ITEM_MAX = 4
+ITEM_COORD_MIN = -128
+ITEM_COORD_MAX = 127
 ITEM_ORIGIN = 0
 ITEM_BIAS = 1
 ITEM_MAX_VERTS = 16
@@ -151,15 +151,15 @@ DEFAULT_MESHES = {
         ],
     },
     "Tech": {
-        "verts": [v(-2, 0, 0), v(2, 0, 0), v(2, 4, 0), v(-2, 4, 0), v(-2, 2, 0), v(2, 2, 0)],
+        "verts": [v(-2, 0, 0), v(2, 0, 0), v(2, 5, 0), v(-2, 5, 0), v(-2, 2, 0), v(2, 2, 0)],
         "lines": [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5]],
     },
     "Arch": {
-        "verts": [v(-2, 0, 0), v(2, 0, 0), v(2, 3, 0), v(0, 4, 0), v(-2, 3, 0)],
+        "verts": [v(-2, 0, 0), v(2, 0, 0), v(2, 4, 0), v(0, 5, 0), v(-2, 4, 0)],
         "lines": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]],
     },
     "Tri": {
-        "verts": [v(-2, 0, 0), v(2, 0, 0), v(0, 4, 0)],
+        "verts": [v(-2, 0, 0), v(2, 0, 0), v(0, 5, 0)],
         "lines": [[0, 1], [1, 2], [2, 0]],
     },
 }
@@ -167,10 +167,10 @@ DEFAULT_MESHES = {
 
 def clamp_grid(n: int) -> int:
     n = int(n)
-    if n < ITEM_MIN:
-        return ITEM_MIN
-    if n > ITEM_MAX:
-        return ITEM_MAX
+    if n < ITEM_COORD_MIN:
+        return ITEM_COORD_MIN
+    if n > ITEM_COORD_MAX:
+        return ITEM_COORD_MAX
     return n
 
 

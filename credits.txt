@@ -17,7 +17,7 @@ tim willits, adrian carmack,
 kevin cloud, paul steed,
 trent reznor & nine inch nails.
 ^
-Loader: krill / plush.
+Loader by krill / plush.
 Loader integration by chris masiero.
 
 Thanks all!

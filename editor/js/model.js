@@ -485,8 +485,12 @@ export const ITEM_MESH_KEYS = ["backpack", ...PICKUP_TYPES];
 export const DOOR_TYPES = ["Tech", "Arch", "Tri"];
 export const DOOR_MESH_KEYS = DOOR_TYPES;
 export const ALL_MESH_KEYS = [...ITEM_MESH_KEYS, ...DOOR_MESH_KEYS];
+/** Items-tab floor/cube and paste-nudge window. Not a coord cap. */
 export const ITEM_MIN = -4;
 export const ITEM_MAX = 4;
+/** Signed 8-bit local X/Y/Z. $80 is −128. */
+export const ITEM_COORD_MIN = -128;
+export const ITEM_COORD_MAX = 127;
 export const ITEM_ORIGIN = 0;
 /** Editor 0 sits at the centre of the 2×2 pickup footprint. */
 export const ITEM_WORLD_BIAS = 1;
@@ -555,8 +559,8 @@ export function isDoorMeshKey(key) {
 
 export function clampItemCoord(n) {
   const v = n | 0;
-  if (v < ITEM_MIN) return ITEM_MIN;
-  if (v > ITEM_MAX) return ITEM_MAX;
+  if (v < ITEM_COORD_MIN) return ITEM_COORD_MIN;
+  if (v > ITEM_COORD_MAX) return ITEM_COORD_MAX;
   return v;
 }
 
@@ -762,8 +766,8 @@ export function defaultItemMeshes() {
       [
         [-2, 0, 0],
         [2, 0, 0],
-        [2, 4, 0],
-        [-2, 4, 0],
+        [2, 5, 0],
+        [-2, 5, 0],
         [-2, 2, 0],
         [2, 2, 0],
       ],
@@ -779,9 +783,9 @@ export function defaultItemMeshes() {
       [
         [-2, 0, 0],
         [2, 0, 0],
-        [2, 3, 0],
-        [0, 4, 0],
-        [-2, 3, 0],
+        [2, 4, 0],
+        [0, 5, 0],
+        [-2, 4, 0],
       ],
       [
         [0, 1],
@@ -795,7 +799,7 @@ export function defaultItemMeshes() {
       [
         [-2, 0, 0],
         [2, 0, 0],
-        [0, 4, 0],
+        [0, 5, 0],
       ],
       [
         [0, 1],

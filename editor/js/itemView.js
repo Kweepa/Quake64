@@ -1,6 +1,8 @@
 import {
   ITEM_MIN,
   ITEM_MAX,
+  ITEM_COORD_MIN,
+  ITEM_COORD_MAX,
   ITEM_ORIGIN,
   ITEM_MAX_VERTS,
   ITEM_MAX_LINES,
@@ -211,7 +213,7 @@ export class ItemView {
     }
     let uniqueFail = false;
     let placed = null;
-    for (const [dx, dy, dz] of this.#pasteOffsets(itemClip.verts)) {
+    for (const [dx, dy, dz] of this.#pasteOffsets()) {
       const trial = this.#shiftedClip(dx, dy, dz);
       if (!trial || this.#cellsBlocked(mesh, trial)) continue;
       if (!this.#uniqueOk([...mesh.verts, ...trial])) {
@@ -278,25 +280,11 @@ export class ItemView {
     };
   }
 
-  #pasteOffsets(verts) {
-    let minx = ITEM_MAX;
-    let maxx = ITEM_MIN;
-    let miny = ITEM_MAX;
-    let maxy = ITEM_MIN;
-    let minz = ITEM_MAX;
-    let maxz = ITEM_MIN;
-    for (const v of verts) {
-      minx = Math.min(minx, v.x);
-      maxx = Math.max(maxx, v.x);
-      miny = Math.min(miny, v.y);
-      maxy = Math.max(maxy, v.y);
-      minz = Math.min(minz, v.z);
-      maxz = Math.max(maxz, v.z);
-    }
+  #pasteOffsets() {
     const offs = [];
-    for (let dx = ITEM_MIN - minx; dx <= ITEM_MAX - maxx; dx++) {
-      for (let dy = ITEM_MIN - miny; dy <= ITEM_MAX - maxy; dy++) {
-        for (let dz = ITEM_MIN - minz; dz <= ITEM_MAX - maxz; dz++) {
+    for (let dx = ITEM_MIN; dx <= ITEM_MAX; dx++) {
+      for (let dy = ITEM_MIN; dy <= ITEM_MAX; dy++) {
+        for (let dz = ITEM_MIN; dz <= ITEM_MAX; dz++) {
           offs.push([dx, dy, dz]);
         }
       }
@@ -311,7 +299,14 @@ export class ItemView {
       const x = v.x + dx;
       const y = v.y + dy;
       const z = v.z + dz;
-      if (x < ITEM_MIN || x > ITEM_MAX || y < ITEM_MIN || y > ITEM_MAX || z < ITEM_MIN || z > ITEM_MAX) {
+      if (
+        x < ITEM_COORD_MIN ||
+        x > ITEM_COORD_MAX ||
+        y < ITEM_COORD_MIN ||
+        y > ITEM_COORD_MAX ||
+        z < ITEM_COORD_MIN ||
+        z > ITEM_COORD_MAX
+      ) {
         return null;
       }
       placed.push({ x, y, z });

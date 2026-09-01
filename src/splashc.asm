@@ -1,7 +1,8 @@
 ; splashc.prg — Koala matrix/colour staged at $4000, then do_splash helpers.
 ; Boot LOADs this, then JSR do_splash: copy matrix → SCREEN ($5C00) and colour
-; → $D800, clear bitmap, MCM on, LOAD splash pixels, then LOADER+INSTALL.
-; Does not load MENU — that would overwrite these helpers (menu grows to $5300).
+; → $D800, clear bitmap, MCM on, LOAD splash pixels.
+; USE_KRILL=1: then LOADER+INSTALL, JSR install. Does not load MENU — that
+; would overwrite these helpers (menu grows to $5300).
 !cpu 6502
 !to "splashc.prg", cbm
 
@@ -27,6 +28,7 @@ clr_ptr		= $fb
 	bcs .fail
 	jsr splash_vic			; KERNAL LOAD RMW of $dd00; keep bank 1
 
+!if USE_KRILL {
 	lda #6
 	ldx #<name_loader
 	ldy #>name_loader
@@ -42,6 +44,7 @@ clr_ptr		= $fb
 	jsr KRILL_INSTALL			; C=1 → no fallback, hang loudly
 	bcs .fail
 	jsr splash_vic			; Krill DDRA=$03 — absolute $dd00 only
+}
 	rts
 .fail
 	lda #BANK_LOADER
@@ -150,12 +153,14 @@ load_sa1
 name_splash
 	!text "SPLASH"
 	!byte 0
+!if USE_KRILL {
 name_loader
 	!text "LOADER"
 	!byte 0
 name_install
 	!text "INSTALL"
 	!byte 0
+}
 
 end_splashc = *
 !if end_splashc > SCREEN {

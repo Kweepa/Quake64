@@ -64,12 +64,54 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
-"%ACME%" -v3 --vicelabels ..\game.lbl quake64.asm
+"%ACME%" menu.asm
 if errorlevel 1 (
   popd
   exit /b 1
 )
-"%ACME%" menu.asm
+popd
+
+if exist src\tab.prg move /y src\tab.prg tab.prg >nul
+if exist src\sqt.prg move /y src\sqt.prg sqt.prg >nul
+if exist src\fnt.prg move /y src\fnt.prg fnt.prg >nul
+if exist src\scr.prg move /y src\scr.prg scr.prg >nul
+if exist src\menu.prg move /y src\menu.prg menu.prg >nul
+
+rem Krill disk first (loadraw @ $EE08, needs TDE / real 1541)
+pushd src
+"%ACME%" -DUSE_KRILL=1 -v3 --vicelabels ..\game-krill.lbl quake64.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" -DUSE_KRILL=1 boot.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" -DUSE_KRILL=1 splashc.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+
+if exist src\game.prg move /y src\game.prg game.prg >nul
+if exist src\boot.prg move /y src\boot.prg boot.prg >nul
+if exist src\splashc.prg move /y src\splashc.prg splashc.prg >nul
+
+python tools\mkreloc.py
+if errorlevel 1 exit /b 1
+
+python tools\checkheap.py
+if errorlevel 1 exit /b 1
+
+python tools\mkdisk.py --krill --out quake64-krill.d64
+if errorlevel 1 exit /b 1
+
+rem Default disk: KERNAL LOAD (VICE virtual traps)
+pushd src
+"%ACME%" -v3 --vicelabels ..\game.lbl quake64.asm
 if errorlevel 1 (
   popd
   exit /b 1
@@ -86,12 +128,7 @@ if errorlevel 1 (
 )
 popd
 
-if exist src\tab.prg move /y src\tab.prg tab.prg >nul
-if exist src\sqt.prg move /y src\sqt.prg sqt.prg >nul
-if exist src\fnt.prg move /y src\fnt.prg fnt.prg >nul
-if exist src\scr.prg move /y src\scr.prg scr.prg >nul
 if exist src\game.prg move /y src\game.prg game.prg >nul
-if exist src\menu.prg move /y src\menu.prg menu.prg >nul
 if exist src\boot.prg move /y src\boot.prg boot.prg >nul
 if exist src\splashc.prg move /y src\splashc.prg splashc.prg >nul
 
@@ -101,8 +138,8 @@ if errorlevel 1 exit /b 1
 python tools\checkheap.py
 if errorlevel 1 exit /b 1
 
-python tools\mkdisk.py
+python tools\mkdisk.py --out quake64.d64
 if errorlevel 1 exit /b 1
 
-echo Built quake64.d64
-dir quake64.d64
+echo Built quake64.d64 and quake64-krill.d64
+dir quake64.d64 quake64-krill.d64

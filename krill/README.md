@@ -8,10 +8,13 @@ Binaries only; the loader source is not vendored here. Built from Krill's
 
 with `LOAD_TO_API = 1` and `UNINSTALL_API = 0`; everything else stock.
 
+`quake64-krill.d64` packs these files (`build.bat -DUSE_KRILL=1`).
+`quake64.d64` is KERNAL `$FFD5` and does not include them.
+
 | file | load address | notes |
 |---|---|---|
-| `loader.prg` | `$EE08`–`$EEF3` | resident, 236 B. Boot KERNAL-loads it, then it stays for the whole session. |
-| `install.prg` | `$2000`–`$3B52` | transient. Run once at boot; MENU and GAME overwrite it. |
+| `loader.prg` | `$EE08`–`$EEF3` | resident, 236 B. Splashc KERNAL-loads it, then it stays for the whole session. |
+| `install.prg` | `$2000`–`$3B52` | transient. Run once at splash; MENU and GAME overwrite it. |
 | `loadersymbols-c64.inc` | — | the build's own symbol/config dump, for reference. |
 
 `LOAD_TO_API = 1` is required: the heap blobs (`E1M1`, `RELOC`, `GRUNT`…) all

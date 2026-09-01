@@ -23,15 +23,26 @@ BANK_LOADER	= $35
 ; --- Krill fastloader (v194, LOAD_TO_API=1, UNINSTALL_API=0) ---------------
 ; Resident lives in the 248-byte gap between the charset B bottom margin glyph
 ; ($EE00-$EE07, written by copy_tab) and LOGTAB ($EF00). 236 B, 12 B spare.
+; -DUSE_KRILL=1: loadraw at $EE08. Default 0: KERNAL LOAD ($FFD5).
 ; NOT $CE82 — memorymap.md calls that unused but en_pat_n and the grenade SoA
 ; are there; see mem.asm's own "$CF20+ free" below.
+!ifndef USE_KRILL {
+	USE_KRILL = 0
+}
 KRILL_RESIDENT	= $EE08
 KRILL_INSTALL	= $2000			; transient; MENU/GAME overwrite it after use
-loadraw		= KRILL_RESIDENT
+!if USE_KRILL {
+	!source "../krill/loadersymbols-c64.inc"
+	!if loadraw != KRILL_RESIDENT {
+		!error "Krill loadraw is not KRILL_RESIDENT $EE08"
+	}
+} else {
+	; Hole reserved on the KERNAL disk; do not alias loadraw.
+	loadaddrlo	= $60
+	loadaddrhi	= $61
+}
 ; Krill's zeropage. $60/$61 double as dlo/dhi (line-draw scratch, dead across a
 ; load); $60-$64 must not be written while a load is in flight.
-loadaddrlo	= $60
-loadaddrhi	= $61
 
 LOADER_BASE	= $0801
 LOCODE_BASE	= $0900			; MENU overlay, then game

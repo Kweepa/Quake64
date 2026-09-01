@@ -1,7 +1,8 @@
 ; Quake64 disposable boot — fits LOADER_BASE..REBOOT_STUB-1.
-; LOAD splashc @ $4000 → JSR do_splash (koala colour then pixels, Krill install)
-; → Krill MENU @ $0900 → JSR menu → TAB + JSR copy_tab (+3) → file_tab → JMP $0900.
-; Per file: SETNAM / SETLFS / LOAD / CLOSE only.
+; LOAD splashc @ $4000 → JSR do_splash (koala colour then pixels; Krill install
+; if USE_KRILL) → MENU @ $0900 → JSR menu → TAB + JSR copy_tab (+3) → file_tab
+; → JMP $0900.
+; USE_KRILL=1: loadraw after splashc installed Krill. Default: KERNAL $FFD5.
 ; File-table index in .xi (KERNAL LOAD clobbers ZP — do not keep ptr in $ae/$af).
 !cpu 6502
 !to "boot.prg", cbm
@@ -33,16 +34,16 @@ boot_start
 	; MENU → $0900 (header address), run difficulty select
 	ldx #<name_menu
 	ldy #>name_menu
-	jsr krill_load
+	jsr load_file
 	bcs .fail
-	lda #%00000010			; Krill loadraw RMW of $dd00; keep bank 1
+	lda #%00000010			; LOAD RMW of $dd00; keep bank 1
 	sta $dd00
 	jsr LOCODE_BASE
 
 	; TAB → $8000 (header address), copy into charset tails via MENU+3
 	ldx #<name_tab
 	ldy #>name_tab
-	jsr krill_load
+	jsr load_file
 	bcs .fail
 	jsr MENU_COPY_TAB
 
@@ -59,7 +60,7 @@ boot_start
 	lda #>file_tab
 	adc #0
 	tay
-	jsr krill_load
+	jsr load_file
 	bcs .fail
 	ldx .xi
 .skip
@@ -81,7 +82,6 @@ boot_start
 	jmp .hang
 
 ; KERNAL LOAD, SA=1 (address from the PRG header). A=len, X/Y=name.
-; Only used for SPLASHC, before Krill is up (do_splash installs it).
 load_sa1
 	jsr $ffbd
 	lda #1
@@ -96,12 +96,9 @@ load_sa1
 	plp
 	rts
 
-; Krill loadraw, X/Y = 0-terminated name. Carry CLEAR on entry, so the
-; destination comes from the PRG header — every file here carries its own.
-; BANK_LOADER unmaps the KERNAL, so this must run under SEI: the IRQ vector
-; would otherwise be read from RAM at $fffe, which is uninitialised until FNT
-; lands. C=0 ok, C=1 error.
-krill_load
+; X/Y = 0-terminated name. Dest from PRG header.
+load_file
+!if USE_KRILL {
 	sei
 	lda #BANK_LOADER
 	sta $01
@@ -113,6 +110,21 @@ krill_load
 	plp
 	cli
 	rts
+} else {
+	stx .lf_lda+1
+	sty .lf_lda+2
+	ldy #0
+.lf_lda
+	lda $ffff,y
+	beq .lf_got
+	iny
+	bne .lf_lda
+.lf_got
+	tya
+	ldx .lf_lda+1
+	ldy .lf_lda+2
+	jmp load_sa1
+}
 
 .xi	!byte 0
 

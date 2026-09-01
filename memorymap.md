@@ -2,7 +2,7 @@
 
 Source of truth for addresses is [`src/mem.asm`](src/mem.asm). Engine code is the `game` PRG (load `$0900`); this bank is screens, charsets, sprites, LUTs, and game scratch. Accessing `$D000–$FFFF` as RAM requires `$01` to unmap I/O and the KERNAL. Colour RAM (`$D800`) is the I/O overlay of charset A bottom.
 
-The playable disk is [`quake64.d64`](quake64.d64): boot KERNAL-loads a split koala cover (`splashc` colour/matrix first, then `splash` bitmap) in VIC bank 1, installs Krill, then loads `menu`. The cover uses the menu’s matrix/bitmap (`$5C00` / `$6000`); splashc stages at `$4000` so `MENU` can grow past `$4000` without flashing the picture. `run_menu` switches to hires and wipes it. After the menu, boot stages `tab` into charset tails, then `fnt` / `scr` / `sqt` / `game`.
+The playable disks are [`quake64.d64`](quake64.d64) (KERNAL `$FFD5`, VICE virtual 1541) and [`quake64-krill.d64`](quake64-krill.d64) (`loadraw`, true drive emulation / real 1541). Both KERNAL-load a split koala cover (`splashc` colour/matrix first, then `splash` bitmap) in VIC bank 1. The Krill disk then installs the resident at `$EE08` before `menu`. The cover uses the menu’s matrix/bitmap (`$5C00` / `$6000`); splashc stages at `$4000` so `MENU` can grow past `$4000` without flashing the picture. `run_menu` switches to hires and wipes it. After the menu, boot stages `tab` into charset tails, then `fnt` / `scr` / `sqt` / `game`.
 
 Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and **6 unique world Z** (rooms still cook at 4 unique).
 
@@ -39,7 +39,8 @@ Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and
 | `$E700`–`$E7FF` | 256 | `ALOGHI` |
 | `$E800`–`$EDFF` | 1536 | Charset B bottom cols 0–23 |
 | `$EE00`–`$EE07` | 8 | Char 192 `$FF` |
-| `$EE08`–`$EEFF` | 248 | Unused |
+| `$EE08`–`$EEF3` | 236 | Krill `loadraw` on `quake64-krill.d64`; unused hole on the KERNAL disk |
+| `$EEF4`–`$EEFF` | 12 | Spare after resident |
 | `$EF00`–`$EFFF` | 256 | `LOGTAB` |
 | `$F000`–`$F1FF` | 512 | `sqlo` (disk `sqt`) |
 | `$F200`–`$F3FF` | 512 | `sqhi` |

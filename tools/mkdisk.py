@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Build quake64.d64 from boot/splash/menu/tab/fnt/scr/sqt/game/reloc PRGs via c1541.
+"""Build quake64.d64 / quake64-krill.d64 from boot/splash/menu/... PRGs via c1541.
 
 reloc.prg comes from tools/mkreloc.py after GAME assemble (see build.bat).
 Boot does not load RELOC; GAME LoadLevel does.
 
-Directory order is colour then pixels then Krill then menu: boot KERNAL-loads
-splashc + splash (koala cover), splashc installs Krill, then MENU and the rest
-go through the fastloader. krill/loader.prg and krill/install.prg are prebuilt
-Krill v194 binaries checked in under krill/ (see krill/README.md).
+Directory order is colour then pixels then (Krill disk) loader/install then
+menu: boot KERNAL-loads splashc + splash (koala cover). On the Krill disk,
+splashc installs the fastloader and MENU+the rest go through loadraw.
+krill/loader.prg and krill/install.prg are prebuilt Krill v194 binaries
+checked in under krill/ (see krill/README.md).
 
 DOS names are deliberately LOWERCASE. c1541 maps uppercase ASCII into the
 shifted PETSCII range $c1-$da, which a C64 typing LOAD"NAME" can never match.
@@ -23,12 +24,16 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-FILES = (
+FILES_HEAD = (
     ("boot.prg", "quake64"),
     ("splashc.prg", "splashc,p"),
     ("splash.prg", "splash,p"),
+)
+FILES_KRILL = (
     ("krill/loader.prg", "loader,p"),
     ("krill/install.prg", "install,p"),
+)
+FILES_TAIL = (
     ("menu.prg", "menu,p"),
     ("tab.prg", "tab,p"),
     ("fnt.prg", "fnt,p"),
@@ -67,8 +72,11 @@ def find_c1541(explicit: Optional[Path] = None) -> Optional[Path]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build quake64.d64 via c1541")
     ap.add_argument("--out", default="quake64.d64")
+    ap.add_argument("--krill", action="store_true", help="pack loader+install after splash")
     ap.add_argument("--c1541", type=Path, default=None)
     args = ap.parse_args()
+
+    files = FILES_HEAD + (FILES_KRILL if args.krill else ()) + FILES_TAIL
 
     c1541 = find_c1541(args.c1541)
     if not c1541:
@@ -78,7 +86,7 @@ def main() -> None:
         )
         sys.exit(1)
 
-    for src, _dos in FILES:
+    for src, _dos in files:
         p = Path(src)
         if not p.is_file():
             print(f"missing: {p}", file=sys.stderr)
@@ -100,7 +108,7 @@ def main() -> None:
         "-attach",
         str(d64),
     ]
-    for src, dos in FILES:
+    for src, dos in files:
         cmd.extend(["-write", str(Path(src).resolve()), dos])
     for src, dos in extra:
         cmd.extend(["-write", str(Path(src).resolve()), dos])

@@ -14,4 +14,8 @@ echo VICE not found — quake64.d64 is built; run it manually.
 exit /b 0
 
 :launch
-start "" "%VICE%" -silent -pal -autostart "%~dp0quake64.d64"
+if not exist "%~dp0quake64.d64" (
+  echo quake64.d64 missing after build
+  exit /b 1
+)
+start "" "%VICE%" -silent -pal -autostartprgmode 0 -trapdevice8 +drive8truedrive -8 "%~dp0quake64.d64" -autostart "%~dp0quake64.d64"

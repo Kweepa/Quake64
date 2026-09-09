@@ -27,15 +27,9 @@ IRQ_RBORDER_VIEW	= 7
 nmi_rti
 	rti
 
-init_irq
-	lda #$7f
-	sta $dc0d
-	sta $dd0d
-	lda $dc0d
-	lda $dd0d
-
-	; $01=$30 fetches $FFFA–$FFFF (UI char 255, unused). Also KERNAL $0314/8
-	; for $01=$36. Menu sfx owns these until GAME init.
+; $FFFA–$FFFF (RAM under KERNAL / UI char 255) and KERNAL $0314/8.
+; Call with I/O in so $Dxxx is VIC; $E000+ writes still hit RAM.
+install_irq_vectors
 	lda #<nmi_rti
 	sta $fffa
 	sta $0318
@@ -52,6 +46,18 @@ init_irq
 	lda #>irq_entry
 	sta $ffff
 	sta $0315
+	rts
+
+init_irq
+	lda #$7f
+	sta $dc0d
+	sta $dd0d
+	lda $dc0d
+	lda $dd0d
+
+	; $01=$30 fetches $FFFA–$FFFF (UI char 255, unused). Also KERNAL $0314/8
+	; for $01=$36. Menu sfx owns these until GAME init.
+	jsr install_irq_vectors
 
 	lda #0
 	sta irq_phase

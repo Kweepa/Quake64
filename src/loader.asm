@@ -597,6 +597,8 @@ stream_room_enemies
 	rts
 
 ; After movement, before draw_enemies. AB→A keeps orphans and skips the swap.
+; In-play LoadPrg (KERNAL $FFD5) CLIs — SEI is not enough. Mask $d01a like
+; LoadLevel or a raster IRQ hits $0314 while KERNAL is paged in.
 maybe_stream_room
 	lda room_idx
 	cmp stream_room
@@ -611,6 +613,10 @@ maybe_stream_room
 	lda #BANK_IO
 	sta $01
 	lda #0
+	sta $d01a
+	lda #1
+	sta $d019
+	lda #0
 	sta col_bg
 	sta col_line
 	jsr fill_viewport_colour
@@ -622,6 +628,17 @@ maybe_stream_room
 	jsr fill_viewport_colour
 	lda col_bg
 	sta $d021
+	jsr install_irq_vectors
+	lda #0
+	sta irq_phase
+	lda #RASTER_VIEW
+	sta $d012
+	lda $d011
+	and #$7f
+	sta $d011
+	lda #1
+	sta $d019
+	sta $d01a
 	pla
 	sta $01
 	plp

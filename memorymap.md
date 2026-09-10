@@ -22,8 +22,8 @@ Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and
 | `$08F9`–`$08FB` | 3 | `REBOOT_STUB` (`JMP reboot_game`) |
 | `$08FC` | 1 | `level_num` |
 | `$08FD`–`$08FF` | 3 | `effects_vol` / `game_complete` / `difficulty` (survive GAME load) |
-| `$0900`–`$982E` | 36655 | GAME (`end_game` `$982F`). Menu overlay lived here first |
-| `$982F`–`$BFFF` | 10193 | Heap (map, reloc overlay, per-room poses). Krill GAME is 48 B shorter |
+| `$0900`–`$9545` | 35910 | GAME (`end_game` `$9546`). Menu overlay lived here first |
+| `$9546`–`$BFFF` | 10938 | Heap (map with bind/reloc prefix, per-room poses). Krill GAME is 48 B shorter |
 
 ### Play BSS `$0520+`
 
@@ -75,27 +75,25 @@ Assembled in `!source` order from [`src/quake64.asm`](src/quake64.asm). Bounds a
 | `$6B74`–`$6CF2` | 383 | `enemy_data.asm` | clip tables / stats (from `cube.asm`) |
 | `$6CF3`–`$7EC1` | 4559 | `cube.asm` | enemy xform / project / clip / draw |
 | `$7EC2`–`$8E62` | 4001 | `enemy.asm` | AI, hitscan, damage |
-| `$8E63`–`$8ED8` | 118 | `mapacc_rt.asm` | reloc patch |
-| `$8ED9`–`$8EF8` | 32 | `map_sizes.asm` + `enemy_sizes.asm` | generated payload sizes |
-| `$8EF9`–`$982E` | 2358 | `loader.asm` | `LoadPrg`, `LoadLevel`, pose stream, `bind_map` table |
+| `$8E63`–`$9545` | 1763 | `loader.asm` | sizes + `LoadPrg` / `LoadLevel` / pose stream / `bind_map` header. Bind+patch overlay lives on the map prefix (`overlay.asm`), not in GAME |
 
-Largest slices: `cube` 4559, `enemy` 4001, `world` 3754, `mesh` 2972, `loader` 2358, `pcsounds` 2176, `weapon` 1992, `_line_bodies` 1942, `math` 1540, `grenade` 1474, `weapon_spr` 1456, `hud` 1102.
+Largest slices: `cube` 4559, `enemy` 4001, `world` 3754, `mesh` 2972, `pcsounds` 2176, `weapon` 1992, `_line_bodies` 1942, `loader` 1763, `math` 1540, `grenade` 1474, `weapon_spr` 1456, `hud` 1102.
 
-Macros-only (no bytes): `mem.asm`, `zp.asm`, `map_counts.asm`, `mapacc.asm`, `map_bss.asm`. `_rotate_body.asm` is inlined in `load_view_trig` (no own label).
+Macros-only (no bytes): `mem.asm`, `zp.asm`, `map_counts.asm`, `mapacc.asm`, `map_bss.asm`, `level_prefix.asm`. `_rotate_body.asm` is inlined in `load_view_trig` (no own label). `overlay.asm` assembles to `overlay.bin` and is prepended to each map.
 
-### Heap `$982F`–`$C000`
+### Heap `$9546`–`$C000`
 
-Grows down from `SCR_A`. `LoadLevel`: map, then `RELOC_MAX` (`$0800` / 2048; actual `reloc.prg` is 1388), patch SMC, drop reloc (`heap_top = map_base`), then at most `ROOM_MAX_TYPES` (2) pose banks for the current room. Peak = `map + max(RELOC_MAX, worst-room pose sum)`. `tools/checkheap.py` gates the build on that.
+Grows down from `SCR_A`. `LoadLevel` one-shots each E1Mn (4-byte header + PIC overlay + reloc dest words + packed map). `bind_map` copies the 24-byte header and name, SMC-`jsr`s the overlay (`bind_apply` then `patch_map_smc`), then `heap_top = map_base` dumps the prefix. Then at most `ROOM_MAX_TYPES` (2) pose banks for the current room. Play peak = `packed + worst-room pose sum`. Load peak = `packed + LEVEL_PREFIX` (1691). Gate is `packed + max(prefix, worst-room poses)`. `tools/checkheap.py` enforces that. `MAP_MAX_BYTES` 4096 is a packed cap; prefix is extra.
 
 Pose payload bytes (from `enemy_sizes.asm`, includes trailing sfx blob): grunt 2354, knight 1662, rott 2112, scrag 1544, ogre 2523, shambl 2394, chthon 2804, zombie 2804.
 
-Current gate (`game.lbl`, avail 10193):
+Current gate (`game.lbl`, avail 10938):
 
 | Level | Map | Worst room poses | Need | Slack |
 | :--- | ---: | :--- | ---: | ---: |
-| E1M1 | 2289 | 4466 (room 2: grunt, rott) | 6755 | 3438 |
-| E1M2 | 3081 | 4877 (room 0: grunt, ogre) | 7958 | 2235 |
-| E1M3 | 3515 | 2804 (room 1: zombie) | 6319 | 3874 |
+| E1M1 | 2289 | 4466 (room 2: grunt, rott) | 6755 | 4183 |
+| E1M2 | 3081 | 4877 (room 0: grunt, ogre) | 7958 | 2980 |
+| E1M3 | 3515 | 2804 (room 1: zombie) | 6319 | 4619 |
 
 E1M2 is still the tightest (pose-bound). Caps: `MAP_MAX_BYTES` 4096, `ENEMY_POSE_MAX` 4096.
 

@@ -7,7 +7,7 @@
 ;
 ; Macros emit `lda $02id,x` (etc.): operand lo = field id = (.fld-room_x)/2,
 ; hi = MAP_SMC_HI sentinel. tools/mkreloc.py scans game.prg for those
-; abs,x / abs,y ops and writes reloc.prg. LoadLevel patches the two operand
+; abs,x / abs,y ops and writes the reloc prefix. LoadLevel patches the two operand
 ; bytes to the bound column address after bind_map. Do not execute these
 ; until after that patch.
 ;

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build quake64.d64 / quake64-krill.d64 from boot/splash/menu/... PRGs via c1541.
 
-reloc.prg comes from tools/mkreloc.py after GAME assemble (see build.bat).
-Boot does not load RELOC; GAME LoadLevel does.
+Maps carry the bind/patch overlay + reloc dest words as a prefix (tools/mkreloc.py).
+Boot does not load maps; GAME LoadLevel does.
 
 Directory order is colour then pixels then (Krill disk) loader/install then
 menu: boot KERNAL-loads splashc + splash (koala cover). On the Krill disk,
@@ -40,7 +40,6 @@ FILES_TAIL = (
     ("scr.prg", "scr,p"),
     ("sqt.prg", "sqt,p"),
     ("game.prg", "game,p"),
-    ("reloc.prg", "reloc,p"),
 )
 
 MAP_FILES = [(f"maps/e1m{i}.prg", f"e1m{i},p") for i in range(1, 9)]

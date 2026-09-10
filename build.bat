@@ -79,6 +79,14 @@ if exist src\fnt.prg move /y src\fnt.prg fnt.prg >nul
 if exist src\scr.prg move /y src\scr.prg scr.prg >nul
 if exist src\menu.prg move /y src\menu.prg menu.prg >nul
 
+pushd src
+"%ACME%" --vicelabels ..\overlay.lbl overlay.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+
 rem Krill disk first (loadraw @ $EE08, needs TDE / real 1541)
 pushd src
 "%ACME%" -DUSE_KRILL=1 -v3 --vicelabels ..\game-krill.lbl quake64.asm
@@ -102,10 +110,19 @@ if exist src\game.prg move /y src\game.prg game.prg >nul
 if exist src\boot.prg move /y src\boot.prg boot.prg >nul
 if exist src\splashc.prg move /y src\splashc.prg splashc.prg >nul
 
-python tools\mkreloc.py
+python tools\mkreloc.py --labels game-krill.lbl
 if errorlevel 1 exit /b 1
 
-python tools\checkheap.py
+pushd src
+"%ACME%" -DUSE_KRILL=1 -v3 --vicelabels ..\game-krill.lbl quake64.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+if exist src\game.prg move /y src\game.prg game.prg >nul
+
+python tools\checkheap.py --labels game-krill.lbl
 if errorlevel 1 exit /b 1
 
 python tools\mkdisk.py --krill --out quake64-krill.d64
@@ -136,6 +153,15 @@ if exist src\splashc.prg move /y src\splashc.prg splashc.prg >nul
 
 python tools\mkreloc.py
 if errorlevel 1 exit /b 1
+
+pushd src
+"%ACME%" -v3 --vicelabels ..\game.lbl quake64.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+if exist src\game.prg move /y src\game.prg game.prg >nul
 
 python tools\checkheap.py
 if errorlevel 1 exit /b 1

@@ -3,14 +3,12 @@
 !zone loader
 
 !source "asset_sizes.asm"
+!source "level_prefix.asm"
 
 ; Filenames are 0-terminated (Krill README "Basic operation"; KERNAL SETNAM
 ; takes a length computed at the call).
 level_dos_name
 	!text "E1M1"
-	!byte 0
-reloc_dos_name
-	!text "RELOC"
 	!byte 0
 
 en_name_lo
@@ -53,7 +51,7 @@ FormatDosName
 ; LoadPrg — X/Y = 0-terminated name pointer. Dest in load_dest. C=0 ok, C=1 err.
 ; Krill loadraw with LOAD_TO_API: carry SET on entry takes the destination from
 ; loadaddrlo/hi instead of the PRG header — which is what this needs, because
-; every heap blob (E1M1, RELOC, GRUNT…) carries header address $0000.
+; every heap blob (E1M1, GRUNT…) carries header address $0000.
 ; Returns with interrupts DISABLED (see the sei below); callers already sei.
 LoadPrg
 	stx load_name_l
@@ -182,10 +180,9 @@ heap_alloc
 	sec
 	rts
 
-; LoadLevel — blank + map + reloc overlay + enemies.
-; Heap grows down from SCR_A: map first, then RELOC below it, bind_map on
-; map_base only, patch SMC operands, heap_top = map_base (drop reloc),
-; then the reloc bytes are reclaimed as the per-room pose sub-heap.
+; LoadLevel — blank + one E1Mn load (prefix overlay+reloc, then packed map).
+; Heap grows down from SCR_A. Prefix is bind/patch overlay + dest words;
+; bind_map header/name, SMC-jsr overlay, heap_top = map_base (dump prefix).
 ; load_in_play=0: cold (DEN off). =1: in-play (init_vic, DEN on).
 ; C=0 ok, C=1 error. Caller re-inits VIC/IRQ.
 LoadLevel
@@ -252,32 +249,34 @@ LoadLevel
 	ora map_size_hi,x
 	beq .ll_fail
 	lda map_size_lo,x
-	ldy map_size_hi,x
+	clc
+	adc #<LEVEL_PREFIX
+	pha
+	lda map_size_hi,x
+	adc #>LEVEL_PREFIX
+	tay
+	pla
 	jsr heap_alloc
 	bcs .ll_fail
 	ldx #<level_dos_name
 	ldy #>level_dos_name
 	jsr LoadPrg
 	bcs .ll_fail
+	clc
 	lda load_dest
+	adc #<LEVEL_PREFIX
 	sta map_base
 	lda load_dest+1
+	adc #>LEVEL_PREFIX
 	sta map_base+1
-	jsr bind_map
-
-	lda #<RELOC_MAX
-	ldy #>RELOC_MAX
-	jsr heap_alloc
-	bcs .ll_fail
+	clc
 	lda load_dest
+	adc #<RELOC_OFF
 	sta reloc_base
 	lda load_dest+1
+	adc #>RELOC_OFF
 	sta reloc_base+1
-	ldx #<reloc_dos_name
-	ldy #>reloc_dos_name
-	jsr LoadPrg
-	bcs .ll_fail
-	jsr patch_map_smc
+	jsr bind_map
 	bcs .ll_fail
 	lda map_base
 	sta heap_top
@@ -775,234 +774,9 @@ bind_type_sfx
 	dec bind_n
 	jmp .bts_lp
 
-; Table records for bind_apply: dest word, count-addr word.
-; dest 0 = end; 1 = bind_n = nrooms*3; 2 = bind_n = nrooms*2.
-; +bind_add lines stay here so tools/perroom.py can replay packed order.
-!macro bind_add .ptr, .n {
-	!word .ptr
-	!word .n
-}
-!macro bind_set_n3 {
-	!word 1
-	!word 0
-}
-!macro bind_set_n2 {
-	!word 2
-	!word 0
-}
-
-; AY → table. src_ptr / dst_ptr are init-only (LoadLevel, not draw).
-bind_apply
-	sta src_ptr
-	sty src_ptr+1
-.ba_lp
-	ldy #0
-	lda (src_ptr),y
-	sta dst_ptr
-	iny
-	lda (src_ptr),y
-	sta dst_ptr+1
-	ora dst_ptr
-	beq .ba_rts
-	lda dst_ptr+1
-	bne .ba_fld
-	lda dst_ptr
-	cmp #1
-	beq .ba_n3
-	cmp #2
-	beq .ba_n2
-.ba_fld
-	ldy #0
-	lda bind_cur
-	sta (dst_ptr),y
-	iny
-	lda bind_cur+1
-	sta (dst_ptr),y
-	ldy #2
-	lda (src_ptr),y
-	sta dst_ptr
-	iny
-	lda (src_ptr),y
-	sta dst_ptr+1
-	clc
-	ldy #0
-	lda bind_cur
-	adc (dst_ptr),y
-	sta bind_cur
-	bcc .ba_nxt
-	inc bind_cur+1
-.ba_nxt
-	clc
-	lda src_ptr
-	adc #4
-	sta src_ptr
-	bcc .ba_lp
-	inc src_ptr+1
-	jmp .ba_lp
-.ba_n3
-	lda map_nrooms
-	asl
-	clc
-	adc map_nrooms
-	sta bind_n
-	jmp .ba_nxt
-.ba_n2
-	lda map_nrooms
-	asl
-	sta bind_n
-	jmp .ba_nxt
-.ba_rts
-	rts
-
 ; Walk packed SoA at map_base; fill counts, spawn bytes, and field pointers.
+; Overlay at load_dest+OVERLAY_OFF binds columns then patches SMC operands.
 bind_map
-	jmp .bm_go
-bind_tab
-	+bind_add room_x, map_nrooms
-	+bind_add room_y, map_nrooms
-	+bind_add room_z, map_nrooms
-	+bind_add room_sx, map_nrooms
-	+bind_add room_sy, map_nrooms
-	+bind_add room_sz, map_nrooms
-	+bind_add room_bg, map_nrooms
-	+bind_add room_line, map_nrooms
-	+bind_add room_fx, map_nrooms
-	+bind_add room_wpn, map_nrooms
-	+bind_add room_id, map_nrooms
-	+bind_set_n3
-	+bind_add rc_x, bind_n
-	+bind_add rc_y, bind_n
-	+bind_add rc_z, bind_n
-	+bind_add rc_sx, bind_n
-	+bind_add rc_sy, bind_n
-	+bind_add rc_sz, bind_n
-	+bind_set_n2
-	+bind_add rb_x, bind_n
-	+bind_add rb_y, bind_n
-	+bind_add rb_z, bind_n
-	+bind_add rb_sx, bind_n
-	+bind_add rb_sy, bind_n
-	+bind_add rb_sz, bind_n
-
-	+bind_add room_nv, map_nrooms
-	+bind_add room_ne, map_nrooms
-	+bind_add room_vo, map_nrooms
-	+bind_add room_eo, map_nrooms
-	+bind_add room_nx, map_nrooms
-	+bind_add room_nz, map_nrooms
-	+bind_add room_uo, map_nrooms
-	+bind_add room_zo, map_nrooms
-	+bind_add room_door_o, map_nrooms
-	+bind_add room_ndoor, map_nrooms
-	+bind_add room_ux, map_nux
-	+bind_add room_uz, map_nuz
-	+bind_add room_vy, map_nvert
-	+bind_add room_xid, map_nvert
-	+bind_add room_zid, map_nvert
-	+bind_add room_col, map_nvert
-	+bind_add room_e0, map_nedge
-	+bind_add room_e1, map_nedge
-	+bind_add room_evert, map_nedge
-	+bind_add room_efaces, map_nedge
-
-	+bind_add door_x, map_ndoors
-	+bind_add door_y, map_ndoors
-	+bind_add door_z, map_ndoors
-	+bind_add door_sx, map_ndoors
-	+bind_add door_sy, map_ndoors
-	+bind_add door_sz, map_ndoors
-	+bind_add door_face, map_ndoors
-	+bind_add door_key, map_ndoors
-	+bind_add door_type, map_ndoors
-	+bind_add door_id, map_ndoors
-	+bind_add door_other, map_ndoors
-
-	+bind_add crate_x, map_ncrates
-	+bind_add crate_y, map_ncrates
-	+bind_add crate_z, map_ncrates
-	+bind_add crate_sx, map_ncrates
-	+bind_add crate_sy, map_ncrates
-	+bind_add crate_sz, map_ncrates
-	+bind_add crate_room, map_ncrates
-	+bind_add crate_id, map_ncrates
-
-	+bind_add slope_x, map_nslopes
-	+bind_add slope_y, map_nslopes
-	+bind_add slope_z, map_nslopes
-	+bind_add slope_sx, map_nslopes
-	+bind_add slope_sy, map_nslopes
-	+bind_add slope_sz, map_nslopes
-	+bind_add slope_axis, map_nslopes
-	+bind_add slope_dir, map_nslopes
-	+bind_add slope_room, map_nslopes
-	+bind_add slope_id, map_nslopes
-	+bind_add slope_flags, map_nslopes
-
-	+bind_add plat_x, map_nplats
-	+bind_add plat_y, map_nplats
-	+bind_add plat_z, map_nplats
-	+bind_add plat_sx, map_nplats
-	+bind_add plat_sz, map_nplats
-	+bind_add plat_room, map_nplats
-	+bind_add plat_solid, map_nplats
-	+bind_add plat_id, map_nplats
-
-	+bind_add elev_x, map_nelevs
-	+bind_add elev_y0, map_nelevs
-	+bind_add elev_z, map_nelevs
-	+bind_add elev_sx, map_nelevs
-	+bind_add elev_sy, map_nelevs
-	+bind_add elev_sz, map_nelevs
-	+bind_add elev_home, map_nelevs
-	+bind_add elev_dest, map_nelevs
-	+bind_add elev_room, map_nelevs
-	+bind_add elev_id, map_nelevs
-
-	+bind_add sw_x, map_nswitches
-	+bind_add sw_y, map_nswitches
-	+bind_add sw_z, map_nswitches
-	+bind_add sw_sx, map_nswitches
-	+bind_add sw_sy, map_nswitches
-	+bind_add sw_sz, map_nswitches
-	+bind_add sw_elev, map_nswitches
-	+bind_add sw_room, map_nswitches
-	+bind_add sw_face, map_nswitches
-	+bind_add sw_id, map_nswitches
-
-	+bind_add en_x, map_nenemies
-	+bind_add en_y, map_nenemies
-	+bind_add en_z, map_nenemies
-	+bind_add en_type, map_nenemies
-	+bind_add en_rot, map_nenemies
-	+bind_add en_room, map_nenemies
-	+bind_add en_patrol, map_nenemies
-	+bind_add en_id, map_nenemies
-
-	+bind_add tr_x, map_ntrigs
-	+bind_add tr_y, map_ntrigs
-	+bind_add tr_z, map_ntrigs
-	+bind_add tr_sx, map_ntrigs
-	+bind_add tr_sy, map_ntrigs
-	+bind_add tr_sz, map_ntrigs
-	+bind_add tr_room, map_ntrigs
-	+bind_add tr_purpose, map_ntrigs
-	+bind_add tr_arg, map_ntrigs
-	+bind_add tr_id, map_ntrigs
-
-	+bind_add td_x, map_ndests
-	+bind_add td_y, map_ndests
-	+bind_add td_z, map_ndests
-	+bind_add td_rot, map_ndests
-	+bind_add td_room, map_ndests
-
-	+bind_add bp_x, map_nbackpacks
-	+bind_add bp_y, map_nbackpacks
-	+bind_add bp_z, map_nbackpacks
-	+bind_add bp_type, map_nbackpacks
-	+bind_add bp_room, map_nbackpacks
-	+bind_add bp_id, map_nbackpacks
-	!word 0, 0
-.bm_go
 	lda map_base
 	sta src_ptr
 	lda map_base+1
@@ -1039,14 +813,29 @@ bind_tab
 	adc #0
 	sta bind_cur+1
 
-	lda #<bind_tab
-	ldy #>bind_tab
-	jsr bind_apply
-
+	clc
+	lda load_dest
+	adc #<OVERLAY_OFF
+	sta .bm_ov+1
+	lda load_dest+1
+	adc #>OVERLAY_OFF
+	sta .bm_ov+2
+	clc
+	lda load_dest
+	adc #<BIND_TAB_OFF
+	pha
+	lda load_dest+1
+	adc #>BIND_TAB_OFF
+	tay
+	pla
+.bm_ov
+	jsr $ffff
+	php
 	lda bind_cur
 	sta map_text
 	lda bind_cur+1
 	sta map_text+1
+	plp
 	rts
 
 ; Restore ZP clobbered by KERNAL LOAD (mesh/edge ptrs, key latch).

@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Simulate LoadLevel heap vs GAME size; fail the build if a map cannot load.
 
-Heap grows down from SCR_A. LoadLevel: map, RELOC_MAX (then drop), then pose
-banks. heap_alloc fails when new top <= end_game, so need must be strictly less
-than SCR_A - end_game.
+Heap grows down from SCR_A. LoadLevel: one E1Mn (prefix overlay+reloc, then
+packed map), dump prefix (heap_top = map_base), then pose banks. heap_alloc
+fails when new top <= end_game, so need must be strictly less than
+SCR_A - end_game.
 
 Streaming holds at most ROOM_MAX_TYPES banks — the types that cohabit in the
 room being played. The gate is the worst SINGLE ROOM pose sum, not a map-wide
 pair of the heaviest types. tools/perroom.py extracts per-room sets by
-replaying bind_map over the packed payload.
+replaying bind_tab over the packed payload.
 """
 
 from __future__ import annotations
@@ -20,18 +21,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mkreloc import parse_labels, parse_mem_const
-from perroom import ROOM_MAX_TYPES, per_room_types
+from perroom import ROOM_MAX_TYPES, packed_payload, per_room_types
 
 ROOT = Path(__file__).resolve().parents[1]
 MAP_DIR = ROOT / "maps"
 ENEMY_DIR = ROOT / "enemies"
 ENEMY_SIZES = ROOT / "src" / "enemy_sizes.asm"
+PREFIX_ASM = ROOT / "src" / "level_prefix.asm"
 
 LEVEL_NAMES = [f"E1M{i}" for i in range(1, 9)]
 DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
 ENEMY_NTYPES = len(DOS_NAME)
-HDR_TYPE_SLOTS = 3
-TYPE_OFF = 11  # packed header: 11 count bytes, then type0..2
 
 
 def prg_payload(path: Path) -> bytes:
@@ -54,6 +54,15 @@ def parse_size_table(path: Path, lo_name: str, hi_name: str) -> list[int]:
     if len(lo) != len(hi):
         raise SystemExit(f"{path}: {lo_name}/{hi_name} length mismatch")
     return [l + (h << 8) for l, h in zip(lo, hi)]
+
+
+def parse_level_prefix() -> int:
+    if not PREFIX_ASM.is_file():
+        raise SystemExit(f"missing: {PREFIX_ASM}")
+    m = re.search(r"^LEVEL_PREFIX\s*=\s*(\d+)\s*$", PREFIX_ASM.read_text(), re.M)
+    if not m:
+        raise SystemExit(f"{PREFIX_ASM}: no LEVEL_PREFIX")
+    return int(m.group(1))
 
 
 def enemy_sizes() -> list[int]:
@@ -98,17 +107,17 @@ def main() -> None:
     end_game = labels["end_game"]
     locode = parse_mem_const("LOCODE_BASE")
     scr_a = parse_mem_const("SCR_A")
-    reloc_max = parse_mem_const("RELOC_MAX")
+    prefix = parse_level_prefix()
     avail = scr_a - end_game
     poses = enemy_sizes()
 
     print(
         f"heap  GAME ${locode:04X}-${end_game:04X}  "
-        f"avail {avail}  reloc_max {reloc_max}"
+        f"avail {avail}  prefix {prefix}"
     )
     print(
         f"      per-room model (max {ROOM_MAX_TYPES} types/room): "
-        "gate is the worst room's pose sum."
+        "gate is packed + max(prefix, worst room pose sum)."
     )
 
     failed = False
@@ -121,6 +130,7 @@ def main() -> None:
         if not payload:
             continue
         any_level = True
+        packed = packed_payload(payload)
 
         per_room = per_room_types(payload)
         for room, ts in sorted(per_room.items()):
@@ -151,13 +161,14 @@ def main() -> None:
                 worst_sum = s
                 worst_names = [DOS_NAME[t] for t in sorted(per_room[room])]
 
-        need = len(payload) + max(reloc_max, worst_sum)
+        need = len(packed) + max(prefix, worst_sum)
         slack = avail - need
         pose_s = ",".join(worst_names) if worst_names else "-"
         where = f"room {worst_room}" if worst_room >= 0 else "no enemies"
         saved = level_sum - worst_sum
         head = (
-            f"{key}  map {len(payload)}  worst {worst_sum} ({where}: {pose_s})"
+            f"{key}  map {len(packed)}  prefix {prefix}  "
+            f"worst {worst_sum} ({where}: {pose_s})"
             f"  level-wide {level_sum} (-{saved})  need {need}"
         )
         if slack <= 0:

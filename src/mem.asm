@@ -5,7 +5,7 @@
 ; Viewport uses charset cols 0–23; col 24 (char 192) is $FF×8 margins.
 ; Tails (cols 24–31) hold unique log/sin/invz LUTs — not mirrored.
 ; $F000 Judd sqlo..negsqhi (disk sqt). $F800 UI charset (disk fnt).
-; Game PRG $0900–<$C000. Heap grows down from $C000 (map, reloc, poses).
+; Game PRG $0900–<$C000. Heap grows down from $C000 (map with bind/reloc prefix, poses).
 ; $FFFA–$FFFF overlay unused UI char 255 (init_irq).
 ;
 ; Boot $0801: koala cover (splashc/splash), then menu overlay, then game at $0900.
@@ -182,10 +182,9 @@ negsqlo		= $F400
 negsqhi		= $F600
 
 ; SMC map accessors: macros emit abs,x/y with this operand hi until LoadLevel
-; patches from reloc.prg. Must not collide with a real GAME abs address.
+; patches from the map-file reloc prefix. Must not collide with a real GAME abs.
 MAP_SMC_HI	= $02
 MAP_SMC_BASE	= $0200
-RELOC_MAX	= $0800			; heap reserve for reloc overlay
 !if (>MAP_SMC_BASE) != MAP_SMC_HI {
 	!error "MAP_SMC_BASE hi must equal MAP_SMC_HI"
 }
@@ -528,7 +527,7 @@ load_name_l	= $CC5A
 load_name_h	= $CC5B
 load_type	= $CC5C
 bind_n		= $CC5D
-reloc_base	= $CC5E			; word: reloc overlay dest (reclaimed after patch)
+reloc_base	= $CC5E			; word: reloc dest words in the map prefix
 
 ; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
 VOC		= $CC60			; Cohen–Sutherland outcode (front verts)

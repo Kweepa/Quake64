@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """Locate en_type / en_room inside a packed map payload.
 
-The packed layout is defined in exactly one place: bind_map in src/loader.asm,
+The packed layout is defined in exactly one place: bind_tab in src/overlay.asm,
 which walks the payload adding one array per `+bind_add field, count`. Rather
-than duplicate that order here and let the two drift, this parses bind_map and
+than duplicate that order here and let the two drift, this parses bind_tab and
 replays it.
 
-Payload layout:
+Level PRG payload:
+    overlay_len word, reloc_len word, overlay, reloc dests, then packed map.
+
+Packed layout:
     24 bytes  counts header (map_nrooms .. spawn_id, see src/map_bss.asm)
     n bytes   NUL-terminated map name
     ...       the bind_add arrays, in source order
 
-Counts are either a header symbol or `bind_n`. bind_map's table emits
+Counts are either a header symbol or `bind_n`. bind_tab emits
 `+bind_set_n3` / `+bind_set_n2` (nrooms*3 for rc_*, nrooms*2 for rb_*).
 
 Everything extracted is validated before use: room ids must be < map_nrooms and
@@ -26,10 +29,11 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LOADER = ROOT / "src" / "loader.asm"
+OVERLAY = ROOT / "src" / "overlay.asm"
 MAP_BSS = ROOT / "src" / "map_bss.asm"
 
 HDR_LEN = 24
+LEVEL_HDR = 4
 ENEMY_NTYPES = 8
 ROOM_MAX_TYPES = 2
 
@@ -50,13 +54,28 @@ def header_symbols() -> list[str]:
     return [found[0x400 + i] for i in range(HDR_LEN)]
 
 
+def packed_payload(payload: bytes) -> bytes:
+    """Strip the LoadLevel prefix (overlay_len, reloc_len, overlay, reloc)."""
+    ov_bin = ROOT / "src" / "overlay.bin"
+    if len(payload) < LEVEL_HDR or not ov_bin.is_file():
+        return payload
+    want = ov_bin.stat().st_size
+    ov, rel = int.from_bytes(payload[0:2], "little"), int.from_bytes(
+        payload[2:4], "little"
+    )
+    body = LEVEL_HDR + ov + rel
+    if ov == want and body <= len(payload):
+        return payload[body:]
+    return payload
+
+
 def bind_sequence() -> list[tuple[str, str]]:
-    """[(field, count_expr)] in bind_map order, count_expr already resolved
+    """[(field, count_expr)] in bind_tab order, count_expr already resolved
     for the two bind_n recomputations."""
-    text = LOADER.read_text(encoding="utf-8", errors="replace")
-    m = re.search(r"^bind_map\b(.*?)^\s*rts", text, re.M | re.S)
+    text = OVERLAY.read_text(encoding="utf-8", errors="replace")
+    m = re.search(r"^bind_tab\b(.*?)^\s*!word\s+0,\s*0\s*$", text, re.M | re.S)
     if not m:
-        raise SystemExit("perroom: no bind_map in loader.asm")
+        raise SystemExit("perroom: no bind_tab in overlay.asm")
     body = m.group(1)
 
     seq: list[tuple[str, str]] = []
@@ -79,12 +98,13 @@ def bind_sequence() -> list[tuple[str, str]]:
                 count = pending
             seq.append((field, count))
     if not seq:
-        raise SystemExit("perroom: bind_map has no bind_add lines")
+        raise SystemExit("perroom: bind_tab has no bind_add lines")
     return seq
 
 
 def field_offsets(payload: bytes) -> tuple[dict[str, int], dict[str, int]]:
-    """(offset of each field, header counts). Offsets are into payload."""
+    """(offset of each field, header counts). Offsets are into packed payload."""
+    payload = packed_payload(payload)
     if len(payload) < HDR_LEN:
         raise SystemExit("perroom: payload shorter than the header")
     syms = header_symbols()
@@ -119,12 +139,13 @@ def field_offsets(payload: bytes) -> tuple[dict[str, int], dict[str, int]]:
 def per_room_types(payload: bytes) -> dict[int, set[int]]:
     """{room: {enemy type, ...}} for every room holding enemies."""
     offs, counts = field_offsets(payload)
+    payload = packed_payload(payload)
     n = counts["map_nenemies"]
     if n == 0:
         return {}
     for need in ("en_type", "en_room"):
         if need not in offs:
-            raise SystemExit(f"perroom: bind_map has no {need}")
+            raise SystemExit(f"perroom: bind_tab has no {need}")
     types = payload[offs["en_type"]:offs["en_type"] + n]
     rooms = payload[offs["en_room"]:offs["en_room"] + n]
     if len(types) != n or len(rooms) != n:

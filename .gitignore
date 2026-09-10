@@ -9,6 +9,7 @@
 *.lbl
 *.o
 *.sym
+overlay.bin
 __pycache__/
 *.pyc
 

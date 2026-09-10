@@ -261,7 +261,6 @@ apply_move
 !source "mesh.asm"
 !source "cube.asm"
 !source "enemy.asm"
-!source "mapacc_rt.asm"
 !source "loader.asm"
 
 !source "map_bss.asm"

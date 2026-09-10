@@ -17,7 +17,7 @@ with `LOAD_TO_API = 1` and `UNINSTALL_API = 0`; everything else stock.
 | `install.prg` | `$2000`–`$3B52` | transient. Run once at splash; MENU and GAME overwrite it. |
 | `loadersymbols-c64.inc` | — | the build's own symbol/config dump, for reference. |
 
-`LOAD_TO_API = 1` is required: the heap blobs (`E1M1`, `RELOC`, `GRUNT`…) all
+`LOAD_TO_API = 1` is required: the heap blobs (`E1M1`, `GRUNT`…) all
 carry PRG load address `$0000`, and `LoadPrg` supplies the real destination in
 `loadaddrlo`/`loadaddrhi` with carry set.
 

@@ -312,6 +312,7 @@ LoadLevel
 ;
 ; Bank base for type T = pose_map[T] - 2. First load sits under map_base; the
 ; second packs below it (heap_top).
+; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…] [sfx_count] {id,N,AD,freq,vol}*
 
 ; Distinct types in room_idx → need0/need1 ($FF = empty). Cap 2 by tooling.
 collect_room_need
@@ -380,6 +381,7 @@ clear_pose_ptrs
 	inx
 	cpx #ENEMY_NTYPES
 	bcc .cpp
+	jsr unbind_streamed_sfx
 	rts
 
 ; Zero pose ptrs for type A.
@@ -590,6 +592,7 @@ stream_room_enemies
 	lda need1
 	jsr load_pose_if_needed
 	bcs .sre_err
+	jsr rebind_streamed_sfx
 	clc
 	rts
 .sre_err
@@ -651,7 +654,7 @@ maybe_stream_room
 	jmp load_fail_hang
 
 ; dest in load_dest; type in load_type.
-; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…]
+; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…] [sfx blob]
 patch_enemy_gx
 	lda load_dest
 	sta src_ptr
@@ -691,58 +694,170 @@ patch_enemy_gx
 	sta enemy_gz_hi,y
 	rts
 
-!macro bind_add .ptr, .n {
-	lda bind_cur
-	sta .ptr
-	lda bind_cur+1
-	sta .ptr+1
+; Stop streamed SID voices, zero their table slots, bind every resident type.
+rebind_streamed_sfx
+	jsr stop_streamed_sfx
+	jsr unbind_streamed_sfx
+	ldx #0
+.rsx_lp
+	lda pose_map_hi,x
+	beq .rsx_n
+	txa
+	pha
+	jsr bind_type_sfx
+	pla
+	tax
+.rsx_n
+	inx
+	cpx #ENEMY_NTYPES
+	bcc .rsx_lp
+	rts
+
+; A = type. Walk trailing sfx blob; sound_table[id] → N,AD,freq,vol.
+bind_type_sfx
+	tay
+	lda pose_map_hi,y
+	bne .bts_go
+	rts
+.bts_go
+	ldx enemy_nframes,y
 	clc
-	lda bind_cur
-	adc .n
-	sta bind_cur
-	lda bind_cur+1
+	lda enemy_gz_lo,y
+	adc frame13_lo,x
+	sta src_ptr
+	lda enemy_gz_hi,y
+	adc frame13_hi,x
+	sta src_ptr+1
+	ldy #0
+	lda (src_ptr),y
+	sta bind_n
+	inc src_ptr
+	bne .bts_lp
+	inc src_ptr+1
+.bts_lp
+	lda bind_n
+	bne .bts_one
+	rts
+.bts_one
+	ldy #0
+	lda (src_ptr),y
+	asl
+	tax
+	clc
+	lda src_ptr
+	adc #1
+	sta sound_table,x
+	lda src_ptr+1
 	adc #0
-	sta bind_cur+1
+	sta sound_table+1,x
+	ldy #1
+	lda (src_ptr),y
+	sta map_sv_a
+	asl
+	tax
+	lda #0
+	rol
+	tay
+	txa
+	clc
+	adc #3
+	tax
+	tya
+	adc #0
+	tay
+	txa
+	clc
+	adc src_ptr
+	sta src_ptr
+	tya
+	adc src_ptr+1
+	sta src_ptr+1
+	dec bind_n
+	jmp .bts_lp
+
+; Table records for bind_apply: dest word, count-addr word.
+; dest 0 = end; 1 = bind_n = nrooms*3; 2 = bind_n = nrooms*2.
+; +bind_add lines stay here so tools/perroom.py can replay packed order.
+!macro bind_add .ptr, .n {
+	!word .ptr
+	!word .n
 }
+!macro bind_set_n3 {
+	!word 1
+	!word 0
+}
+!macro bind_set_n2 {
+	!word 2
+	!word 0
+}
+
+; AY → table. src_ptr / dst_ptr are init-only (LoadLevel, not draw).
+bind_apply
+	sta src_ptr
+	sty src_ptr+1
+.ba_lp
+	ldy #0
+	lda (src_ptr),y
+	sta dst_ptr
+	iny
+	lda (src_ptr),y
+	sta dst_ptr+1
+	ora dst_ptr
+	beq .ba_rts
+	lda dst_ptr+1
+	bne .ba_fld
+	lda dst_ptr
+	cmp #1
+	beq .ba_n3
+	cmp #2
+	beq .ba_n2
+.ba_fld
+	ldy #0
+	lda bind_cur
+	sta (dst_ptr),y
+	iny
+	lda bind_cur+1
+	sta (dst_ptr),y
+	ldy #2
+	lda (src_ptr),y
+	sta dst_ptr
+	iny
+	lda (src_ptr),y
+	sta dst_ptr+1
+	clc
+	ldy #0
+	lda bind_cur
+	adc (dst_ptr),y
+	sta bind_cur
+	bcc .ba_nxt
+	inc bind_cur+1
+.ba_nxt
+	clc
+	lda src_ptr
+	adc #4
+	sta src_ptr
+	bcc .ba_lp
+	inc src_ptr+1
+	jmp .ba_lp
+.ba_n3
+	lda map_nrooms
+	asl
+	clc
+	adc map_nrooms
+	sta bind_n
+	jmp .ba_nxt
+.ba_n2
+	lda map_nrooms
+	asl
+	sta bind_n
+	jmp .ba_nxt
+.ba_rts
+	rts
 
 ; Walk packed SoA at map_base; fill counts, spawn bytes, and field pointers.
 bind_map
-	lda map_base
-	sta src_ptr
-	lda map_base+1
-	sta src_ptr+1
-	ldy #0
-.bm_hdr
-	lda (src_ptr),y
-	sta map_nrooms,y
-	iny
-	cpy #24
-	bne .bm_hdr
-
-	clc
-	lda map_base
-	adc #24
-	sta map_name
-	lda map_base+1
-	adc #0
-	sta map_name+1
-
-	ldy #24
-.bm_nm
-	lda (src_ptr),y
-	beq .bm_nm0
-	iny
-	bne .bm_nm
-.bm_nm0
-	iny					; skip NUL
-	tya
-	clc
-	adc map_base
-	sta bind_cur
-	lda map_base+1
-	adc #0
-	sta bind_cur+1
-
+	jmp .bm_go
+bind_tab
 	+bind_add room_x, map_nrooms
 	+bind_add room_y, map_nrooms
 	+bind_add room_z, map_nrooms
@@ -754,22 +869,14 @@ bind_map
 	+bind_add room_fx, map_nrooms
 	+bind_add room_wpn, map_nrooms
 	+bind_add room_id, map_nrooms
-
-	lda map_nrooms
-	asl
-	clc
-	adc map_nrooms
-	sta bind_n				; nrooms*3
+	+bind_set_n3
 	+bind_add rc_x, bind_n
 	+bind_add rc_y, bind_n
 	+bind_add rc_z, bind_n
 	+bind_add rc_sx, bind_n
 	+bind_add rc_sy, bind_n
 	+bind_add rc_sz, bind_n
-
-	lda map_nrooms
-	asl
-	sta bind_n				; nrooms*2
+	+bind_set_n2
 	+bind_add rb_x, bind_n
 	+bind_add rb_y, bind_n
 	+bind_add rb_z, bind_n
@@ -894,6 +1001,47 @@ bind_map
 	+bind_add bp_type, map_nbackpacks
 	+bind_add bp_room, map_nbackpacks
 	+bind_add bp_id, map_nbackpacks
+	!word 0, 0
+.bm_go
+	lda map_base
+	sta src_ptr
+	lda map_base+1
+	sta src_ptr+1
+	ldy #0
+.bm_hdr
+	lda (src_ptr),y
+	sta map_nrooms,y
+	iny
+	cpy #24
+	bne .bm_hdr
+
+	clc
+	lda map_base
+	adc #24
+	sta map_name
+	lda map_base+1
+	adc #0
+	sta map_name+1
+
+	ldy #24
+.bm_nm
+	lda (src_ptr),y
+	beq .bm_nm0
+	iny
+	bne .bm_nm
+.bm_nm0
+	iny					; skip NUL
+	tya
+	clc
+	adc map_base
+	sta bind_cur
+	lda map_base+1
+	adc #0
+	sta bind_cur+1
+
+	lda #<bind_tab
+	ldy #>bind_tab
+	jsr bind_apply
 
 	lda bind_cur
 	sta map_text
@@ -920,6 +1068,47 @@ game_zp_init
 	lda #>enemy_edge_vert
 	sta edge_vert_ptr+1
 	rts
+
+; Player died: freeze, wait for scream + 1s, starting loadout, reload this map.
+PL_DEATH_WAIT_MS	= 1000
+
+death_restart
+	ldx #$ff
+	txs
+.dw_q
+	lda sfx_q_len
+	bne .dw_q
+.dw_sfx
+	lda sfx_index
+	bpl .dw_sfx
+	lda #0
+	sta death_wait_l
+	sta death_wait_h
+.dw_hold
+	lda frame_flag
+.dw_hold_f
+	cmp frame_flag
+	beq .dw_hold_f
+	clc
+	lda death_wait_l
+	adc sample_ms
+	sta death_wait_l
+	lda death_wait_h
+	adc #0
+	sta death_wait_h
+	cmp #>PL_DEATH_WAIT_MS
+	bcc .dw_hold
+	bne .dw_go
+	lda death_wait_l
+	cmp #<PL_DEATH_WAIT_MS
+	bcc .dw_hold
+.dw_go
+	jsr reset_loadout
+	jsr restart_level
+	bcc .dw_ok
+	jmp load_fail_hang
+.dw_ok
+	jmp main
 
 ; In-play reload: keep HP / ammo / weapons. C=0 ok.
 restart_level

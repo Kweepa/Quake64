@@ -882,10 +882,10 @@ enemy_enter_alert
 	sta en_frame,x
 	jsr enemy_get_class
 	bne .eeal_bark
-	lda #SOUND_HALT
+	lda #SOUND_SOLDIER_SIGHT1
 	jmp play_sound
 .eeal_bark
-	lda #SOUND_DOGBARK
+	lda #SOUND_DOG_DSIGHT
 	jmp play_sound
 
 ; A = attack variant (0=swing, 1=shoot). Face player; saw rev on swing.
@@ -898,7 +898,7 @@ enemy_enter_ogre_attack
 	sta en_frame,x
 	lda en_pain_i,x
 	bne .eeoa_face
-	lda #SOUND_SAWFUL
+	lda #SOUND_OGRE_OGSAWATK
 	jsr play_sound
 	ldx enemy_idx
 .eeoa_face
@@ -1012,7 +1012,7 @@ enemy_saw
 	jsr take_damage
 	lda enemy_idx
 	sta bite_splat_i
-	lda #SOUND_SAWHIT
+	lda #SOUND_OGRE_OGDRAG
 	jmp play_sound
 .esaw_rts
 	rts
@@ -1075,11 +1075,12 @@ take_damage
 	jsr hud_ammo
 	lda player_hp
 	beq .td_death
-	lda #SOUND_TAKEDAMAGE
+	lda #SOUND_PLAYER_PAIN1
 	jmp play_sound
 .td_death
-	lda #SOUND_PLAYERDEATH
-	jmp play_sound
+	lda #SOUND_PLAYER_DEATH1
+	jsr play_sound
+	jmp death_restart
 .td_rts
 	rts
 
@@ -1765,10 +1766,10 @@ damage_enemy
 	jsr pick_pain_var
 	jsr enemy_get_class
 	bne .de_dpain
-	lda #SOUND_POPAIN
+	lda #SOUND_SOLDIER_PAIN1
 	jmp play_sound
 .de_dpain
-	lda #SOUND_DMPAIN
+	lda #SOUND_DOG_DPAIN1
 	jmp play_sound
 .de_kill
 	jmp kill_enemy

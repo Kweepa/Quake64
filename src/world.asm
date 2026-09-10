@@ -611,7 +611,7 @@ sync_eye
 ; ------------------------------------------------------------------
 ; update_fall — snap if gap <= FALL_LEDGE; else accelerate down (no WASD).
 ; Call after update_floor. Landing: snap, maybe take_damage(FALL_DAMAGE).
-; Step-up: rise <= STEP_UP snaps (SOUND_OOF at exactly 2, unless elevator).
+; Step-up: rise <= STEP_UP snaps (SOUND_PLAYER_LAND at exactly 2, unless elevator).
 ; ------------------------------------------------------------------
 update_fall
 	lda pl_falling
@@ -648,7 +648,7 @@ update_fall
 .ufl_riseok
 	cmp #STEP_UP
 	bne .ufl_sync			; 1-unit ledge: silent
-	lda #SOUND_OOF
+	lda #SOUND_PLAYER_LAND
 	jsr play_sound
 	jmp .ufl_sync
 
@@ -1371,12 +1371,12 @@ apply_move_world
 	lda cam_zh
 	cmp dt_tmp
 	bne .am_sw
-	lda #SOUND_HITWALL
+	lda #SOUND_WEAPONS_TINK1
 	jsr play_sound
 .am_sw
 	jsr try_room_switch
 	bcc .am_rts
-	lda #SOUND_OPENDOOR
+	lda #SOUND_DOORS_HYDRO1
 	jsr play_sound
 .am_rts
 	rts
@@ -1499,7 +1499,7 @@ try_proximity
 	tax
 	jsr elev_activate
 	bcs .tp_el
-	lda #SOUND_SWITCH
+	lda #SOUND_MISC_MENU2
 	jsr play_sound
 	jmp .tp_el			; one switch per press
 .tp_sn
@@ -1604,7 +1604,7 @@ try_backpack_pickup
 	ldx obj_i
 	lda #1
 	sta drop_taken,x
-	lda #SOUND_GETAMMO
+	lda #SOUND_WEAPONS_PKUP
 	jsr play_sound
 .tdp_n
 	ldx obj_i
@@ -1778,21 +1778,21 @@ pickup_sound
 	bcc .ps_ammo
 	cmp #BP_SILVER
 	bcc .ps_bonus
-	lda #SOUND_GETKEY
+	lda #SOUND_ITEMS_ITEMBK2
 	jmp play_sound
 .ps_bonus
-	lda #SOUND_BONUS1
+	lda #SOUND_ITEMS_DAMAGE
 	jmp play_sound
 .ps_ammo
-	lda #SOUND_GETAMMO
+	lda #SOUND_WEAPONS_PKUP
 	jmp play_sound
 .ps_hp
 	cmp #BP_HEALTH50
 	beq .ps_hp2
-	lda #SOUND_HEALTH1
+	lda #SOUND_ITEMS_HEALTH1
 	jmp play_sound
 .ps_hp2
-	lda #SOUND_HEALTH2
+	lda #SOUND_ITEMS_HEALTH1
 	jmp play_sound
 
 ; X=switch; C=1 if within SW_USE_RANGE of pad XZ, Y overlaps, facing the face

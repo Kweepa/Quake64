@@ -289,7 +289,7 @@ DOOR_PROX	= 3			; open trigger: depth in front of door face
 MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
 FALL_LEDGE	= 1			; start fall if feet-floor > this
-STEP_UP		= 2			; max walk-up; 2 units plays SOUND_OOF
+STEP_UP		= 2			; max walk-up; 2 units plays SOUND_PLAYER_LAND
 FALL_TICK_MS	= 32			; gravity cadence (like MOTION_STEP_MS)
 FALL_ACCEL	= $10			; 8.8 added to downward vel per tick
 FALL_SAFE	= 8			; no damage if eye-drop <= this
@@ -607,7 +607,9 @@ emuz_vy		= $CE0F			; VIC Y staged
 emuz_col		= $CE10			; sprite colour staged from col_fx
 emuz_pending	= $CE11			; enemy idx waiting to muzzle, $ff = none
 fb_probe_y	= $CE12			; floor_below: inclusive max walkable Y
-; $CE13–$CE15 free (was emuz_skip + splat on/ms)
+death_wait_l	= $CE13			; death hold ms acc
+death_wait_h	= $CE14
+; $CE15 free (was emuz_skip + splat on/ms)
 splat_xmsb	= $CE16			; $d010 bit7 when X>=256
 splat_vx		= $CE17
 splat_vy		= $CE18

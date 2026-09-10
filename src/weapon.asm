@@ -25,7 +25,7 @@ wpn_fire_ms_hi
 	!byte >0, >600, >100, >1000
 
 wpn_sound
-	!byte 0, SOUND_SHOTGN, SOUND_ATKMACHINEGUN, SOUND_SHOOT
+	!byte 0, SOUND_WEAPONS_SHOTGN2, SOUND_WEAPONS_SPIKE2, SOUND_WEAPONS_GRENADE
 
 wpn_idle_x
 	!byte WPN_X0, WPN_X0, WPN_X0, WPN_X0
@@ -94,7 +94,7 @@ ws_xmsb_lo
 ws_xmsb_hi
 	!byte >emuz_xmsb, >splat_xmsb
 ws_snd
-	!byte SOUND_SHOOT, 0
+	!byte SOUND_WEAPONS_GRENADE, 0
 ws_colsrc
 	!byte 0, 1			; 0 = copy col_fx, 1 = leave splat_col
 
@@ -208,6 +208,10 @@ init_weapon_hw
 init_weapon
 	jsr init_weapon_hw
 	jsr init_grenades
+	jmp reset_loadout
+
+; Axe+shotgun, 25 shells, 100 HP, no armour/keys/powerup. Shotgun selected.
+reset_loadout
 	lda #HAVE_START
 	sta have_wpn
 	lda #AMMO_SHELLS_START
@@ -714,7 +718,7 @@ axe_apply_step
 	lda wpn_tmp0
 	and #AXE_F_OOF
 	beq .aas_hit
-	lda #SOUND_OOF
+	lda #SOUND_PLAYER_LAND
 	jsr play_sound
 .aas_hit
 	lda wpn_tmp0
@@ -722,7 +726,7 @@ axe_apply_step
 	beq .aas_rts
 	jsr axe_try_kill
 	bcc .aas_rts
-	lda #SOUND_HITENEMY
+	lda #SOUND_WEAPONS_LHIT
 	jsr play_sound
 	lda wpn_tmp0
 	and #AXE_F_SPARK

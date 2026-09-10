@@ -24,6 +24,8 @@ python tools\genenemymuzzle.py
 if errorlevel 1 exit /b 1
 python tools\gensplat.py
 if errorlevel 1 exit /b 1
+python tools\gensounds.py
+if errorlevel 1 exit /b 1
 python tools\genenemies.py
 if errorlevel 1 exit /b 1
 python tools\genmap.py

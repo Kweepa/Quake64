@@ -138,7 +138,7 @@ spawn_ogre_grenade
 	ldx obj_i
 	lda #GREN_OWN_EN
 	jsr gren_fill_slot
-	lda #SOUND_SHOOT
+	lda #SOUND_WEAPONS_GRENADE
 	jmp play_sound
 .sog_rts
 	rts
@@ -612,7 +612,7 @@ gren_explode
 	sta ent_wz
 	jsr gren_splash
 	jsr start_explosion
-	lda #SOUND_BAREXP
+	lda #SOUND_WEAPONS_R_EXP3
 	jsr play_sound
 	ldx obj_i
 	lda #0

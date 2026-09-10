@@ -150,7 +150,7 @@ h2 {
 
 .layout {
   display: grid;
-  grid-template-columns: 200px 1fr 344px;
+  grid-template-columns: 280px 1fr 344px;
   gap: 0;
   flex: 1;
   min-height: 0;
@@ -908,6 +908,67 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
+.sound-ambience-toggle {
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.sound-ambience-toggle span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sound-ambience-toggle input {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.sound-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.sound-folder h3 {
+  margin: 0.45rem 0 0.2rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.sound-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.sound-row input[type="checkbox"] {
+  flex: 0 0 auto;
+}
+
+.sound-row button {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.sound-row .sound-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sound-row .sound-meta {
+  color: var(--muted);
+  font-size: 0.68rem;
+  flex: 0 0 auto;
+}
+
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
@@ -931,6 +992,7 @@ button:disabled {
       <button type="button" id="btn-mode-anim">Animation</button>
       <button type="button" id="btn-mode-weapons">Weapons</button>
       <button type="button" id="btn-mode-items">Items</button>
+      <button type="button" id="btn-mode-sounds">Sounds</button>
     </div>
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
@@ -994,6 +1056,17 @@ button:disabled {
         <ul id="item-mesh-list" class="object-list"></ul>
         <h2>Doors</h2>
         <ul id="door-mesh-list" class="object-list"></ul>
+      </section>
+      <section id="sounds-left" hidden>
+        <h2>Sounds</h2>
+        <label class="field sound-ambience-toggle">
+          <input type="checkbox" id="chk-show-ambience" />
+          <span>Show ambience</span>
+        </label>
+        <div id="sound-list" class="sound-list"></div>
+        <div class="btn-row">
+          <button type="button" id="btn-sound-folder">Open shareware folder</button>
+        </div>
       </section>
     </aside>
 
@@ -2340,7 +2413,7 @@ const ANIM_ORBIT_DIST_MIN = 16;
 const ANIM_ORBIT_DIST_MAX = 400;
 const ITEM_ORBIT_DIST_MIN = 8;
 const ITEM_ORBIT_DIST_MAX = 80;
-const DOC_VERSION = 9;
+const DOC_VERSION = 10;
 /** Mid-distance stick LOD: full project while CAM_ZH < lodZ (world units). */
 const DEFAULT_ENEMY_LOD_Z = 4;
 const ENEMY_LOD_Z_BY_NAME = {
@@ -2361,6 +2434,329 @@ const WEAPON_LABELS = {
   nail: "Nailgun",
   rock: "Grenade launcher",
 };
+
+const SOUND_TICK_HZ = 50;
+const SOUND_MAX_TICKS = 255;
+const SOUND_PAYLOAD_MAX = 4096;
+const PC_TIMER = 1193181;
+const SOUND_HZ_MIN = 80;
+const SOUND_HZ_MAX = 4000;
+const SOUND_VOICE_LABELS = ["Player", "Enemy", "World"];
+const SOUND_HUM_TYPES = ["grunt", "knight", "scrag", "ogre", "shambl", "chthon", "zombie"];
+
+/** Locked in-game aliases. Always exported. extraAliases share the same ID. */
+const SOUND_LOCKED = [
+  { alias: "HITWALL", path: "sound/weapons/tink1.wav", voice: 0, priority: 1, freq: [131, 142, 134] },
+  {
+    alias: "PLAYERDEATH",
+    path: "sound/player/death1.wav",
+    voice: 0,
+    priority: 99,
+    freq: [21, 30, 39, 45, 52, 15, 77, 98, 17, 0, 30, 0, 36, 0, 79, 79],
+  },
+  {
+    alias: "DOGDEATH",
+    path: "sound/dog/ddeath.wav",
+    voice: 1,
+    priority: 50,
+    streamTypes: ["rott"],
+    freq: [19, 16, 15, 27, 40, 43, 57, 69, 83, 103, 111, 157, 145, 152, 159],
+  },
+  {
+    alias: "TAKEDAMAGE",
+    path: "sound/player/pain1.wav",
+    voice: 0,
+    priority: 90,
+    freq: [62, 59, 55, 52, 49, 63, 75, 80, 69, 78, 65, 77, 68, 62, 56, 74, 67, 61, 55],
+  },
+  {
+    alias: "OPENDOOR",
+    path: "sound/doors/hydro1.wav",
+    voice: 2,
+    priority: 20,
+    freq: [119, 118, 118, 116, 114, 111, 107, 101, 95, 89, 83, 77],
+  },
+  {
+    alias: "HALT",
+    path: "sound/soldier/sight1.wav",
+    voice: 1,
+    priority: 50,
+    streamTypes: SOUND_HUM_TYPES,
+    freq: [42, 38, 35, 31, 31, 31, 32, 46, 60, 77, 85, 105, 132, 140, 145, 148, 151, 153, 157, 0, 0, 0, 138, 138, 138],
+  },
+  { alias: "ATKMACHINEGUN", path: "sound/weapons/spike2.wav", voice: 0, priority: 50, freq: [104, 107, 101, 123] },
+  { alias: "HITENEMY", path: "sound/weapons/lhit.wav", voice: 0, priority: 50, freq: [130, 25, 33, 78, 26, 18, 18, 25, 0, 32] },
+  {
+    alias: "DEATHSCREAM1",
+    path: "sound/soldier/death1.wav",
+    voice: 1,
+    priority: 50,
+    streamTypes: SOUND_HUM_TYPES,
+    freq: [60, 55, 51, 26, 37, 31, 15, 16, 23, 29, 74, 28, 31, 27, 34, 42, 38, 34, 36, 41],
+  },
+  { alias: "SHOOT", path: "sound/weapons/grenade.wav", voice: 1, priority: 20, freq: [16, 110, 40, 40, 33, 103, 41, 115, 137] },
+  {
+    alias: "DOGBARK",
+    path: "sound/dog/dsight.wav",
+    voice: 1,
+    priority: 50,
+    streamTypes: ["rott"],
+    freq: [64, 56, 47, 41, 142, 144, 37, 48, 144, 57, 67, 82, 93, 104, 123, 151, 151],
+  },
+  {
+    alias: "GETKEY",
+    path: "sound/items/itembk2.wav",
+    voice: 0,
+    priority: 90,
+    freq: [36, 36, 36, 36, 36, 36, 36, 36, 0, 0, 55, 55, 55, 55, 55, 55, 55, 55, 0, 55, 55, 55, 55, 0, 25, 25, 25, 25, 25, 25],
+  },
+  {
+    alias: "GETAMMO",
+    path: "sound/weapons/pkup.wav",
+    voice: 0,
+    priority: 80,
+    freq: [34, 34, 34, 34, 34, 34, 0, 0, 0, 20, 20, 20, 0, 20, 20, 20, 20, 20, 20, 20, 20],
+  },
+  {
+    alias: "HEALTH1",
+    extraAliases: ["HEALTH2"],
+    path: "sound/items/health1.wav",
+    voice: 0,
+    priority: 85,
+    freq: [58, 0, 0, 51, 51, 0, 0, 38, 38, 0, 0, 22, 22, 0, 0, 22, 22, 22, 0, 0, 21, 21, 21],
+  },
+  { alias: "SWITCH", path: "sound/misc/menu2.wav", voice: 0, priority: 1, freq: [114, 60, 114] },
+  {
+    alias: "BONUS1",
+    path: "sound/items/damage.wav",
+    voice: 0,
+    priority: 70,
+    freq: [61, 53, 49, 46, 45, 51, 57, 64, 71, 74, 73, 69, 58, 41, 33, 30, 29, 28, 31, 35, 41, 46, 49, 47, 41, 30, 20, 0, 0, 0, 18, 18, 18, 0, 18, 18, 18, 18, 18, 18],
+  },
+  {
+    alias: "SHOTGN",
+    path: "sound/weapons/shotgn2.wav",
+    voice: 0,
+    priority: 50,
+    freq: [40, 57, 49, 60, 48, 52, 64, 68, 57, 74, 78, 81, 72, 70, 83, 107],
+  },
+  {
+    alias: "BAREXP",
+    path: "sound/weapons/r_exp3.wav",
+    voice: 0,
+    priority: 50,
+    freq: [81, 78, 60, 107, 83, 64, 32, 83, 107, 33, 36, 60, 44, 47, 64, 114, 107, 105, 26, 47, 47, 78, 101, 32, 83, 47, 43],
+  },
+  { alias: "SAWFUL", path: "sound/ogre/ogsawatk.wav", voice: 0, priority: 20, freq: [59, 47, 59, 37, 59, 47, 59], streamTypes: ["ogre"] },
+  { alias: "SAWHIT", path: "sound/ogre/ogdrag.wav", voice: 0, priority: 50, freq: [48, 55, 44, 54, 36, 49, 30, 47, 26], streamTypes: ["ogre"] },
+  { alias: "OOF", path: "sound/player/land.wav", voice: 0, priority: 50, freq: [83, 78, 78, 85] },
+  { alias: "DMPAIN", path: "sound/dog/dpain1.wav", voice: 1, priority: 50, freq: [15, 28, 31, 23, 31, 29, 38, 45, 45, 52, 64, 96], streamTypes: ["rott"] },
+  { alias: "POPAIN", path: "sound/soldier/pain1.wav", voice: 1, priority: 50, freq: [88, 62, 57, 39, 28, 35, 28, 28, 31, 44, 57, 81, 83], streamTypes: SOUND_HUM_TYPES },
+];
+
+const SOUND_LOCKED_BY_PATH = Object.fromEntries(SOUND_LOCKED.map((s) => [s.path, s]));
+const SOUND_LOCKED_ALIASES = new Set(
+  SOUND_LOCKED.flatMap((s) => [s.alias, ...(s.extraAliases || [])])
+);
+
+function wolfByteToHz(b) {
+  const n = b | 0;
+  if (n <= 0) return 0;
+  return PC_TIMER / (n * 60);
+}
+
+function hzToWolfByte(hz) {
+  const v = Number(hz);
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  return Math.max(1, Math.min(255, Math.round(PC_TIMER / (v * 60))));
+}
+
+function clampSoundVoice(n) {
+  const v = n | 0;
+  if (v < 0) return 0;
+  if (v > 2) return 2;
+  return v;
+}
+
+function clampSoundPriority(n) {
+  const v = n | 0;
+  if (v < 0) return 0;
+  if (v > 99) return 99;
+  return v;
+}
+
+function clampSoundVol(n) {
+  const v = n | 0;
+  if (v < 0) return 0;
+  if (v > 15) return 15;
+  return v;
+}
+
+function clampSoundAttack(n) {
+  const v = n | 0;
+  if (v < 0) return 0;
+  if (v > 15) return 15;
+  return v;
+}
+
+function clampSoundFreqByte(n) {
+  const v = n | 0;
+  if (v < 0) return 0;
+  if (v > 255) return 255;
+  return v;
+}
+
+function parseSoundBytes(raw, clamp, fill) {
+  if (!Array.isArray(raw)) return fill.slice();
+  const out = [];
+  for (let i = 0; i < raw.length && out.length < SOUND_MAX_TICKS; i++) out.push(clamp(raw[i]));
+  return out;
+}
+
+function fullVol(n) {
+  return Array.from({ length: n }, () => 15);
+}
+
+function defaultSoundEntry(locked) {
+  const freq = locked.freq.map((b) => clampSoundFreqByte(b));
+  return {
+    export: true,
+    alias: locked.alias,
+    extraAliases: locked.extraAliases ? [...locked.extraAliases] : undefined,
+    voice: clampSoundVoice(locked.voice),
+    priority: clampSoundPriority(locked.priority),
+    attack: 0,
+    freq,
+    vol: fullVol(freq.length),
+    origin: "wolf",
+  };
+}
+
+function defaultSounds() {
+  const sounds = {};
+  for (const locked of SOUND_LOCKED) sounds[locked.path] = defaultSoundEntry(locked);
+  return sounds;
+}
+
+function emptySoundEntry() {
+  return { export: false, voice: 0, priority: 50, attack: 0, freq: [], vol: [], origin: "empty" };
+}
+
+function isSoundLocked(path) {
+  return !!SOUND_LOCKED_BY_PATH[path];
+}
+
+function soundFolder(path) {
+  const rest = String(path || "").replace(/^sound\//i, "");
+  const i = rest.lastIndexOf("/");
+  return i >= 0 ? rest.slice(0, i) : "";
+}
+
+function soundShortName(path) {
+  const rest = String(path || "").replace(/^sound\//i, "");
+  return rest.replace(/\.wav$/i, "") || rest;
+}
+
+function soundIdent(path) {
+  return soundShortName(path)
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase() || "SFX";
+}
+
+function alignSoundArrays(snd) {
+  let freq = Array.isArray(snd.freq) ? snd.freq.map(clampSoundFreqByte) : [];
+  let vol = Array.isArray(snd.vol) ? snd.vol.map(clampSoundVol) : [];
+  if (freq.length > SOUND_MAX_TICKS) freq = freq.slice(0, SOUND_MAX_TICKS);
+  if (vol.length > SOUND_MAX_TICKS) vol = vol.slice(0, SOUND_MAX_TICKS);
+  let n = Math.max(freq.length, vol.length);
+  while (freq.length < n) freq.push(0);
+  while (vol.length < n) vol.push(0);
+  while (n > 0 && !(freq[n - 1] | 0) && !(vol[n - 1] | 0)) n--;
+  snd.freq = freq.slice(0, n);
+  snd.vol = vol.slice(0, n);
+  delete snd.wave;
+  snd.attack = clampSoundAttack(snd.attack);
+  return n;
+}
+
+function soundIsStreamed(path) {
+  const locked = SOUND_LOCKED_BY_PATH[path];
+  return Array.isArray(locked?.streamTypes) && locked.streamTypes.length > 0;
+}
+
+function soundPayloadBytes(sounds) {
+  let total = 0;
+  const seen = new Set();
+  for (const [path, snd] of Object.entries(sounds || {})) {
+    if (!snd?.export) continue;
+    if (seen.has(path)) continue;
+    seen.add(path);
+    if (soundIsStreamed(path)) continue;
+    const n = Math.min(SOUND_MAX_TICKS, Math.max(snd.freq?.length || 0, snd.vol?.length || 0));
+    total += 2 + n * 2;
+  }
+  return total;
+}
+
+function getSound(doc, path) {
+  const cur = doc?.sounds?.[path];
+  if (cur) return cur;
+  const locked = SOUND_LOCKED_BY_PATH[path];
+  if (locked) return defaultSoundEntry(locked);
+  return emptySoundEntry();
+}
+
+function ensureSound(doc, path) {
+  if (!doc.sounds) doc.sounds = {};
+  if (!doc.sounds[path]) {
+    const locked = SOUND_LOCKED_BY_PATH[path];
+    doc.sounds[path] = locked ? defaultSoundEntry(locked) : emptySoundEntry();
+  }
+  return doc.sounds[path];
+}
+
+function parseSoundEntry(path, raw, fallback) {
+  const locked = SOUND_LOCKED_BY_PATH[path];
+  const base = fallback || (locked ? defaultSoundEntry(locked) : emptySoundEntry());
+  const src = raw && typeof raw === "object" ? raw : {};
+  const freq = parseSoundBytes(src.freq, clampSoundFreqByte, base.freq);
+  let vol = parseSoundBytes(src.vol, clampSoundVol, base.vol.length === freq.length ? base.vol : fullVol(freq.length));
+  if (!src.vol && freq.length && vol.length !== freq.length) vol = fullVol(freq.length);
+  const snd = {
+    export: locked ? true : !!src.export,
+    voice: clampSoundVoice(src.voice != null ? src.voice : base.voice),
+    priority: clampSoundPriority(src.priority != null ? src.priority : base.priority),
+    attack: clampSoundAttack(src.attack != null ? src.attack : base.attack),
+    freq,
+    vol,
+    origin:
+      src.origin === "estimate" || src.origin === "edit" || src.origin === "wolf"
+        ? src.origin
+        : src.origin === "anneal"
+          ? "edit"
+          : base.origin,
+  };
+  if (locked) {
+    snd.alias = locked.alias;
+    if (locked.extraAliases) snd.extraAliases = [...locked.extraAliases];
+  } else if (typeof src.alias === "string" && src.alias.trim() && !SOUND_LOCKED_ALIASES.has(src.alias.trim().toUpperCase())) {
+    snd.alias = src.alias.trim().toUpperCase();
+  }
+  alignSoundArrays(snd);
+  return snd;
+}
+
+function parseSounds(raw) {
+  const sounds = defaultSounds();
+  if (!raw || typeof raw !== "object") return sounds;
+  for (const [path, src] of Object.entries(raw)) {
+    const key = String(path || "").replace(/\\/g, "/").toLowerCase();
+    if (!key.startsWith("sound/") || !key.endsWith(".wav")) continue;
+    sounds[key] = parseSoundEntry(key, src, sounds[key]);
+  }
+  return sounds;
+}
 
 function clampMdlScale(n) {
   const v = Number(n);
@@ -4920,6 +5316,8 @@ function defaultEditorState() {
     layoutCameras: {},
     item: "backpack",
     itemOrbit: { yaw: 0.6, pitch: 0.35, dist: 16, target: { x: 0, y: 0, z: 0 } },
+    sound: SOUND_LOCKED[0].path,
+    showAmbience: false,
   };
 }
 
@@ -4990,7 +5388,7 @@ function parseLayoutCamera(raw, fallback) {
 function parseEditorState(raw) {
   const d = defaultEditorState();
   if (!raw || typeof raw !== "object") return d;
-  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons" || raw.mode === "items") d.mode = raw.mode;
+  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons" || raw.mode === "items" || raw.mode === "sounds") d.mode = raw.mode;
   d.localDraw = !!raw.localDraw;
   d.neighbourDraw = !!raw.neighbourDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
@@ -5044,6 +5442,8 @@ function parseEditorState(raw) {
     d.activeLevel = null;
   }
   if (typeof raw.item === "string" && ALL_MESH_KEYS.includes(raw.item)) d.item = raw.item;
+  if (typeof raw.sound === "string" && raw.sound) d.sound = raw.sound.replace(/\\/g, "/").toLowerCase();
+  if (raw.showAmbience != null) d.showAmbience = !!raw.showAmbience;
   const io = raw.itemOrbit || {};
   const tgt = io.target || {};
   d.itemOrbit = {
@@ -5068,6 +5468,7 @@ function gameDocument(doc) {
     enemies: doc.enemies,
     weapons: doc.weapons,
     items: doc.items,
+    sounds: doc.sounds,
   };
 }
 
@@ -5082,6 +5483,7 @@ function createDefaultDocument() {
     enemies: createAllCreatures(),
     weapons: defaultWeapons(),
     items: defaultItemMeshes(),
+    sounds: defaultSounds(),
   };
 }
 
@@ -5179,6 +5581,7 @@ function normalizeDocument(raw) {
   doc.version = DOC_VERSION;
   doc.weapons = parseWeapons(raw.weapons);
   doc.items = parseItemMeshes(migrateItemMeshes(raw.items, fromVersion));
+  doc.sounds = parseSounds(raw.sounds);
   doc.editor = parseEditorState(raw.editor);
   return doc;
 }
@@ -10405,6 +10808,864 @@ class ItemView {
 }
 
 
+// ---- js/fft.js ----
+/** In-place radix-2 FFT. `re` / `im` length must be a power of two. */
+function fft(re, im) {
+  const n = re.length;
+  let j = 0;
+  for (let i = 1; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      const tr = re[i];
+      re[i] = re[j];
+      re[j] = tr;
+      const ti = im[i];
+      im[i] = im[j];
+      im[j] = ti;
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wr0 = Math.cos(ang);
+    const wi0 = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let wr = 1;
+      let wi = 0;
+      const half = len >> 1;
+      for (let k = 0; k < half; k++) {
+        const ur = re[i + k];
+        const ui = im[i + k];
+        const vr = re[i + k + half] * wr - im[i + k + half] * wi;
+        const vi = re[i + k + half] * wi + im[i + k + half] * wr;
+        re[i + k] = ur + vr;
+        im[i + k] = ui + vi;
+        re[i + k + half] = ur - vr;
+        im[i + k + half] = ui - vi;
+        const nwr = wr * wr0 - wi * wi0;
+        wi = wr * wi0 + wi * wr0;
+        wr = nwr;
+      }
+    }
+  }
+}
+
+
+// ---- js/pcsfx.js ----
+const FFT_SIZE = 512;
+const FLATNESS_NOISE = 0.42;
+const RMS_SILENCE = 0.04;
+const ESTIMATE_HZ_MAX = 2000;
+const NOISE_CENTROID_HZ_MAX = 800;
+const PEAK_REL_DB = 12;
+
+/** Last sample index + 1 with |s| above 8-bit LSB. Trailing digital silence dropped. */
+function pcmActiveLength(pcm) {
+  if (!pcm || !pcm.length) return 0;
+  const eps = 1 / 256;
+  let end = pcm.length;
+  while (end > 0 && Math.abs(pcm[end - 1]) <= eps) end--;
+  return end;
+}
+
+function mixMono(buffer) {
+  const n = buffer.length;
+  const chs = buffer.numberOfChannels;
+  if (chs === 1) return buffer.getChannelData(0);
+  const out = new Float32Array(n);
+  for (let c = 0; c < chs; c++) {
+    const data = buffer.getChannelData(c);
+    for (let i = 0; i < n; i++) out[i] += data[i];
+  }
+  const inv = 1 / chs;
+  for (let i = 0; i < n; i++) out[i] *= inv;
+  return out;
+}
+
+function hann(i, n) {
+  return 0.5 * (1 - Math.cos((2 * Math.PI * i) / (n - 1)));
+}
+
+function spectralFlatness(mag, lo, hi) {
+  let logSum = 0;
+  let sum = 0;
+  let n = 0;
+  for (let i = lo; i < hi; i++) {
+    const m = mag[i];
+    if (m <= 1e-12) continue;
+    logSum += Math.log(m);
+    sum += m;
+    n++;
+  }
+  if (n < 4 || sum <= 0) return 1;
+  const geo = Math.exp(logSum / n);
+  return geo / (sum / n);
+}
+
+function binRange(sr, fftSize, hzLo, hzHi) {
+  const nyq = (fftSize >> 1) - 1;
+  const lo = Math.max(1, Math.round((hzLo * fftSize) / sr));
+  const hi = Math.min(nyq, Math.round((hzHi * fftSize) / sr));
+  if (hi <= lo) return [1, Math.min(nyq, lo + 1)];
+  return [lo, hi];
+}
+
+function interpPeakHz(mag, bin, sr, fftSize) {
+  const prev = mag[bin - 1] || 0;
+  const next = mag[bin + 1] || 0;
+  const mid = mag[bin];
+  const denom = prev - 2 * mid + next;
+  const delta = denom !== 0 ? (0.5 * (prev - next)) / denom : 0;
+  return ((bin + delta) * sr) / fftSize;
+}
+
+function peakHz(mag, sr, fftSize, lo, hi) {
+  let maxM = 0;
+  for (let i = lo; i < hi; i++) {
+    if (mag[i] > maxM) maxM = mag[i];
+  }
+  if (maxM <= 0) return 0;
+  const thresh = maxM * Math.pow(10, -PEAK_REL_DB / 20);
+  let best = -1;
+  for (let i = lo; i < hi; i++) {
+    if (mag[i] < thresh) continue;
+    const prev = i > lo ? mag[i - 1] : 0;
+    const next = i + 1 < hi ? mag[i + 1] : 0;
+    if (mag[i] >= prev && mag[i] >= next) {
+      best = i;
+      break;
+    }
+  }
+  if (best < 0) {
+    for (let i = lo; i < hi; i++) {
+      if (mag[i] >= maxM) {
+        best = i;
+        break;
+      }
+    }
+  }
+  return interpPeakHz(mag, best, sr, fftSize);
+}
+
+function centroidHz(mag, sr, fftSize, lo, hi) {
+  let num = 0;
+  let den = 0;
+  for (let i = lo; i < hi; i++) {
+    num += i * mag[i];
+    den += mag[i];
+  }
+  if (den <= 0) return 0;
+  return ((num / den) * sr) / fftSize;
+}
+
+const SID_ATTACK_MS = [2, 8, 16, 24, 38, 56, 68, 80, 100];
+
+function estimateAttack(frames, maxRms) {
+  if (maxRms <= 0) return 0;
+  let t10 = -1;
+  let t90 = -1;
+  for (let i = 0; i < frames.length; i++) {
+    if (t10 < 0 && frames[i].rms >= maxRms * 0.1) t10 = i;
+    if (t90 < 0 && frames[i].rms >= maxRms * 0.9) t90 = i;
+  }
+  if (t10 < 0 || t90 < 0 || t90 <= t10) return 0;
+  const ms = (t90 - t10) * (1000 / SOUND_TICK_HZ);
+  let best = 0;
+  for (let i = 0; i < SID_ATTACK_MS.length; i++) {
+    if (SID_ATTACK_MS[i] <= ms) best = i;
+  }
+  return best;
+}
+
+function clampEstimateHz(hz) {
+  if (!(hz > 0)) return 0;
+  if (hz < SOUND_HZ_MIN) return SOUND_HZ_MIN;
+  if (hz > ESTIMATE_HZ_MAX) return ESTIMATE_HZ_MAX;
+  return hz;
+}
+
+/** 50 Hz STFT frames for Estimate. `pcm` is Float32 mono. */
+function analyzePcmTicks(pcm, sampleRate) {
+  const sr = sampleRate || 11025;
+  const hop = sr / SOUND_TICK_HZ;
+  const live = pcmActiveLength(pcm);
+  if (live <= 0) {
+    const [lo0, hi0] = binRange(sr, FFT_SIZE, SOUND_HZ_MIN, ESTIMATE_HZ_MAX);
+    return { frames: [], maxRms: 0, sr, lo: lo0, hi: hi0 };
+  }
+  const nTicks = Math.min(SOUND_MAX_TICKS, Math.max(1, Math.ceil(live / hop)));
+  const frames = [];
+  let maxRms = 0;
+  for (let t = 0; t < nTicks; t++) {
+    const start = Math.floor(t * hop);
+    const re = new Float64Array(FFT_SIZE);
+    const im = new Float64Array(FFT_SIZE);
+    let sumSq = 0;
+    const win = Math.min(FFT_SIZE, Math.max(8, Math.round(hop)));
+    for (let i = 0; i < win; i++) {
+      const src = start + i;
+      const s = src < live ? pcm[src] * hann(i, win) : 0;
+      re[i] = s;
+      sumSq += s * s;
+    }
+    fft(re, im);
+    const mag = new Float64Array(FFT_SIZE >> 1);
+    for (let i = 0; i < mag.length; i++) mag[i] = Math.hypot(re[i], im[i]);
+    const rms = Math.sqrt(sumSq / win);
+    if (rms > maxRms) maxRms = rms;
+    frames.push({ mag, rms });
+  }
+  const [lo, hi] = binRange(sr, FFT_SIZE, SOUND_HZ_MIN, ESTIMATE_HZ_MAX);
+  return { frames, maxRms, sr, lo, hi };
+}
+
+/** 50 Hz FFT first pass. `pcm` is Float32 mono. */
+function estimateFromPcm(pcm, sampleRate) {
+  const { frames, maxRms, sr, lo, hi } = analyzePcmTicks(pcm, sampleRate);
+  const [nLo, nHi] = binRange(sr, FFT_SIZE, SOUND_HZ_MIN, NOISE_CENTROID_HZ_MAX);
+  const freq = [];
+  const vol = [];
+  const floor = maxRms * RMS_SILENCE;
+  for (const fr of frames) {
+    if (fr.rms <= floor || maxRms <= 0) {
+      freq.push(0);
+      vol.push(0);
+      continue;
+    }
+    const v = clampSoundVol(Math.max(1, Math.round((fr.rms / maxRms) * 15)));
+    const flat = spectralFlatness(fr.mag, lo, hi);
+    const rawHz =
+      flat >= FLATNESS_NOISE
+        ? centroidHz(fr.mag, sr, FFT_SIZE, nLo, nHi)
+        : peakHz(fr.mag, sr, FFT_SIZE, lo, hi);
+    const hz = clampEstimateHz(rawHz);
+    freq.push(hzToWolfByte(hz));
+    vol.push(v);
+  }
+  return { freq, vol, attack: estimateAttack(frames, maxRms), origin: "estimate" };
+}
+
+async function decodeWav(ctx, buffer) {
+  const copy = buffer.slice(0);
+  return ctx.decodeAudioData(copy);
+}
+
+let audioCtx = null;
+
+function getAudioContext() {
+  if (!audioCtx) audioCtx = new AudioContext();
+  return audioCtx;
+}
+
+class SfxPreview {
+  constructor() {
+    this._nodes = [];
+    this._tickTimer = 0;
+    this.onTick = null;
+    this.playing = false;
+    this.kind = null;
+  }
+
+  stop() {
+    if (this._tickTimer) {
+      clearInterval(this._tickTimer);
+      this._tickTimer = 0;
+    }
+    for (const n of this._nodes) {
+      try {
+        n.stop?.();
+      } catch {
+        /* already stopped */
+      }
+      try {
+        n.disconnect?.();
+      } catch {
+        /* ok */
+      }
+    }
+    this._nodes = [];
+    this.playing = false;
+    this.kind = null;
+    this.onTick?.(-1);
+  }
+
+  async playOriginal(arrayBuffer, loop) {
+    this.stop();
+    const ctx = getAudioContext();
+    if (ctx.state === "suspended") await ctx.resume();
+    const decoded = await decodeWav(ctx, arrayBuffer);
+    const src = ctx.createBufferSource();
+    src.buffer = decoded;
+    src.loop = !!loop;
+    src.connect(ctx.destination);
+    src.onended = () => {
+      if (this.kind === "wav") this.stop();
+    };
+    src.start();
+    this._nodes = [src];
+    this.playing = true;
+    this.kind = "wav";
+  }
+
+  async playSpeaker(snd, loop) {
+    this.stop();
+    const ctx = getAudioContext();
+    if (ctx.state === "suspended") await ctx.resume();
+    alignSoundArrays(snd);
+    const n = snd.freq.length;
+    if (!n) return;
+    const tick = 1 / SOUND_TICK_HZ;
+    const master = ctx.createGain();
+    master.gain.value = 0.22;
+    master.connect(ctx.destination);
+
+    const osc = ctx.createOscillator();
+    osc.type = "square";
+    osc.frequency.value = 440;
+    const gain = ctx.createGain();
+    gain.gain.value = 0;
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start();
+    this._nodes = [osc, gain, master];
+
+    const start = ctx.currentTime + 0.02;
+    const applyTick = (i, at) => {
+      const f = snd.freq[i] | 0;
+      const v = snd.vol[i] | 0;
+      const hz = wolfByteToHz(f);
+      const amp = f && v ? v / 15 : 0;
+      gain.gain.setValueAtTime(amp, at);
+      osc.frequency.setValueAtTime(Math.max(hz, 1), at);
+    };
+    const scheduleOnce = (origin) => {
+      for (let i = 0; i < n; i++) applyTick(i, origin + i * tick);
+      gain.gain.setValueAtTime(0, origin + n * tick);
+    };
+    scheduleOnce(start);
+    if (loop) {
+      const period = n * tick;
+      for (let r = 1; r < 32; r++) scheduleOnce(start + r * period);
+    }
+
+    let tickI = 0;
+    this.onTick?.(0);
+    this._tickTimer = setInterval(() => {
+      tickI++;
+      if (tickI >= n) {
+        if (loop) {
+          tickI = 0;
+          this.onTick?.(0);
+        } else {
+          this.stop();
+        }
+        return;
+      }
+      this.onTick?.(tickI);
+    }, 1000 / SOUND_TICK_HZ);
+
+    this.playing = true;
+    this.kind = "speaker";
+    if (!loop) {
+      const srcEnd = ctx.createBufferSource();
+      srcEnd.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+      srcEnd.connect(ctx.createGain());
+      srcEnd.onended = () => {
+        if (this.kind === "speaker") this.stop();
+      };
+      srcEnd.start(start + n * tick + 0.02);
+      this._nodes.push(srcEnd);
+    }
+  }
+}
+
+function reverseSound(snd) {
+  alignSoundArrays(snd);
+  snd.freq.reverse();
+  snd.vol.reverse();
+  snd.origin = "edit";
+}
+
+function transposeSound(snd, delta) {
+  alignSoundArrays(snd);
+  const d = delta | 0;
+  for (let i = 0; i < snd.freq.length; i++) {
+    if (!snd.freq[i]) continue;
+    snd.freq[i] = clampSoundFreqByte(Math.max(1, snd.freq[i] + d));
+  }
+  snd.origin = "edit";
+}
+
+function fadeSound(snd, mode) {
+  alignSoundArrays(snd);
+  const n = snd.vol.length;
+  if (n < 2) return;
+  for (let i = 0; i < n; i++) {
+    const t = mode === "out" ? 1 - i / (n - 1) : i / (n - 1);
+    snd.vol[i] = clampSoundVol(Math.round(snd.vol[i] * t));
+  }
+  snd.origin = "edit";
+}
+
+function insertSoundTick(snd, at) {
+  alignSoundArrays(snd);
+  if (snd.freq.length >= SOUND_MAX_TICKS) return false;
+  const i = Math.max(0, Math.min(snd.freq.length, at | 0));
+  const f = snd.freq[i] ?? snd.freq[i - 1] ?? 0;
+  const v = snd.vol[i] ?? snd.vol[i - 1] ?? 0;
+  snd.freq.splice(i, 0, f);
+  snd.vol.splice(i, 0, v);
+  snd.origin = "edit";
+  return true;
+}
+
+function deleteSoundTick(snd, at) {
+  alignSoundArrays(snd);
+  if (!snd.freq.length) return false;
+  const i = Math.max(0, Math.min(snd.freq.length - 1, at | 0));
+  snd.freq.splice(i, 1);
+  snd.vol.splice(i, 1);
+  snd.origin = "edit";
+  return true;
+}
+
+
+// ---- js/soundView.js ----
+const PAD_L = 44;
+const PAD_R = 12;
+const PAD_T = 18;
+const PAD_B = 4;
+const GAP = 10;
+const ORIG_H = 72;
+const AXIS_H = 18;
+const MIN_TICK_W = 6;
+const AXIS_STEP_SEC = 0.5;
+
+function clamp(v, lo, hi) {
+  return v < lo ? lo : v > hi ? hi : v;
+}
+
+function yToHz(y, top, h) {
+  const t = clamp(1 - (y - top) / h, 0, 1);
+  return SOUND_HZ_MIN * Math.pow(SOUND_HZ_MAX / SOUND_HZ_MIN, t);
+}
+
+function hzToY(hz, top, h) {
+  const z = clamp(hz, SOUND_HZ_MIN, SOUND_HZ_MAX);
+  const t = Math.log(z / SOUND_HZ_MIN) / Math.log(SOUND_HZ_MAX / SOUND_HZ_MIN);
+  return top + h * (1 - t);
+}
+
+class SoundView {
+  constructor(canvas, opts) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    this.opts = opts;
+    this.enabled = false;
+    this.scroll = 0;
+    this.playTick = -1;
+    this.selectedTick = 0;
+    this.drag = null;
+    this.cssW = 0;
+    this.cssH = 0;
+    this._pcm = null;
+    this._pcmSr = 0;
+    this._pcmLive = 0;
+    this._pcmPath = null;
+    this._pcmHadBuf = false;
+    this._pcmGen = 0;
+    this._ro = new ResizeObserver(() => this.resize());
+    this._ro.observe(opts.stage || canvas.parentElement);
+    this.resize();
+
+    canvas.addEventListener("pointerdown", (e) => this.#onDown(e));
+    canvas.addEventListener("pointermove", (e) => this.#onMove(e));
+    canvas.addEventListener("pointerup", (e) => this.#onUp(e));
+    canvas.addEventListener("pointerleave", (e) => this.#onUp(e));
+    canvas.addEventListener("wheel", (e) => this.#onWheel(e), { passive: false });
+    canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+
+  resize() {
+    if (!this.enabled) return;
+    const stage = this.opts.stage || this.canvas.parentElement;
+    const rect = stage.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(64, Math.floor(rect.width));
+    const h = Math.max(64, Math.floor(rect.height));
+    this.canvas.width = Math.floor(w * dpr);
+    this.canvas.height = Math.floor(h * dpr);
+    this.canvas.style.width = `${w}px`;
+    this.canvas.style.height = `${h}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.cssW = w;
+    this.cssH = h;
+    this.draw();
+  }
+
+  setPlayTick(i) {
+    this.playTick = i;
+    if (this.enabled) this.draw();
+  }
+
+  draw() {
+    if (!this.enabled) return;
+    const ctx = this.ctx;
+    const w = this.cssW;
+    const h = this.cssH;
+    ctx.fillStyle = "#0a0a0c";
+    ctx.fillRect(0, 0, w, h);
+    const snd = this.opts.getSound?.();
+    if (!snd) {
+      this.#label(ctx, "Select a sound", 16, 28);
+      return;
+    }
+    alignSoundArrays(snd);
+    this.#ensurePcm();
+    const layout = this.#layout(snd);
+    this.#drawOrig(ctx, snd, layout);
+    this.#drawTimeAxis(ctx, layout, layout.orig.top + layout.orig.h);
+    this.#drawVol(ctx, snd, layout);
+    this.#drawTimeAxis(ctx, layout, layout.vol.top + layout.vol.h);
+    this.#drawFreq(ctx, snd, layout);
+    this.#drawTimeAxis(ctx, layout, layout.freq.top + layout.freq.h);
+    if (!snd.freq.length) {
+      this.#label(ctx, "Empty — Estimate from Quake or click to draw", 16, layout.freq.top + 22);
+    }
+  }
+
+  #label(ctx, text, x, y) {
+    ctx.fillStyle = "#8b91a0";
+    ctx.font = "13px Segoe UI, sans-serif";
+    ctx.fillText(text, x, y);
+  }
+
+  #layout(snd) {
+    const w = this.cssW;
+    const h = this.cssH;
+    const innerW = Math.max(40, w - PAD_L - PAD_R);
+    const rest = h - PAD_T - ORIG_H - AXIS_H * 3 - GAP * 2 - PAD_B;
+    const freqH = Math.max(48, Math.floor(rest * 0.68));
+    const volH = Math.max(28, rest - freqH);
+    const n = Math.max(1, snd.freq.length, this.#wavTicks());
+    const tickW = Math.max(MIN_TICK_W, Math.min(14, innerW / n));
+    const vis = Math.max(1, Math.floor(innerW / tickW));
+    const maxScroll = Math.max(0, n - vis);
+    this.scroll = clamp(this.scroll, 0, maxScroll);
+    const cols = Math.min(vis, Math.max(0, n - this.scroll));
+    const origTop = PAD_T;
+    const volTop = origTop + ORIG_H + AXIS_H + GAP;
+    const freqTop = volTop + volH + AXIS_H + GAP;
+    return {
+      innerW,
+      tickW,
+      vis,
+      cols,
+      orig: { top: origTop, h: ORIG_H },
+      vol: { top: volTop, h: volH },
+      freq: { top: freqTop, h: freqH },
+      n,
+    };
+  }
+
+  #wavTicks() {
+    if (!this._pcm || !(this._pcmSr > 0) || !(this._pcmLive > 0)) return 0;
+    const hop = this._pcmSr / SOUND_TICK_HZ;
+    return Math.min(SOUND_MAX_TICKS, Math.max(1, Math.ceil(this._pcmLive / hop)));
+  }
+
+  #ensurePcm() {
+    const path = this.opts.getSoundPath?.() || "";
+    const buf = path ? this.opts.getWavBuffer?.() : null;
+    const hasBuf = !!buf;
+    if (path === this._pcmPath && hasBuf === this._pcmHadBuf) return;
+    this._pcmPath = path;
+    this._pcmHadBuf = hasBuf;
+    this._pcm = null;
+    this._pcmSr = 0;
+    this._pcmLive = 0;
+    if (!buf) return;
+    const gen = ++this._pcmGen;
+    const ctx = getAudioContext();
+    const start = () => {
+      decodeWav(ctx, buf)
+        .then((decoded) => {
+          if (gen !== this._pcmGen) return;
+          this._pcm = mixMono(decoded);
+          this._pcmSr = decoded.sampleRate || 11025;
+          this._pcmLive = pcmActiveLength(this._pcm);
+          if (this.enabled) this.draw();
+        })
+        .catch(() => {
+          if (gen !== this._pcmGen) return;
+          this._pcm = null;
+          this._pcmLive = 0;
+        });
+    };
+    if (ctx.state === "suspended") ctx.resume().then(start, start);
+    else start();
+  }
+
+  #tickAt(x, layout) {
+    const col = Math.floor((x - PAD_L) / layout.tickW);
+    if (col < 0) return -1;
+    return this.scroll + col;
+  }
+
+  #localXY(e) {
+    const r = this.canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  #growTo(snd, tick) {
+    if (tick < 0 || tick >= SOUND_MAX_TICKS) return false;
+    alignSoundArrays(snd);
+    while (snd.freq.length <= tick) {
+      snd.freq.push(0);
+      snd.vol.push(0);
+    }
+    return true;
+  }
+
+  #paint(e) {
+    const snd = this.opts.ensureSound?.();
+    if (!snd) return;
+    const layout = this.#layout(snd);
+    const { x, y } = this.#localXY(e);
+    const tick = this.#tickAt(x, layout);
+    if (tick < 0) return;
+    if (!this.#growTo(snd, tick)) return;
+    this.selectedTick = tick;
+    if (this.drag === "freq") {
+      const hz = yToHz(y, layout.freq.top, layout.freq.h);
+      snd.freq[tick] = hzToWolfByte(hz);
+      if (!snd.vol[tick]) snd.vol[tick] = 12;
+    } else if (this.drag === "vol") {
+      const t = clamp(1 - (y - layout.vol.top) / layout.vol.h, 0, 1);
+      snd.vol[tick] = clampSoundVol(Math.round(t * 15));
+      if (!snd.vol[tick]) snd.freq[tick] = 0;
+    }
+    snd.origin = "edit";
+    this.opts.onChange?.();
+    this.draw();
+  }
+
+  #onDown(e) {
+    if (!this.enabled || e.button !== 0) return;
+    const snd = this.opts.getSound?.();
+    if (!snd) return;
+    const layout = this.#layout(snd);
+    const { y } = this.#localXY(e);
+    if (y >= layout.orig.top && y <= layout.orig.top + layout.orig.h) {
+      const tick = this.#tickAt(this.#localXY(e).x, layout);
+      if (tick >= 0) {
+        this.selectedTick = tick;
+        this.draw();
+        this.opts.onSelect?.();
+      }
+      return;
+    }
+    if (y >= layout.freq.top && y <= layout.freq.top + layout.freq.h) this.drag = "freq";
+    else if (y >= layout.vol.top && y <= layout.vol.top + layout.vol.h) this.drag = "vol";
+    else return;
+    this.opts.beginUndo?.();
+    this.canvas.setPointerCapture(e.pointerId);
+    this.#paint(e);
+  }
+
+  #onMove(e) {
+    if (!this.enabled) return;
+    if (this.drag) this.#paint(e);
+  }
+
+  #onUp(e) {
+    if (!this.enabled) return;
+    if (this.drag) {
+      this.drag = null;
+      this.opts.endUndo?.();
+      this.opts.onSelect?.();
+    }
+  }
+
+  #onWheel(e) {
+    if (!this.enabled) return;
+    const snd = this.opts.getSound?.();
+    if (!snd) return;
+    if (!snd.freq.length && !this._pcm) return;
+    e.preventDefault();
+    const layout = this.#layout(snd);
+    this.scroll = clamp(this.scroll + Math.sign(e.deltaY), 0, Math.max(0, layout.n - layout.vis));
+    this.draw();
+  }
+
+  #drawTimeAxis(ctx, layout, y) {
+    const { tickW, cols } = layout;
+    const plotW = cols * tickW;
+    ctx.strokeStyle = "#2e3340";
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, y);
+    ctx.lineTo(PAD_L + plotW, y);
+    ctx.stroke();
+    const t0 = this.scroll / SOUND_TICK_HZ;
+    const t1 = (this.scroll + cols) / SOUND_TICK_HZ;
+    let t = Math.ceil(t0 / AXIS_STEP_SEC - 1e-9) * AXIS_STEP_SEC;
+    ctx.fillStyle = "#8b91a0";
+    ctx.font = "10px Segoe UI, sans-serif";
+    while (t <= t1 + 1e-9) {
+      const x = PAD_L + (t * SOUND_TICK_HZ - this.scroll) * tickW;
+      ctx.strokeStyle = "#2e3340";
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y + 4);
+      ctx.stroke();
+      const col = t * SOUND_TICK_HZ - this.scroll;
+      ctx.textAlign = col <= 0.5 ? "left" : col >= cols - 0.5 ? "right" : "center";
+      ctx.fillText(t.toFixed(1), x, y + 14);
+      t += AXIS_STEP_SEC;
+    }
+    ctx.textAlign = "left";
+  }
+
+  #drawOrig(ctx, snd, layout) {
+    const { tickW, cols, orig } = layout;
+    const plotW = cols * tickW;
+    ctx.fillStyle = "#12141a";
+    ctx.fillRect(PAD_L, orig.top, plotW, orig.h);
+    ctx.strokeStyle = "#2e3340";
+    ctx.strokeRect(PAD_L, orig.top, plotW, orig.h);
+    ctx.fillStyle = "#8b91a0";
+    ctx.font = "10px Segoe UI, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("ORIG", 6, orig.top + 10);
+    const mid = orig.top + orig.h / 2;
+    ctx.strokeStyle = "#1c1f28";
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, mid);
+    ctx.lineTo(PAD_L + plotW, mid);
+    ctx.stroke();
+    for (let c = 0; c < cols; c++) {
+      const i = this.scroll + c;
+      const x = PAD_L + c * tickW;
+      if (i === this.selectedTick) {
+        ctx.fillStyle = "rgba(212,160,23,0.15)";
+        ctx.fillRect(x, orig.top, tickW, orig.h);
+      }
+      if (this.playTick === i) {
+        ctx.fillStyle = "rgba(212,160,23,0.35)";
+        ctx.fillRect(x, orig.top, tickW, orig.h);
+      }
+    }
+    if (!this._pcm || !(this._pcmSr > 0)) {
+      ctx.fillStyle = "#8b91a0";
+      ctx.font = "12px Segoe UI, sans-serif";
+      ctx.fillText(this.opts.getWavBuffer?.() ? "Loading…" : "No original WAV", PAD_L + 8, mid + 4);
+      return;
+    }
+    const hop = this._pcmSr / SOUND_TICK_HZ;
+    const live = this._pcmLive || 0;
+    const startSamp = Math.floor(this.scroll * hop);
+    const endSamp = Math.max(startSamp + 1, Math.min(live, Math.floor((this.scroll + cols) * hop)));
+    const sampSpan = endSamp - startSamp;
+    const amp = orig.h / 2 - 3;
+    ctx.fillStyle = "#7eb8d4";
+    for (let px = 0; px < plotW; px++) {
+      const s0 = startSamp + Math.floor((px * sampSpan) / plotW);
+      const s1 = Math.max(s0 + 1, startSamp + Math.floor(((px + 1) * sampSpan) / plotW));
+      let mn = 0;
+      let mx = 0;
+      for (let s = s0; s < s1 && s < live; s++) {
+        const v = this._pcm[s];
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+      }
+      const y0 = mid - mx * amp;
+      const y1 = mid - mn * amp;
+      ctx.fillRect(PAD_L + px, y0, 1, Math.max(1, y1 - y0));
+    }
+  }
+
+  #drawFreq(ctx, snd, layout) {
+    const { tickW, cols, freq } = layout;
+    ctx.fillStyle = "#12141a";
+    ctx.fillRect(PAD_L, freq.top, cols * tickW, freq.h);
+    ctx.strokeStyle = "#2e3340";
+    ctx.strokeRect(PAD_L, freq.top, cols * tickW, freq.h);
+    const marks = [125, 250, 500, 1000, 2000, 4000];
+    ctx.fillStyle = "#8b91a0";
+    ctx.font = "10px Segoe UI, sans-serif";
+    ctx.textAlign = "right";
+    for (const hz of marks) {
+      if (hz < SOUND_HZ_MIN || hz > SOUND_HZ_MAX) continue;
+      const y = hzToY(hz, freq.top, freq.h);
+      ctx.strokeStyle = "#1c1f28";
+      ctx.beginPath();
+      ctx.moveTo(PAD_L, y);
+      ctx.lineTo(PAD_L + cols * tickW, y);
+      ctx.stroke();
+      ctx.fillStyle = "#8b91a0";
+      ctx.fillText(hz >= 1000 ? `${hz / 1000}k` : String(hz), PAD_L - 4, y + 3);
+    }
+    ctx.textAlign = "left";
+    ctx.fillText("FREQ", 6, freq.top + 10);
+    for (let c = 0; c < cols; c++) {
+      const i = this.scroll + c;
+      if (i >= snd.freq.length) break;
+      const hz = wolfByteToHz(snd.freq[i]);
+      const x = PAD_L + c * tickW;
+      if (i === this.selectedTick) {
+        ctx.fillStyle = "rgba(212,160,23,0.15)";
+        ctx.fillRect(x, freq.top, tickW, freq.h);
+      }
+      if (this.playTick === i) {
+        ctx.fillStyle = "rgba(212,160,23,0.35)";
+        ctx.fillRect(x, freq.top, tickW, freq.h);
+      }
+      if (hz > 0 && snd.vol[i]) {
+        const y = hzToY(hz, freq.top, freq.h);
+        ctx.fillStyle = "#d4a017";
+        ctx.fillRect(x + 1, y, Math.max(1, tickW - 2), freq.top + freq.h - y);
+      }
+    }
+  }
+
+  #drawVol(ctx, snd, layout) {
+    const { tickW, cols, vol } = layout;
+    ctx.fillStyle = "#12141a";
+    ctx.fillRect(PAD_L, vol.top, cols * tickW, vol.h);
+    ctx.strokeStyle = "#2e3340";
+    ctx.strokeRect(PAD_L, vol.top, cols * tickW, vol.h);
+    ctx.fillStyle = "#8b91a0";
+    ctx.font = "10px Segoe UI, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("VOL", 6, vol.top + 10);
+    ctx.textAlign = "right";
+    ctx.fillText("15", PAD_L - 4, vol.top + 8);
+    ctx.fillText("0", PAD_L - 4, vol.top + vol.h - 2);
+    ctx.textAlign = "left";
+    for (let c = 0; c < cols; c++) {
+      const i = this.scroll + c;
+      if (i >= snd.vol.length) break;
+      const x = PAD_L + c * tickW;
+      if (i === this.selectedTick) {
+        ctx.fillStyle = "rgba(212,160,23,0.15)";
+        ctx.fillRect(x, vol.top, tickW, vol.h);
+      }
+      if (this.playTick === i) {
+        ctx.fillStyle = "rgba(212,160,23,0.35)";
+        ctx.fillRect(x, vol.top, tickW, vol.h);
+      }
+      const v = snd.vol[i] | 0;
+      if (v > 0) {
+        const bh = (v / 15) * vol.h;
+        ctx.fillStyle = "#6a9";
+        ctx.fillRect(x + 1, vol.top + vol.h - bh, Math.max(1, tickW - 2), bh);
+      }
+    }
+  }
+}
+
+
 // ---- js/main.js ----
 const statusEl = document.getElementById("status");
 const titleEl = document.querySelector(".toolbar h1");
@@ -10449,6 +11710,10 @@ let mdlScale = DEFAULT_MDL_SCALE;
 let weaponKey = "axe";
 let weaponFrame = 0;
 let itemMeshKey = "backpack";
+let soundPath = "sound/weapons/shotgn2.wav";
+let showAmbience = false;
+let sharewareSounds = new Map();
+const sfxPreview = new SfxPreview();
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
 /** Last room used for placement / parenting. */
@@ -10617,6 +11882,21 @@ const itemView = new ItemView(document.getElementById("view-canvas"), {
   onStatus: (msg, isError) => setStatus(msg, isError),
   onViewChanged: () => markUi(),
 });
+
+const soundView = new SoundView(document.getElementById("view-canvas"), {
+  stage: document.getElementById("map-stage"),
+  getSound: () => (soundPath ? getSound(doc, soundPath) : null),
+  getSoundPath: () => soundPath,
+  getWavBuffer: () => (soundPath ? sharewareSounds.get(soundPath) : null),
+  ensureSound: () => (soundPath ? ensureSound(doc, soundPath) : null),
+  beginUndo,
+  endUndo,
+  onChange: () => {
+    markDirty();
+  },
+  onSelect: () => renderInspector(),
+});
+sfxPreview.onTick = (i) => soundView.setPlayTick(i);
 
 function setStatus(msg, isError = false) {
   statusEl.textContent = msg || "";
@@ -10809,6 +12089,8 @@ function collectEditorState() {
       dist: iorb.dist,
       target: { x: iorb.target.x, y: iorb.target.y, z: iorb.target.z },
     },
+    sound: soundPath,
+    showAmbience,
   });
 }
 
@@ -10865,6 +12147,10 @@ function applyEditorState(ed) {
     iorb.target.x = ed.itemOrbit.target.x;
     iorb.target.y = ed.itemOrbit.target.y;
     iorb.target.z = ed.itemOrbit.target.z;
+    soundPath = ed.sound || soundPath;
+    showAmbience = !!ed.showAmbience;
+    const amb = document.getElementById("chk-show-ambience");
+    if (amb) amb.checked = showAmbience;
     setNeighbourDraw(ed.neighbourDraw, false);
     setDrawMode(ed.localDraw);
     setMode(ed.mode);
@@ -10905,6 +12191,7 @@ function snapshot() {
     enemies: doc.enemies,
     weapons: doc.weapons,
     items: doc.items,
+    sounds: doc.sounds,
   });
 }
 
@@ -11080,17 +12367,21 @@ function activeTimelineClip() {
 }
 
 function setMode(mode) {
+  if (editorMode === "sounds" && mode !== "sounds") sfxPreview.stop();
   editorMode = mode;
   document.getElementById("btn-mode-layout").classList.toggle("active", mode === "layout");
   document.getElementById("btn-mode-anim").classList.toggle("active", mode === "anim");
   document.getElementById("btn-mode-weapons").classList.toggle("active", mode === "weapons");
   document.getElementById("btn-mode-items")?.classList.toggle("active", mode === "items");
+  document.getElementById("btn-mode-sounds")?.classList.toggle("active", mode === "sounds");
   document.getElementById("layout-left").hidden = mode !== "layout";
   document.querySelector(".left")?.classList.toggle("left-map", mode === "layout");
   document.getElementById("anim-left").hidden = mode !== "anim";
   document.getElementById("weapons-left").hidden = mode !== "weapons";
   const itemsLeft = document.getElementById("items-left");
   if (itemsLeft) itemsLeft.hidden = mode !== "items";
+  const soundsLeft = document.getElementById("sounds-left");
+  if (soundsLeft) soundsLeft.hidden = mode !== "sounds";
   document.getElementById("draw-mode-group").classList.toggle("inactive", mode !== "layout");
   for (const id of ["btn-draw-all", "btn-draw-local", "btn-draw-neighbours"]) {
     document.getElementById(id).disabled = mode !== "layout";
@@ -11106,17 +12397,21 @@ function setMode(mode) {
         ? "LMB drag pans · wheel scale"
         : mode === "items"
           ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
-          : bindJoint >= 0
-            ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
-            : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+          : mode === "sounds"
+            ? "LMB drag paints volume (middle) or freq (bottom) · wheel scrolls ticks · Estimate from Quake is a one-shot first pass"
+            : bindJoint >= 0
+              ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
+              : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
   itemView.enabled = mode === "items";
+  soundView.enabled = mode === "sounds";
   if (mode === "layout") layoutView.resize();
   else if (mode === "anim") animView.resize();
   else if (mode === "weapons") weaponView.resize();
   else if (mode === "items") itemView.resize();
+  else if (mode === "sounds") soundView.resize();
   if (mode !== "anim") stopAnimPlay();
   refreshAll();
   markUi();
@@ -11475,12 +12770,22 @@ function updateCenterChrome() {
         ? itemMeshKey === "backpack"
           ? "Backpack"
           : itemMeshKey
-        : "Enemy";
+        : editorMode === "sounds"
+          ? soundShortName(soundPath)
+          : "Enemy";
   if (statsEl) {
-    statsEl.hidden = true;
-    statsEl.textContent = "";
-    statsEl.title = "";
-    statsEl.classList.remove("error");
+    if (editorMode === "sounds") {
+      const bytes = soundPayloadBytes(doc.sounds);
+      statsEl.hidden = false;
+      statsEl.textContent = `${bytes} / ${SOUND_PAYLOAD_MAX} B exported`;
+      statsEl.title = "Resident pcsounds.asm payload (enemy SFX stream with poses)";
+      statsEl.classList.toggle("error", bytes > SOUND_PAYLOAD_MAX);
+    } else {
+      statsEl.hidden = true;
+      statsEl.textContent = "";
+      statsEl.title = "";
+      statsEl.classList.remove("error");
+    }
   }
 }
 
@@ -11698,6 +13003,8 @@ function syncSharewareFolderButtons() {
   if (weaponBtn) weaponBtn.textContent = label;
   const animBtn = document.getElementById("btn-anim-folder");
   if (animBtn) animBtn.textContent = label;
+  const soundBtn = document.getElementById("btn-sound-folder");
+  if (soundBtn) soundBtn.textContent = label;
   const exportBtn = document.getElementById("btn-weapon-export");
   if (exportBtn) exportBtn.disabled = !Object.keys(sharewareWeapons).length;
 }
@@ -11774,6 +13081,367 @@ function renderWeaponList() {
     });
     li.appendChild(btn);
     ul.appendChild(li);
+  }
+}
+
+function listedSoundPaths() {
+  const set = new Set(Object.keys(doc.sounds || {}));
+  for (const key of sharewareSounds.keys()) set.add(key);
+  const paths = [...set].sort();
+  return paths.filter((p) => {
+    if (!p.startsWith("sound/") || !p.endsWith(".wav")) return false;
+    if (!showAmbience && soundFolder(p) === "ambience") return false;
+    return true;
+  });
+}
+
+function soundStatusLabel(snd) {
+  if (!snd?.freq?.length) return "empty";
+  if (snd.origin === "estimate") return "est";
+  if (snd.origin === "edit") return "edit";
+  if (snd.origin === "wolf") return "wolf";
+  return `${snd.freq.length}t`;
+}
+
+function renderSoundList() {
+  const root = document.getElementById("sound-list");
+  if (!root) return;
+  root.innerHTML = "";
+  const paths = listedSoundPaths();
+  if (!paths.length) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = sharewareSounds.size
+      ? "No sounds (ambience hidden)."
+      : "Open shareware to list Quake WAVs.";
+    root.appendChild(p);
+    return;
+  }
+  let lastFolder = null;
+  for (const path of paths) {
+    const folder = soundFolder(path) || "root";
+    if (folder !== lastFolder) {
+      lastFolder = folder;
+      const wrap = document.createElement("div");
+      wrap.className = "sound-folder";
+      const h = document.createElement("h3");
+      h.textContent = folder;
+      wrap.appendChild(h);
+      root.appendChild(wrap);
+    }
+    const host = root.lastElementChild;
+    const snd = getSound(doc, path);
+    const row = document.createElement("div");
+    row.className = "sound-row";
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.checked = !!snd.export;
+    chk.disabled = isSoundLocked(path);
+    chk.title = isSoundLocked(path) ? "Required in-game alias" : "Export to C64 bank";
+    chk.addEventListener("click", (e) => e.stopPropagation());
+    chk.addEventListener("change", () => {
+      if (isSoundLocked(path)) {
+        chk.checked = true;
+        return;
+      }
+      pushUndo();
+      ensureSound(doc, path).export = chk.checked;
+      markDirty();
+      refreshAll();
+    });
+    const btn = document.createElement("button");
+    btn.type = "button";
+    if (path === soundPath) btn.className = "active";
+    const name = document.createElement("span");
+    name.className = "sound-name";
+    name.textContent = soundShortName(path).split("/").pop();
+    const meta = document.createElement("span");
+    meta.className = "sound-meta";
+    const ident = soundIdent(path);
+    meta.textContent = `${ident} · ${soundStatusLabel(snd)}`;
+    btn.append(name, meta);
+    btn.addEventListener("click", () => {
+      sfxPreview.stop();
+      soundPath = path;
+      soundView.selectedTick = 0;
+      soundView.scroll = 0;
+      markUi();
+      refreshAll();
+    });
+    row.append(chk, btn);
+    host.appendChild(row);
+  }
+}
+
+function renderSoundInspector(root) {
+  const h = document.createElement("h2");
+  h.textContent = soundShortName(soundPath);
+  root.appendChild(h);
+  const snd = soundPath ? getSound(doc, soundPath) : null;
+  if (!snd) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "Select a sound.";
+    root.appendChild(p);
+    return;
+  }
+  alignSoundArrays(snd);
+  const locked = isSoundLocked(soundPath);
+  const hasWav = sharewareSounds.has(soundPath);
+  const folder = sharewareFolderName();
+  const st = document.createElement("p");
+  st.className = "muted";
+  const ident = soundIdent(soundPath);
+  st.textContent = hasWav
+    ? `${folder || "PAK"} · SOUND_${ident} · ${snd.freq.length} ticks · ${2 + snd.freq.length * 2} B`
+    : folder
+      ? `${soundPath} not in ${folder}`
+      : "Open shareware to load the original WAV";
+  root.appendChild(st);
+
+  const loopChk = document.createElement("input");
+  loopChk.type = "checkbox";
+  loopChk.id = "chk-sfx-loop";
+
+  const playRow = document.createElement("div");
+  playRow.className = "btn-row";
+  const playWav = document.createElement("button");
+  playWav.type = "button";
+  playWav.textContent = "Play original";
+  playWav.disabled = !hasWav;
+  playWav.addEventListener("click", () => {
+    const buf = sharewareSounds.get(soundPath);
+    if (!buf) return;
+    sfxPreview.playOriginal(buf, !!loopChk.checked).catch((err) => setStatus(String(err.message || err), true));
+  });
+  const playSpk = document.createElement("button");
+  playSpk.type = "button";
+  playSpk.textContent = "Play speaker";
+  playSpk.disabled = !snd.freq.length;
+  playSpk.addEventListener("click", () => {
+    sfxPreview.playSpeaker(ensureSound(doc, soundPath), !!loopChk.checked).catch((err) =>
+      setStatus(String(err.message || err), true)
+    );
+  });
+  const stop = document.createElement("button");
+  stop.type = "button";
+  stop.textContent = "Stop";
+  stop.addEventListener("click", () => sfxPreview.stop());
+  playRow.append(playWav, playSpk, stop);
+  root.appendChild(playRow);
+
+  const loopLab = document.createElement("label");
+  loopLab.className = "field";
+  const loopSpan = document.createElement("span");
+  loopSpan.textContent = "Loop";
+  loopLab.append(loopSpan, loopChk);
+  root.appendChild(loopLab);
+
+  const est = document.createElement("button");
+  est.type = "button";
+  est.textContent = "Estimate from Quake";
+  est.disabled = !hasWav;
+  est.addEventListener("click", () => void estimateSelectedSound());
+  root.appendChild(est);
+
+  const voiceSel = document.createElement("select");
+  for (let i = 0; i < SOUND_VOICE_LABELS.length; i++) {
+    const o = document.createElement("option");
+    o.value = String(i);
+    o.textContent = SOUND_VOICE_LABELS[i];
+    if (snd.voice === i) o.selected = true;
+    voiceSel.appendChild(o);
+  }
+  voiceSel.addEventListener("change", () => {
+    pushUndo();
+    ensureSound(doc, soundPath).voice = clampSoundVoice(voiceSel.value);
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("Voice", voiceSel));
+
+  const pri = document.createElement("input");
+  pri.type = "number";
+  pri.min = "0";
+  pri.max = "99";
+  pri.value = String(snd.priority);
+  pri.addEventListener("change", () => {
+    pushUndo();
+    ensureSound(doc, soundPath).priority = clampSoundPriority(pri.value);
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("Priority", pri));
+
+  const atk = document.createElement("input");
+  atk.type = "number";
+  atk.min = "0";
+  atk.max = "15";
+  atk.value = String(snd.attack | 0);
+  atk.addEventListener("change", () => {
+    pushUndo();
+    ensureSound(doc, soundPath).attack = clampSoundAttack(atk.value);
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("Attack", atk));
+
+  const tick = Math.max(0, Math.min(Math.max(0, snd.freq.length - 1), soundView.selectedTick | 0));
+  soundView.selectedTick = tick;
+  const hzIn = document.createElement("input");
+  hzIn.type = "number";
+  hzIn.min = "0";
+  hzIn.max = "20000";
+  hzIn.step = "1";
+  hzIn.value = snd.freq.length ? String(Math.round(wolfByteToHz(snd.freq[tick]))) : "0";
+  hzIn.disabled = !snd.freq.length;
+  hzIn.addEventListener("change", () => {
+    if (!snd.freq.length) return;
+    pushUndo();
+    const cur = ensureSound(doc, soundPath);
+    cur.freq[tick] = hzToWolfByte(Number(hzIn.value));
+    cur.origin = "edit";
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("Tick Hz", hzIn));
+
+  const volIn = document.createElement("input");
+  volIn.type = "number";
+  volIn.min = "0";
+  volIn.max = "15";
+  volIn.value = snd.freq.length ? String(snd.vol[tick] | 0) : "0";
+  volIn.disabled = !snd.freq.length;
+  volIn.addEventListener("change", () => {
+    if (!snd.freq.length) return;
+    pushUndo();
+    const cur = ensureSound(doc, soundPath);
+    cur.vol[tick] = clampSoundVol(volIn.value);
+    cur.origin = "edit";
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("Tick vol", volIn));
+
+  const xf = document.createElement("div");
+  xf.className = "btn-row";
+  const mk = (label, fn) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.disabled = !snd.freq.length;
+    b.addEventListener("click", fn);
+    xf.appendChild(b);
+  };
+  mk("Reverse", () => {
+    pushUndo();
+    reverseSound(ensureSound(doc, soundPath));
+    markDirty();
+    refreshAll();
+  });
+  mk("Pitch -", () => {
+    pushUndo();
+    transposeSound(ensureSound(doc, soundPath), 1);
+    markDirty();
+    refreshAll();
+  });
+  mk("Pitch +", () => {
+    pushUndo();
+    transposeSound(ensureSound(doc, soundPath), -1);
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(xf);
+  const xf2 = document.createElement("div");
+  xf2.className = "btn-row";
+  const mk2 = (label, fn, disabled) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.disabled = disabled;
+    b.addEventListener("click", fn);
+    xf2.appendChild(b);
+  };
+  mk2(
+    "Fade in",
+    () => {
+      pushUndo();
+      fadeSound(ensureSound(doc, soundPath), "in");
+      markDirty();
+      refreshAll();
+    },
+    !snd.freq.length
+  );
+  mk2(
+    "Fade out",
+    () => {
+      pushUndo();
+      fadeSound(ensureSound(doc, soundPath), "out");
+      markDirty();
+      refreshAll();
+    },
+    !snd.freq.length
+  );
+  mk2(
+    "Insert tick",
+    () => {
+      pushUndo();
+      if (!insertSoundTick(ensureSound(doc, soundPath), soundView.selectedTick)) {
+        setStatus("Tick cap (255)", true);
+        return;
+      }
+      markDirty();
+      refreshAll();
+    },
+    snd.freq.length >= 255
+  );
+  mk2(
+    "Delete tick",
+    () => {
+      pushUndo();
+      deleteSoundTick(ensureSound(doc, soundPath), soundView.selectedTick);
+      if (soundView.selectedTick >= ensureSound(doc, soundPath).freq.length) {
+        soundView.selectedTick = Math.max(0, ensureSound(doc, soundPath).freq.length - 1);
+      }
+      markDirty();
+      refreshAll();
+    },
+    !snd.freq.length
+  );
+  root.appendChild(xf2);
+  if (locked) {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = `Locked export · SOUND_${soundIdent(soundPath)}`;
+    root.appendChild(note);
+  }
+}
+
+async function estimateSelectedSound() {
+  const buf = sharewareSounds.get(soundPath);
+  if (!buf) {
+    setStatus("Original WAV not in the opened PAK", true);
+    return;
+  }
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === "suspended") await ctx.resume();
+    const decoded = await decodeWav(ctx, buf);
+    const pcm = mixMono(decoded);
+    const est = estimateFromPcm(pcm, decoded.sampleRate);
+    pushUndo();
+    const snd = ensureSound(doc, soundPath);
+    snd.freq = est.freq;
+    snd.vol = est.vol;
+    snd.attack = est.attack;
+    snd.origin = "estimate";
+    soundView.selectedTick = 0;
+    soundView.scroll = 0;
+    markDirty();
+    refreshAll();
+    setStatus(`Estimated ${est.freq.length} ticks @ ${SOUND_TICK_HZ} Hz`);
+  } catch (err) {
+    setStatus(String(err.message || err), true);
   }
 }
 
@@ -12419,6 +14087,10 @@ function renderLayoutObjectFields(root, objs) {
 function renderInspector() {
   const root = document.getElementById("right-editors");
   root.innerHTML = "";
+  if (editorMode === "sounds") {
+    renderSoundInspector(root);
+    return;
+  }
   if (editorMode === "items") {
     const h = document.createElement("h2");
     h.textContent = "Item";
@@ -12730,11 +14402,13 @@ async function loadSharewareFromHandle(handle) {
       sharewareMissing = ENEMY_TYPES.map((t) => t.name);
       sharewareWeapons = {};
       sharewareWeaponMissing = [...WEAPON_KEYS];
+      sharewareSounds = new Map();
       setStatus("No pak0.pak / pak1.pak in that folder", true);
       refreshPanels();
       return;
     }
     const lumps = parsePakBuffers(buffers);
+    sharewareSounds = indexPakSounds(lumps);
     const { models, missing } = loadEnemyMdls(lumps);
     sharewareModels = models;
     sharewareMissing = missing;
@@ -12744,16 +14418,18 @@ async function loadSharewareFromHandle(handle) {
     clampWeaponPreviewFrame();
     const n = Object.keys(models).length;
     const wn = Object.keys(sharewareWeapons).length;
+    const sn = sharewareSounds.size;
     const miss = missing.length ? ` · missing ${missing.join(", ")}` : "";
     const wmiss = weapons.missing.length ? ` · weapons missing ${weapons.missing.join(", ")}` : "";
     setStatus(
-      `Loaded ${n} enemy / ${wn} weapon model${wn === 1 ? "" : "s"} from ${sharewareFolderName()}${miss}${wmiss}`
+      `Loaded ${n} enemy / ${wn} weapon model${wn === 1 ? "" : "s"} / ${sn} sounds from ${sharewareFolderName()}${miss}${wmiss}`
     );
   } catch (err) {
     sharewareModels = {};
     sharewareMissing = ENEMY_TYPES.map((t) => t.name);
     sharewareWeapons = {};
     sharewareWeaponMissing = [...WEAPON_KEYS];
+    sharewareSounds = new Map();
     setStatus(String(err.message || err), true);
   }
   if (restoreMdlRigBackup()) markDirty();
@@ -12764,6 +14440,15 @@ async function loadSharewareFromHandle(handle) {
     refreshPanels();
   }
   if (editorMode === "weapons") weaponView.draw();
+  if (editorMode === "sounds") soundView.draw();
+}
+
+function indexPakSounds(lumps) {
+  const map = new Map();
+  for (const [key, buf] of lumps) {
+    if (key.startsWith("sound/") && key.endsWith(".wav")) map.set(key, buf);
+  }
+  return map;
 }
 
 async function openSharewareFolder() {
@@ -13047,6 +14732,7 @@ function refreshPanels() {
   renderEnemyList();
   renderWeaponList();
   renderItemList();
+  renderSoundList();
   renderInspector();
   syncWeaponScaleInputs();
   syncSharewareFolderButtons();
@@ -13055,6 +14741,7 @@ function refreshPanels() {
   if (editorMode === "anim") animView.draw();
   if (editorMode === "weapons") weaponView.draw();
   if (editorMode === "items") itemView.draw();
+  if (editorMode === "sounds") soundView.draw();
 }
 
 function refreshAll() {
@@ -13063,6 +14750,7 @@ function refreshAll() {
   if (editorMode === "layout") layoutView.draw();
   else if (editorMode === "weapons") weaponView.draw();
   else if (editorMode === "items") itemView.draw();
+  else if (editorMode === "sounds") soundView.draw();
   else animView.draw();
 }
 
@@ -13077,6 +14765,9 @@ document.getElementById("btn-mode-weapons").addEventListener("click", () => {
 });
 document.getElementById("btn-mode-items")?.addEventListener("click", () => {
   setMode("items");
+});
+document.getElementById("btn-mode-sounds")?.addEventListener("click", () => {
+  setMode("sounds");
 });
 document.getElementById("mdl-scale").addEventListener("input", (e) => {
   setMdlScale(e.target.value);
@@ -13108,6 +14799,12 @@ document.getElementById("weapon-scale-num").addEventListener("change", (e) => {
 });
 document.getElementById("btn-weapon-folder")?.addEventListener("click", () => void openSharewareFolder());
 document.getElementById("btn-anim-folder")?.addEventListener("click", () => void openSharewareFolder());
+document.getElementById("btn-sound-folder")?.addEventListener("click", () => void openSharewareFolder());
+document.getElementById("chk-show-ambience")?.addEventListener("change", (e) => {
+  showAmbience = !!e.target.checked;
+  markUi();
+  refreshAll();
+});
 document.getElementById("btn-weapon-export")?.addEventListener("click", () => {
   exportWeaponPngs().catch((err) => setStatus(String(err.message || err), true));
 });

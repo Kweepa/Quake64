@@ -1,7 +1,9 @@
-; Sound effects — PC-speaker envelopes on SID voices 1–3.
-; Data: pcsounds.asm + pcsfreq.asm (tools/gensounds.py); sound_voices routes
-; each ID to ch0=player V1 pulse, ch1=enemy V2 pulse, ch2=world V3 noise.
-; Decimated 3x; stepped once per mid-split raster (~50/60 Hz).
+; Sound effects — PC-speaker envelopes on SID voices 1–3 (pulse 50%).
+; Data: pcsounds.asm + pcsfreq.asm (tools/gensounds.py); sound_voices is a
+; mixer (ch0=player V1, ch1=enemy V2, ch2=world V3). Enemy envelopes ride
+; pose PRGs; sound_table hi=0 until rebind_streamed_sfx.
+; Layout: N, AD, freq[0..N-1], vol[0..N-1] (same Y). AD written on commit.
+; Stepped once per mid-split raster (~50/60 Hz).
 ; SID Fn lo fixed at $80 (hi LUT only — saves 256 bytes).
 
 !zone playsound
@@ -23,6 +25,12 @@ sfx_ptr_l
 	!byte 0, 0, 0
 sfx_ptr_h
 	!byte 0, 0, 0
+sfx_vol_l
+	!byte 0, 0, 0
+sfx_vol_h
+	!byte 0, 0, 0
+sfx_sr
+	!byte 0				; AD / SR nibble scratch (IRQ)
 
 ; Main stages here; mid-split IRQ flushes via play_sound_commit.
 sfx_q
@@ -34,12 +42,8 @@ fs_save_x
 sfx_sid_base
 	!byte $00, $07, $0e
 
-; Control: pulse+gate vs noise+gate
-sfx_wave
-	!byte $41, $41, $81
-
 ; ------------------------------------------------------------------
-; play_sound_init — clear SID; V1/V2 pulse + V3 noise ADSR; volume full
+; play_sound_init — clear SID; PW+ADSR defaults; volume full
 ; ------------------------------------------------------------------
 play_sound_init
 	lda #0
@@ -66,14 +70,16 @@ play_sound_init
 	sta $d418
 	rts
 
-; Program PW+ADSR for V1/V2 and ADSR for V3 (no PW for noise).
+; Default PW 50% + ADSR on all voices (per-sound AD on commit).
 sfx_voice_adsr_all
 	lda #$00
 	sta $d402				; V1 PW lo — 50%
 	sta $d409				; V2 PW lo
+	sta $d410				; V3 PW lo
 	lda #$08
 	sta $d403				; V1 PW hi
 	sta $d40a				; V2 PW hi
+	sta $d411				; V3 PW hi
 	lda #$00
 	sta $d405				; V1 AD
 	sta $d40c				; V2 AD
@@ -121,9 +127,14 @@ flush_sfx
 	rts
 
 ; A = sound index; higher-or-equal priority preempts (IRQ / flush only).
+; Streamed IDs have sound_table hi=0 until the pose bank is bound.
 play_sound_commit
 	sta sfx_id
+	asl
 	tax
+	lda sound_table+1,x
+	beq .psc_skip
+	ldx sfx_id
 	lda sound_voices,x
 	sta sfx_ch
 	tay
@@ -137,24 +148,90 @@ play_sound_commit
 	asl
 	tax
 	lda sound_table,x
-	sta sfx_ptr_l,y
 	sta sfx_zp_l
 	lda sound_table+1,x
-	sta sfx_ptr_h,y
 	sta sfx_zp_h
 
 	ldy #0
-	lda (sfx_zp_l),y
-	tay
-	iny
+	lda (sfx_zp_l),y			; N
 	ldx sfx_ch
-	tya
 	sta sfx_max,x
+
+	ldy #1
+	lda (sfx_zp_l),y			; AD (attack<<4, decay 0)
+	sta sfx_sr
+	lda sfx_sid_base,x
+	tay
 	lda #0
+	sta $d404,y				; gate off so attack sees 0→1
+	lda sfx_sr
+	sta $d405,y
+
+	clc
+	lda sfx_zp_l
+	adc #2
+	sta sfx_ptr_l,x
+	lda sfx_zp_h
+	adc #0
+	sta sfx_ptr_h,x
+
+	clc
+	lda sfx_ptr_l,x
+	adc sfx_max,x
+	sta sfx_vol_l,x
+	lda sfx_ptr_h,x
+	adc #0
+	sta sfx_vol_h,x
+
+	lda #$ff
 	sta sfx_count,x
 	lda sfx_id
 	sta sfx_index,x
 .psc_skip
+	rts
+
+; Gate off any channel whose current id is a streamed (heap) effect.
+stop_streamed_sfx
+	ldx #SFX_NCH-1
+.sss_lp
+	lda sfx_index,x
+	bmi .sss_n
+	tay
+	lda sound_streamed,y
+	beq .sss_n
+	stx sfx_ch
+	jsr sfx_gate_off
+	ldx sfx_ch
+	lda #$ff
+	sta sfx_index,x
+	lda #0
+	sta sfx_priority,x
+	cpx #2
+	bne .sss_n
+	jsr elev_noise_restore
+.sss_n
+	dex
+	bpl .sss_lp
+	rts
+
+; Zero sound_table slots for streamed ids (resident pc_* words stay).
+unbind_streamed_sfx
+	ldx #0
+.uss_lp
+	cpx #SOUND_COUNT
+	bcs .uss_rts
+	lda sound_streamed,x
+	beq .uss_n
+	txa
+	asl
+	tay
+	lda #0
+	sta sound_table,y
+	sta sound_table+1,y
+.uss_n
+	inx
+	bne .uss_lp
+.uss_rts
 	rts
 
 ; ------------------------------------------------------------------
@@ -186,6 +263,13 @@ update_sfx
 	ldy sfx_count,x
 	lda (sfx_zp_l),y
 	beq .us_silent
+	sta sfx_id
+	lda sfx_vol_l,x
+	sta sfx_zp_l
+	lda sfx_vol_h,x
+	sta sfx_zp_h
+	lda (sfx_zp_l),y
+	beq .us_silent
 	jsr sfx_write_tone
 	jmp .us_next
 
@@ -209,9 +293,14 @@ update_sfx
 	sta $d418
 	jmp .us_next
 
-; A = inverse-freq byte; sfx_ch = channel. Writes Fn + ADSR + gate.
+; A = vol 1..15; sfx_id = inverse-freq byte; sfx_ch = channel.
+; AD was set on commit; rewrite SR + pulse+gate each tick (gate stays on).
 sfx_write_tone
-	sta sfx_id
+	asl
+	asl
+	asl
+	asl					; sustain nibble, release 0
+	sta sfx_sr
 	ldx sfx_ch
 	lda sfx_sid_base,x
 	tay
@@ -220,25 +309,13 @@ sfx_write_tone
 	ldx sfx_id
 	lda pcsfreq_hi,x
 	sta $d401,y
-	ldx sfx_ch
-	cpx #2
-	beq .swt_v3
 	lda #$00
-	sta $d402,y
+	sta $d402,y				; 50% PW
 	lda #$08
 	sta $d403,y
-	lda #$00
-	sta $d405,y
-	lda #$f0
+	lda sfx_sr
 	sta $d406,y
-	jmp .swt_gate
-.swt_v3
-	lda #$00
-	sta $d413
-	lda #$f0
-	sta $d414
-.swt_gate
-	lda sfx_wave,x
+	lda #$41				; pulse + gate
 	sta $d404,y
 	rts
 

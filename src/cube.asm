@@ -2499,10 +2499,10 @@ kill_enemy
 	jsr pick_death_var
 	jsr enemy_get_class
 	bne .ke_dog
-	lda #SOUND_DEATHSCREAM1
+	lda #SOUND_SOLDIER_DEATH1
 	jmp play_sound
 .ke_dog
-	lda #SOUND_DOGDEATH
+	lda #SOUND_DOG_DDEATH
 	jmp play_sound
 
 ; X = enemy finishing death → EN_GONE + optional drop (preserves X)

@@ -11,8 +11,8 @@ Payload layout:
     n bytes   NUL-terminated map name
     ...       the bind_add arrays, in source order
 
-Counts are either a header symbol or `bind_n`, which bind_map recomputes twice
-(nrooms*3 for the rc_* colliders, nrooms*2 for the rb_* boxes).
+Counts are either a header symbol or `bind_n`. bind_map's table emits
+`+bind_set_n3` / `+bind_set_n2` (nrooms*3 for rc_*, nrooms*2 for rb_*).
 
 Everything extracted is validated before use: room ids must be < map_nrooms and
 type ids < ENEMY_NTYPES. If the layout is ever changed without this being
@@ -63,17 +63,11 @@ def bind_sequence() -> list[tuple[str, str]]:
     pending = None      # what bind_n currently holds
     for line in body.splitlines():
         s = line.strip()
-        # bind_map sets bind_n twice; both are multiples of map_nrooms and
-        # both are annotated. Match the arithmetic, not the comment.
-        if re.match(r"^sta\s+bind_n\b", s):
-            if pending is None:
-                raise SystemExit("perroom: sta bind_n with no preceding shift")
-            continue
-        if re.match(r"^asl\s*$", s):
-            pending = "nrooms*2"
-            continue
-        if re.match(r"^adc\s+map_nrooms\b", s) and pending == "nrooms*2":
+        if re.match(r"^\+bind_set_n3\b", s):
             pending = "nrooms*3"
+            continue
+        if re.match(r"^\+bind_set_n2\b", s):
+            pending = "nrooms*2"
             continue
         b = re.match(r"^\+bind_add\s+([a-z_0-9]+)\s*,\s*([a-z_0-9]+)\s*$", s)
         if b:

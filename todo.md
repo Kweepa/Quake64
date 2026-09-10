@@ -8,7 +8,7 @@
 - [ ] Shambler behaviour
 - [ ] Scrag behaviour (flying)
 - [ ] Proper map complete screen/message (without going overboard)
-- [ ] Decide what to do when you die in the game
+- [x] Decide what to do when you die in the game
 - [x] Player grenade launcher should launch grenade projectile
 - [ ] Something unique for Chthon — ability to create a larger wireframe character like the items, with arbitrary lines? Maybe do this for all creatures, starting with what we have. To add a vert, immediately bind it to get its position. Vert names are probably not important now except for finding verts to use in the game; that could be done by tagging them. Would only need a jaw and a weapon end.
 - [x] When producing splat on the center of the screen, the sprite setup delays the screen flip by a raster line. Move the flip earlier so it doesn't have this problem. We can debug this by changing the border colour first thing and seeing where it is happening, so we can tweak its movement.

@@ -23,6 +23,9 @@ JS_ORDER = [
     "js/animView.js",
     "js/weaponView.js",
     "js/itemView.js",
+    "js/fft.js",
+    "js/pcsfx.js",
+    "js/soundView.js",
     "js/main.js",
 ]
 
@@ -67,6 +70,7 @@ def main() -> None:
       <button type="button" id="btn-mode-anim">Animation</button>
       <button type="button" id="btn-mode-weapons">Weapons</button>
       <button type="button" id="btn-mode-items">Items</button>
+      <button type="button" id="btn-mode-sounds">Sounds</button>
     </div>
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
@@ -130,6 +134,17 @@ def main() -> None:
         <ul id="item-mesh-list" class="object-list"></ul>
         <h2>Doors</h2>
         <ul id="door-mesh-list" class="object-list"></ul>
+      </section>
+      <section id="sounds-left" hidden>
+        <h2>Sounds</h2>
+        <label class="field sound-ambience-toggle">
+          <input type="checkbox" id="chk-show-ambience" />
+          <span>Show ambience</span>
+        </label>
+        <div id="sound-list" class="sound-list"></div>
+        <div class="btn-row">
+          <button type="button" id="btn-sound-folder">Open shareware folder</button>
+        </div>
       </section>
     </aside>
 

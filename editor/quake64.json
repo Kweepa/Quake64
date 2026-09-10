@@ -56540,7 +56540,7 @@
       "origin": "estimate"
     },
     "sound/boss1/death.wav": {
-      "export": true,
+      "export": false,
       "voice": 0,
       "priority": 50,
       "attack": 8,
@@ -56797,7 +56797,7 @@
       "origin": "edit"
     },
     "sound/boss1/out1.wav": {
-      "export": true,
+      "export": false,
       "voice": 0,
       "priority": 50,
       "attack": 8,
@@ -57248,7 +57248,7 @@
       "origin": "edit"
     },
     "sound/boss1/pain.wav": {
-      "export": true,
+      "export": false,
       "voice": 0,
       "priority": 50,
       "attack": 8,
@@ -57409,7 +57409,7 @@
       "origin": "edit"
     },
     "sound/boss1/sight1.wav": {
-      "export": true,
+      "export": false,
       "voice": 0,
       "priority": 50,
       "attack": 7,
@@ -57640,7 +57640,7 @@
       "origin": "edit"
     },
     "sound/boss1/throw.wav": {
-      "export": true,
+      "export": false,
       "voice": 0,
       "priority": 50,
       "attack": 7,

@@ -69,20 +69,17 @@ credits_hi
 READTHIS_PAGES = 6
 
 readthis1_text
-	!scr "You get the phone call at 4a.m. by",0
-	!scr "5:30 you're in the secret installation.",0
-	!scr "the commander explains tersely:",0
-	!scr "\"it's about the slipgate device.",0
-	!scr "once we perfect these, we'll be able",0
-	!scr "to use them to transport people and",0
-	!scr "cargo from one place to another",0
-	!scr "instantly.",0
+	!scr "You get the phone call at 4a.m.",0
+	!scr "the commander explains: \"it's about",0
+	!scr "the slipgate device. once we perfect",0
+	!scr "these, we'll be able to transport people",0
+	!scr "and cargo instantly.",0
 	!byte 0
 
 readthis2_text
 	!scr "\"An enemy codenamed quake is using his",0
-	!scr "own slipgates to insert death squads",0
-	!scr "inside our bases to kidnap, steal,",0
+	!scr "own slipgates to drop death squads",0
+	!scr "inside our bases to steal, kidnap,",0
 	!scr "and kill.\"",0
 	!byte 0
 
@@ -90,7 +87,7 @@ readthis3_text
 	!scr "\"The hell of it is we have no idea",0
 	!scr "where he's from. our top scientists",0
 	!scr "think quake's not from earth, but",0
-	!scr "another dimension. They say he's",0
+	!scr "another dimension. they say he's",0
 	!scr "preparing to unleash his real army,",0
 	!scr "whatever that is.\"",0
 	!byte 0
@@ -98,34 +95,31 @@ readthis3_text
 readthis4_text
 	!scr "\"You're our best man. this is operation",0
 	!scr "counterstrike and you're in charge.",0
-	!scr "Find quake, and stop him... or it...",0
+	!scr "find quake, and stop him... or it...",0
 	!scr "you have full authority to requisition",0
 	!scr "anything you need. if the eggheads are",0
 	!scr "right, all our lives are expendable.\"",0
 	!byte 0
 
 readthis5_text
-	!scr "PRELUDE TO DESTRUCTION",0
+	!scr "Prelude To Destruction",0
 	!scr " ",0
-	!scr "While scouting the neighborhood, you",0
-	!scr "hear shots back at the base. damn,",0
-	!scr "that quake bastard works fast! He heard",0
-	!scr "about operation counterstrike, and hit",0
-	!scr "first. racing back, you see the place",0
-	!scr "is overrun. you are almost certainly the",0
-	!scr "only survivor. operation counterstrike",0
-	!scr "is over. except for you.",0
+	!scr "As you approach the base, you hear shots.",0
+	!scr "damn, that quake bastard works fast!",0
+	!scr "he heard about operation counterstrike,",0
+	!scr "and hit first. the place is overrun.",0
+	!scr "operation counterstrike is over.",0
+	!scr " ",0
+	!scr "except for you.",0
 	!byte 0
 
 readthis6_text
-	!scr "You know that the heart of the",0
-	!scr "installation holds a slipgate. since",0
-	!scr "quake's killers came through, it's",0
-	!scr "still set to his dimension. you can",0
-	!scr "use it to get loose in his hometown.",0
+	!scr "The heart of the installation holds a",0
+	!scr "slipgate. since quake's killers came",0
+	!scr "through, it's paired with his dimension.",0
 	!scr "maybe you can get to the asshole",0
-	!scr "personally. you pump a round into",0
-	!scr "your shotgun, and get moving.",0
+	!scr "personally. you pump a round into your",0
+	!scr "shotgun, and get moving.",0
 	!byte 0
 
 readthis_lo

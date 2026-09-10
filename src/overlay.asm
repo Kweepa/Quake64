@@ -72,7 +72,7 @@ bind_apply
 	clc
 	bcc .ba_nxt
 
-; Reloc: count word, then count × dest word. Field id = operand lo at dest.
+; Reloc: count word, then count × (dest word, field id byte).
 patch_map_smc
 	lda reloc_base
 	sta src_ptr
@@ -102,8 +102,8 @@ patch_map_smc
 	iny
 	lda (src_ptr),y
 	sta dst_ptr+1
-	ldy #0
-	lda (dst_ptr),y
+	iny
+	lda (src_ptr),y
 	asl
 	bcs .hi
 	tay
@@ -128,7 +128,7 @@ patch_map_smc
 	sta (dst_ptr),y
 	clc
 	lda src_ptr
-	adc #2
+	adc #3
 	sta src_ptr
 	bcc .dec
 	inc src_ptr+1

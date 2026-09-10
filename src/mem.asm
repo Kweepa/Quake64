@@ -210,7 +210,13 @@ pose_gy		= pose_gx + 13
 pose_gz		= pose_gy + 13
 pose_map_lo	= pose_gz + 13			; patched at pose load (logical → packed)
 pose_map_hi	= pose_map_lo + ENEMY_PTR_N
-; next free pose_map_hi + ENEMY_PTR_N  ($06DF)
+enemy_sfx_evt_lo	= pose_map_hi + ENEMY_PTR_N	; clip event table on pose heap
+enemy_sfx_evt_hi	= enemy_sfx_evt_lo + ENEMY_PTR_N
+en_sfx_old	= enemy_sfx_evt_hi + ENEMY_PTR_N	; local frame before this anim step
+en_sfx_new	= en_sfx_old + 1		; logical frame after the step
+en_sfx_n	= en_sfx_new + 1		; remaining events while scanning
+en_sfx_armed	= en_sfx_n + 1			; 1 = frame changed this anim step
+; next free en_sfx_armed + 1  ($06F2)
 
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
@@ -511,7 +517,7 @@ need0		= $CC46			; type id or $FF
 need1		= $CC47			; type id or $FF
 pose_dump	= $CC48			; type being dumped
 pose_keep	= $CC49			; surviving type while dumping ($FF = none)
-; $CC4A free
+load_device	= $CC4A			; IEC device; $ba is far_scale during play
 emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
 item_spin	= $CC4C			; world powerup yaw (0..255)
 item_spin_l	= $CC4D			; 8.8 fraction

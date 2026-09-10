@@ -109,6 +109,7 @@ import {
   ensureSound,
   isSoundLocked,
   alignSoundArrays,
+  withClipSound,
 } from "./model.js";
 import {
   autosaveDocJSON,
@@ -757,6 +758,101 @@ function activeEnemy() {
 function stickClipFor(e, clip) {
   if (!clip || !e?.clips?.length) return null;
   return e.clips.find((c) => c.name === clip.name) || null;
+}
+
+function exportedSoundIdents() {
+  const out = [];
+  const seen = new Set();
+  for (const path of listedSoundPaths()) {
+    const snd = getSound(doc, path);
+    if (!snd.export && !isSoundLocked(path)) continue;
+    if (!snd.freq?.length) continue;
+    const ident = soundIdent(path);
+    if (seen.has(ident)) continue;
+    seen.add(ident);
+    out.push(ident);
+  }
+  out.sort();
+  return out;
+}
+
+function pathForSoundIdent(ident) {
+  const want = String(ident || "")
+    .trim()
+    .toUpperCase()
+    .replace(/^SOUND_/, "");
+  if (!want) return null;
+  for (const path of listedSoundPaths()) {
+    if (soundIdent(path) === want) return path;
+  }
+  return null;
+}
+
+function previewClipSound(clip, local) {
+  const stick = stickClipFor(activeEnemy(), clip);
+  if (!stick?.sound || (stick.soundFrame | 0) !== (local | 0)) return;
+  const path = pathForSoundIdent(stick.sound);
+  if (!path) return;
+  const snd = getSound(doc, path);
+  if (!snd?.freq?.length) return;
+  sfxPreview.playSpeaker(snd, false).catch((err) => setStatus(String(err.message || err), true));
+}
+
+function renderClipSoundFields(root, e, clip) {
+  const stick = stickClipFor(e, clip);
+  if (!stick) return;
+  const idents = exportedSoundIdents();
+  const sel = document.createElement("select");
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "(none)";
+  sel.appendChild(none);
+  for (const ident of idents) {
+    const o = document.createElement("option");
+    o.value = ident;
+    o.textContent = `SOUND_${ident}`;
+    sel.appendChild(o);
+  }
+  if (stick.sound && !idents.includes(stick.sound)) {
+    const o = document.createElement("option");
+    o.value = stick.sound;
+    o.textContent = `SOUND_${stick.sound}`;
+    sel.appendChild(o);
+  }
+  sel.value = stick.sound || "";
+  sel.addEventListener("change", () => {
+    pushUndo();
+    const next = withClipSound({ name: stick.name, start: stick.start, len: stick.len }, {
+      sound: sel.value,
+      soundFrame: stick.soundFrame,
+    });
+    stick.sound = next.sound;
+    stick.soundFrame = next.soundFrame;
+    if (!next.sound) {
+      delete stick.sound;
+      delete stick.soundFrame;
+    }
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("Clip sound", sel));
+  const fr = document.createElement("input");
+  fr.type = "number";
+  fr.min = "0";
+  fr.max = String(Math.max(0, stick.len - 1));
+  fr.step = "1";
+  fr.value = String(stick.sound ? stick.soundFrame | 0 : 0);
+  fr.disabled = !stick.sound;
+  fr.addEventListener("change", () => {
+    if (!stick.sound) return;
+    pushUndo();
+    const next = withClipSound(stick, { sound: stick.sound, soundFrame: fr.value });
+    stick.soundFrame = next.soundFrame;
+    fr.value = String(stick.soundFrame);
+    markDirty();
+    refreshAll();
+  });
+  root.appendChild(field("Sound frame", fr));
 }
 
 function exportClipNames(e, mdl) {
@@ -1651,11 +1747,11 @@ function renderSoundList() {
     if (path === soundPath) btn.className = "active";
     const name = document.createElement("span");
     name.className = "sound-name";
-    name.textContent = soundShortName(path).split("/").pop();
+    const ident = soundIdent(path);
+    name.textContent = `SOUND_${ident}`;
     const meta = document.createElement("span");
     meta.className = "sound-meta";
-    const ident = soundIdent(path);
-    meta.textContent = `${ident} · ${soundStatusLabel(snd)}`;
+    meta.textContent = soundStatusLabel(snd);
     btn.append(name, meta);
     btn.addEventListener("click", () => {
       sfxPreview.stop();
@@ -2817,6 +2913,7 @@ function renderInspector() {
     playRow.append(playBtn, loopBtn);
     transport.appendChild(playRow);
     root.appendChild(transport);
+    renderClipSoundFields(root, e, clip);
   }
 
   const counts = document.createElement("p");
@@ -2987,9 +3084,10 @@ function retargetMdlFrames(options = {}) {
   const rest = e.frames[0] || dummyFrameFor(e.name);
   const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVert, names);
   if (!frames.length) return false;
+  const prevByName = new Map((e.clips || []).map((c) => [c.name, c]));
   const keepName = activeTimelineClip()?.name;
   e.frames = frames;
-  e.clips = clips;
+  e.clips = clips.map((c) => withClipSound(c, prevByName.get(c.name)));
   e.exportClips = clips.map((c) => c.name);
   frameLocal = 0;
   if (keepName) {
@@ -3119,6 +3217,7 @@ function stopAnimPlay() {
     clearInterval(animPlayTimer);
     animPlayTimer = null;
   }
+  sfxPreview.stop();
 }
 
 function updateLoopButton() {
@@ -3149,6 +3248,7 @@ function toggleAnimPlay() {
   frameLocal = 0;
   applyFrameLocal();
   syncPlayUi();
+  previewClipSound(clip, 0);
   animPlaying = true;
   animPlayTimer = setInterval(tickAnimPlay, ANIM_PLAY_MS);
   updatePlayButton();
@@ -3180,6 +3280,7 @@ function tickAnimPlay() {
   }
   applyFrameLocal();
   syncPlayUi();
+  previewClipSound(clip, frameLocal);
 }
 
 function setOverlayOn(on) {

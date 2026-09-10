@@ -94,19 +94,37 @@ LoadPrg
 	ldy .lp_lda+2
 	jsr $ffbd				; SETNAM
 	lda #1
-	ldx $ba
+	ldx load_device
 	ldy #0					; SA=0 → load to X/Y of LOAD
 	jsr $ffba				; SETLFS
+	; IOINIT restarts CIA1 TA. In-play $0314 is irq_entry (no CIA ack).
+	lda $0314
+	pha
+	lda $0315
+	pha
+	lda #<$ea31				; KERNAL IRQ
+	sta $0314
+	lda #>$ea31
+	sta $0315
 	lda #0
 	ldx load_dest
 	ldy load_dest+1
+	cli					; IEC / VICE $FFD5
 	jsr $ffd5				; LOAD
-	php
+	sei					; C intact through lda/sta
+	pla
+	sta $0315
+	pla
+	sta $0314
+	lda #0
+	rol
 	pha
 	lda #1
 	jsr $ffc3				; CLOSE
+	jsr load_irq_off
+	jsr mulset_init
 	pla
-	plp
+	lsr
 	rts
 
 ; IOINIT can leave CIA2 Timer A generating NMIs. Quiesce CIA2 while
@@ -122,6 +140,20 @@ load_cia2_quiet
 	rts
 
 }
+
+; I=1, CIA1 TA off, raster off. $01 = BANK_IO. C and A preserved.
+load_irq_off
+	sei
+	pha
+	lda #BANK_IO
+	sta $01
+	lda #$7f
+	sta $dc0d
+	lda $dc0d
+	lda #0
+	sta $d01a
+	pla
+	rts
 
 blank_screen
 	lda #0
@@ -212,24 +244,18 @@ LoadLevel
 .ll_common
 	jsr blank_screen
 } else {
-	; IOINIT for KERNAL IEC. Cold: no CIA2 quiet (quiet+DEN=0 stalls IEC).
-	; In-play: quiet after IOINIT, DEN on via init_vic.
-	lda load_in_play
-	beq .ll_cold
-	jsr $ff84
-	jsr load_cia2_quiet
-	jsr init_vic
-	jmp .ll_common
-.ll_cold
+	; IOINIT for KERNAL IEC. Screen blanked (DEN off) so VIC bad lines don't stall IEC.
 	jsr $ff84
 	jsr blank_screen
 	lda $d011
 	and #%11101111				; DEN off after IOINIT
 	sta $d011
+	lda #<$ea31
+	sta $0314
+	lda #>$ea31
+	sta $0315
 	cli
 	jmp .ll_dos
-.ll_common
-	jsr blank_screen
 }
 .ll_dos
 	lda #BANK_IO
@@ -296,9 +322,11 @@ LoadLevel
 	lda #>end_game
 	sbc heap_top+1
 	bcs .ll_fail
+	jsr load_irq_off
 	clc
 	rts
 .ll_fail
+	jsr load_irq_off
 	sec
 	rts
 
@@ -311,7 +339,8 @@ LoadLevel
 ;
 ; Bank base for type T = pose_map[T] - 2. First load sits under map_base; the
 ; second packs below it (heap_top).
-; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…] [sfx_count] {id,N,AD,freq,vol}*
+; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…]
+;       [sfx_count] {id,N,AD,freq,vol}* [evt_count] {logical_frame,id}*
 
 ; Distinct types in room_idx → need0/need1 ($FF = empty). Cap 2 by tooling.
 collect_room_need
@@ -377,6 +406,8 @@ clear_pose_ptrs
 	sta enemy_gz_hi,x
 	sta pose_map_lo,x
 	sta pose_map_hi,x
+	sta enemy_sfx_evt_lo,x
+	sta enemy_sfx_evt_hi,x
 	inx
 	cpx #ENEMY_NTYPES
 	bcc .cpp
@@ -395,6 +426,8 @@ clear_one_pose
 	sta enemy_gz_hi,x
 	sta pose_map_lo,x
 	sta pose_map_hi,x
+	sta enemy_sfx_evt_lo,x
+	sta enemy_sfx_evt_hi,x
 	rts
 
 ; src_ptr → dst_ptr, size X=pages Y=frac. dst > src; overlap-safe (high→low).
@@ -713,7 +746,9 @@ rebind_streamed_sfx
 	rts
 
 ; A = type. Walk trailing sfx blob; sound_table[id] → N,AD,freq,vol.
+; src_ptr then at evt table → enemy_sfx_evt_*[type].
 bind_type_sfx
+	sta map_sv_y
 	tay
 	lda pose_map_hi,y
 	bne .bts_go
@@ -736,6 +771,11 @@ bind_type_sfx
 .bts_lp
 	lda bind_n
 	bne .bts_one
+	ldx map_sv_y
+	lda src_ptr
+	sta enemy_sfx_evt_lo,x
+	lda src_ptr+1
+	sta enemy_sfx_evt_hi,x
 	rts
 .bts_one
 	ldy #0
@@ -892,6 +932,7 @@ death_restart
 	cmp #<PL_DEATH_WAIT_MS
 	bcc .dw_hold
 .dw_go
+	sei
 	jsr reset_loadout
 	jsr restart_level
 	bcc .dw_ok
@@ -911,18 +952,19 @@ restart_level
 	sei
 	lda #BANK_IO
 	sta $01
+	jsr game_zp_init
 	jsr fill_colour
 	jsr init_vic
 	jsr init_irq
+	jsr prof_init
 	jsr play_sound_init
 	jsr init_weapon_hw
 	ldx cur_weapon
 	jsr setup_weapon
 	lda #BANK_RAM
 	sta $01
-	jsr game_zp_init
-	jsr world_init
-	jsr maybe_stream_room
+	jsr clear_charsets
+	jsr fill_margin_glyph
 	lda #BANK_IO
 	sta $01
 	jsr init_hud
@@ -930,6 +972,9 @@ restart_level
 	jsr hud_powerup
 	lda #BANK_RAM
 	sta $01
+	jsr mulset_init
+	jsr world_init
+	jsr maybe_stream_room
 	cli
 	clc
 .rl_fail
@@ -983,7 +1028,7 @@ reboot_game
 	ldy #> .rg_name
 	jsr $ffbd
 	lda #1
-	ldx $ba
+	ldx load_device
 	ldy #1
 	jsr $ffba
 	lda #0

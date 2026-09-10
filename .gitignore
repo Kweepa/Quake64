@@ -10,6 +10,8 @@
 *.o
 *.sym
 overlay.bin
+enemies/sfx_*.bin
+enemies/sound_ids.json
 __pycache__/
 *.pyc
 

@@ -382,9 +382,18 @@ enemy_anim_step
 	rts
 .eas_go
 	stx enemy_idx
+	lda #0
+	sta en_sfx_armed
 	lda en_state,x
 	cmp #EN_GONE
 	beq .eas_n
+	cmp #EN_DEAD
+	beq .eas_n
+	lda en_frame,x
+	sta en_sfx_old
+	lda #1
+	sta en_sfx_armed
+	lda en_state,x
 	cmp #EN_IDLE
 	bne +
 	jmp .eas_loop
@@ -407,6 +416,10 @@ enemy_anim_step
 .eas_walk_go
 	jmp .eas_walk
 .eas_n
+	lda en_sfx_armed
+	beq .eas_nx
+	jsr enemy_play_clip_sfx
+.eas_nx
 	ldx enemy_idx
 	inx
 	jmp .eas_lp
@@ -880,13 +893,89 @@ enemy_enter_alert
 	sta en_state,x
 	lda #0
 	sta en_frame,x
-	jsr enemy_get_class
-	bne .eeal_bark
-	lda #SOUND_SOLDIER_SIGHT1
-	jmp play_sound
-.eeal_bark
-	lda #SOUND_DOG_DSIGHT
-	jmp play_sound
+	jmp enemy_play_clip_sfx_enter
+
+; Fire clip events at this logical frame (enter).
+enemy_play_clip_sfx_enter
+	ldx enemy_idx
+	lda #$ff
+	sta en_sfx_old
+	; fall through
+
+; Events are {logical_frame, id} on the pose heap. Latch old_g < ev <= new_g
+; on a forward step; enter (old=$FF) fires ev == new_g. Wrap does not fire.
+enemy_play_clip_sfx
+	ldx enemy_idx
+	+ldy_mx en_type
+	lda enemy_sfx_evt_hi,y
+	bne +
+	rts
++
+	sta src_ptr+1
+	lda enemy_sfx_evt_lo,y
+	sta src_ptr
+	jsr enemy_logical_frame
+	sty en_sfx_new
+	lda en_sfx_old
+	cmp #$ff
+	beq .epc_scan
+	ldx enemy_idx
+	cmp en_frame,x
+	beq .epc_hold
+	bcs .epc_hold
+	lda en_frame,x
+	sec
+	sbc en_sfx_old
+	sta en_sfx_old
+	lda en_sfx_new
+	sec
+	sbc en_sfx_old
+	sta en_sfx_old
+	jmp .epc_scan
+.epc_hold
+	lda en_sfx_new
+	sta en_sfx_old
+.epc_scan
+	ldy #0
+	lda (src_ptr),y
+	beq .epc_rts
+	sta en_sfx_n
+	inc src_ptr
+	bne .epc_lp
+	inc src_ptr+1
+.epc_lp
+	ldy #0
+	lda (src_ptr),y
+	ldx en_sfx_old
+	cpx #$ff
+	bne .epc_step
+	cmp en_sfx_new
+	bne .epc_skip
+	beq .epc_play
+.epc_step
+	cmp en_sfx_old
+	beq .epc_skip
+	bcc .epc_skip
+	cmp en_sfx_new
+	beq .epc_play
+	bcs .epc_skip
+.epc_play
+	iny
+	lda (src_ptr),y
+	jsr play_sound
+.epc_skip
+	clc
+	lda src_ptr
+	adc #2
+	sta src_ptr
+	bcc +
+	inc src_ptr+1
++
+	dec en_sfx_n
+	bne .epc_lp
+.epc_rts
+	ldx enemy_idx
+	rts
 
 ; A = attack variant (0=swing, 1=shoot). Face player; saw rev on swing.
 enemy_enter_ogre_attack
@@ -896,12 +985,8 @@ enemy_enter_ogre_attack
 	sta en_state,x
 	lda #0
 	sta en_frame,x
-	lda en_pain_i,x
-	bne .eeoa_face
-	lda #SOUND_OGRE_OGSAWATK
-	jsr play_sound
+	jsr enemy_play_clip_sfx_enter
 	ldx enemy_idx
-.eeoa_face
 	jmp enemy_face_player
 
 ; Enter approach: grunt APPROACH_MIN; Rott DOG_REPATH. Zero step; pick dodge.
@@ -1732,6 +1817,7 @@ pick_attack_var
 ; ------------------------------------------------------------------
 ; X = enemy. A = damage. Pain chance if survives.
 damage_enemy
+	stx enemy_idx
 	sta rot2
 	lda pu_kind
 	cmp #BP_QUAD
@@ -1764,13 +1850,7 @@ damage_enemy
 	lda #0
 	sta en_frame,x
 	jsr pick_pain_var
-	jsr enemy_get_class
-	bne .de_dpain
-	lda #SOUND_SOLDIER_PAIN1
-	jmp play_sound
-.de_dpain
-	lda #SOUND_DOG_DPAIN1
-	jmp play_sound
+	jmp enemy_play_clip_sfx_enter
 .de_kill
 	jmp kill_enemy
 .de_rts

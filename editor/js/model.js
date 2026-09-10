@@ -1316,6 +1316,23 @@ export function normalizeExportClips(raw) {
   return out;
 }
 
+/** Optional one SOUND_* stem + clip-local frame. Empty sound is omitted. */
+export function normalizeClipSound(raw, len) {
+  const n = Math.max(1, len | 0);
+  const ident = String(raw?.sound || "")
+    .trim()
+    .toUpperCase()
+    .replace(/^SOUND_/, "");
+  if (!ident) return {};
+  return { sound: ident, soundFrame: Math.max(0, Math.min(raw.soundFrame | 0, n - 1)) };
+}
+
+export function withClipSound(clip, src) {
+  const extra = normalizeClipSound(src || clip, clip.len);
+  if (!extra.sound) return { name: clip.name, start: clip.start, len: clip.len };
+  return { name: clip.name, start: clip.start, len: clip.len, ...extra };
+}
+
 export function normalizeClips(raw, frameCount) {
   const n = Math.max(0, frameCount | 0);
   if (!n || !Array.isArray(raw) || !raw.length) return [];
@@ -1326,7 +1343,7 @@ export function normalizeClips(raw, frameCount) {
     const start = Math.max(0, c.start | 0);
     const len = Math.max(1, c.len | 0);
     if (start >= n) continue;
-    out.push({ name, start, len: Math.min(len, n - start) });
+    out.push(withClipSound({ name, start, len: Math.min(len, n - start) }, c));
   }
   return out;
 }
@@ -2084,7 +2101,7 @@ export function exportPoseData(enemy) {
     if (!c) continue;
     const slice = frames.slice(c.start | 0, (c.start | 0) + (c.len | 0));
     if (!slice.length) continue;
-    outClips.push({ name: c.name, start, len: slice.length });
+    outClips.push(withClipSound({ name: c.name, start, len: slice.length }, c));
     outFrames.push(...slice);
     start += slice.length;
   }

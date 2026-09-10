@@ -28,6 +28,11 @@ start
 
 	lda #0
 	sta load_in_play
+	lda $ba
+	bne +
+	lda #8
++
+	sta load_device
 	jsr install_reboot_stub
 	lda #START_LEVEL
 	sta level_num

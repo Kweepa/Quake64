@@ -66,77 +66,78 @@ enemy_get_class
 	lda enemy_class,y
 	rts
 
-; Point gx/gy/gz at the current pose for ent_type / obj_i.
-; Clip from en_state + en_frame[obj_i]
-ent_set_pose
-	jsr ent_set_ptrs
-	ldx obj_i
+; X = enemy. Y = logical timeline frame (clip start + en_frame).
+; Pose and clip SFX share this clock. rot0 via pain_var_off; src_ptr preserved.
+enemy_logical_frame
 	lda en_state,x
 	cmp #EN_DYING
-	beq .esp_death
+	beq .elf_death
 	cmp #EN_DEAD
-	beq .esp_death
+	beq .elf_death
 	cmp #EN_PAIN
-	beq .esp_pain
+	beq .elf_pain
 	cmp #EN_ATTACK
-	beq .esp_atk
+	beq .elf_atk
 	cmp #EN_ALERT
-	beq .esp_alert
+	beq .elf_alert
 	cmp #EN_APPROACH
-	beq .esp_run
+	beq .elf_run
 	cmp #EN_PATROL
-	beq .esp_walk
-	; idle (and fallback)
-	jmp .esp_idle
-.esp_idle
-	ldx obj_i
+	beq .elf_walk
 	lda en_frame,x
-	ldx ent_type
+	+ldy_mx en_type
 	clc
-	adc enemy_stand_start,x
+	adc enemy_stand_start,y
 	tay
-	jmp .esp_off
-.esp_run
+	rts
+.elf_run
 	lda en_frame,x
-	ldx ent_type
+	+ldy_mx en_type
 	clc
-	adc enemy_run_start,x
+	adc enemy_run_start,y
 	tay
-	jmp .esp_off
-.esp_walk
+	rts
+.elf_walk
 	lda en_frame,x
-	ldx ent_type
+	+ldy_mx en_type
 	clc
-	adc enemy_walk_start,x
+	adc enemy_walk_start,y
 	tay
-	jmp .esp_off
-.esp_alert
+	rts
+.elf_alert
 	lda en_frame,x
-	ldx ent_type
+	+ldy_mx en_type
 	clc
-	adc enemy_alert_start,x
+	adc enemy_alert_start,y
 	tay
-	jmp .esp_off
-.esp_atk
+	rts
+.elf_atk
 	lda en_frame,x
 	jsr pain_var_off
 	clc
 	adc enemy_attack_start,y
 	tay
-	jmp .esp_off
-.esp_pain
+	rts
+.elf_pain
 	lda en_frame,x
 	jsr pain_var_off
 	clc
 	adc enemy_pain_start,y
 	tay
-	jmp .esp_off
-.esp_death
+	rts
+.elf_death
 	lda en_frame,x
 	jsr pain_var_off
 	clc
 	adc enemy_death_start,y
 	tay
+	rts
+
+; Point gx/gy/gz at the current pose for ent_type / obj_i.
+ent_set_pose
+	jsr ent_set_ptrs
+	ldx obj_i
+	jsr enemy_logical_frame
 .esp_off
 	; Y = logical global frame. pose_map (heap): packed index or $FF = midpoint lerp.
 	ldx ent_type
@@ -2488,7 +2489,7 @@ enemy_muzzle_want
 	clc
 	rts
 
-; X = enemy index → EN_DYING, frame 0, death SFX
+; X = enemy index → EN_DYING, frame 0, clip death SFX
 kill_enemy
 	lda #EN_DYING
 	sta en_state,x
@@ -2497,13 +2498,8 @@ kill_enemy
 	sta en_timer,x
 	sta en_timer_h,x
 	jsr pick_death_var
-	jsr enemy_get_class
-	bne .ke_dog
-	lda #SOUND_SOLDIER_DEATH1
-	jmp play_sound
-.ke_dog
-	lda #SOUND_DOG_DDEATH
-	jmp play_sound
+	stx enemy_idx
+	jmp enemy_play_clip_sfx_enter
 
 ; X = enemy finishing death → EN_GONE + optional drop (preserves X)
 finish_enemy_death

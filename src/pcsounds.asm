@@ -31,7 +31,8 @@ SOUND_DOG_DPAIN1	= 21
 SOUND_SOLDIER_PAIN1	= 22
 SOUND_DOG_DATTACK1	= 23
 SOUND_DOG_IDLE	= 24
-SOUND_COUNT	= 25
+SOUND_SOLDIER_SATTCK1	= 25
+SOUND_COUNT	= 26
 
 pc_weapons_tink1
 	!byte 3, 0, 131, 142, 134, 15, 15, 15
@@ -113,17 +114,17 @@ pc_player_land
 ; resident sound payload 874 bytes
 sound_priorities
 	!byte 1, 99, 50, 90, 20, 50, 50, 50, 50, 20, 50, 90, 80, 85, 1, 70
-	!byte 50, 50, 20, 50, 50, 50, 50, 50, 50
+	!byte 50, 50, 20, 50, 50, 50, 50, 50, 50, 50
 
 ; 0 = player V1, 1 = enemy V2, 2 = world V3 (mixer; all pulse)
 sound_voices
 	!byte 0, 0, 1, 0, 2, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0
-	!byte 0, 0, 0, 0, 0, 1, 1, 1, 0
+	!byte 0, 0, 0, 0, 0, 1, 1, 1, 0, 0
 
 ; 1 = payload on pose heap (sound_table patched at room stream)
 sound_streamed
 	!byte 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0
-	!byte 0, 0, 1, 1, 0, 1, 1, 1, 1
+	!byte 0, 0, 1, 1, 0, 1, 1, 1, 1, 1
 
 sound_table
 	!word pc_weapons_tink1
@@ -147,6 +148,7 @@ sound_table
 	!word 0
 	!word 0
 	!word pc_player_land
+	!word 0
 	!word 0
 	!word 0
 	!word 0

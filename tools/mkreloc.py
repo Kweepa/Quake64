@@ -3,8 +3,7 @@
 
 Macros in src/mapacc.asm emit abs,x / abs,y with operand hi = MAP_SMC_HI
 and lo = field id. This must run after ACME writes game.prg and overlay.bin
-(see build.bat). Reloc records are dest words only; the patcher reads field
-id from the operand lo already in GAME.
+(see build.bat). Reloc records are (dest_addr, field_id) triples.
 """
 
 from __future__ import annotations
@@ -175,8 +174,8 @@ def main() -> None:
 
     reloc = bytearray()
     reloc += struct.pack("<H", len(recs))
-    for addr, _fid in recs:
-        reloc += struct.pack("<H", addr)
+    for addr, fid in recs:
+        reloc += struct.pack("<HB", addr, fid)
 
     prefix = write_prefix_asm(overlay, bytes(reloc), bind_tab)
     pack_maps(overlay, bytes(reloc))

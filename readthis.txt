@@ -7,14 +7,14 @@ and cargo instantly.
 "An enemy codenamed quake is using his
 own slipgates to drop death squads
 inside our bases to steal, kidnap,
-and kill."
+and kill.
 ^
 "The hell of it is we have no idea
 where he's from. our top scientists
 think quake's not from earth, but
 another dimension. they say he's
 preparing to unleash his real army,
-whatever that is."
+whatever that is.
 ^
 "You're our best man. this is operation
 counterstrike and you're in charge.

@@ -69,7 +69,7 @@ credits_hi
 READTHIS_PAGES = 6
 
 readthis1_text
-	!scr "You get the phone call at 4a.m.",0
+	!scr "You get the phone call at 0400.",0
 	!scr "the commander explains: \"it's about",0
 	!scr "the slipgate device. once we perfect",0
 	!scr "these, we'll be able to transport people",0
@@ -80,7 +80,7 @@ readthis2_text
 	!scr "\"An enemy codenamed quake is using his",0
 	!scr "own slipgates to drop death squads",0
 	!scr "inside our bases to steal, kidnap,",0
-	!scr "and kill.\"",0
+	!scr "and kill.",0
 	!byte 0
 
 readthis3_text
@@ -89,7 +89,7 @@ readthis3_text
 	!scr "think quake's not from earth, but",0
 	!scr "another dimension. they say he's",0
 	!scr "preparing to unleash his real army,",0
-	!scr "whatever that is.\"",0
+	!scr "whatever that is.",0
 	!byte 0
 
 readthis4_text
@@ -109,7 +109,6 @@ readthis5_text
 	!scr "he heard about operation counterstrike,",0
 	!scr "and hit first. the place is overrun.",0
 	!scr "operation counterstrike is over.",0
-	!scr " ",0
 	!scr "except for you.",0
 	!byte 0
 

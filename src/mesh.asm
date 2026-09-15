@@ -745,14 +745,8 @@ fill_item_verts
 	lda #>item_evert
 	adc #0
 	sta edge_vert_ptr+1
-	; Quad / pent / ring yaw-spin; other pickups use angle 0 (still origin-centred).
-	lda #0
-	cpy #BP_QUAD
-	bcc +
-	cpy #BP_SILVER
-	bcs +
+	; All pickups yaw-spin about box+ITEM_BIAS.
 	lda item_spin
-+
 	sta ent_rot
 	jmp xform_item_spin
 

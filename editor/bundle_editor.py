@@ -20,6 +20,7 @@ JS_ORDER = [
     "js/mdl.js",
     "js/layoutView.js",
     "js/overheadView.js",
+    "js/previewView.js",
     "js/animView.js",
     "js/weaponView.js",
     "js/itemView.js",
@@ -51,6 +52,15 @@ def main() -> None:
     if icon_path.exists():
         b64 = base64.b64encode(icon_path.read_bytes()).decode("ascii")
         favicon_link = f'  <link rel="icon" type="image/png" href="data:image/png;base64,{b64}" />\n'
+
+    nail_path = ROOT.parent / "assets" / "weapons" / "nail_0_edit.png"
+    nail_img = ""
+    if nail_path.is_file():
+        nail_b64 = base64.b64encode(nail_path.read_bytes()).decode("ascii")
+        nail_img = (
+            f'      <img id="preview-nail-png" width="48" height="42" hidden alt="" '
+            f'src="data:image/png;base64,{nail_b64}" />\n'
+        )
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -161,6 +171,13 @@ def main() -> None:
 
     <aside class="right">
       <div class="right-editors" id="right-editors"></div>
+      <div id="preview-panel" class="preview-panel panel">
+        <h2>Preview</h2>
+        <div class="preview-frame preview-3d-frame">
+          <canvas id="preview-canvas"></canvas>
+        </div>
+        <p class="muted" id="preview-hint">Drag L/R to rotate · U/D to walk</p>
+{nail_img}      </div>
       <div id="overhead-panel" class="preview-panel panel">
         <div class="toolbar-actions ortho-tabs" role="group" aria-label="Ortho view">
           <button type="button" id="btn-ortho-top" class="active">Top</button>

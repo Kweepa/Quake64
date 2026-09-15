@@ -4,6 +4,7 @@ import {
   ENEMY_TYPES,
   JOINT_NAMES,
   cycleEnemyRot,
+  clampEnemyRot,
   cycleSlopeOrient,
   SLOPE_FLAG_BOTTOM,
   SLOPE_FLAG_TOP,
@@ -68,6 +69,8 @@ import {
   roomUnderObject,
   roomById,
   roomsOf,
+  WORLD_MIN,
+  WORLD_MAX,
   assignDoorRooms,
   snapDoorBetweenRooms,
   snapSwitchToRoom,
@@ -148,6 +151,7 @@ import {
 } from "./mdl.js";
 import { LayoutView } from "./layoutView.js";
 import { OverheadView } from "./overheadView.js";
+import { PreviewView } from "./previewView.js";
 import { AnimView } from "./animView.js";
 import { WeaponView } from "./weaponView.js";
 import { ItemView } from "./itemView.js";
@@ -262,6 +266,51 @@ const overheadView = new OverheadView(document.getElementById("overhead-canvas")
   getLocalMode: () => localDraw,
   getNeighbourMode: () => neighbourDraw,
   getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
+});
+
+function previewSpawn() {
+  const objs = activeMap(doc).objects;
+  for (let i = selectedIds.length - 1; i >= 0; i--) {
+    const obj = objs.find((o) => o.id === selectedIds[i]);
+    if (obj?.kind === "spawn") return obj;
+  }
+  return null;
+}
+
+function previewRoom() {
+  const spawn = previewSpawn();
+  if (spawn) return roomById(doc, spawn.roomId) || localFocusRoom(doc, selectedIds, lastRoomId);
+  return localFocusRoom(doc, selectedIds, lastRoomId);
+}
+
+const previewView = new PreviewView(document.getElementById("preview-canvas"), {
+  getDoc: () => doc,
+  getRoom: () => previewRoom(),
+  getSpawn: () => previewSpawn(),
+  nailImg: document.getElementById("preview-nail-png"),
+  onRotate: (yaw) => {
+    const spawn = previewSpawn();
+    if (!spawn) return;
+    spawn.rot = clampEnemyRot(Math.round(yaw / (Math.PI / 4)));
+    markDirty();
+  },
+  onMove: (x, z) => {
+    const spawn = previewSpawn();
+    if (!spawn) return;
+    spawn.x = Math.max(WORLD_MIN, Math.min(WORLD_MAX, Math.round(x - 1)));
+    spawn.z = Math.max(WORLD_MIN, Math.min(WORLD_MAX, Math.round(z - 1)));
+    markDirty();
+  },
+  onEditStart: beginUndo,
+  onEditEnd: () => {
+    endUndo();
+    refreshAll();
+  },
+  onChange: () => {
+    layoutView.draw();
+    overheadView.draw();
+    renderInspector();
+  },
 });
 
 const animView = new AnimView(document.getElementById("view-canvas"), {
@@ -980,6 +1029,7 @@ function setMode(mode) {
     document.getElementById(id).disabled = mode !== "layout";
   }
   document.getElementById("overhead-panel").hidden = mode !== "layout";
+  document.getElementById("preview-panel").hidden = mode !== "layout";
   document.getElementById("weapon-preview-panel").hidden = mode !== "weapons";
   if (mode !== "layout") clearPaletteDrag();
   updateCenterChrome();
@@ -3335,6 +3385,7 @@ function refreshPanels() {
   syncWeaponScaleInputs();
   syncSharewareFolderButtons();
   overheadView.draw();
+  if (editorMode === "layout") previewView.draw();
   if (editorMode === "layout") layoutView.draw();
   if (editorMode === "anim") animView.draw();
   if (editorMode === "weapons") weaponView.draw();

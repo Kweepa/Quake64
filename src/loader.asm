@@ -77,11 +77,14 @@ LoadPrg
 } else {
 
 ; LoadPrg — X/Y = 0-terminated name. Dest in load_dest (SA=0; heap headers are
-; $0000 so SA=1 would load to zero page). KERNAL must already be paged in.
-; C=0 ok, C=1 err.
+; $0000 so SA=1 would load to zero page). Owns the KERNAL prelude: BANK_IO,
+; $EA31, IOINIT, $DD00=$38, DEN off. C=0 ok, C=1 err. Leaves I=1, $DD00=$38.
 LoadPrg
 	stx .lp_lda+1
 	sty .lp_lda+2
+	sei
+	lda #BANK_IO
+	sta $01
 	ldy #0
 .lp_lda
 	lda $ffff,y
@@ -106,6 +109,12 @@ LoadPrg
 	sta $0314
 	lda #>$ea31
 	sta $0315
+	jsr $ff84				; IOINIT — after $EA31
+	lda #$38				; VIC bank 3, IEC idle (IOINIT left bank 0)
+	sta $dd00
+	lda $d011
+	and #%11101111				; DEN off: badlines stall IEC
+	sta $d011
 	lda #0
 	ldx load_dest
 	ldy load_dest+1
@@ -123,6 +132,8 @@ LoadPrg
 	jsr $ffc3				; CLOSE
 	jsr load_irq_off
 	jsr mulset_init
+	lda #$38
+	sta $dd00
 	pla
 	lsr
 	rts
@@ -215,8 +226,7 @@ heap_alloc
 ; LoadLevel — blank + one E1Mn load (prefix overlay+reloc, then packed map).
 ; Heap grows down from SCR_A. Prefix is bind/patch overlay + dest words;
 ; bind_map header/name, SMC-jsr overlay, heap_top = map_base (dump prefix).
-; load_in_play=0: cold (DEN off). =1: in-play (init_vic, DEN on).
-; C=0 ok, C=1 error. Caller re-inits VIC/IRQ.
+; load_in_play=0: cold. =1: in-play. C=0 ok, C=1 error. Caller re-inits VIC/IRQ.
 LoadLevel
 	sei
 	lda #BANK_IO
@@ -244,18 +254,8 @@ LoadLevel
 .ll_common
 	jsr blank_screen
 } else {
-	; IOINIT for KERNAL IEC. Screen blanked (DEN off) so VIC bad lines don't stall IEC.
-	jsr $ff84
+	; LoadPrg owns IOINIT / $EA31 / $DD00 / DEN off.
 	jsr blank_screen
-	lda $d011
-	and #%11101111				; DEN off after IOINIT
-	sta $d011
-	lda #<$ea31
-	sta $0314
-	lda #>$ea31
-	sta $0315
-	cli
-	jmp .ll_dos
 }
 .ll_dos
 	lda #BANK_IO
@@ -657,13 +657,22 @@ maybe_stream_room
 	jsr fill_viewport_colour
 	lda #0
 	sta $d021
+	lda $d011
+	and #%11101111				; DEN off: badlines stall IEC
+	sta $d011
 	jsr stream_room_enemies
 	bcs .msr_fail
+	lda $d011
+	ora #%00010000
+	sta $d011
 	jsr apply_room_palette
 	jsr fill_viewport_colour
 	lda col_bg
 	sta $d021
 	jsr install_irq_vectors
+!if USE_KRILL = 0 {
+	jsr prof_init				; IOINIT in LoadPrg reset CIA2 cascade
+}
 	lda #0
 	sta irq_phase
 	lda #RASTER_VIEW

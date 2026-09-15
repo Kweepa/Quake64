@@ -334,7 +334,7 @@ SHOT_Z_MAX	= 32		; view-Z high max range; dmg = SHOT_DMG_MAX − (z>>2), min 1
 SHOT_MID_H	= 3			; mid-body Y above feet (≈ ENEMY_CULL_H/2)
 NAIL_DMG_MAX	= 2			; Quake nail 9 ÷ 5
 NAIL_HIT_X	= 6			; |sx − SCREEN_CX| ≤ this (pixels)
-NAIL_HIT_Y	= 8			; |sy − 64| ≤ this; shotgun uses $ff (no Y gate)
+
 ITEM_CULL_Y	= 2			; AABB |y| vs Chebyshev XZ + pad
 FOV_HALF	= 31			; yaw ticks ≈ atan(SCREEN_CX/FOCAL)
 
@@ -476,6 +476,15 @@ GREN_HIT_R		= 1
 GREN_WRIST_L		= 5			; skeleton "Wrist L"
 GREN_HW			= $40			; tail half-width 0.25
 GREN_VEL_ASR		= 5			; tip = view-vel >> 5
+; Scrag spit — single slot (overwrite if live)
+SPIT_TICK_MS		= 32
+SPIT_SPEED		= 28			; horizontal (same ASR as grenade)
+SPIT_LIFE_MS		= 3000
+SPIT_DMG		= 5
+SPIT_HIT_R		= 1
+SPIT_TIP_VERT		= 12			; muzzle tip bone
+SPIT_DRAW_ASR		= 4			; tip→tail length (vel >> this)
+SCRAG_FALL		= 1			; en_y drop per think while dying
 VIEW_SPR_X0	= 24 + VIEW_COL * 8	; 88 — viewport (0,0) → VIC
 VIEW_SPR_Y0	= 50 + VIEW_ROW * 8	; 122
 EMUZ_OX		= 12			; tip −12 X (center 24px)
@@ -519,7 +528,7 @@ pose_dump	= $CC48			; type being dumped
 pose_keep	= $CC49			; surviving type while dumping ($FF = none)
 load_device	= $CC4A			; IEC device; $ba is far_scale during play
 emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
-item_spin	= $CC4C			; world powerup yaw (0..255)
+item_spin	= $CC4C			; world pickup yaw (0..255)
 item_spin_l	= $CC4D			; 8.8 fraction
 map_sv_a	= $CC4E			; heap_alloc size hi scratch
 map_sv_y	= $CC4F			; enemy slot / keep type scratch
@@ -672,7 +681,7 @@ gr_life_h	= $CEFF
 gren_save_room	= $CF03
 ; Hitscan params (live during gun_hitscan / splat_aim_jitter)
 scan_hit_x	= $CF04			; |sx−CX| max (inclusive)
-scan_hit_y	= $CF05			; |sy−64| max, $ff = no Y gate
+scan_hit_y	= $CF05			; |sy−64| max, $ff = no Y gate (both guns)
 scan_dmg_max	= $CF06			; dmg = this − (z>>2), min 1
 scan_dmg_all	= $CF07			; 1 = damage every cone hit (SSG)
 scan_jx_mask	= $CF08			; splat rnd X mask
@@ -717,7 +726,26 @@ stream_room	= $CF20
 ; Explosion particle vel — FX_N × vx/vy s8 (integrated at draw)
 fx_vx		= $CF21			; 24
 fx_vy		= $CF39			; 24
-; $CF51+ free
+; Scrag spit — scalar BSS $CF51–$CF62
+spit_on		= $CF51
+spit_room	= $CF52
+spit_owner	= $CF53			; enemy index
+spit_acc	= $CF54
+spit_xl		= $CF55
+spit_xh		= $CF56
+spit_yl		= $CF57
+spit_yh		= $CF58
+spit_zl		= $CF59
+spit_zh		= $CF5A
+spit_vxl	= $CF5B
+spit_vxh	= $CF5C
+spit_vyl	= $CF5D
+spit_vyh	= $CF5E
+spit_vzl	= $CF5F
+spit_vzh	= $CF60
+spit_life_l	= $CF61
+spit_life_h	= $CF62
+; $CF63+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

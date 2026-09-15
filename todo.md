@@ -6,7 +6,7 @@
 - [x] Ogre behaviour
 - [ ] Knight behaviour
 - [ ] Shambler behaviour
-- [ ] Scrag behaviour (flying)
+- [x] Scrag behaviour (flying)
 - [ ] Proper map complete screen/message (without going overboard)
 - [x] Decide what to do when you die in the game
 - [x] Player grenade launcher should launch grenade projectile

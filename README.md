@@ -28,7 +28,7 @@ There’s an editor for maps (Unity-style orbit in the viewport), item meshes, w
 
 Enemies are **13 vertices / 13 lines** on a shared skeleton (Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon, Zombie). Poses live in local space as signed offsets from the creature base. All animations are imported from the original data by retargeting the vertex animation to the skeleton. A few KB of poses per type, plus one line layout.
 
-They run a room-scoped state machine (idle / patrol / alert / approach / attack / pain / death). Grunt and Rottweiler behaviour is in; the others still share the skeleton and clips. E1M1 places Grunts and a rottweiler.
+They run a room-scoped state machine (idle / patrol / alert / approach / attack / pain / death). Grunt, Rottweiler, Ogre, and Scrag behaviour is in; the others still share the skeleton and clips. Scrag hovers, spits, and falls on death. E1M1 places Grunts and a rottweiler.
 
 Yaw is rolled(!) into the world rotation to avoid a double rotate. Perspective and rotation use 8-bit **log / antilog LUTs** (`alog(log|x| + log|cos θ|)`).
 

@@ -2499,6 +2499,8 @@ kill_enemy
 	sta en_timer_h,x
 	jsr pick_death_var
 	stx enemy_idx
+	jsr clear_spit_if_owner
+	ldx enemy_idx
 	jmp enemy_play_clip_sfx_enter
 
 ; X = enemy finishing death → EN_GONE + optional drop (preserves X)

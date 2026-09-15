@@ -82,6 +82,7 @@ main
 	jsr draw_world
 	jsr draw_enemies
 	jsr draw_grenades
+	jsr draw_spit
 	jsr draw_explosion
 
 	lda draw_buf
@@ -108,6 +109,7 @@ main
 	jsr update_floor
 	jsr update_fall
 	jsr update_grenades
+	jsr update_spit
 	jsr update_status
 	jsr update_triggers
 	jsr enemies_update
@@ -251,6 +253,7 @@ apply_move
 !source "line.asm"
 !source "fx.asm"
 !source "grenade.asm"
+!source "spit.asm"
 !source "playsound.asm"
 !source "pcsounds.asm"
 !source "pcsfreq.asm"

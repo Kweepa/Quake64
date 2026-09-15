@@ -113,7 +113,7 @@ E1M2 is still the tightest (pose-bound). Caps: `MAP_MAX_BYTES` 4096, `ENEMY_POSE
 | `$C980`–`$C9BF` | 64 | Sprite 6 enemy muzzle (`WPN_EMUZ`) |
 | `$C9C0`–`$C9FF` | 64 | Sprite 7 impact splat (`WPN_SPLAT`) |
 | `$CA00`–`$CE81` | 642 | Project / clip / game scratch (table below) |
-| `$CE82`–`$CFFF` | 382 | Unused (before charset A) |
+| `$CE82`–`$CFFF` | 382 | Play BSS: `en_pat_n`, grenade SoA (`$CEAF`–`$CF03`), hitscan/FX timers, Scrag spit scalar (`spit_*` at `$CF51`–`$CF62`); remainder free before charset A |
 | `$D000`–`$D5FF` | 1536 | Charset A top cols 0–23 (viewport) |
 | `$D600`–`$D607` | 8 | Char 192 `$FF` margin glyph |
 | `$D608`–`$D747` | 320 | `SINTAB` (COSTAB = SINTAB+64 at `$D648`) |

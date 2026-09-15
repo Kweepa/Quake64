@@ -337,6 +337,32 @@ eu_pain
 
 ; ------------------------------------------------------------------
 eu_dying
+	ldx enemy_idx
+	+ldy_mx en_type
+	cpy #ENT_SCRAG
+	bne eu_next
+	+lda_mx en_x
+	sta col_x
+	+lda_mx en_z
+	sta col_z
+	+lda_mx en_y
+	sta fb_probe_y
+	jsr floor_below
+	bcc eu_next
+	ldx enemy_idx
+	+lda_mx en_y
+	cmp proc_tmp2
+	beq eu_next
+	bcc eu_next
+	sec
+	sbc #SCRAG_FALL
+	bcc .eud_clamp
+	cmp proc_tmp2
+	bcs .eud_store
+.eud_clamp
+	lda proc_tmp2
+.eud_store
+	+sta_mx en_y
 	jmp eu_next
 
 ; ------------------------------------------------------------------
@@ -507,7 +533,7 @@ enemy_anim_step
 	bne .eas_bite			; Rottweiler — leap bite
 	+ldy_mx en_type
 	cpy #ENT_OGRE
-	bne .eas_gun
+	bne .eas_not_ogre_fire
 	lda en_pain_i,x
 	bne .eas_ogre_g
 	jsr enemy_saw
@@ -516,6 +542,15 @@ enemy_anim_step
 	lda enemy_idx
 	sta emuz_pending
 	jsr spawn_ogre_grenade
+	jmp .eas_atk_rest
+.eas_not_ogre_fire
+	cpy #ENT_SCRAG
+	bne .eas_gun
+	lda spit_on
+	bne .eas_atk_rest		; one spit at a time — no overwrite
+	lda enemy_idx
+	sta emuz_pending
+	jsr spawn_scrag_spit
 	jmp .eas_atk_rest
 .eas_gun
 	lda enemy_idx
@@ -537,6 +572,7 @@ enemy_anim_step
 	jmp .eas_n
 +
 	; Ogre: re-swing if still in melee; grenade always back to chase.
+	; Scrag: wait for live spit to clear before re-attack.
 	; Grunt 50% re-shoot; Rott always re-bite if still in range
 	ldx enemy_idx
 	+ldy_mx en_type
@@ -553,6 +589,11 @@ enemy_anim_step
 	jsr enemy_enter_ogre_attack
 	jmp .eas_n
 .eas_not_ogre
+	cpy #ENT_SCRAG
+	bne .eas_not_scrag_re
+	lda spit_on
+	bne .eas_to_ap
+.eas_not_scrag_re
 	jsr enemy_get_class
 	bne .eas_rng_chk
 	jsr rnd8
@@ -784,6 +825,8 @@ select_dodge_dir
 	bne .sdd_zig
 	cpy #ENT_OGRE
 	beq .sdd_zig			; ogre closes, doesn't back off
+	cpy #ENT_SCRAG
+	beq .sdd_zig			; scrag closes, doesn't back off
 	jsr enemy_chebyshev
 	cmp #GRUNT_BACKOFF + 1
 	bcs .sdd_zig
@@ -1227,6 +1270,7 @@ enemy_probe_dir
 	rts
 
 ; Try step in en_dir; repath if blocked. Also clamp.
+; Scrag: keep hover Y (do not floor-snap).
 enemy_try_step
 	ldx enemy_idx
 	lda en_dir,x
@@ -1243,8 +1287,12 @@ enemy_try_step
 	+sta_mx en_x
 	lda col_z
 	+sta_mx en_z
+	+ldy_mx en_type
+	cpy #ENT_SCRAG
+	beq .ets_geom
 	lda proc_tmp2
 	+sta_mx en_y
+.ets_geom
 	lda en_dir,x
 	jsr enemy_set_geom
 	jsr enemy_clamp_room
@@ -1262,8 +1310,12 @@ enemy_patrol_step
 	+sta_mx en_x
 	lda col_z
 	+sta_mx en_z
+	+ldy_mx en_type
+	cpy #ENT_SCRAG
+	beq .eps_geom
 	lda proc_tmp2
 	+sta_mx en_y
+.eps_geom
 	lda en_dir,x
 	jsr enemy_set_geom
 	jsr enemy_clamp_room
@@ -1589,8 +1641,12 @@ enemy_pos_ok
 
 ; Dest walkable ≤ en_y+STEP_UP (rc floor, crate top, solid plat).
 ; C=1 if |proc_tmp2 − en_y| ≤ STEP_UP. Leaves dest Y in proc_tmp2.
+; Scrag: any floor under XZ (hover — ignore STEP_UP delta).
 enemy_floor_ok
 	ldx enemy_idx
+	+ldy_mx en_type
+	cpy #ENT_SCRAG
+	beq .efl_scrag
 	clc
 	+lda_mx en_y
 	adc #STEP_UP
@@ -1617,6 +1673,10 @@ enemy_floor_ok
 .efl_yes
 	sec
 	rts
+.efl_scrag
+	+lda_mx en_y
+	sta fb_probe_y
+	jmp floor_below
 
 ; If the room has a matching-top rb, dest must lie in one (inset 1).
 enemy_cutout_ok

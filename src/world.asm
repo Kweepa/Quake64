@@ -54,6 +54,7 @@ world_init
 	jsr init_backpacks
 	jsr init_enemies
 	jsr init_grenades
+	jsr init_spit
 	jsr init_drops
 	lda spawn_y
 	sta floor_y

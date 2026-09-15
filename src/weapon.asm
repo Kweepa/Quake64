@@ -208,6 +208,7 @@ init_weapon_hw
 init_weapon
 	jsr init_weapon_hw
 	jsr init_grenades
+	jsr init_spit
 	jmp reset_loadout
 
 ; Axe+shotgun, 25 shells, 100 HP, no armour/keys/powerup. Shotgun selected.

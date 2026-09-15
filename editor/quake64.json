@@ -1,6 +1,6 @@
 {
   "version": 10,
-  "activeLevel": "E1M4",
+  "activeLevel": "E1M2",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -1353,7 +1353,7 @@
           "doorType": "Arch",
           "doorScale": 1,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "48f4bb7c-f85b-4837-acf3-8a81214372de"
         },
         {
           "id": "48f4bb7c-f85b-4837-acf3-8a81214372de",
@@ -1493,7 +1493,7 @@
           "doorType": "Arch",
           "doorScale": 1,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "1c572e13-1b60-48fc-abea-43a8adb20734"
         },
         {
           "id": "e82a324d-f9e2-4956-bcda-0fba46e848f2",
@@ -1512,7 +1512,7 @@
           "doorType": "Arch",
           "doorScale": 1,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7"
         },
         {
           "id": "5b78acdf-c85c-4b99-9867-182aac802eff",
@@ -1562,7 +1562,7 @@
           "doorType": "Arch",
           "doorScale": 1,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7"
         },
         {
           "id": "48d61df3-e3ca-42d5-9f3a-49628cee01d7",
@@ -1704,7 +1704,7 @@
           "doorType": "Arch",
           "doorScale": 1,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085"
         },
         {
           "id": "4bef566e-28ee-43c1-ad46-be25caf9385f",
@@ -2673,7 +2673,7 @@
           "doorType": "Arch",
           "doorScale": 1,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "122327e6-38a9-415d-b6ee-41d27d73f0f9"
         },
         {
           "id": "78b8eb7f-dfd6-42ce-884c-8a073f345446",
@@ -2735,7 +2735,7 @@
           "doorType": "Arch",
           "doorScale": 1,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "fd4180ce-dd34-4be0-ad87-1a4bfec4826a"
         },
         {
           "id": "39a3c204-1033-43de-95b6-dc608485a2a0",
@@ -2969,10 +2969,10 @@
           "dir": 1,
           "roomId": "509b8043-73ee-4e67-be27-fb3df68cf6dd",
           "lockKey": "gold",
-          "doorType": "Tech",
+          "doorType": "Arch",
           "doorScale": 1.5,
           "locked": true,
-          "otherRoomId": null
+          "otherRoomId": "f8a948cc-7a09-45e9-af37-a6cb119e36aa"
         },
         {
           "id": "4b8a34b4-9fea-4249-a46f-9ae1eacfc845",
@@ -3541,10 +3541,10 @@
           "dir": 1,
           "roomId": "f8a948cc-7a09-45e9-af37-a6cb119e36aa",
           "lockKey": "unlocked",
-          "doorType": "Tech",
+          "doorType": "Arch",
           "doorScale": 1,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "3aee6079-dbc3-461a-944b-e317fa32e416"
         },
         {
           "id": "534b6f4c-d025-4cf1-8bb1-de32d736ed5f",
@@ -3866,7 +3866,7 @@
           "doorType": "Arch",
           "doorScale": 2,
           "locked": false,
-          "otherRoomId": null
+          "otherRoomId": "7cc30490-9e84-47d3-8991-5015ca448267"
         },
         {
           "id": "dd10410d-e692-4fe7-9d93-7da0a51b16b3",
@@ -4581,8 +4581,8 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7"
+          "otherRoomId": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7",
+          "locked": false
         },
         {
           "id": "1752c63a-a527-4de7-983d-4da70901d59b",
@@ -4600,8 +4600,8 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7"
+          "otherRoomId": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7",
+          "locked": false
         },
         {
           "id": "db51ec38-04b8-4c2e-8446-3f054a7de571",
@@ -4662,7 +4662,7 @@
           "doorType": "Arch",
           "doorScale": 1.5,
           "locked": true,
-          "otherRoomId": null
+          "otherRoomId": "156da2b6-105d-4a9d-aa43-65d8663f5971"
         },
         {
           "id": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7",
@@ -5081,8 +5081,8 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "310aae69-9078-41fa-a5d9-ab0873e1c5be"
+          "otherRoomId": "310aae69-9078-41fa-a5d9-ab0873e1c5be",
+          "locked": false
         },
         {
           "id": "310aae69-9078-41fa-a5d9-ab0873e1c5be",
@@ -5414,6 +5414,21 @@
           "enemy": "Knight",
           "patrol": false,
           "roomId": "310aae69-9078-41fa-a5d9-ab0873e1c5be"
+        },
+        {
+          "id": "9b14e2c1-a1ab-4c76-a978-89af6e183bd7",
+          "kind": "switch",
+          "x": 54,
+          "y": 133,
+          "z": 54,
+          "sx": 1,
+          "sy": 3,
+          "sz": 2,
+          "face": "-x",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "3958eae4-1917-4a18-8180-841376947f2e",
+          "tag": ""
         }
       ]
     },

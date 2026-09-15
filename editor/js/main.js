@@ -72,6 +72,8 @@ import {
   WORLD_MIN,
   WORLD_MAX,
   assignDoorRooms,
+  tryConnectDoor,
+  doorDoublyConnected,
   snapDoorBetweenRooms,
   snapSwitchToRoom,
   usesLinkTag,
@@ -229,21 +231,36 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   getNeighbourMode: () => neighbourDraw,
   getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
   onSelectIds: (ids, additive) => {
+    const added = [];
     if (additive) {
       for (const id of ids) {
-        if (!selectedIds.includes(id)) selectedIds.push(id);
+        if (!selectedIds.includes(id)) {
+          selectedIds.push(id);
+          added.push(id);
+        }
       }
-    } else selectedIds = [...ids];
+    } else {
+      selectedIds = [...ids];
+      added.push(...ids);
+    }
     rememberSelectedRoom();
-    markUi();
+    const linked = connectUnlinkedDoors(added);
+    if (linked) markDirty();
+    else markUi();
     refreshPanels();
   },
   onToggleSelect: (id) => {
     const i = selectedIds.indexOf(id);
+    const added = [];
     if (i >= 0) selectedIds.splice(i, 1);
-    else selectedIds.push(id);
+    else {
+      selectedIds.push(id);
+      added.push(id);
+    }
     rememberSelectedRoom();
-    markUi();
+    const linked = connectUnlinkedDoors(added);
+    if (linked) markDirty();
+    else markUi();
     refreshPanels();
   },
   onChange: () => {
@@ -1458,16 +1475,51 @@ function renderLevelList() {
 }
 
 function selectObjectIds(ids, additive) {
+  const added = [];
   if (additive) {
     for (const id of ids) {
       const i = selectedIds.indexOf(id);
       if (i >= 0) selectedIds.splice(i, 1);
-      else selectedIds.push(id);
+      else {
+        selectedIds.push(id);
+        added.push(id);
+      }
     }
-  } else selectedIds = [...ids];
+  } else {
+    selectedIds = [...ids];
+    added.push(...ids);
+  }
   rememberSelectedRoom();
+  connectUnlinkedDoors(added);
   markDirty();
   refreshPanels();
+}
+
+function connectUnlinkedDoors(ids) {
+  const map = activeMap(doc);
+  const doors = [];
+  for (const id of ids) {
+    const obj = map.objects.find((o) => o.id === id);
+    if (obj?.kind === "doorway" && !doorDoublyConnected(doc, obj)) doors.push(obj);
+  }
+  if (!doors.length) return false;
+  pushUndo();
+  let n = 0;
+  for (const door of doors) {
+    if (tryConnectDoor(doc, door)) {
+      clampObject(door);
+      n++;
+    }
+  }
+  if (!n) {
+    undoStack.pop();
+    updateUndoButtons();
+    if (doors.length === 1) setStatus("Doorway not connected to two rooms", true);
+    return false;
+  }
+  markDirty();
+  setStatus(n === 1 ? "Connected doorway" : `Connected ${n} doorways`);
+  return true;
 }
 
 function makeObjectListButton(obj) {
@@ -1476,6 +1528,10 @@ function makeObjectListButton(obj) {
   btn.textContent = objectLabel(obj);
   btn.classList.add(obj.kind === "room" ? "tree-label-wrap" : "tree-label-elide");
   if (selectedIds.includes(obj.id)) btn.classList.add("active");
+  if (obj.kind === "doorway" && !doorDoublyConnected(doc, obj)) {
+    btn.classList.add("door-unlinked");
+    btn.title = "Not connected to two rooms";
+  }
   btn.addEventListener("click", (e) => {
     selectObjectIds([obj.id], e.shiftKey);
   });

@@ -2608,14 +2608,23 @@ export function objectTree(doc) {
 /** Hull-face scores below this are on-wall; +50 is a lateral miss. */
 const DOOR_PAIR_MAX = 8;
 const DOOR_PAIR_SLACK = 4;
+const DOOR_PAIR_LOOSE = 16;
+
+/** True if the door lists two different rooms that still exist. */
+export function doorDoublyConnected(doc, door) {
+  if (!door || door.kind !== "doorway") return false;
+  const a = roomById(doc, door.roomId);
+  const b = roomById(doc, door.otherRoomId);
+  return !!(a && b && a.id !== b.id);
+}
 
 /** Closest room, plus a second room across the same portal if still close. */
-export function inferDoorRoomPair(doc, door) {
+export function inferDoorRoomPair(doc, door, loose = false) {
   if (!door || door.kind !== "doorway") return { room: null, other: null };
   const scored = doorRoomScores(door, roomsOf(doc));
   if (!scored.length || scored[0].score >= 50) return { room: null, other: null };
   const best = scored[0];
-  const closeLimit = Math.min(DOOR_PAIR_MAX, best.score + DOOR_PAIR_SLACK);
+  const closeLimit = loose ? DOOR_PAIR_LOOSE : Math.min(DOOR_PAIR_MAX, best.score + DOOR_PAIR_SLACK);
   let otherHit = null;
   for (const hit of scored) {
     if (hit.room.id === best.room.id) continue;
@@ -2627,9 +2636,7 @@ export function inferDoorRoomPair(doc, door) {
   return { room: best.room, other: otherHit?.hit.room || null };
 }
 
-export function assignDoorRooms(doc, door, owner, snap = true) {
-  if (!door || door.kind !== "doorway") return door;
-  const pair = inferDoorRoomPair(doc, door);
+function setDoorRoomPair(door, pair, owner) {
   const a = pair.room;
   const b = pair.other;
   const ownerId = owner?.id || null;
@@ -2650,11 +2657,35 @@ export function assignDoorRooms(doc, door, owner, snap = true) {
     door.otherRoomId = null;
   }
   if (door.otherRoomId === door.roomId) door.otherRoomId = null;
+}
+
+export function assignDoorRooms(doc, door, owner, snap = true) {
+  if (!door || door.kind !== "doorway") return door;
+  setDoorRoomPair(door, inferDoorRoomPair(doc, door), owner);
   const roomA = roomById(doc, door.roomId);
   const roomB = roomById(doc, door.otherRoomId);
   if (snap) snapDoorBetweenRooms(door, roomA, roomB);
   else orientDoorToRooms(door, roomA, roomB);
   return door;
+}
+
+/** Fill both room links if a second room can be inferred. Returns true if newly paired. */
+export function tryConnectDoor(doc, door) {
+  if (!door || door.kind !== "doorway" || doorDoublyConnected(doc, door)) return false;
+  const owner = roomById(doc, door.roomId);
+  let pair = inferDoorRoomPair(doc, door, true);
+  if (!pair.other) {
+    const hits = roomsOf(doc).filter((r) => aabbOverlap(door, r));
+    hits.sort((a, b) => aabbVolume(a) - aabbVolume(b));
+    const room = owner || hits[0] || pair.room;
+    const other = hits.find((r) => r.id !== room?.id) || null;
+    pair = { room: room || pair.room, other };
+  }
+  if (!pair.room || !pair.other) return false;
+  setDoorRoomPair(door, pair, owner);
+  if (!doorDoublyConnected(doc, door)) return false;
+  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
+  return true;
 }
 
 export function neighbourRooms(doc, room) {

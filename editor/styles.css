@@ -606,6 +606,15 @@ button:disabled {
   margin: 0.4rem 0 0.15rem;
 }
 
+.object-tree button.door-unlinked {
+  color: #f88;
+}
+
+.object-tree button.door-unlinked.active {
+  color: #f88;
+  border-color: #f88;
+}
+
 .level-list ul {
   list-style: none;
   margin: 0 0 1rem;

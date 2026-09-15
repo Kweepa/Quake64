@@ -614,6 +614,15 @@ button:disabled {
   margin: 0.4rem 0 0.15rem;
 }
 
+.object-tree button.door-unlinked {
+  color: #f88;
+}
+
+.object-tree button.door-unlinked.active {
+  color: #f88;
+  border-color: #f88;
+}
+
 .level-list ul {
   list-style: none;
   margin: 0 0 1rem;
@@ -4971,14 +4980,23 @@ function objectTree(doc) {
 /** Hull-face scores below this are on-wall; +50 is a lateral miss. */
 const DOOR_PAIR_MAX = 8;
 const DOOR_PAIR_SLACK = 4;
+const DOOR_PAIR_LOOSE = 16;
+
+/** True if the door lists two different rooms that still exist. */
+function doorDoublyConnected(doc, door) {
+  if (!door || door.kind !== "doorway") return false;
+  const a = roomById(doc, door.roomId);
+  const b = roomById(doc, door.otherRoomId);
+  return !!(a && b && a.id !== b.id);
+}
 
 /** Closest room, plus a second room across the same portal if still close. */
-function inferDoorRoomPair(doc, door) {
+function inferDoorRoomPair(doc, door, loose = false) {
   if (!door || door.kind !== "doorway") return { room: null, other: null };
   const scored = doorRoomScores(door, roomsOf(doc));
   if (!scored.length || scored[0].score >= 50) return { room: null, other: null };
   const best = scored[0];
-  const closeLimit = Math.min(DOOR_PAIR_MAX, best.score + DOOR_PAIR_SLACK);
+  const closeLimit = loose ? DOOR_PAIR_LOOSE : Math.min(DOOR_PAIR_MAX, best.score + DOOR_PAIR_SLACK);
   let otherHit = null;
   for (const hit of scored) {
     if (hit.room.id === best.room.id) continue;
@@ -4990,9 +5008,7 @@ function inferDoorRoomPair(doc, door) {
   return { room: best.room, other: otherHit?.hit.room || null };
 }
 
-function assignDoorRooms(doc, door, owner, snap = true) {
-  if (!door || door.kind !== "doorway") return door;
-  const pair = inferDoorRoomPair(doc, door);
+function setDoorRoomPair(door, pair, owner) {
   const a = pair.room;
   const b = pair.other;
   const ownerId = owner?.id || null;
@@ -5013,11 +5029,35 @@ function assignDoorRooms(doc, door, owner, snap = true) {
     door.otherRoomId = null;
   }
   if (door.otherRoomId === door.roomId) door.otherRoomId = null;
+}
+
+function assignDoorRooms(doc, door, owner, snap = true) {
+  if (!door || door.kind !== "doorway") return door;
+  setDoorRoomPair(door, inferDoorRoomPair(doc, door), owner);
   const roomA = roomById(doc, door.roomId);
   const roomB = roomById(doc, door.otherRoomId);
   if (snap) snapDoorBetweenRooms(door, roomA, roomB);
   else orientDoorToRooms(door, roomA, roomB);
   return door;
+}
+
+/** Fill both room links if a second room can be inferred. Returns true if newly paired. */
+function tryConnectDoor(doc, door) {
+  if (!door || door.kind !== "doorway" || doorDoublyConnected(doc, door)) return false;
+  const owner = roomById(doc, door.roomId);
+  let pair = inferDoorRoomPair(doc, door, true);
+  if (!pair.other) {
+    const hits = roomsOf(doc).filter((r) => aabbOverlap(door, r));
+    hits.sort((a, b) => aabbVolume(a) - aabbVolume(b));
+    const room = owner || hits[0] || pair.room;
+    const other = hits.find((r) => r.id !== room?.id) || null;
+    pair = { room: room || pair.room, other };
+  }
+  if (!pair.room || !pair.other) return false;
+  setDoorRoomPair(door, pair, owner);
+  if (!doorDoublyConnected(doc, door)) return false;
+  snapDoorBetweenRooms(door, roomById(doc, door.roomId), roomById(doc, door.otherRoomId));
+  return true;
 }
 
 function neighbourRooms(doc, room) {
@@ -12265,21 +12305,36 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   getNeighbourMode: () => neighbourDraw,
   getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
   onSelectIds: (ids, additive) => {
+    const added = [];
     if (additive) {
       for (const id of ids) {
-        if (!selectedIds.includes(id)) selectedIds.push(id);
+        if (!selectedIds.includes(id)) {
+          selectedIds.push(id);
+          added.push(id);
+        }
       }
-    } else selectedIds = [...ids];
+    } else {
+      selectedIds = [...ids];
+      added.push(...ids);
+    }
     rememberSelectedRoom();
-    markUi();
+    const linked = connectUnlinkedDoors(added);
+    if (linked) markDirty();
+    else markUi();
     refreshPanels();
   },
   onToggleSelect: (id) => {
     const i = selectedIds.indexOf(id);
+    const added = [];
     if (i >= 0) selectedIds.splice(i, 1);
-    else selectedIds.push(id);
+    else {
+      selectedIds.push(id);
+      added.push(id);
+    }
     rememberSelectedRoom();
-    markUi();
+    const linked = connectUnlinkedDoors(added);
+    if (linked) markDirty();
+    else markUi();
     refreshPanels();
   },
   onChange: () => {
@@ -13494,16 +13549,51 @@ function renderLevelList() {
 }
 
 function selectObjectIds(ids, additive) {
+  const added = [];
   if (additive) {
     for (const id of ids) {
       const i = selectedIds.indexOf(id);
       if (i >= 0) selectedIds.splice(i, 1);
-      else selectedIds.push(id);
+      else {
+        selectedIds.push(id);
+        added.push(id);
+      }
     }
-  } else selectedIds = [...ids];
+  } else {
+    selectedIds = [...ids];
+    added.push(...ids);
+  }
   rememberSelectedRoom();
+  connectUnlinkedDoors(added);
   markDirty();
   refreshPanels();
+}
+
+function connectUnlinkedDoors(ids) {
+  const map = activeMap(doc);
+  const doors = [];
+  for (const id of ids) {
+    const obj = map.objects.find((o) => o.id === id);
+    if (obj?.kind === "doorway" && !doorDoublyConnected(doc, obj)) doors.push(obj);
+  }
+  if (!doors.length) return false;
+  pushUndo();
+  let n = 0;
+  for (const door of doors) {
+    if (tryConnectDoor(doc, door)) {
+      clampObject(door);
+      n++;
+    }
+  }
+  if (!n) {
+    undoStack.pop();
+    updateUndoButtons();
+    if (doors.length === 1) setStatus("Doorway not connected to two rooms", true);
+    return false;
+  }
+  markDirty();
+  setStatus(n === 1 ? "Connected doorway" : `Connected ${n} doorways`);
+  return true;
 }
 
 function makeObjectListButton(obj) {
@@ -13512,6 +13602,10 @@ function makeObjectListButton(obj) {
   btn.textContent = objectLabel(obj);
   btn.classList.add(obj.kind === "room" ? "tree-label-wrap" : "tree-label-elide");
   if (selectedIds.includes(obj.id)) btn.classList.add("active");
+  if (obj.kind === "doorway" && !doorDoublyConnected(doc, obj)) {
+    btn.classList.add("door-unlinked");
+    btn.title = "Not connected to two rooms";
+  }
   btn.addEventListener("click", (e) => {
     selectObjectIds([obj.id], e.shiftKey);
   });

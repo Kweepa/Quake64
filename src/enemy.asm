@@ -1909,8 +1909,8 @@ axe_try_kill
 	rts
 
 ; ------------------------------------------------------------------
-; Hitscan: mid-body project → |sx−CX|≤scan_hit_x (and |sy−64| if
-; scan_hit_y≠$ff). dmg = scan_dmg_max − (z>>2), min 1, z in 0..SHOT_Z_MAX-1.
+; Hitscan: mid-body project → |sx−CX|≤scan_hit_x (no screen-Y gate;
+; height auto-aims). dmg = scan_dmg_max − (z>>2), min 1, z in 0..SHOT_Z_MAX-1.
 ; scan_dmg_all=1: every cone hit (SSG). =0: closest only (nail).
 ; Blood splat on closest hit; col_line wall splat on miss.
 shotgun_hitscan
@@ -1935,7 +1935,7 @@ shotgun_hitscan
 nailgun_hitscan
 	lda #NAIL_HIT_X
 	sta scan_hit_x
-	lda #NAIL_HIT_Y
+	lda #$ff
 	sta scan_hit_y
 	lda #NAIL_DMG_MAX
 	sta scan_dmg_max

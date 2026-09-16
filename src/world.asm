@@ -1495,7 +1495,17 @@ try_proximity
 	bne .tp_sn
 	jsr .prox_switch
 	bcc .tp_sn
-	+ldy_mx sw_elev
+	+lda_mx sw_kind
+	bne .tp_elev
+	+lda_mx sw_tag
+	jsr door_unlock_tag
+	lda #SOUND_MISC_MENU2
+	jsr play_sound
+	jmp .tp_el
+.tp_elev
+	cmp #SW_DEST_ELEV
+	bne .tp_el
+	+ldy_mx sw_tag
 	tya
 	tax
 	jsr elev_activate
@@ -2050,6 +2060,8 @@ trig_enter
 	beq .te_elev
 	cmp #TRIG_SUMMON
 	beq .te_summon
+	cmp #TRIG_UNLOCK
+	beq .te_unlock
 	cmp #TRIG_END
 	bne .te_rts
 	jmp next_level
@@ -2076,6 +2088,9 @@ trig_enter
 	+lda_mx tr_arg
 	tax
 	jmp elev_summon
+.te_unlock
+	+lda_mx tr_arg
+	jmp door_unlock_tag
 .te_tele
 	lda map_ndests
 	beq .te_tele_rts

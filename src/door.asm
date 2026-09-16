@@ -70,6 +70,8 @@ door_front
 door_unlocked
 	+lda_mx door_key
 	beq .du_yes
+	cmp #DOOR_KEY_REMOTE
+	beq .du_no
 	cmp #DOOR_KEY_GOLD
 	beq .du_gold
 	lda have_keys
@@ -85,6 +87,27 @@ door_unlocked
 	rts
 .du_no
 	clc
+	rts
+
+; A = cooked tag id. Unlock every remote door with that tag.
+door_unlock_tag
+	sta sw_match
+	ldx #0
+.dut
+	cpx	map_ndoors
+	bcs .dut_done
+	+lda_mx door_tag
+	cmp sw_match
+	bne .dut_n
+	+lda_mx door_key
+	cmp #DOOR_KEY_REMOTE
+	bne .dut_n
+	lda #0
+	+sta_mx door_key
+.dut_n
+	inx
+	bne .dut
+.dut_done
 	rts
 
 ; ------------------------------------------------------------------

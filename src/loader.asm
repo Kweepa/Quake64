@@ -46,13 +46,29 @@ FormatDosName
 	sta level_dos_name + 3
 	rts
 
+; Play IRQ dead: I=1, CIA1 TA masked+acked, $d01a=0, $01=BANK_IO. Preserves A.
+; C clobbered. irq_entry does not ack CIA1 — this is the only GAME kill.
+; LoadPrg enter/exit, LoadLevel, maybe_stream_room, reboot_game all jsr here.
+; Do not poke $dc0d / $d01a / $0314 from those callers.
+load_irq_off
+	sei
+	pha
+	lda #BANK_IO
+	sta $01
+	lda #$7f
+	sta $dc0d
+	lda $dc0d
+	lda #0
+	sta $d01a
+	pla
+	rts
+
 !if USE_KRILL {
 
-; LoadPrg — X/Y = 0-terminated name pointer. Dest in load_dest. C=0 ok, C=1 err.
-; Krill loadraw with LOAD_TO_API: carry SET on entry takes the destination from
-; loadaddrlo/hi instead of the PRG header — which is what this needs, because
-; every heap blob (E1M1, GRUNT…) carries header address $0000.
-; Returns with interrupts DISABLED (see the sei below); callers already sei.
+; LoadPrg — THE disk load. X/Y = 0-terminated name. Dest in load_dest.
+; Enter/exit via load_irq_off. Returns I=1, CIA1 off, raster off, C=0 ok.
+; Krill loadraw + LOAD_TO_API: carry SET uses loadaddrlo/hi (PRG header $0000).
+; BANK_LOADER unmaps KERNAL; IRQ would come from $fffe — so play IRQ is dead first.
 LoadPrg
 	stx load_name_l
 	sty load_name_h
@@ -60,8 +76,7 @@ LoadPrg
 	sta loadaddrlo
 	lda load_dest+1
 	sta loadaddrhi
-	sei					; BANK_LOADER unmaps the KERNAL, so the
-						; IRQ vector would come from RAM at $fffe
+	jsr load_irq_off
 	lda #BANK_LOADER
 	sta $01
 	ldx load_name_l
@@ -71,20 +86,24 @@ LoadPrg
 	php
 	lda #BANK_IO
 	sta $01
-	plp
+	pla
+	lsr
+	pha
+	jsr load_irq_off
+	pla
+	lsr
 	rts
 
 } else {
 
-; LoadPrg — X/Y = 0-terminated name. Dest in load_dest (SA=0; heap headers are
-; $0000 so SA=1 would load to zero page). Owns the KERNAL prelude: BANK_IO,
-; $EA31, IOINIT, $DD00=$38, DEN off. C=0 ok, C=1 err. Leaves I=1, $DD00=$38.
+; LoadPrg — THE disk load. X/Y = 0-terminated name. Dest in load_dest (SA=0).
+; Enter/exit via load_irq_off. Returns I=1, CIA1 off, raster off, C=0 ok.
+; Standard KERNAL SETNAM/SETLFS/LOAD/CLOSE. No IOINIT — boot already did it.
+; $EA31 around CLI+$FFD5 so a spurious IRQ cannot hit irq_entry (no CIA1 ack).
 LoadPrg
 	stx .lp_lda+1
 	sty .lp_lda+2
-	sei
-	lda #BANK_IO
-	sta $01
+	jsr load_irq_off
 	ldy #0
 .lp_lda
 	lda $ffff,y
@@ -100,71 +119,38 @@ LoadPrg
 	ldx load_device
 	ldy #0					; SA=0 → load to X/Y of LOAD
 	jsr $ffba				; SETLFS
-	; IOINIT restarts CIA1 TA. In-play $0314 is irq_entry (no CIA ack).
 	lda $0314
 	pha
 	lda $0315
 	pha
-	lda #<$ea31				; KERNAL IRQ
+	lda #<$ea31
 	sta $0314
 	lda #>$ea31
 	sta $0315
-	jsr $ff84				; IOINIT — after $EA31
-	lda #$38				; VIC bank 3, IEC idle (IOINIT left bank 0)
-	sta $dd00
-	lda $d011
-	and #%11101111				; DEN off: badlines stall IEC
-	sta $d011
 	lda #0
 	ldx load_dest
 	ldy load_dest+1
-	cli					; IEC / VICE $FFD5
+	cli					; IEC bitbang / VICE traps
 	jsr $ffd5				; LOAD
-	sei					; C intact through lda/sta
+	sei
+	lda #0
+	rol
+	pha
+	jsr load_irq_off			; TA dead before irq_entry restored
+	lda #1
+	jsr $ffc3				; CLOSE
+	pla
+	tay
 	pla
 	sta $0315
 	pla
 	sta $0314
-	lda #0
-	rol
-	pha
-	lda #1
-	jsr $ffc3				; CLOSE
-	jsr load_irq_off
 	jsr mulset_init
-	lda #$38
-	sta $dd00
-	pla
+	tya
 	lsr
 	rts
 
-; IOINIT can leave CIA2 Timer A generating NMIs. Quiesce CIA2 while
-; loading; prof_init restarts both timers afterward for frame timing.
-load_cia2_quiet
-	lda #0
-	sta $dd0e
-	sta $dd0f
-	sta $02a1				; KERNAL CIA2 ICR shadow; prevent FE88 re-enable
-	lda #$7f
-	sta $dd0d
-	lda $dd0d
-	rts
-
 }
-
-; I=1, CIA1 TA off, raster off. $01 = BANK_IO. C and A preserved.
-load_irq_off
-	sei
-	pha
-	lda #BANK_IO
-	sta $01
-	lda #$7f
-	sta $dc0d
-	lda $dc0d
-	lda #0
-	sta $d01a
-	pla
-	rts
 
 blank_screen
 	lda #0
@@ -228,14 +214,7 @@ heap_alloc
 ; bind_map header/name, SMC-jsr overlay, heap_top = map_base (dump prefix).
 ; load_in_play=0: cold. =1: in-play. C=0 ok, C=1 error. Caller re-inits VIC/IRQ.
 LoadLevel
-	sei
-	lda #BANK_IO
-	sta $01
-	lda #$7f
-	sta $dc0d				; kill CIA1 Timer A
-	lda $dc0d
-	lda #0
-	sta $d01a				; kill raster IRQ
+	jsr load_irq_off			; play IRQ dead before any disk
 !if USE_KRILL {
 	; NO jsr $ff84. KERNAL IOINIT writes $DD02 = $3F, which is Krill's
 	; uninstall signal — the drive-side code tears itself down and the
@@ -254,7 +233,7 @@ LoadLevel
 .ll_common
 	jsr blank_screen
 } else {
-	; LoadPrg owns IOINIT / $EA31 / $DD00 / DEN off.
+	; LoadPrg owns SETNAM/SETLFS/LOAD/CLOSE under load_irq_off.
 	jsr blank_screen
 }
 .ll_dos
@@ -632,23 +611,20 @@ stream_room_enemies
 	rts
 
 ; After movement, before draw_enemies. AB→A keeps orphans and skips the swap.
-; In-play LoadPrg (KERNAL $FFD5) CLIs — SEI is not enough. Mask $d01a like
-; LoadLevel or a raster IRQ hits $0314 while KERNAL is paged in.
+; Disk via LoadPrg (CLI on KERNAL $FFD5). load_irq_off first — sei is not enough.
 maybe_stream_room
 	lda room_idx
 	cmp stream_room
-	beq .msr_rts
+	bne .msr_need
+	rts
+.msr_need
 	jsr collect_room_need
 	jsr room_need_resident
 	bcc .msr_mark
 	php
-	sei
 	lda $01
 	pha
-	lda #BANK_IO
-	sta $01
-	lda #0
-	sta $d01a
+	jsr load_irq_off
 	lda #1
 	sta $d019
 	lda #0
@@ -670,9 +646,6 @@ maybe_stream_room
 	lda col_bg
 	sta $d021
 	jsr install_irq_vectors
-!if USE_KRILL = 0 {
-	jsr prof_init				; IOINIT in LoadPrg reset CIA2 cascade
-}
 	lda #0
 	sta irq_phase
 	lda #RASTER_VIEW
@@ -680,6 +653,7 @@ maybe_stream_room
 	lda $d011
 	and #$7f
 	sta $d011
+	jsr load_irq_off
 	lda #1
 	sta $d019
 	sta $d01a
@@ -689,7 +663,6 @@ maybe_stream_room
 .msr_mark
 	lda room_idx
 	sta stream_room
-.msr_rts
 	rts
 .msr_fail
 	jmp load_fail_hang
@@ -1015,15 +988,18 @@ install_reboot_stub
 
 ; Reload boot (quake64) and re-enter menu.
 reboot_game
-	sei
-	lda #BANK_IO
-	sta $01
 	ldx #$ff
 	txs
+	jsr load_irq_off
+	lda #<$ea31
+	sta $0314
+	lda #>$ea31
+	sta $0315
 	; DELIBERATE on the Krill disk, and the only surviving IOINIT. $DD02 = $3F
 	; uninstalls the drive code and hands the drive back to normal DOS, which
 	; is exactly what the KERNAL LOAD below needs. splashc re-installs on the
 	; Krill disk; the KERNAL disk never had drive code up.
+	; $EA31 first: irq_entry does not ack CIA1 TA that IOINIT restarts.
 	jsr $ff84
 	lda $d011
 	and #%11101111
@@ -1041,6 +1017,7 @@ reboot_game
 	ldy #1
 	jsr $ffba
 	lda #0
+	cli
 	jsr $ffd5
 	bcs .rg_hang
 	jmp $080d

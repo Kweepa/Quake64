@@ -58,7 +58,11 @@ def scan(body: bytes, load: int, sentinel: int, max_id: int) -> list[tuple[int, 
     while i + 2 < n:
         op, lo, hi = body[i], body[i + 1], body[i + 2]
         if op in ABS_OPS and hi == sentinel and lo <= max_id:
-            recs.append((load + i + 1, lo))
+            # adc item_uo,y ($79 $7B $5D) ; sta src_ptr ($85 $02) looks like
+            # eor $0285,x (slope_flags). Nobody emits eor_mx. Drop that window
+            # only — do not skip-3 on every abs op (that jumped real lda $02id,x).
+            if not (op == 0x5D and lo == 0x85):
+                recs.append((load + i + 1, lo))
             i += 3
             continue
         i += 1
@@ -171,6 +175,18 @@ def main() -> None:
         sys.exit(1)
     if len(recs) < 200:
         print(f"mkreloc: warning: only {len(recs)} sites (expected ~400+)", file=sys.stderr)
+
+    dests = {addr for addr, _fid in recs}
+    for off in range(len(body) - 2):
+        if body[off : off + 3] == bytes((0x5D, 0x85, 0x02)):
+            addr = load + off + 1
+            if addr in dests:
+                print(
+                    f"mkreloc: phantom SMC site at ${addr:04X} "
+                    "(sta src_ptr after $5Dxx abs,y)",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
     reloc = bytearray()
     reloc += struct.pack("<H", len(recs))

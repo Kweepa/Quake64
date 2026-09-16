@@ -122,4 +122,4 @@ update_sfx
 .sfx_idle
 	rts
 
-; sound_* / ps_save_* live in ZP (zp.asm) — shared with MENU overlay
+; sound_* live in menu ZP; ps_save_* are mem.asm BSS (shared with GAME playsound)

@@ -77,6 +77,7 @@ import {
   snapDoorBetweenRooms,
   snapSwitchToRoom,
   usesLinkTag,
+  doorUsesTag,
   triggerUsesTag,
   emptyMdlRig,
   DEFAULT_MDL_SCALE,
@@ -2605,7 +2606,7 @@ function renderLayoutObjectFields(root, objs) {
         "Tag",
         textInputMixed(tagCur, {
           maxLength: MAX_TAG_LEN,
-          placeholder: kind === "switch" || kind === "elevator" ? "elevator link" : "destination tag",
+          placeholder: kind === "elevator" ? "elevator link" : "destination tag",
           onChange: (v) => apply((obj) => (obj.tag = clampTag(v))),
         })
       )
@@ -2720,6 +2721,19 @@ function renderLayoutObjectFields(root, objs) {
         )
       )
     );
+    if (lockCur !== undefined && doorUsesTag(lockCur)) {
+      const tagCur = unanimous(objs, (o) => o.tag || "");
+      root.appendChild(
+        field(
+          "Tag",
+          textInputMixed(tagCur, {
+            maxLength: MAX_TAG_LEN,
+            placeholder: "destination tag",
+            onChange: (v) => apply((obj) => (obj.tag = clampTag(v))),
+          })
+        )
+      );
+    }
     const typeCur = unanimous(objs, (o) => clampDoorType(o.doorType));
     root.appendChild(
       field(

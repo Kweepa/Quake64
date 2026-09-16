@@ -8,13 +8,9 @@ init_vic
 	; nothing either — it returns $3c whether the latch is poisoned or not.
 	; Measured: NOTES.md "PHASE 1 RESULT", variants B vs E.
 	; Bits 0–1 = %00 → VIC bank 3 ($C000). Bits 3–5 are IEC ATN/CLK/DATA
-	; (active low). Krill: leave them 0 (DDRA=$03, those bits are inputs).
-	; KERNAL: must release them or in-play LoadPrg is Device Not Present.
-!if USE_KRILL {
+	; (active low via 7406). Write 0 to release the bus; write 1 clamps low
+	; → Device Not Present on the next LoadPrg. Krill DDRA=$03: same $00.
 	lda #$00
-} else {
-	lda #$38
-}
 	sta $dd00
 
 	lda #$1b				; DEN, 25 rows, YSCROLL=3, text mode

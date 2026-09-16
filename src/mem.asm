@@ -190,12 +190,12 @@ MAP_SMC_BASE	= $0200
 }
 
 ; Play BSS: default VIC matrix / leftover boot. VIC matrix in play is $C000.
-; map_bss.asm occupies $0400–$051F. $08F9–$08FF is reboot stub + selectors.
+; map_bss.asm occupies $0400–$0523. $08F9–$08FF is reboot stub + selectors.
 FRAME13_N	= 106			; offsets 0..105
 ENEMY_PTR_N	= 8			; must == ENEMY_NTYPES (quake64.asm asserts)
-frame13_lo	= $0520
-frame13_hi	= $058A
-enemy_gx_lo	= $05F4
+frame13_lo	= $0524
+frame13_hi	= $058E
+enemy_gx_lo	= $05F8
 enemy_gx_hi	= enemy_gx_lo + ENEMY_PTR_N
 enemy_gy_lo	= enemy_gx_hi + ENEMY_PTR_N
 enemy_gy_hi	= enemy_gy_lo + ENEMY_PTR_N
@@ -216,7 +216,7 @@ en_sfx_old	= enemy_sfx_evt_hi + ENEMY_PTR_N	; local frame before this anim step
 en_sfx_new	= en_sfx_old + 1		; logical frame after the step
 en_sfx_n	= en_sfx_new + 1		; remaining events while scanning
 en_sfx_armed	= en_sfx_n + 1			; 1 = frame changed this anim step
-; next free en_sfx_armed + 1  ($06F2)
+; next free en_sfx_armed + 1  ($06F6)
 
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
@@ -526,7 +526,7 @@ need0		= $CC46			; type id or $FF
 need1		= $CC47			; type id or $FF
 pose_dump	= $CC48			; type being dumped
 pose_keep	= $CC49			; surviving type while dumping ($FF = none)
-load_device	= $CC4A			; IEC device; $ba is far_scale during play
+load_device	= $CC4A			; IEC device (KERNAL $ba is not ours during play)
 emuz_xmsb	= $CC4B			; $d010 bit6 when X>=256
 item_spin	= $CC4C			; world pickup yaw (0..255)
 item_spin_l	= $CC4D			; 8.8 fraction
@@ -640,7 +640,8 @@ status_ms_h	= $CE21
 ; $CE22–$CE81 free (was door runtime SoA)
 door_i0		= $CE22			; room door slice start
 door_i1		= $CE23			; exclusive end
-; $CE24–$CE81 free
+sw_match	= $CE24			; cooked door-tag id while unlocking
+; $CE25–$CE81 free
 en_pat_n	= $CE82			; ENEMY_MAX: patrol remaining cells
 have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD / HAVE_EARTH
 pu_kind		= $CE93			; 0 or BP_QUAD / BP_PENT / BP_RING
@@ -745,7 +746,62 @@ spit_vzl	= $CF5F
 spit_vzh	= $CF60
 spit_life_l	= $CF61
 spit_life_h	= $CF62
-; $CF63+ free
+; Evicted from KERNAL ZP ($90–$bf / SETNAM $b7–$bc). Abs OK — not (ptr),y.
+wish_dx		= $CF63			; signed move intent X
+wish_dz		= $CF64
+wish_dxh	= $CF65			; wish 8.8 high
+wish_dzh	= $CF66
+save_xh		= $CF67
+save_zh		= $CF68
+save_xl		= $CF69
+save_zl		= $CF6A
+col_x		= $CF6B			; collision test point
+col_z		= $CF6C
+col_y		= $CF6D
+obj_i		= $CF6E
+face_bits	= $CF6F			; which box faces visible
+box_x		= $CF70			; AABB scratch (util indexes box_*,x)
+box_y		= $CF71
+box_z		= $CF72
+box_sx		= $CF73
+box_sy		= $CF74
+box_sz		= $CF75
+msg_off		= $CF76			; offset into map_text
+vel_ms		= $CF77			; hold duration ms (lo)
+vel_msh		= $CF78
+turn_acc_l	= $CF79
+turn_acc_h	= $CF7A
+dt_msh		= $CF7B			; frame dt milliseconds (hi)
+inv_l		= $CF7C			; (FOCAL<<16)/(z>>k) lo, mesh project
+inv_h		= $CF7D
+inv_k		= $CF7E
+mesh_vmask	= $CF7F
+mesh_nwork	= $CF80
+random8		= $CF81
+scale_s		= $CF82
+fn_lx		= $CF83			; frustum inward normals (XZ)
+fn_lz		= $CF84
+fn_rx		= $CF85
+fn_rz		= $CF86
+fn_fx		= $CF87
+fn_fz		= $CF88
+pv0		= $CF89			; glyph / ramp / door fill
+pv1		= $CF8A
+pv2		= $CF8B
+pv3		= $CF8C
+pv4		= $CF8D
+col_bg		= $CF8E			; active room background → $d021
+col_fx		= $CF8F			; active room FX
+col_line	= $CF90			; active room lines → colour RAM
+palette_room	= $CF91			; last room_idx palette ($ff = none)
+far_scale	= $CF92			; FOCAL/z integer, far enemy project
+col_wpn		= $CF93			; weapon sprite colour → $d027–$d02a
+sfx_ch		= $CF94			; current channel 0..2
+sfx_id		= $CF95			; sound id / freq scratch
+sample_ms	= $CF96			; PAL 20 / NTSC 17 — set at init
+ps_save_x	= $CF97
+ps_save_y	= $CF98
+; $CF99+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

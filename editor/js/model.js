@@ -613,8 +613,8 @@ export function usesLinkTag(kind) {
   return kind === "switch" || kind === "elevator" || kind === "teleporter_dest";
 }
 
-/** Trigger purposes. Tag is used for teleport / elevator / summon. */
-export const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator", "summon"];
+/** Trigger purposes. Tag is used for teleport / elevator / summon / unlock. */
+export const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator", "summon", "unlock"];
 export const TRIGGER_PURPOSE_LABELS = {
   message: "Display message",
   end_level: "End of level",
@@ -622,6 +622,7 @@ export const TRIGGER_PURPOSE_LABELS = {
   teleport: "Teleport",
   elevator: "Activate elevator",
   summon: "Summon elevator",
+  unlock: "Unlock door",
 };
 
 export function clampTriggerPurpose(s) {
@@ -630,7 +631,11 @@ export function clampTriggerPurpose(s) {
 
 export function triggerUsesTag(purpose) {
   const p = clampTriggerPurpose(purpose);
-  return p === "teleport" || p === "elevator" || p === "summon";
+  return p === "teleport" || p === "elevator" || p === "summon" || p === "unlock";
+}
+
+export function doorUsesTag(lockKey) {
+  return clampDoorLock(lockKey) === "remote";
 }
 
 /** Layout placements draw the first stick frame at this fraction of anim units (Grunt ~4 world high). */
@@ -821,11 +826,12 @@ export const ITEM_MAX_VERTS = 16;
 export const ITEM_MAX_LINES = 16;
 export const ITEM_MAX_UNIQUE = 6;
 
-export const DOOR_LOCKS = ["unlocked", "silver", "gold"];
+export const DOOR_LOCKS = ["unlocked", "silver", "gold", "remote"];
 export const DOOR_LOCK_LABELS = {
   unlocked: "Unlocked",
   silver: "Silver key",
   gold: "Gold key",
+  remote: "Remote",
 };
 /** Discrete AABB scales of the 4×5×1 doorway. Thickness stays 1. */
 export const DOOR_SCALES = [1, 1.5, 2];
@@ -847,7 +853,7 @@ export function clampBackpackType(s) {
 }
 
 export function clampDoorLock(s) {
-  return s === "silver" || s === "gold" ? s : "unlocked";
+  return s === "silver" || s === "gold" || s === "remote" ? s : "unlocked";
 }
 
 export function clampDoorType(s) {
@@ -1820,6 +1826,7 @@ export function clampObject(obj) {
     obj.lockKey = clampDoorLock(obj.lockKey);
     obj.doorType = clampDoorType(obj.doorType);
     obj.locked = obj.lockKey !== "unlocked";
+    obj.tag = clampTag(obj.tag);
     delete obj.keyTag;
     if (obj.otherRoomId != null) obj.otherRoomId = String(obj.otherRoomId);
     else obj.otherRoomId = null;
@@ -1900,6 +1907,7 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.lockKey = clampDoorLock(extra.lockKey ?? (extra.locked ? "silver" : "unlocked"));
     obj.doorType = clampDoorType(extra.doorType);
     obj.doorScale = clampDoorScale(extra.doorScale);
+    obj.tag = clampTag(extra.tag);
     if (extra.otherRoomId) obj.otherRoomId = String(extra.otherRoomId);
   }
   if (kind === "platform") obj.collide = extra.collide !== false;
@@ -2985,6 +2993,7 @@ function parseObjects(list) {
     if (o.kind === "doorway") {
       obj.lockKey = migrateDoorLock(o);
       if (o.otherRoomId != null) obj.otherRoomId = String(o.otherRoomId);
+      if (o.tag != null) obj.tag = clampTag(o.tag);
     }
     if (o.kind === "platform" && o.collide != null) obj.collide = o.collide !== false;
     if (o.kind === "spawn") obj.enabled = o.enabled === true;

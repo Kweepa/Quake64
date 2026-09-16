@@ -29,6 +29,7 @@ nmi_rti
 
 ; $FFFA–$FFFF (RAM under KERNAL / UI char 255) and KERNAL $0314/8.
 ; Call with I/O in so $Dxxx is VIC; $E000+ writes still hit RAM.
+; Writes $0314=irq_entry. CIA1 TA must already be off (load_irq_off / init_irq).
 install_irq_vectors
 	lda #<nmi_rti
 	sta $fffa
@@ -112,6 +113,8 @@ irq_entry
 	lda $d019
 	and #1
 	bne .do
+	; Not raster: RTI, no CIA1 ack. CIA1 TA + this vector = IRQ storm.
+	; Loaders: jsr load_irq_off. Never $0314=irq_entry while CIA1 TA lives.
 	pla
 	sta $01
 	pla

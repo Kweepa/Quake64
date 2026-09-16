@@ -97,8 +97,7 @@ sound_ptr_h	= $b4
 sound_priority	= $c1
 sound_count	= $c2
 sound_max	= $c3
-ps_save_x	= $c4
-ps_save_y	= $c5
+; ps_save_x/y: mem.asm BSS (game); menu playsound uses the same labels
 mouse_en	= $38			; match zp.asm — 1351 on/off (survives locode LOAD)
 
 *= LOCODE_BASE

@@ -1,6 +1,6 @@
 {
   "version": 10,
-  "activeLevel": "E1M2",
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -77,6 +77,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "locked": false
         },
@@ -127,23 +128,9 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
           "locked": false
-        },
-        {
-          "id": "ff80f0a1-d4e1-47bb-98eb-e9dfdfc4b438",
-          "kind": "switch",
-          "x": 21,
-          "y": 105,
-          "z": 139,
-          "sx": 2,
-          "sy": 3,
-          "sz": 1,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
-          "tag": "firstelevator"
         },
         {
           "id": "d02a651b-f650-42c8-9847-5e2c033e828f",
@@ -228,6 +215,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef",
           "locked": false
         },
@@ -277,21 +265,6 @@
           "dir": 1,
           "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
           "collide": false
-        },
-        {
-          "id": "6775dd62-2420-42eb-9331-05501c7cdb39",
-          "kind": "switch",
-          "x": 21,
-          "y": 64,
-          "z": 139,
-          "sx": 2,
-          "sy": 3,
-          "sz": 1,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e",
-          "tag": "firstelevator"
         },
         {
           "id": "a537a113-f506-4ee9-bb08-41449d638e8e",
@@ -355,6 +328,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
           "locked": false
         },
@@ -391,6 +365,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
           "locked": false
         },
@@ -458,6 +433,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "locked": false
         },
@@ -599,21 +575,6 @@
           "roomId": "5815d324-6a01-4d2c-9502-3f3a421cee04"
         },
         {
-          "id": "56bf6182-22f3-4597-8b74-fe9036b65200",
-          "kind": "switch",
-          "x": 124,
-          "y": 79,
-          "z": 175,
-          "sx": 2,
-          "sy": 3,
-          "sz": 1,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486",
-          "tag": "hidden"
-        },
-        {
           "id": "46f7f038-d8c3-4de4-9862-07496de7b5a3",
           "kind": "doorway",
           "x": 27,
@@ -629,6 +590,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "55bb6f77-5638-4dfc-a488-eda26561ed21",
           "locked": false
         },
@@ -731,6 +693,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "5815d324-6a01-4d2c-9502-3f3a421cee04",
           "locked": false
         },
@@ -750,6 +713,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "b569290e-9dbc-4322-9838-ff8bdf565a1d",
           "locked": false
         },
@@ -899,6 +863,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "b569290e-9dbc-4322-9838-ff8bdf565a1d",
           "locked": false
         },
@@ -950,6 +915,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "c181607a-0146-4be9-8946-5c3b0527e1ef",
           "locked": false
         },
@@ -1130,6 +1096,91 @@
           "rot": 6,
           "enabled": false,
           "roomId": "fe882475-4577-4b90-b224-f631a99db34d"
+        },
+        {
+          "id": "df93f6b0-0d6c-4eb2-a217-181db95a6827",
+          "kind": "trigger",
+          "x": 19,
+          "y": 63,
+          "z": 134,
+          "sx": 9,
+          "sy": 4,
+          "sz": 6,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "summon",
+          "text": "",
+          "tag": "firstelevator",
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e"
+        },
+        {
+          "id": "3dc6e5b0-0059-4b06-b3f4-352349e97807",
+          "kind": "trigger",
+          "x": 19,
+          "y": 104,
+          "z": 132,
+          "sx": 8,
+          "sy": 4,
+          "sz": 8,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "summon",
+          "text": "",
+          "tag": "firstelevator",
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e"
+        },
+        {
+          "id": "09e02e1d-51c0-4b12-bff6-53cf43954318",
+          "kind": "trigger",
+          "x": 19,
+          "y": 64,
+          "z": 135,
+          "sx": 3,
+          "sy": 4,
+          "sz": 4,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "elevator",
+          "text": "",
+          "tag": "firstelevator",
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e"
+        },
+        {
+          "id": "38af75f1-cd1f-4bd5-8f44-bf213b3f6e77",
+          "kind": "trigger",
+          "x": 20,
+          "y": 104,
+          "z": 135,
+          "sx": 4,
+          "sy": 4,
+          "sz": 5,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "elevator",
+          "text": "",
+          "tag": "firstelevator",
+          "roomId": "d7962384-2db2-4a88-a53a-a1112e2ced4e"
+        },
+        {
+          "id": "4b6ae122-dd8d-402c-9652-a5d5a2a4ba9b",
+          "kind": "trigger",
+          "x": 123,
+          "y": 78,
+          "z": 173,
+          "sx": 4,
+          "sy": 4,
+          "sz": 3,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "elevator",
+          "text": "",
+          "tag": "hidden",
+          "roomId": "8fff08eb-f3f6-4448-8608-54c3449f4486"
         }
       ]
     },
@@ -1244,6 +1295,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "locked": false,
           "otherRoomId": null
         },
@@ -1352,8 +1404,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "48f4bb7c-f85b-4837-acf3-8a81214372de"
+          "tag": "",
+          "otherRoomId": "48f4bb7c-f85b-4837-acf3-8a81214372de",
+          "locked": false
         },
         {
           "id": "48f4bb7c-f85b-4837-acf3-8a81214372de",
@@ -1458,6 +1511,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "48f4bb7c-f85b-4837-acf3-8a81214372de",
           "locked": false
         },
@@ -1492,8 +1546,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "1c572e13-1b60-48fc-abea-43a8adb20734"
+          "tag": "",
+          "otherRoomId": "1c572e13-1b60-48fc-abea-43a8adb20734",
+          "locked": false
         },
         {
           "id": "e82a324d-f9e2-4956-bcda-0fba46e848f2",
@@ -1511,8 +1566,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7"
+          "tag": "",
+          "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7",
+          "locked": false
         },
         {
           "id": "5b78acdf-c85c-4b99-9867-182aac802eff",
@@ -1561,8 +1617,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7"
+          "tag": "",
+          "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7",
+          "locked": false
         },
         {
           "id": "48d61df3-e3ca-42d5-9f3a-49628cee01d7",
@@ -1684,6 +1741,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "48d61df3-e3ca-42d5-9f3a-49628cee01d7",
           "locked": false
         },
@@ -1703,8 +1761,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085"
+          "tag": "",
+          "otherRoomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085",
+          "locked": false
         },
         {
           "id": "4bef566e-28ee-43c1-ad46-be25caf9385f",
@@ -1876,6 +1935,7 @@
           "lockKey": "silver",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085",
           "locked": true
         },
@@ -1895,6 +1955,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "ec707e69-9eec-4e53-a32b-681dccd8ec0f",
           "locked": false
         },
@@ -1970,6 +2031,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "bca3293b-77d8-485a-bd79-37df6d5a2208",
           "locked": false
         },
@@ -2116,6 +2178,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "7b2e58fd-ad8a-4d66-b1bb-9855f518c055",
           "locked": false
         },
@@ -2218,6 +2281,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "80430749-edbc-4d7d-bbca-332263790b75",
           "locked": false
         },
@@ -2237,6 +2301,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5",
           "locked": false
         },
@@ -2386,6 +2451,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
           "locked": false
         },
@@ -2405,6 +2471,7 @@
           "lockKey": "silver",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf",
           "locked": true
         },
@@ -2473,6 +2540,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 2,
+          "tag": "",
           "locked": false,
           "otherRoomId": null
         },
@@ -2492,6 +2560,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1.5,
+          "tag": "",
           "otherRoomId": "56e26635-7a43-4841-9ca2-973f198bb227",
           "locked": false
         },
@@ -2567,6 +2636,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "af5ce2d5-46fe-41f0-a786-902b097223c4",
           "locked": false
         },
@@ -2653,6 +2723,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1.5,
+          "tag": "",
           "otherRoomId": "56e26635-7a43-4841-9ca2-973f198bb227",
           "locked": false
         },
@@ -2672,8 +2743,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "122327e6-38a9-415d-b6ee-41d27d73f0f9"
+          "tag": "",
+          "otherRoomId": "122327e6-38a9-415d-b6ee-41d27d73f0f9",
+          "locked": false
         },
         {
           "id": "78b8eb7f-dfd6-42ce-884c-8a073f345446",
@@ -2734,8 +2806,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "fd4180ce-dd34-4be0-ad87-1a4bfec4826a"
+          "tag": "",
+          "otherRoomId": "fd4180ce-dd34-4be0-ad87-1a4bfec4826a",
+          "locked": false
         },
         {
           "id": "39a3c204-1033-43de-95b6-dc608485a2a0",
@@ -2860,6 +2933,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "8748e6dd-29e4-40f0-b419-05f17d8efe25",
           "locked": false
         },
@@ -2907,6 +2981,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "8748e6dd-29e4-40f0-b419-05f17d8efe25",
           "locked": false
         },
@@ -2971,8 +3046,9 @@
           "lockKey": "gold",
           "doorType": "Arch",
           "doorScale": 1.5,
-          "locked": true,
-          "otherRoomId": "f8a948cc-7a09-45e9-af37-a6cb119e36aa"
+          "tag": "",
+          "otherRoomId": "f8a948cc-7a09-45e9-af37-a6cb119e36aa",
+          "locked": true
         },
         {
           "id": "4b8a34b4-9fea-4249-a46f-9ae1eacfc845",
@@ -3050,6 +3126,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "509b8043-73ee-4e67-be27-fb3df68cf6dd",
           "locked": false
         },
@@ -3069,6 +3146,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "ac2e2083-2c29-4aac-a19c-c7721bd2bba6",
           "locked": false
         },
@@ -3194,6 +3272,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "ac2e2083-2c29-4aac-a19c-c7721bd2bba6",
           "locked": false
         },
@@ -3364,6 +3443,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "122327e6-38a9-415d-b6ee-41d27d73f0f9",
           "locked": false
         },
@@ -3543,8 +3623,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
-          "locked": false,
-          "otherRoomId": "3aee6079-dbc3-461a-944b-e317fa32e416"
+          "tag": "",
+          "otherRoomId": "3aee6079-dbc3-461a-944b-e317fa32e416",
+          "locked": false
         },
         {
           "id": "534b6f4c-d025-4cf1-8bb1-de32d736ed5f",
@@ -3600,6 +3681,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "4a6659cb-c27c-43c3-966e-f2b4a55138ae",
           "locked": false
         },
@@ -3675,6 +3757,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "8a704e37-f7b3-4555-b04d-1c1d233aea02",
           "locked": false
         },
@@ -3722,6 +3805,7 @@
           "lockKey": "unlocked",
           "doorType": "Tech",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "3aee6079-dbc3-461a-944b-e317fa32e416",
           "locked": false
         },
@@ -3799,6 +3883,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "4a6659cb-c27c-43c3-966e-f2b4a55138ae",
           "locked": false
         },
@@ -3865,8 +3950,9 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 2,
-          "locked": false,
-          "otherRoomId": "7cc30490-9e84-47d3-8991-5015ca448267"
+          "tag": "",
+          "otherRoomId": "7cc30490-9e84-47d3-8991-5015ca448267",
+          "locked": false
         },
         {
           "id": "dd10410d-e692-4fe7-9d93-7da0a51b16b3",
@@ -3974,6 +4060,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 2,
+          "tag": "",
           "otherRoomId": "7cc30490-9e84-47d3-8991-5015ca448267",
           "locked": false
         },
@@ -3993,6 +4080,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 2,
+          "tag": "",
           "locked": false,
           "otherRoomId": null
         },
@@ -4202,6 +4290,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 2,
+          "tag": "",
           "locked": false,
           "otherRoomId": null
         },
@@ -4221,6 +4310,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "773d257d-abee-4475-bb1c-fb2732c7aa0d",
           "locked": false
         },
@@ -4245,7 +4335,7 @@
           "id": "bcadaece-9d5c-41bc-83e1-ef521aa4a498",
           "kind": "pickup",
           "x": 144,
-          "y": 145,
+          "y": 147,
           "z": 63,
           "sx": 0.9270509831248422,
           "sy": 1.5,
@@ -4312,6 +4402,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "7fe64a99-3835-477d-ae04-71bd5d9a6bce",
           "locked": false
         },
@@ -4438,6 +4529,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "39c84000-9ffc-448a-9cb7-ff085efe413c",
           "locked": false
         },
@@ -4500,6 +4592,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1.5,
+          "tag": "",
           "otherRoomId": "52d9a56f-4cff-4b71-9071-ca2675a7e39d",
           "locked": false
         },
@@ -4534,6 +4627,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "162c7559-fbba-41ca-809f-6677e337945f",
           "locked": false
         },
@@ -4581,6 +4675,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7",
           "locked": false
         },
@@ -4600,6 +4695,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7",
           "locked": false
         },
@@ -4642,6 +4738,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "162c7559-fbba-41ca-809f-6677e337945f",
           "locked": false
         },
@@ -4661,8 +4758,9 @@
           "lockKey": "silver",
           "doorType": "Arch",
           "doorScale": 1.5,
-          "locked": true,
-          "otherRoomId": "156da2b6-105d-4a9d-aa43-65d8663f5971"
+          "tag": "",
+          "otherRoomId": "156da2b6-105d-4a9d-aa43-65d8663f5971",
+          "locked": true
         },
         {
           "id": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7",
@@ -4776,6 +4874,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "89e94f61-c8bc-4c0c-acb3-a4ff8baece79",
           "locked": false
         },
@@ -4795,6 +4894,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "e6520f20-0c62-4bb7-8b0e-e464acd302e5",
           "locked": false
         },
@@ -4837,6 +4937,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1.5,
+          "tag": "",
           "otherRoomId": "9f4e32a6-ad59-41d0-9a84-98c03bd908c7",
           "locked": false
         },
@@ -4901,11 +5002,12 @@
           "axis": "z",
           "dir": 1,
           "roomId": "3958eae4-1917-4a18-8180-841376947f2e",
-          "lockKey": "unlocked",
+          "lockKey": "remote",
           "doorType": "Arch",
           "doorScale": 1.5,
+          "tag": "rafterdoor",
           "otherRoomId": "52d9a56f-4cff-4b71-9071-ca2675a7e39d",
-          "locked": false
+          "locked": true
         },
         {
           "id": "fd0fd438-fd6b-4da3-a393-3e255408e24f",
@@ -5081,6 +5183,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "310aae69-9078-41fa-a5d9-ab0873e1c5be",
           "locked": false
         },
@@ -5164,6 +5267,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "e6520f20-0c62-4bb7-8b0e-e464acd302e5",
           "locked": false
         },
@@ -5236,6 +5340,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 1,
+          "tag": "",
           "otherRoomId": "3e5f609f-c2d3-4b0d-8f84-f2e27c42f883",
           "locked": false
         },
@@ -5278,6 +5383,7 @@
           "lockKey": "unlocked",
           "doorType": "Arch",
           "doorScale": 2,
+          "tag": "",
           "locked": false,
           "otherRoomId": null
         },
@@ -5428,7 +5534,41 @@
           "axis": "z",
           "dir": 1,
           "roomId": "3958eae4-1917-4a18-8180-841376947f2e",
-          "tag": ""
+          "tag": "rafterdoor"
+        },
+        {
+          "id": "11c996b8-448c-4758-91ff-31ec24beef47",
+          "kind": "enemy",
+          "x": 57,
+          "y": 132,
+          "z": 54,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 2,
+          "enemy": "Ogre",
+          "patrol": false,
+          "roomId": "3958eae4-1917-4a18-8180-841376947f2e"
+        },
+        {
+          "id": "67a9ab93-1dc6-4581-b39c-aa602aecc22b",
+          "kind": "enemy",
+          "x": 76,
+          "y": 116,
+          "z": 42,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 0,
+          "enemy": "Knight",
+          "patrol": true,
+          "roomId": "3958eae4-1917-4a18-8180-841376947f2e"
         }
       ]
     },

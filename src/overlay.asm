@@ -215,6 +215,7 @@ bind_tab
 	+bind_add door_type, map_ndoors
 	+bind_add door_id, map_ndoors
 	+bind_add door_other, map_ndoors
+	+bind_add door_tag, map_ndoors
 	+bind_add crate_x, map_ncrates
 	+bind_add crate_y, map_ncrates
 	+bind_add crate_z, map_ncrates
@@ -258,7 +259,8 @@ bind_tab
 	+bind_add sw_sx, map_nswitches
 	+bind_add sw_sy, map_nswitches
 	+bind_add sw_sz, map_nswitches
-	+bind_add sw_elev, map_nswitches
+	+bind_add sw_kind, map_nswitches
+	+bind_add sw_tag, map_nswitches
 	+bind_add sw_room, map_nswitches
 	+bind_add sw_face, map_nswitches
 	+bind_add sw_id, map_nswitches

@@ -10,6 +10,8 @@ echo ACME not found. Set ACME in setup-env.bat (see setup-env.example.bat)
 exit /b 1
 
 :run
+python tools\check_irq_contract.py
+if errorlevel 1 exit /b 1
 python tools\gentables.py
 if errorlevel 1 exit /b 1
 python tools\genscreens.py

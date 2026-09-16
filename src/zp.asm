@@ -140,73 +140,15 @@ mesh_nv		= $7f
 mesh_ne		= $80
 box_inside	= $81			; 1 = room (interior cull)
 msg_on		= $82
-wish_dx		= $83			; signed move intent X
-wish_dz		= $84
-save_xh		= $85
-save_zh		= $86
-col_x		= $87			; collision test point
-col_z		= $88
-col_y		= $89
-obj_i		= $8a
-face_bits	= $8b			; which box faces visible
+; Indirect ptrs under $90 — KERNAL LOAD/serial owns $90–$bf (and SETNAM $b7–$bc).
+gy_ptr		= $83			; + $84
+gz_ptr		= $85			; + $86
+fx_ptr		= $87			; + $88 timed-FX header (tick_fx / start_world_spr)
+sfx_zp_l	= $8a			; (ptr),y while arming / stepping
+sfx_zp_h	= $8b
 edge_ptr	= $8c			; + $8d → edge table
 gx_ptr		= $8e			; + $8f
-gy_ptr		= $90			; + $91
-gz_ptr		= $92			; + $93
-box_x		= $94
-box_y		= $95
-box_z		= $96
-box_sx		= $97
-box_sy		= $98
-box_sz		= $99
-fx_ptr		= $9a			; + $9b timed-FX header (tick_fx / start_world_spr)
-msg_off		= $9c			; offset into map_text
-wish_dxh	= $9d			; wish 8.8 high
-wish_dzh	= $9e
-vel_ms		= $9f			; hold duration ms (lo)
-turn_acc_l	= $a0
-turn_acc_h	= $a1
-pitch_acc_l	= $a2
-pitch_acc_h	= $a3
-save_xl		= $a4
-save_zl		= $a5
-dt_msh		= $a6			; frame dt milliseconds (hi)
-vel_msh		= $a7			; hold duration ms (hi)
-; $a8–$ad were 8-bit hold snapshots
-inv_l		= $a8			; (FOCAL<<16)/(z>>k) lo, mesh project
-inv_h		= $a9
-inv_k		= $aa			; unsigned 8-bit fit shift of z
-mesh_vmask	= $ab			; $ff = all mesh_nv slots; else 8-bit box corner mask
-mesh_nwork	= $ac			; verts/edges counted this stage
-random8		= $ad			; rnd8 LCG state (Wolf Deathchase)
-scale_s		= $ae			; scale_vel sign
-fn_lx		= $af			; frustum inward normals (XZ)
-fn_lz		= $b0
-pv0		= $b1			; glyph / ramp / door fill
-pv1		= $b2
-pv2		= $b3
-pv3		= $b4
-pv4		= $b5
-col_bg		= $b6			; active room background → $d021 viewport
-col_fx		= $b7			; active room FX (enemy muzzle, etc.)
-col_line	= $b8			; active room lines → viewport colour RAM
-palette_room	= $b9			; last room_idx palette applied ($ff = none)
-far_scale	= $ba			; FOCAL/z integer, far enemy project
-
-; SFX (playsound.asm) — channel queues in abs; ZP scratch only
-sfx_zp_l	= $bb			; (ptr),y while arming / stepping
-sfx_zp_h	= $bc
-sfx_ch		= $bd			; current channel 0..2
-sfx_id		= $be			; sound id / freq scratch
-col_wpn		= $bf			; active room weapon sprite colour → $d027–$d02a
-sample_ms	= $c0			; PAL 20 / NTSC 17 — set at init
-ps_save_x	= $c1
-ps_save_y	= $c2
-sfx_q_len	= $da			; staged play_sound queue depth 0..4
-fn_rx		= $c3
-fn_rz		= $c4
-fn_fx		= $c5			; near/forward
-fn_fz		= $c6
+; $90–$bf: no game labels (KERNAL)
 
 ; Unique X/Z mesh rotate (xform_mesh_xz)
 mesh_nx		= $c7			; unique X count
@@ -226,6 +168,7 @@ org_yl		= $d6
 org_yh		= $d7
 org_zl		= $d8
 org_zh		= $d9
+sfx_q_len	= $da			; staged play_sound queue depth 0..4
 floor_yl	= $db			; floor 8.8 fraction (ramps); 0 on flats
 lx_b		= $dc			; enemy local vert scratch
 lz_b		= $dd

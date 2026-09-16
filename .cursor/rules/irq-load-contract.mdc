@@ -1,0 +1,18 @@
+---
+description: Play IRQ vs disk — load_irq_off / LoadPrg own CIA1, $d01a, $0314
+globs: src/**/*.asm
+alwaysApply: true
+---
+
+# IRQ vs disk
+
+`irq_entry` acks VIC `$d019` only. A CIA1 Timer A tick with `$0314 = irq_entry` is an IRQ storm (E1M4 roof→stair stream, death-reload). Hang looks like a freeze with I=0, `$0314` in play, `$dc0d` TA live.
+
+- **Kill play IRQ:** `jsr load_irq_off` (I=1, CIA1 masked+acked, `$d01a=0`, `BANK_IO`). C clobbered, A preserved. Do not inline `$dc0d` / `$d01a`.
+- **Disk:** `jsr LoadPrg` only. It enter/exits via `load_irq_off`. Krill vs KERNAL stays inside `LoadPrg`. Callers never `$0314`, `$ff84`, `$ffd5`.
+- **KERNAL `LoadPrg`:** SETNAM / SETLFS / LOAD / CLOSE. No `IOINIT`. `$EA31` only while CLI+$FFD5 (restore after `load_irq_off`+CLOSE). Game must not park vars in KERNAL ZP `$90–$bf`.
+- **`reboot_game`:** `load_irq_off`, `$EA31`, then the deliberate `IOINIT`+$FFD5 back to boot. Only GAME `IOINIT`.
+- **`maybe_stream_room` / `LoadLevel`:** `jsr load_irq_off`. Raster `$d01a=1` only after `install_irq_vectors` and CIA1 still dead.
+- **Krill:** no `IOINIT` on the play path (`$DD02=$3F` uninstalls drive code).
+
+`tools/check_irq_contract.py` enforces this. Do not "just SEI" around a load.

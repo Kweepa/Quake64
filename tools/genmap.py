@@ -289,6 +289,24 @@ def btable(name: str, vals: list[int]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def obj_tag(o) -> str:
+    return (o.get("tag") or "").strip()
+
+
+def door_lock_key(d) -> int:
+    lk = str(d.get("lockKey") or "").strip().lower()
+    if lk == "gold":
+        return 2
+    if lk == "silver":
+        return 1
+    if lk == "remote":
+        return 3
+    if d.get("locked"):
+        tag = str(d.get("keyTag") or "").lower()
+        return 2 if "gold" in tag else 1
+    return 0
+
+
 def ascii_screen(s: str, maxlen: int = 40) -> list[int]:
     """ASCII screen codes for the UI font (mixed case, 32..126)."""
     line = s.replace("\r\n", "\n").split("\n", 1)[0]
@@ -362,6 +380,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     TRIG_TELE = 3
     TRIG_ELEV = 4
     TRIG_SUMMON = 5
+    TRIG_UNLOCK = 6
     TRIG_PURPOSE = {
         "message": TRIG_MSG,
         "end_level": TRIG_END,
@@ -369,7 +388,45 @@ def cook_one(level: dict, map_key: str) -> bytes:
         "teleport": TRIG_TELE,
         "elevator": TRIG_ELEV,
         "summon": TRIG_SUMMON,
+        "unlock": TRIG_UNLOCK,
     }
+    SW_DEST_DOOR = 0
+    SW_DEST_ELEV = 1
+
+    doors_by_tag: dict[str, list] = {}
+    for d in doors:
+        tag = obj_tag(d)
+        if tag:
+            doors_by_tag.setdefault(tag, []).append(d)
+
+    door_tag_ids: dict[str, int] = {}
+    for d in doors:
+        if door_lock_key(d) != 3:
+            continue
+        tag = obj_tag(d)
+        if not tag:
+            raise SystemExit(f"{map_key} remote door has empty tag")
+        if tag not in door_tag_ids:
+            n = len(door_tag_ids) + 1
+            if n > 255:
+                raise SystemExit(f"{map_key} has too many remote door tags")
+            door_tag_ids[tag] = n
+
+    remote_ctrl = {tag: False for tag in door_tag_ids}
+    for s in switches:
+        tag = obj_tag(s)
+        if tag in remote_ctrl:
+            remote_ctrl[tag] = True
+    for t in triggers:
+        if (t.get("purpose") or "") == "unlock":
+            tag = obj_tag(t)
+            if tag in remote_ctrl:
+                remote_ctrl[tag] = True
+    for tag, ok in remote_ctrl.items():
+        if not ok:
+            raise SystemExit(
+                f"{map_key} remote door tag {tag!r} has no switch or unlock trigger"
+            )
 
     # Rooms SoA
     room_x = [r["x"] for r in rooms]
@@ -501,19 +558,11 @@ def cook_one(level: dict, map_key: str) -> bytes:
     by_room: list[list[dict]] = [[] for _ in rooms]
     for d in doors:
         ra, rb = door_rooms(rooms, d)
-        lk = str(d.get("lockKey") or "").strip().lower()
-        if lk == "gold":
-            key = 2
-        elif lk == "silver":
-            key = 1
-        elif d.get("locked"):
-            tag = str(d.get("keyTag") or "").lower()
-            key = 2 if "gold" in tag else 1
-        else:
-            key = 0
+        key = door_lock_key(d)
         dt = str(d.get("doorType") or "Tech").strip()
         dtype = {"Tech": 0, "Arch": 1, "Tri": 2, "tech": 0, "arch": 1, "tri": 2}.get(dt, 0)
         did = map_id[id(d)]
+        tag_id = door_tag_ids.get(obj_tag(d), 0) if key == 3 else 0
         base = {
             "x": d["x"],
             "y": d["y"],
@@ -524,6 +573,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
             "key": key,
             "type": dtype,
             "id": did,
+            "tag": tag_id,
         }
         by_room[ra].append({**base, "face": bake_door_face(d, room_cols[ra]), "other": rb})
         if rb != 255:
@@ -540,6 +590,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     door_type: list[int] = []
     door_id: list[int] = []
     door_other: list[int] = []
+    door_tag: list[int] = []
     room_door_o: list[int] = []
     room_ndoor: list[int] = []
     for lst in by_room:
@@ -557,6 +608,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
             door_type.append(inst["type"])
             door_id.append(inst["id"])
             door_other.append(inst["other"])
+            door_tag.append(inst["tag"])
 
     if len(door_x) > 255:
         raise SystemExit(f"{map_key} has {len(door_x)} baked doors (max 255)")
@@ -649,20 +701,38 @@ def cook_one(level: dict, map_key: str) -> bytes:
     # Switches
     sw_x, sw_y, sw_z = [], [], []
     sw_sx, sw_sy, sw_sz = [], [], []
-    sw_elev, sw_room, sw_face = [], [], []
+    sw_kind, sw_tag, sw_room, sw_face = [], [], [], []
     sw_id = []
     for s in switches:
         ri = room_index(rooms, s, "switch")
-        tag = (s.get("tag") or "").strip()
-        if tag not in elev_by_tag:
-            raise SystemExit(f"switch tag {tag!r} has no elevator")
+        tag = obj_tag(s)
+        tagged_doors = doors_by_tag.get(tag, [])
+        in_elev = tag in elev_by_tag
+        if not tag:
+            kind, arg = 255, 0
+        elif in_elev and tagged_doors:
+            raise SystemExit(
+                f"{map_key} switch tag {tag!r} matches both elevator and doorway"
+            )
+        elif in_elev:
+            kind, arg = SW_DEST_ELEV, elev_by_tag[tag]
+        elif tagged_doors:
+            for d in tagged_doors:
+                if door_lock_key(d) != 3:
+                    raise SystemExit(
+                        f"{map_key} switch tag {tag!r} matches a non-remote doorway"
+                    )
+            kind, arg = SW_DEST_DOOR, door_tag_ids[tag]
+        else:
+            raise SystemExit(f"{map_key} switch tag {tag!r} has no destination")
         sw_x.append(s["x"])
         sw_y.append(s["y"])
         sw_z.append(s["z"])
         sw_sx.append(s["sx"])
         sw_sy.append(s["sy"])
         sw_sz.append(s["sz"])
-        sw_elev.append(elev_by_tag[tag])
+        sw_kind.append(kind)
+        sw_tag.append(arg)
         sw_room.append(ri)
         sw_face.append(FACE.get(s.get("face") or "+z", 0))
         sw_id.append(map_id[id(s)])
@@ -731,6 +801,22 @@ def cook_one(level: dict, map_key: str) -> bytes:
             if tag not in elev_by_tag:
                 raise SystemExit(f"{kind} trigger tag {tag!r} has no elevator")
             arg = elev_by_tag[tag]
+        elif purpose == TRIG_UNLOCK:
+            tag = obj_tag(t)
+            if tag in door_tag_ids:
+                arg = door_tag_ids[tag]
+            elif tag in elev_by_tag:
+                raise SystemExit(
+                    f"{map_key} unlock trigger tag {tag!r} is an elevator (use elevator/summon)"
+                )
+            elif tag in doors_by_tag:
+                raise SystemExit(
+                    f"{map_key} unlock trigger tag {tag!r} matches a non-remote doorway"
+                )
+            else:
+                raise SystemExit(
+                    f"{map_key} unlock trigger tag {tag!r} has no remote door"
+                )
         tr_x.append(t["x"])
         tr_y.append(t["y"])
         tr_z.append(t["z"])
@@ -898,6 +984,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(door_type)
     add(door_id)
     add(door_other)
+    add(door_tag)
     add(crate_x)
     add(crate_y)
     add(crate_z)
@@ -941,7 +1028,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(sw_sx)
     add(sw_sy)
     add(sw_sz)
-    add(sw_elev)
+    add(sw_kind)
+    add(sw_tag)
     add(sw_room)
     add(sw_face)
     add(sw_id)
@@ -1002,6 +1090,9 @@ TRIG_HURT	= 2
 TRIG_TELE	= 3
 TRIG_ELEV	= 4
 TRIG_SUMMON	= 5
+TRIG_UNLOCK	= 6
+SW_DEST_DOOR	= 0
+SW_DEST_ELEV	= 1
 FACE_PZ	= 0
 FACE_MZ	= 1
 FACE_PX	= 2
@@ -1025,6 +1116,7 @@ BP_NTYPES	= 15
 DOOR_KEY_NONE	= 0
 DOOR_KEY_SILVER	= 1
 DOOR_KEY_GOLD	= 2
+DOOR_KEY_REMOTE	= 3
 DOOR_TECH	= 0
 DOOR_ARCH	= 1
 DOOR_TRI	= 2

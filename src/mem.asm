@@ -356,7 +356,7 @@ PROC_D		= $CB90			; timer/accum hi
 PROC_E		= $CB98			; elev home return Y
 PROC_L		= $CBA0			; local door/elev SoA index
 floor_slope	= $CBA8			; 1 if this frame's floor is a ramp
-trig_inside	= $CBA9			; trigger SoA index or $ff
+trig_inside	= $CBA9			; occupancy bits, Nth same-room trigger
 hurt_ms_l	= $CBAA			; hurt-trigger cooldown remaining
 hurt_ms_h	= $CBAB
 vic_border	= $CBAC			; staged $d020 (IRQ)
@@ -624,12 +624,12 @@ emuz_pending	= $CE11			; enemy idx waiting to muzzle, $ff = none
 fb_probe_y	= $CE12			; floor_below: inclusive max walkable Y
 death_wait_l	= $CE13			; death hold ms acc
 death_wait_h	= $CE14
-; $CE15 free (was emuz_skip + splat on/ms)
+col_room	= $CE15			; collision room for inset/floor/solid
 splat_xmsb	= $CE16			; $d010 bit7 when X>=256
 splat_vx		= $CE17
 splat_vy		= $CE18
 splat_col	= $CE19			; COL_SPLAT_HIT or col_line (miss)
-; $CE1A free (was splat_skip)
+trig_seen	= $CE1A			; update_triggers: b0=hurt ticked, b1=msg overlap
 shot_hit_i	= $CE1B			; closest hitscan enemy, $ff = miss
 shot_hit_z	= $CE1C			; CAM_ZH of that hit
 hurt_flash_l	= $CE1D			; remaining red-border ms
@@ -658,7 +658,7 @@ fx_oz		= $CE9B
 en_pain_i	= $CE9D			; ENEMY_MAX: pain/death/attack variant index
 sample_ms_chk	= $CEAD			; shadow of sample_ms (init_irq); tripwire restore
 spd_trip	= $CEAE			; sample_ms corruption count (IRQ .top)
-; Grenade SoA — 4 slots × 27 bytes + 1 scratch, $CEAF–$CF03
+; Grenade SoA — 4 slots × 21 bytes, $CEAF–$CF02
 gr_on		= $CEAF
 gr_room		= $CEB3
 gr_owner	= $CEB7
@@ -680,7 +680,7 @@ gr_fuse_l	= $CEF3
 gr_fuse_h	= $CEF7
 gr_life_l	= $CEFB
 gr_life_h	= $CEFF
-gren_save_room	= $CF03
+; $CF03 free (was gren_save_room)
 ; Hitscan params (live during gun_hitscan / splat_aim_jitter)
 scan_hit_x	= $CF04			; |sx−CX| max (inclusive)
 scan_hit_y	= $CF05			; |sy−64| max, $ff = no Y gate (both guns)

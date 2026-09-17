@@ -160,14 +160,8 @@ update_grenades
 
 gren_tick
 	stx obj_i
-	lda room_idx
-	sta gren_save_room
 	lda gr_room,x
-	cmp gren_save_room
-	beq .gt_phys
-	jsr set_room_idx
-	ldx obj_i
-.gt_phys
+	sta col_room
 	clc
 	lda gr_acc,x
 	adc dt_ms
@@ -208,14 +202,14 @@ gren_tick
 	jsr gren_contact
 	ldx obj_i
 	lda gr_on,x
-	beq .gt_rest
+	beq .gt_rts
 	lda gr_flags,x
 	and #GREN_F_PEND
 	beq .gt_fuse
 	lda fx_on
 	bne .gt_life
 	jsr gren_explode
-	jmp .gt_rest
+	jmp .gt_rts
 .gt_fuse
 	lda gr_flags,x
 	and #GREN_F_BOUNCE
@@ -229,11 +223,11 @@ gren_tick
 	sta gr_fuse_h,x
 	bcs .gt_life
 	jsr gren_explode
-	jmp .gt_rest
+	jmp .gt_rts
 .gt_life
 	ldx obj_i
 	lda gr_on,x
-	beq .gt_rest
+	beq .gt_rts
 	sec
 	lda gr_life_l,x
 	sbc dt_ms
@@ -241,13 +235,8 @@ gren_tick
 	lda gr_life_h,x
 	sbc dt_msh
 	sta gr_life_h,x
-	bcs .gt_rest
+	bcs .gt_rts
 	jsr gren_explode
-.gt_rest
-	lda gren_save_room
-	cmp room_idx
-	beq .gt_rts
-	jsr set_room_idx
 .gt_rts
 	rts
 
@@ -415,7 +404,8 @@ gren_move_y
 	ldx obj_i
 	lda gr_yh,x
 	sta fb_probe_y
-	jsr floor_below
+	ldy col_room
+	jsr floor_below_y
 	bcc gren_try_y
 	lda proc_tmp2
 	cmp save_xh
@@ -466,7 +456,8 @@ gren_col_xz
 
 ; C=1 allowed (room colliders only — door holes bounce)
 gren_pos_ok
-	jsr in_room_inset
+	lda col_room
+	jsr in_room_inset_a
 	bcc .gpo_no
 	jsr gren_solid_at
 	bcs .gpo_no
@@ -486,7 +477,7 @@ gren_solid_at
 	adc #EYE_HEIGHT
 	sta cam_yh
 	ldy #0
-	jsr solid_at
+	jsr solid_at_col
 	pla
 	sta cam_yh
 	rts
@@ -528,6 +519,10 @@ gren_hit_enemies
 	rts
 
 gren_hit_player
+	ldx obj_i
+	lda gr_room,x
+	cmp room_idx
+	bne .ghp_rts
 	lda cam_xh
 	sta pv0
 	lda cam_zh

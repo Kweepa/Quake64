@@ -1,6 +1,10 @@
 ; Room physics, proximity triggers, floor / eye sync
 !zone world
 
+!if TRIG_ROOM_MAX > 8 {
+	!error "trig_inside is 8 bits; TRIG_ROOM_MAX must be <= 8"
+}
+
 ; ------------------------------------------------------------------
 world_init
 	lda spawn_room
@@ -27,8 +31,6 @@ world_init
 	sta hurt_ms_h
 	sta item_spin
 	sta item_spin_l
-	lda #$ff
-	sta trig_inside
 	; spawn eye at spawn_x+1 (center-ish), spawn_y+EYE, spawn_z+1
 	clc
 	lda spawn_x
@@ -264,10 +266,13 @@ peek_rc_floor
 	clc
 	rts
 
-; col_x/col_z/room_idx set. fb_probe_y = probe Y inclusive.
+; col_x/col_z set. Y = room (floor_below uses room_idx).
+; fb_probe_y = probe Y inclusive.
 ; C=1, proc_tmp2 = highest walkable ≤ fb_probe_y (rc floor, crate top, solid plat).
 floor_below
 	ldy room_idx
+floor_below_y
+	sty col_room
 	jsr peek_rc_floor
 	bcc .fb_surf
 	lda proc_tmp2
@@ -282,7 +287,7 @@ floor_below
 	cpx	map_ncrates
 	bcs .fb_p
 	+lda_mx crate_room
-	cmp room_idx
+	cmp col_room
 	bne .fb_cn
 	+lda_mx crate_x
 	sta box_x
@@ -309,7 +314,7 @@ floor_below
 	+lda_mx plat_solid
 	beq .fb_pn
 	+lda_mx plat_room
-	cmp room_idx
+	cmp col_room
 	bne .fb_pn
 	+lda_mx plat_x
 	sta box_x
@@ -751,15 +756,19 @@ update_fall
 ; solid_at — col_x/col_z blocked by crate, solid platform, or closed door?
 ; C=1 blocked. Y=1: crate rise <= STEP_UP is not a wall (player/enemy).
 ; Y=0: crate volume always solid (grenade).
+; solid_at uses room_idx; solid_at_col uses col_room (already set).
 ; ------------------------------------------------------------------
 solid_at
+	lda room_idx
+	sta col_room
+solid_at_col
 	; crates — solid on Y overlap (not when on/above top or under)
 	ldx #0
 .sa_c
 	cpx	map_ncrates
 	bcs .sa_p
 	+lda_mx crate_room
-	cmp room_idx
+	cmp col_room
 	bne .sa_cn
 	+lda_mx crate_y
 	sta box_y
@@ -804,7 +813,7 @@ solid_at
 	+lda_mx plat_solid
 	beq .sa_pn
 	+lda_mx plat_room
-	cmp room_idx
+	cmp col_room
 	bne .sa_pn
 	+lda_mx plat_y
 	sta box_y
@@ -836,7 +845,8 @@ solid_at
 	beq .sa_d
 	jmp .sa_pl
 .sa_d
-	jmp door_blocks
+	ldy col_room
+	jmp door_blocks_y
 .sa_yes
 	sec
 	rts
@@ -1188,10 +1198,11 @@ room_cols_inset1
 
 ; ------------------------------------------------------------------
 ; in_room_inset — col_x/col_z inside room_idx colliders (PLAYER_R inset)?
-; C=1 yes. No door holes.
+; in_room_inset_a — A = room. C=1 yes. No door holes.
 ; ------------------------------------------------------------------
 in_room_inset
 	lda room_idx
+in_room_inset_a
 	jsr room_mul3
 	tax
 	jsr rc_inset_ok
@@ -1962,19 +1973,39 @@ near_box_xz
 	rts
 
 ; ------------------------------------------------------------------
-; update_triggers — first 3D overlap in the active room: XZ plus
+; update_triggers — every same-room volume: XZ plus
 ; [box_y, box_y+sy) vs the player feet–eye line (player_overlaps_y).
-; Message: HUD while inside. Hurt: 10 HP on enter, then every HURT_MS.
-; End of level / teleport / elevator / summon: once on entry until leave.
+; Bit N = Nth trigger in this room (SoA order). Enter fires per bit;
+; stay = hold (msg HUD / hurt tick); leave clears the bit.
+; End / teleport: jmp (do not continue the scan).
 ; ------------------------------------------------------------------
 update_triggers
+	lda #0
+	sta trig_seen
 	ldx #0
+	ldy #0				; room-local bit
 .ut
 	cpx	map_ntrigs
-	bcs .ut_miss
+	bcc .ut_go
+	jmp .ut_fin
+.ut_go
 	+lda_mx tr_room
 	cmp room_idx
-	bne .ut_n
+	beq .ut_room
+	inx
+	bne .ut_back
+	jmp .ut_fin
+.ut_back
+	jmp .ut
+.ut_room
+	cpy #TRIG_ROOM_MAX
+	bcc .ut_bit
+	inx
+	bne .ut_back
+	jmp .ut_fin
+.ut_bit
+	lda ut_bits,y
+	sta pv1				; mask
 	+lda_mx tr_x
 	sta box_x
 	+lda_mx tr_y
@@ -1992,59 +2023,59 @@ update_triggers
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	bcc .ut_n
+	bcs .ut_xzok
+	jmp .ut_out
+.ut_xzok
 	jsr player_overlaps_y
-	bcc .ut_n
-	stx pv0				; hit index
-	jmp .ut_apply
-.ut_n
-	inx
-	beq .ut_miss
-	jmp .ut
-.ut_miss
-	lda #$ff
-	sta pv0
-.ut_apply
-	lda pv0
-	cmp trig_inside
-	beq .ut_same
-	sta trig_inside
-	cmp #$ff
-	bne .ut_enter
-	lda msg_on
-	beq .ut_done
-	lda #0
-	sta msg_on
-	jmp hud_msg_blank
-.ut_enter
-	ldx pv0
-	jmp trig_enter
-.ut_same
+	bcs .ut_yok
+	jmp .ut_out
+.ut_yok
+	+lda_mx tr_purpose
+	cmp #TRIG_MSG
+	bne .ut_nmsg
+	lda trig_seen
+	ora #2
+	sta trig_seen
+.ut_nmsg
 	lda trig_inside
-	cmp #$ff
-	beq .ut_done
+	and pv1
+	bne .ut_hold
+	lda trig_inside
+	ora pv1
+	sta trig_inside
+	+lda_mx tr_purpose
+	cmp #TRIG_END
+	beq .ut_jmp
+	cmp #TRIG_TELE
+	beq .ut_jmp
+	txa
+	pha
+	tya
+	pha
+	jsr trig_enter
+	pla
+	tay
+	pla
 	tax
+	jmp .ut_adv
+.ut_jmp
+	jmp trig_enter
+.ut_hold
 	+lda_mx tr_purpose
 	cmp #TRIG_MSG
 	beq .ut_msghold
 	cmp #TRIG_HURT
-	beq .ut_hurttick
-.ut_done
-	rts
-.ut_msghold
-	lda msg_on
-	cmp #1
-	bne .ut_msgdraw
-	+lda_mx tr_arg
-	cmp msg_off
-	beq .ut_done
-.ut_msgdraw
-	lda #1
-	sta msg_on
-	+lda_mx tr_arg
-	sta msg_off
-	jmp hud_message
-.ut_hurttick
+	bne .ut_adv
+	lda trig_seen
+	lsr
+	bcs .ut_adv
+	lda trig_seen
+	ora #1
+	sta trig_seen
+	txa
+	pha
+	tya
+	pha
 	sec
 	lda hurt_ms_l
 	sbc dt_ms
@@ -2052,13 +2083,66 @@ update_triggers
 	lda hurt_ms_h
 	sbc dt_msh
 	sta hurt_ms_h
-	bcs .ut_done
+	bcs .ut_hn
 	lda #<HURT_MS
 	sta hurt_ms_l
 	lda #>HURT_MS
 	sta hurt_ms_h
 	lda #HURT_HP
-	jmp take_damage
+	jsr take_damage
+.ut_hn
+	pla
+	tay
+	pla
+	tax
+	jmp .ut_adv
+.ut_out
+	lda pv1
+	eor #$ff
+	and trig_inside
+	sta trig_inside
+.ut_adv
+	iny
+	inx
+	bne .ut_more
+	jmp .ut_fin
+.ut_more
+	jmp .ut
+.ut_msghold
+	lda msg_on
+	cmp #1
+	bne .ut_msgdraw
+	+lda_mx tr_arg
+	cmp msg_off
+	beq .ut_adv
+.ut_msgdraw
+	lda #1
+	sta msg_on
+	+lda_mx tr_arg
+	sta msg_off
+	txa
+	pha
+	tya
+	pha
+	jsr hud_message
+	pla
+	tay
+	pla
+	tax
+	jmp .ut_adv
+.ut_fin
+	lda trig_seen
+	and #2
+	bne .ut_rts
+	lda msg_on
+	beq .ut_rts
+	lda #0
+	sta msg_on
+	jmp hud_msg_blank
+.ut_rts
+	rts
+ut_bits
+	!byte $01,$02,$04,$08,$10,$20,$40,$80
 
 ; X = trigger SoA. On-entry dispatch.
 trig_enter

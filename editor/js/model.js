@@ -778,8 +778,9 @@ export function elevStopBottoms(doc, elev) {
     return { dest: floorY + elev.elevLow, home: floorY + elev.elevHigh };
   }
   let home = elev.y | 0;
-  const dest = floorY;
-  if ((elev.y | 0) === floorY && room) {
+  let dest = floorY;
+  if ((elev.y | 0) <= floorY && room) {
+    dest = elev.y | 0;
     const map = activeMap(doc);
     const plats = (map?.objects || []).filter((o) => o.kind === "platform");
     let raised = nearestFloorHome(elev, room, floorY);

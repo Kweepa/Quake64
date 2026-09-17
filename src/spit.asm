@@ -96,13 +96,8 @@ update_spit
 	bne .usp_go
 	rts
 .usp_go
-	lda room_idx
-	sta gren_save_room
 	lda spit_room
-	cmp gren_save_room
-	beq .usp_phys
-	jsr set_room_idx
-.usp_phys
+	sta col_room
 	; At most one 32ms step per frame — never spiral under load.
 	clc
 	lda spit_acc
@@ -124,15 +119,10 @@ update_spit
 	lda spit_life_h
 	sbc dt_msh
 	sta spit_life_h
-	bcs .usp_rest
+	bcs .usp_rts
 .usp_die
 	lda #0
 	sta spit_on
-.usp_rest
-	lda gren_save_room
-	cmp room_idx
-	beq .usp_rts
-	jsr set_room_idx
 .usp_rts
 	rts
 
@@ -162,7 +152,8 @@ spit_step
 	sta col_x
 	lda spit_zh
 	sta col_z
-	jsr in_room_inset
+	lda spit_room
+	jsr in_room_inset_a
 	bcc .sst_no
 	lda spit_vyl
 	ldy spit_vyh
@@ -188,7 +179,8 @@ spit_step
 	sta col_z
 	lda spit_yh
 	sta fb_probe_y
-	jsr floor_below
+	ldy spit_room
+	jsr floor_below_y
 	bcc .sst_ok
 	lda proc_tmp2
 	cmp spit_yh
@@ -216,6 +208,9 @@ spit_asr_ay
 
 ; C=1 hit
 spit_hit_player
+	lda spit_room
+	cmp room_idx
+	bne .shp_no
 	lda spit_xh
 	sec
 	sbc cam_xh

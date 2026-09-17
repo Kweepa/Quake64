@@ -2,10 +2,21 @@
 !zone door
 
 ; ------------------------------------------------------------------
-; set_room_idx — A = room
+; set_room_idx — A = room. Player only. Clears trigger occupancy.
 ; ------------------------------------------------------------------
 set_room_idx
 	sta room_idx
+	lda #0
+	sta trig_inside
+	lda msg_on
+	bne .sri_blank
+	lda room_idx
+	rts
+.sri_blank
+	lda #0
+	sta msg_on
+	jsr hud_msg_blank
+	lda room_idx
 	rts
 
 ; door_slice — door_i0..door_i1 (exclusive) = this room's baked doors
@@ -112,9 +123,16 @@ door_unlock_tag
 
 ; ------------------------------------------------------------------
 ; door_blocks — col_x/col_z vs locked door in this room. C=1 blocked
+; door_blocks_y — Y = room
 ; ------------------------------------------------------------------
 door_blocks
-	jsr door_slice
+	ldy room_idx
+door_blocks_y
+	+lda_my room_door_o
+	sta door_i0
+	clc
+	+adc_my room_ndoor
+	sta door_i1
 	ldx door_i0
 .db
 	cpx door_i1

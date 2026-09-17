@@ -178,7 +178,7 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CB98` | 8 | `PROC_E` | Elev home Y |
 | `$CBA0` | 8 | `PROC_L` | Local SoA index |
 | `$CBA8` | 1 | `floor_slope` | 1 if this frame's floor is a ramp |
-| `$CBA9` | 1 | `trig_inside` | Trigger SoA index or `$ff` |
+| `$CBA9` | 1 | `trig_inside` | Occupancy bits; Nth same-room trigger |
 | `$CBAA` | 2 | `hurt_ms_l/h` | Hurt-trigger cooldown remaining |
 | `$CBAC` | 4 | — | Unused |
 | `$CBB0` | 4 | `elev_y` | `MAP_NELEVS` ≤ 4 |
@@ -279,14 +279,14 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CE0F` | 1 | `emuz_vy` | |
 | `$CE10` | 1 | `emuz_col` | |
 | `$CE11` | 1 | `emuz_pending` | |
-| `$CE12` | 1 | `emuz_skip` | |
-| `$CE13` | 2 | `splat_ms_l/h` | |
-| `$CE15` | 1 | `splat_on` | |
+| `$CE12` | 1 | `fb_probe_y` | floor_below inclusive max walkable Y |
+| `$CE13` | 2 | `death_wait_l/h` | Death hold ms |
+| `$CE15` | 1 | `col_room` | Collision room for inset/floor/solid |
 | `$CE16` | 1 | `splat_xmsb` | |
 | `$CE17` | 1 | `splat_vx` | |
 | `$CE18` | 1 | `splat_vy` | |
 | `$CE19` | 1 | `splat_col` | |
-| `$CE1A` | 1 | `splat_skip` | |
+| `$CE1A` | 1 | `trig_seen` | update_triggers: b0 hurt ticked, b1 msg overlap |
 | `$CE1B` | 1 | `shot_hit_i` | |
 | `$CE1C` | 1 | `shot_hit_z` | |
 | `$CE1D` | 1 | `hurt_flash_l` | Remaining red-border ms lo |

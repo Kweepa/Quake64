@@ -38,6 +38,7 @@ SWITCH_MAX = 16
 ELEV_MAX = 4
 ENEMY_MAX = 16
 TRIG_MAX = 16
+TRIG_ROOM_MAX = 8
 DEST_MAX = 16
 BP_MAX = 32
 FACE = {"+z": 0, "-z": 1, "+x": 2, "-x": 3}
@@ -680,7 +681,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
         if auto:
             home = e["y"]
             dest = floor_y
-            if e["y"] == floor_y:
+            if e["y"] <= floor_y:
+                dest = e["y"]
                 raised = nearest_floor_home(e, rooms[ri], floor_y)
                 if raised is None:
                     raised = nearest_plat_home(e, ri, plats, plat_room, floor_y)
@@ -827,6 +829,15 @@ def cook_one(level: dict, map_key: str) -> bytes:
         tr_purpose.append(purpose)
         tr_arg.append(arg)
         tr_id.append(map_id[id(t)])
+
+    by_room_tr: dict[int, int] = {}
+    for ri in tr_room:
+        by_room_tr[ri] = by_room_tr.get(ri, 0) + 1
+    for ri, n in by_room_tr.items():
+        if n > TRIG_ROOM_MAX:
+            raise SystemExit(
+                f"{map_key} room {ri} has {n} triggers (max {TRIG_ROOM_MAX})"
+            )
 
     # Backpacks (pickup tetrahedrons)
     bp_x, bp_y, bp_z, bp_type, bp_room = [], [], [], [], []
@@ -1079,6 +1090,7 @@ PLAT_MAX	= 16
 SWITCH_MAX	= 16
 ELEV_MAX	= 4
 TRIG_MAX	= 16
+TRIG_ROOM_MAX	= 8
 DEST_MAX	= 16
 ROOM_MAX_TYPES	= 2
 MAP_MAX_BYTES	= 4096

@@ -219,6 +219,10 @@ eu_approach
 	sta en_timer,x
 	sta en_timer_h,x
 .eu_ap_step
+	; Knight: stand in melee range (don't sidestep out of the swing)
+	+ldy_mx en_type
+	cpy #ENT_KNIGHT
+	beq .eu_ap_kclose
 	; Rottweiler: stand in melee range; repath when chase timer expires
 	jsr enemy_get_class
 	beq .eu_ap_acc			; grunt — keep strafing
@@ -245,6 +249,16 @@ eu_approach
 	sta en_timer,x
 	lda #>DOG_REPATH_MS
 	sta en_timer_h,x
+	jmp .eu_ap_acc
+.eu_ap_kclose
+	jsr enemy_same_floor
+	bcc .eu_ap_acc			; other floor — keep closing
+	ldx enemy_idx
+	jsr enemy_chebyshev
+	+ldy_mx en_type
+	cmp enemy_range,y
+	beq .eu_ap_stand
+	bcc .eu_ap_stand
 	jmp .eu_ap_acc
 .eu_ap_stand
 	lda #0				; clear repath so resume chases immediately
@@ -291,11 +305,17 @@ eu_approach
 .eu_ap_ready
 	cpy #ENT_OGRE
 	beq .eu_ap_ogre
+	cpy #ENT_KNIGHT
+	beq .eu_ap_knight
 	jsr enemy_get_class
 	beq .eu_ap_glos
 	jsr enemy_same_floor
 	bcs .eu_ap_doatk
 	jmp eu_next			; dog — no bite through a hole
+.eu_ap_knight
+	jsr enemy_same_floor
+	bcs .eu_ap_doatk
+	jmp eu_next			; no slash down a hole
 .eu_ap_ogre
 	jsr enemy_chebyshev
 	cmp #OGRE_MELEE_R + 1
@@ -319,6 +339,13 @@ eu_approach
 	jmp eu_next			; corner / hole in the way
 .eu_ap_doatk
 	ldx enemy_idx
+	+ldy_mx en_type
+	cpy #ENT_KNIGHT
+	bne .eu_ap_doatk_pick
+	lda #0				; runattack
+	jsr enemy_enter_knight_attack
+	jmp eu_next
+.eu_ap_doatk_pick
 	lda #EN_ATTACK
 	sta en_state,x
 	lda #0
@@ -329,7 +356,46 @@ eu_approach
 
 ; ------------------------------------------------------------------
 eu_attack
+	ldx enemy_idx
+	+ldy_mx en_type
+	cpy #ENT_KNIGHT
+	beq .eu_atk_k
 	jmp eu_next
+.eu_atk_k
+	lda en_pain_i,x
+	beq .eu_atk_run
+	jmp eu_next			; attackb — planted
+.eu_atk_run
+	lda en_frame,x
+	cmp #KNIGHT_RUNATK_FIRE	; opening charge, then plant for the hit
+	bcc .eu_atk_lunge
+	jmp eu_next
+.eu_atk_lunge
+	clc
+	lda en_step,x
+	adc dt_ms
+	sta en_step,x
+	lda en_step_h,x
+	adc dt_msh
+	sta en_step_h,x
+.eu_atk_slp
+	lda en_step_h,x
+	bne .eu_atk_go
+	lda en_step,x
+	cmp #ENEMY_STEP_MS
+	bcs .eu_atk_go
+	jmp eu_next
+.eu_atk_go
+	sec
+	lda en_step,x
+	sbc #ENEMY_STEP_MS
+	sta en_step,x
+	lda en_step_h,x
+	sbc #0
+	sta en_step_h,x
+	jsr enemy_patrol_step	; blocked = stop; no dodge
+	ldx enemy_idx
+	jmp .eu_atk_slp
 
 ; ------------------------------------------------------------------
 eu_pain
@@ -512,10 +578,20 @@ enemy_anim_step
 .eas_atlen
 	; Latch hit if we landed on / skipped past fire frame: old < fire <= new
 	cpy #ENT_OGRE
-	bne .eas_ff_tbl
+	bne .eas_ff_k
 	lda en_pain_i,x
 	bne .eas_ff_tbl			; shoot uses table
 	lda #OGRE_SWING_FIRE
+	bne .eas_ff
+.eas_ff_k
+	cpy #ENT_KNIGHT
+	bne .eas_ff_tbl
+	lda en_pain_i,x
+	bne .eas_ff_katkb
+	lda #KNIGHT_RUNATK_FIRE
+	bne .eas_ff
+.eas_ff_katkb
+	lda #KNIGHT_ATKB_FIRE
 	bne .eas_ff
 .eas_ff_tbl
 	lda enemy_fire_frame,y
@@ -544,6 +620,11 @@ enemy_anim_step
 	jsr spawn_ogre_grenade
 	jmp .eas_atk_rest
 .eas_not_ogre_fire
+	cpy #ENT_KNIGHT
+	bne .eas_not_knight_fire
+	jsr enemy_slash
+	jmp .eas_atk_rest
+.eas_not_knight_fire
 	cpy #ENT_SCRAG
 	bne .eas_gun
 	lda spit_on
@@ -572,6 +653,7 @@ enemy_anim_step
 	jmp .eas_n
 +
 	; Ogre: re-swing if still in melee; grenade always back to chase.
+	; Knight: re-slash if still in melee.
 	; Scrag: wait for live spit to clear before re-attack.
 	; Grunt 50% re-shoot; Rott always re-bite if still in range
 	ldx enemy_idx
@@ -589,6 +671,21 @@ enemy_anim_step
 	jsr enemy_enter_ogre_attack
 	jmp .eas_n
 .eas_not_ogre
+	cpy #ENT_KNIGHT
+	bne .eas_not_knight_re
+	jsr enemy_same_floor
+	bcc .eas_to_ap
+	jsr enemy_chebyshev
+	+ldy_mx en_type
+	cmp enemy_range,y
+	beq .eas_k_again
+	bcc .eas_k_again
+	jmp .eas_to_ap
+.eas_k_again
+	lda #1				; attackb follow-up
+	jsr enemy_enter_knight_attack
+	jmp .eas_n
+.eas_not_knight_re
 	cpy #ENT_SCRAG
 	bne .eas_not_scrag_re
 	lda spit_on
@@ -827,6 +924,8 @@ select_dodge_dir
 	beq .sdd_zig			; ogre closes, doesn't back off
 	cpy #ENT_SCRAG
 	beq .sdd_zig			; scrag closes, doesn't back off
+	cpy #ENT_KNIGHT
+	beq .sdd_zig			; knight closes, doesn't back off
 	jsr enemy_chebyshev
 	cmp #GRUNT_BACKOFF + 1
 	bcs .sdd_zig
@@ -1032,7 +1131,21 @@ enemy_enter_ogre_attack
 	ldx enemy_idx
 	jmp enemy_face_player
 
-; Enter approach: grunt APPROACH_MIN; Rott DOG_REPATH. Zero step; pick dodge.
+; A = attack variant (0=runattack, 1=attackb). Zero step so lunge doesn't inherit chase cadence.
+enemy_enter_knight_attack
+	ldx enemy_idx
+	sta en_pain_i,x
+	lda #EN_ATTACK
+	sta en_state,x
+	lda #0
+	sta en_frame,x
+	sta en_step,x
+	sta en_step_h,x
+	jsr enemy_play_clip_sfx_enter
+	ldx enemy_idx
+	jmp enemy_face_player
+
+; Enter approach: grunt APPROACH_MIN; Rott DOG_REPATH; knight immediate. Zero step; pick dodge.
 enemy_enter_approach
 	stx enemy_idx
 	lda #EN_APPROACH
@@ -1041,6 +1154,13 @@ enemy_enter_approach
 	sta en_frame,x
 	sta en_step,x
 	sta en_step_h,x
+	+ldy_mx en_type
+	cpy #ENT_KNIGHT
+	bne .eea_not_k
+	sta en_timer,x
+	sta en_timer_h,x
+	jmp .eea_dodge
+.eea_not_k
 	jsr enemy_get_class
 	bne .eea_dog
 	lda #<APPROACH_MIN_MS
@@ -1143,6 +1263,32 @@ enemy_saw
 	lda #SOUND_OGRE_OGDRAG
 	jmp play_sound
 .esaw_rts
+	rts
+
+; Knight slash — recheck melee range, 4–7 HP.
+enemy_slash
+	ldx enemy_idx
+	jsr enemy_same_floor
+	bcc .esl_rts
+	jsr enemy_chebyshev
+	+ldy_mx en_type
+	cmp enemy_range,y
+	beq .esl_hit
+	bcc .esl_hit
+	rts
+.esl_hit
+	jsr rnd8
+	and #3
+	clc
+	adc #KNIGHT_SLASH_DMG
+	sta rot0
+	lda player_hp
+	beq .esl_rts
+	lda rot0
+	jsr take_damage
+	lda enemy_idx
+	sta bite_splat_i
+.esl_rts
 	rts
 
 ; Grunt fire frame: recheck LOS, distance-scaled hit roll, 8–15 HP.
@@ -2268,42 +2414,50 @@ shotgun_miss_splat
 .sms_rts
 	rts
 
-; A/Y = base sx/sy → A/Y = base ±scan_j* jitter, clamped to viewport.
+; A/Y = base sx/sy → /2, then splat_aim_half.
 splat_aim_jitter
+	lsr
+	sta rot2
+	tya
+	lsr
+	tay
+	lda rot2
+; A/Y already half-pixel (0..95 / 0..63). Jitter, clamp, ×2.
+splat_aim_half
 	sta rot2
 	tya
 	pha
 	jsr rnd8
-	and scan_jx_mask
+	and #7
 	sec
-	sbc scan_jx_bias
+	sbc #4
 	clc
 	adc rot2
-	bpl .saj_sx1
+	bpl +
 	lda #0
-	beq .saj_sxok
-.saj_sx1
-	cmp #192
-	bcc .saj_sxok
-	lda #191
-.saj_sxok
++
+	cmp #96
+	bcc +
+	lda #95
++
+	asl
 	sta rot2
 	pla
 	sta rot1
 	jsr rnd8
-	and scan_jy_mask
+	and #3
 	sec
-	sbc scan_jy_bias
+	sbc #2
 	clc
 	adc rot1
+	bpl +
+	lda #0
++
+	cmp #64
+	bcc +
+	lda #63
++
+	asl
 	tay
-	bpl .saj_sy1
-	ldy #0
-	beq .saj_done
-.saj_sy1
-	cpy #128
-	bcc .saj_done
-	ldy #127
-.saj_done
 	lda rot2
 	rts

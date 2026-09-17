@@ -4,7 +4,7 @@
 - [x] Grenade projectile - needs tweaking (stronger gravity, less shot upward)
 - [x] Grenade FX: billboard particles (bake view-local vels; project root + scale offsets).
 - [x] Ogre behaviour
-- [ ] Knight behaviour
+- [x] Knight behaviour
 - [ ] Shambler behaviour
 - [x] Scrag behaviour (flying)
 - [ ] Proper map complete screen/message (without going overboard)

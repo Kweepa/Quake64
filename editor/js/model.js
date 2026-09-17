@@ -2023,7 +2023,7 @@ export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 export const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 4, 4, 6, 2, 4, 8, 4];
+const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 8, 4];
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {
   Grunt: { stand: ["stand"], alert: ["load"], run: ["run"], walk: ["prowl"], attack: ["shoot"] },
@@ -2032,7 +2032,7 @@ const ROLE_CLIPS = {
     alert: ["standing"],
     run: ["runb"],
     walk: ["walk"],
-    attack: ["attackb"],
+    attack: ["runattack", "attackb"],
   },
   Rottweiler: {
     stand: ["stand"],
@@ -2295,7 +2295,9 @@ export function packedPoseBytes(enemy, clips, frames) {
   for (const [role, start, length] of ranges) {
     const extra =
       typeof role === "string" && role.startsWith("attack") && fireOff >= 0
-        ? [start + fireOff]
+        ? typeI === 1
+          ? [start + 5, start + 7]
+          : [start + fireOff]
         : [];
     for (const i of poseCadenceKeep(start, length, posePickKeys(frs, start, length, extra))) {
       keep.add(i);

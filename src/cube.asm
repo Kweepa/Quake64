@@ -1733,6 +1733,7 @@ xform_view_from_delta
 	rts
 
 ; CAM[0] filled. C=1 → A=sx (0..191), Y=sy (0..127). C=0 behind / invalid.
+; persp is signed; 8-bit adc+bpl treats sx 128..191 as negative — sign-extend.
 project_cam0_screen
 	lda CAM_ZH
 	bmi .pcs_no
@@ -1749,16 +1750,11 @@ project_cam0_screen
 	lda CAM_XH
 	sta yhi
 	jsr persp88
-	clc
-	adc #SCREEN_CX
-	bpl .pcs_xp
-	lda #0
-	beq .pcs_xs
-.pcs_xp
-	cmp #192
-	bcc .pcs_xs
-	lda #191
-.pcs_xs
+	ldx #SCREEN_CX
+	stx rot1
+	ldx #192
+	stx rot2
+	jsr .pcs_bias
 	sta rot0
 	lda CAM_Y
 	sta ylo
@@ -1768,22 +1764,47 @@ project_cam0_screen
 	eor #$ff
 	clc
 	adc #1
-	clc
-	adc #64
+	ldx #64
+	stx rot1
+	ldx #128
+	stx rot2
+	jsr .pcs_bias
 	tay
-	bpl .pcs_yp
-	ldy #0
-	beq .pcs_ok
-.pcs_yp
-	cpy #128
-	bcc .pcs_ok
-	ldy #127
-.pcs_ok
 	lda rot0
 	sec
 	rts
 .pcs_no
 	clc
+	rts
+
+; A = signed offset + rot1, clamp 0 .. rot2-1.
+.pcs_bias
+	sta nlo
+	lda #0
+	bit nlo
+	bpl +
+	lda #$ff
++
+	sta nhi
+	clc
+	lda nlo
+	adc rot1
+	sta nlo
+	lda nhi
+	adc #0
+	bmi .pcs_b0
+	bne .pcs_bhi
+	lda nlo
+	cmp rot2
+	bcc .pcs_bok
+.pcs_bhi
+	lda rot2
+	sec
+	sbc #1
+	rts
+.pcs_b0
+	lda #0
+.pcs_bok
 	rts
 
 ; Unique UX/UZ * sin/cos, then CAM[v] from (xid,zid,VY[v]).
@@ -2330,9 +2351,9 @@ draw_enemies
 	jsr mulset_b
 	ldx #0
 	jsr xform_world_vert
+	jsr try_bite_splat			; origin in CAM[0], even if off-screen
 	jsr enemy_in_view
 	bcc .de_one_rts
-	jsr try_bite_splat			; CAM[0] still feet origin
 	ldx obj_i
 	+lda_mx en_type
 	sta ent_type
@@ -2392,42 +2413,39 @@ draw_enemies
 	ldx obj_i
 	rts
 
-; Pending dog bite splat: CAM[0] = feet origin; +3 Y, jitter, start_splat.
+; Pending melee splat: half-pixel 48+X×4 / 32−Y×2 via .pcs_bias, then jitter ×2.
 try_bite_splat
 	lda bite_splat_i
 	cmp obj_i
 	bne .tbs_rts
-	lda CAM_Y
-	pha
+	lda CAM_XH
+	asl
+	asl
+	ldx #48
+	stx rot1
+	ldx #96
+	stx rot2
+	jsr .pcs_bias
+	sta rot0
 	lda CAM_YH
-	pha
+	asl
+	eor #$ff
 	clc
-	adc #3
-	sta CAM_YH
-	jsr project_cam0_screen
-	bcc .tbs_rest
-	ldx CAM_ZH
-	stx rot0
-	lda #15
-	sta scan_jx_mask
-	lda #8
-	sta scan_jx_bias
-	lda #7
-	sta scan_jy_mask
-	lda #4
-	sta scan_jy_bias
-	jsr splat_aim_jitter
+	adc #1
+	ldx #32
+	stx rot1
+	ldx #64
+	stx rot2
+	jsr .pcs_bias
+	tay
+	lda rot0
+	jsr splat_aim_half
 	sta rot2
 	lda #COL_SPLAT_HIT
 	sta splat_col
-	ldx rot0
+	ldx #0
 	lda rot2
 	jsr start_splat
-.tbs_rest
-	pla
-	sta CAM_YH
-	pla
-	sta CAM_Y
 	lda #$ff
 	sta bite_splat_i
 .tbs_rts
@@ -2469,6 +2487,8 @@ enemy_muzzle_want
 	bne .emw_no
 	jsr enemy_get_class
 	bne .emw_no			; Rottweiler — leap bite, no muzzle
+	cpy #ENT_KNIGHT
+	beq .emw_no			; knight slash — no muzzle
 	cpy #ENT_OGRE
 	bne .emw_ff
 	lda en_pain_i,x

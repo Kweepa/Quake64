@@ -8770,7 +8770,7 @@ class LayoutView {
     const color = highlight
       ? "#f2d36b"
       : obj.kind === "room"
-        ? colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT)
+        ? "#f0f0f0"
         : obj.kind === "spawn" && !obj.enabled
           ? "#1a7a3c"
           : KINDS[obj.kind].color;
@@ -14458,7 +14458,7 @@ function layoutInspectorTitle(objs) {
 function roomItems() {
   return [
     { value: "", text: "(none)" },
-    ...roomsOf(doc).map((r) => ({ value: r.id, text: r.name ? `Room  ${r.name}` : "Room" })),
+    ...roomsOf(doc).map((r) => ({ value: r.id, text: r.name || "Room" })),
   ];
 }
 

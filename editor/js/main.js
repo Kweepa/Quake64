@@ -2376,7 +2376,7 @@ function layoutInspectorTitle(objs) {
 function roomItems() {
   return [
     { value: "", text: "(none)" },
-    ...roomsOf(doc).map((r) => ({ value: r.id, text: r.name ? `Room  ${r.name}` : "Room" })),
+    ...roomsOf(doc).map((r) => ({ value: r.id, text: r.name || "Room" })),
   ];
 }
 

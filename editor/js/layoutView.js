@@ -12,8 +12,6 @@ import {
   figureTemplateName,
   roomsOf,
   clampEnemyRot,
-  colorHex,
-  ROOM_LINE_DEFAULT,
   roomGeometry,
   preserveRoomSplits,
   applyRoomSplitDelta,
@@ -1165,7 +1163,7 @@ export class LayoutView {
     const color = highlight
       ? "#f2d36b"
       : obj.kind === "room"
-        ? colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT)
+        ? "#f0f0f0"
         : obj.kind === "spawn" && !obj.enabled
           ? "#1a7a3c"
           : KINDS[obj.kind].color;

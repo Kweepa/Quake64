@@ -197,7 +197,45 @@ door_hole_hit
 	jmp point_in_box_xz
 
 ; ------------------------------------------------------------------
-; door_portal_ok — col_x/col_z in an unlocked door hole of room_idx? C=1 yes
+; door_y_ok — X=door; C=1 if feet−door_y in [-DOOR_Y_SLACK, +DOOR_Y_SLACK]
+; feet = cam_yh − EYE_HEIGHT. Preserve X.
+; ------------------------------------------------------------------
+door_y_ok
+	lda cam_yh
+	sec
+	sbc #EYE_HEIGHT			; feet
+	sec
+	+sbc_mx door_y			; A = feet − door_y ($FF if 1 below)
+	cmp #DOOR_Y_SLACK + 1
+	bcc .dyo_yes			; 0..slack
+	cmp #$100 - DOOR_Y_SLACK
+	bcc .dyo_no			; 2..$FE
+.dyo_yes
+	sec
+	rts
+.dyo_no
+	clc
+	rts
+
+; ------------------------------------------------------------------
+; door_can_pass — X=door; col_x/col_z set. C=1 live portal at this Y.
+; Unlocked, has dest, XZ in hole, feet within DOOR_Y_SLACK of sill.
+; ------------------------------------------------------------------
+door_can_pass
+	jsr door_unlocked
+	bcc .dcp_no
+	jsr door_other_room
+	cmp #$ff
+	beq .dcp_no
+	jsr door_hole_hit
+	bcc .dcp_no
+	jmp door_y_ok
+.dcp_no
+	clc
+	rts
+
+; ------------------------------------------------------------------
+; door_portal_ok — col_x/col_z in a live door hole of room_idx? C=1 yes
 ; ------------------------------------------------------------------
 door_portal_ok
 	jsr door_slice
@@ -205,11 +243,8 @@ door_portal_ok
 .dpo
 	cpx door_i1
 	bcs .dpo_no
-	jsr door_unlocked
-	bcc .dpo_n
-	jsr door_hole_hit
+	jsr door_can_pass
 	bcs .dpo_yes
-.dpo_n
 	inx
 	bne .dpo
 .dpo_no
@@ -220,7 +255,7 @@ door_portal_ok
 	rts
 
 ; ------------------------------------------------------------------
-; try_room_switch — cross an unlocked door hole of room_idx into the other
+; try_room_switch — cross a live door hole of room_idx into the other
 ; room (XZ left current, inside other). Never probes unrelated rooms.
 ; C=1 if room_idx changed
 ; ------------------------------------------------------------------
@@ -230,9 +265,7 @@ try_room_switch
 .trs
 	cpx door_i1
 	bcs .trs_no
-	jsr door_unlocked
-	bcc .trs_n
-	jsr door_hole_hit
+	jsr door_can_pass
 	bcc .trs_n
 	lda cam_xh
 	sta col_x

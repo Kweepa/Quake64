@@ -210,6 +210,14 @@ player_overlaps_y
 	clc
 	rts
 
+; X = collider; C=1 if player Y overlaps [rc_y, rc_y+rc_sy). Preserve X.
+rc_overlaps_player_y
+	+lda_mx rc_y
+	sta box_y
+	+lda_mx rc_sy
+	sta box_sy
+	jmp player_overlaps_y
+
 ; If col_x/z in collider X, set proc_tmp2 to rc_y (proc_tmp0 = found).
 ; Several colliders may overlap in XZ when an L/T/S is rotated so one
 ; arm is vertical (lid over a shaft). The union hull leaves a hole;
@@ -218,6 +226,8 @@ uf_rc_floor
 	+lda_mx rc_sx
 	beq .urf_rts
 	jsr point_in_rc_xz
+	bcc .urf_rts
+	jsr rc_overlaps_player_y
 	bcc .urf_rts
 	lda proc_tmp0
 	bne .urf_min
@@ -869,6 +879,8 @@ rc_inset_ok
 	bne .rio_go
 	jmp .rio_no
 .rio_go
+	jsr rc_overlaps_player_y
+	bcc .rio_no
 	stx proc_tmp3
 	lda col_x
 	jsr .rio_join_xmin
@@ -1063,8 +1075,7 @@ rc_inset_ok
 	+cmp_my rc_x
 	beq .rovx_no
 	bcc .rovx_no
-	sec
-	rts
+	jmp .rio_sib_y
 .rovx_no
 	clc
 	rts
@@ -1081,14 +1092,19 @@ rc_inset_ok
 	+cmp_my rc_z
 	beq .rovz_no
 	bcc .rovz_no
-	sec
-	rts
+.rio_sib_y
+	+lda_my rc_y
+	sta box_y
+	+lda_my rc_sy
+	sta box_sy
+	jmp player_overlaps_y
 .rovz_no
 	clc
 	rts
 
 ; ------------------------------------------------------------------
-; col_in_room_y — col_x/col_z inside room Y colliders. C=1 inside
+; col_in_room_y — col_x/col_z inside room (Y) colliders the player overlaps in Y.
+; C=1 inside
 ; ------------------------------------------------------------------
 col_in_room_y
 	cpy #$ff
@@ -1097,13 +1113,13 @@ col_in_room_y
 	tya
 	jsr room_mul3
 	tax
-	jsr point_in_rc_xz
+	jsr .cir_one
 	bcs .cir_yes
 	inx
-	jsr point_in_rc_xz
+	jsr .cir_one
 	bcs .cir_yes
 	inx
-	jsr point_in_rc_xz
+	jsr .cir_one
 .cir_yes
 	php
 	ldx pv4
@@ -1111,6 +1127,12 @@ col_in_room_y
 	rts
 .cir_no
 	clc
+	rts
+.cir_one
+	jsr point_in_rc_xz
+	bcc .cir_one_n
+	jmp rc_overlaps_player_y
+.cir_one_n
 	rts
 
 ; Y = room. C=1 if col_x/z in a collider inset by 1 (enemy)

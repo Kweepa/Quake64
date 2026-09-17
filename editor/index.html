@@ -15013,55 +15013,61 @@ function renderInspector() {
   const mdl = sharewareModels[e.name];
   const hasStick = !!stickClipFor(e, activeTimelineClip());
   if (timeline.length) {
-    const clip = activeTimelineClip() || timeline[0];
     if (clipIndex >= timeline.length) clipIndex = 0;
+    const clip = activeTimelineClip() || timeline[0];
     frameLocal = Math.max(0, Math.min(frameLocal, clip.len - 1));
+  }
 
-    if (mdl?.clips?.length) {
-      const selected = new Set(exportClipNames(e, mdl));
-      const listLbl = document.createElement("h2");
-      listLbl.textContent = "Export clips";
-      root.appendChild(listLbl);
-      const ul = document.createElement("ul");
-      ul.className = "export-clip-list";
-      timeline.forEach((c, i) => {
-        const li = document.createElement("li");
-        const chk = document.createElement("input");
-        chk.type = "checkbox";
-        chk.checked = selected.has(c.name);
-        chk.addEventListener("change", () => {
-          pushUndo();
-          const next = new Set(exportClipNames(e, mdl));
-          if (chk.checked) next.add(c.name);
-          else next.delete(c.name);
-          e.exportClips = timeline.map((cl) => cl.name).filter((n) => next.has(n));
-          markDirty();
-          retargetMdlFrames({ status: true });
-          refreshAll();
-        });
-        const nameBtn = document.createElement("button");
-        nameBtn.type = "button";
-        nameBtn.className = "frame-name" + (i === clipIndex ? " current" : "");
-        nameBtn.textContent = `${c.name} (${c.len})`;
-        nameBtn.addEventListener("click", () => {
-          clipIndex = i;
-          frameLocal = 0;
-          applyFrameLocal();
-          markUi();
-          refreshAll();
-        });
-        li.append(chk, nameBtn);
-        ul.appendChild(li);
+  const listLbl = document.createElement("h2");
+  listLbl.textContent = "Export clips";
+  root.appendChild(listLbl);
+  if (mdl?.clips?.length) {
+    const selected = new Set(exportClipNames(e, mdl));
+    const ul = document.createElement("ul");
+    ul.className = "export-clip-list";
+    timeline.forEach((c, i) => {
+      const li = document.createElement("li");
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.checked = selected.has(c.name);
+      chk.addEventListener("change", () => {
+        pushUndo();
+        const next = new Set(exportClipNames(e, mdl));
+        if (chk.checked) next.add(c.name);
+        else next.delete(c.name);
+        e.exportClips = timeline.map((cl) => cl.name).filter((n) => next.has(n));
+        markDirty();
+        retargetMdlFrames({ status: true });
+        refreshAll();
       });
-      root.appendChild(ul);
-      const packed = packedPoseBytes(e);
-      const mem = document.createElement("p");
-      mem.className = "muted anim-mem";
-      mem.classList.toggle("error", packed.bytes > ENEMY_POSE_MAX);
-      mem.title = "Packed pose PRG: 2 + logical map + stored gx/gy/gz (13×3). Clip tables are in GAME.";
-      mem.textContent = formatPackedPoseMem(packed);
-      root.appendChild(mem);
-    } else {
+      const nameBtn = document.createElement("button");
+      nameBtn.type = "button";
+      nameBtn.className = "frame-name" + (i === clipIndex ? " current" : "");
+      nameBtn.textContent = `${c.name} (${c.len})`;
+      nameBtn.addEventListener("click", () => {
+        clipIndex = i;
+        frameLocal = 0;
+        applyFrameLocal();
+        markUi();
+        refreshAll();
+      });
+      li.append(chk, nameBtn);
+      ul.appendChild(li);
+    });
+    root.appendChild(ul);
+    const packed = packedPoseBytes(e);
+    const mem = document.createElement("p");
+    mem.className = "muted anim-mem";
+    mem.classList.toggle("error", packed.bytes > ENEMY_POSE_MAX);
+    mem.title = "Packed pose PRG: 2 + logical map + stored gx/gy/gz (13×3). Clip tables are in GAME.";
+    mem.textContent = formatPackedPoseMem(packed);
+    root.appendChild(mem);
+  } else {
+    const hint = document.createElement("p");
+    hint.className = "muted";
+    hint.textContent = "Load ID1 to see clips";
+    root.appendChild(hint);
+    if (timeline.length) {
       const clipSel = document.createElement("select");
       timeline.forEach((c, i) => {
         const opt = document.createElement("option");
@@ -15079,6 +15085,10 @@ function renderInspector() {
       });
       root.appendChild(field("Clip", clipSel));
     }
+  }
+
+  if (timeline.length) {
+    const clip = activeTimelineClip() || timeline[0];
 
     const transport = document.createElement("div");
     transport.className = "anim-transport";

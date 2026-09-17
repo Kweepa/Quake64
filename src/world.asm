@@ -212,6 +212,108 @@ player_overlaps_y
 	clc
 	rts
 
+; X = enemy. box_x/box_z = test point.
+; C=1 if Chebyshev vs en_x/en_z <= ENEMY_BLOCK_R. Preserves X.
+body_vs_en
+	+lda_mx en_x
+	sec
+	sbc box_x
+	bcs +
+	eor #$ff
+	clc
+	adc #1
++
+	cmp #ENEMY_BLOCK_R + 1
+	bcs .bve_no
+	+lda_mx en_z
+	sec
+	sbc box_z
+	bcs +
+	eor #$ff
+	clc
+	adc #1
++
+	cmp #ENEMY_BLOCK_R + 1
+	bcs .bve_no
+	sec
+	rts
+.bve_no
+	clc
+	rts
+
+; box_x/box_z = test point.
+; C=1 if Chebyshev vs cam_xh/cam_zh <= ENEMY_BLOCK_R.
+body_vs_cam
+	lda cam_xh
+	sec
+	sbc box_x
+	bcs +
+	eor #$ff
+	clc
+	adc #1
++
+	cmp #ENEMY_BLOCK_R + 1
+	bcs .bvc_no
+	lda cam_zh
+	sec
+	sbc box_z
+	bcs +
+	eor #$ff
+	clc
+	adc #1
++
+	cmp #ENEMY_BLOCK_R + 1
+	bcs .bvc_no
+	sec
+	rts
+.bvc_no
+	clc
+	rts
+
+; col_x/col_z dest vs alive same-room enemies. C=1 ok, C=0 newly overlapping.
+; Enter-only: start save_xh/save_zh already overlapping that body → allow.
+; Does not use rot*.
+enemies_block_player
+	ldx #0
+.ebp_lp
+	cpx	map_nenemies
+	bcs .ebp_ok
+	lda en_state,x
+	cmp #EN_DYING
+	bcs .ebp_n
+	+lda_mx en_room
+	cmp room_idx
+	bne .ebp_n
+	+lda_mx en_y
+	sta box_y
+	lda #ENEMY_CULL_H
+	sta box_sy
+	stx obj_i
+	jsr player_overlaps_y
+	ldx obj_i
+	bcc .ebp_n
+	lda col_x
+	sta box_x
+	lda col_z
+	sta box_z
+	jsr body_vs_en
+	bcc .ebp_n
+	lda save_xh
+	sta box_x
+	lda save_zh
+	sta box_z
+	jsr body_vs_en
+	bcs .ebp_n
+	clc
+	rts
+.ebp_n
+	inx
+	beq .ebp_ok
+	jmp .ebp_lp
+.ebp_ok
+	sec
+	rts
+
 ; X = collider; C=1 if player Y overlaps [rc_y, rc_y+rc_sy). Preserve X.
 rc_overlaps_player_y
 	+lda_mx rc_y
@@ -1232,6 +1334,8 @@ in_room_or_portal
 ; ------------------------------------------------------------------
 pos_ok
 	jsr in_room_or_portal
+	bcc .po_no
+	jsr enemies_block_player
 	bcc .po_no
 	ldy #1
 	jsr solid_at

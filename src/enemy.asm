@@ -1760,9 +1760,43 @@ clamp_to_box_inset1
 .cbi_rts
 	rts
 
+; col_x/col_z vs player. C=1 ok, C=0 newly overlapping.
+; Enter-only: start en_x/en_z already overlapping → allow. No rot*.
+player_blocks_enemy
+	ldx enemy_idx
+	lda en_state,x
+	cmp #EN_DYING
+	bcs .pbe_ok
+	+lda_mx en_y
+	sta box_y
+	lda #ENEMY_CULL_H
+	sta box_sy
+	jsr player_overlaps_y
+	bcc .pbe_ok
+	lda col_x
+	sta box_x
+	lda col_z
+	sta box_z
+	jsr body_vs_cam
+	bcc .pbe_ok
+	ldx enemy_idx
+	+lda_mx en_x
+	sta box_x
+	+lda_mx en_z
+	sta box_z
+	jsr body_vs_cam
+	bcs .pbe_ok
+	clc
+	rts
+.pbe_ok
+	sec
+	rts
+
 ; col_x/col_z proposed. C=1 ok (inset + solid + dest floor within STEP_UP + cutout).
 ; Uses enemy Y via cam hack for solid_at.
 enemy_pos_ok
+	jsr player_blocks_enemy
+	bcc .epo_no
 	ldx enemy_idx
 	+ldy_mx en_room
 	jsr room_cols_inset1

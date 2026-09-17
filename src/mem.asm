@@ -294,6 +294,7 @@ DOOR_PROX	= 3			; open trigger: depth in front of door face
 DOOR_Y_SLACK	= 1			; |feet − door_y| to punch the portal hole
 MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
+ENEMY_BLOCK_R	= 1			; XZ Chebyshev vs player (same cell + neighbors)
 FALL_LEDGE	= 1			; start fall if feet-floor > this
 STEP_UP		= 2			; max walk-up; 2 units plays SOUND_PLAYER_LAND
 FALL_TICK_MS	= 32			; gravity cadence (like MOTION_STEP_MS)

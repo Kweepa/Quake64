@@ -984,16 +984,37 @@ export class LayoutView {
     };
   }
 
-  /** Keep look; put selection in view center. Pull back to frame if closer than that. */
-  focusSelection() {
-    const ids = this.#selectedIds();
-    if (!ids.length) return false;
-    const doc = this.opts.getDoc();
-    const objs = ids
-      .map((id) => activeMap(doc).objects.find((o) => o.id === id))
-      .filter(Boolean);
-    if (!objs.length) return false;
-
+  #focusBox(doc, objs) {
+    let room = null;
+    for (let i = objs.length - 1; i >= 0; i--) {
+      const o = objs[i];
+      if (o.kind === "room") {
+        room = o;
+        break;
+      }
+      room = roomById(doc, o.roomId);
+      if (room) break;
+    }
+    if (!room) room = this.opts.getFocusRoom?.() || null;
+    if (room) {
+      const cols = roomGeometry(room).colliders;
+      const boxes = cols?.length ? cols : [room];
+      let minx = Infinity;
+      let miny = Infinity;
+      let minz = Infinity;
+      let maxx = -Infinity;
+      let maxy = -Infinity;
+      let maxz = -Infinity;
+      for (const c of boxes) {
+        minx = Math.min(minx, c.x);
+        miny = Math.min(miny, c.y);
+        minz = Math.min(minz, c.z);
+        maxx = Math.max(maxx, c.x + c.sx);
+        maxy = Math.max(maxy, c.y + c.sy);
+        maxz = Math.max(maxz, c.z + c.sz);
+      }
+      return { x: minx, y: miny, z: minz, sx: maxx - minx, sy: maxy - miny, sz: maxz - minz };
+    }
     let minx = Infinity;
     let miny = Infinity;
     let minz = Infinity;
@@ -1008,14 +1029,27 @@ export class LayoutView {
       maxy = Math.max(maxy, o.y + o.sy);
       maxz = Math.max(maxz, o.z + o.sz);
     }
-    const box = { x: minx, y: miny, z: minz, sx: maxx - minx, sy: maxy - miny, sz: maxz - minz };
+    return { x: minx, y: miny, z: minz, sx: maxx - minx, sy: maxy - miny, sz: maxz - minz };
+  }
+
+  /** Keep look; frame the containing room at about half the viewport. */
+  focusSelection() {
+    const ids = this.#selectedIds();
+    if (!ids.length) return false;
+    const doc = this.opts.getDoc();
+    const objs = ids
+      .map((id) => activeMap(doc).objects.find((o) => o.id === id))
+      .filter(Boolean);
+    if (!objs.length) return false;
+
+    const box = this.#focusBox(doc, objs);
     const center = aabbCenter(box);
     const cam = this.camera;
     const { forward, right, up } = lookVectors(cam.yaw, cam.pitch);
     const w = this.cssW;
     const h = this.cssH;
     const focal = Math.min(w, h) * 0.9;
-    const pad = 0.82;
+    const pad = 0.5;
     const halfW = Math.max(1, w * 0.5 * pad);
     const halfH = Math.max(1, h * 0.5 * pad);
 
@@ -1033,8 +1067,7 @@ export class LayoutView {
       frameDist = Math.max(frameDist, 1 - cz);
     }
 
-    const currentDist = Math.hypot(cam.x - center.x, cam.y - center.y, cam.z - center.z);
-    const dist = Math.max(frameDist, currentDist);
+    const dist = Math.max(frameDist, 1);
     cam.x = center.x - forward.x * dist;
     cam.y = center.y - forward.y * dist;
     cam.z = center.z - forward.z * dist;

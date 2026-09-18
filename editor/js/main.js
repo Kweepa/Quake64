@@ -286,7 +286,7 @@ const overheadView = new OverheadView(document.getElementById("overhead-canvas")
   getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
 });
 
-function previewSpawn() {
+function selectedSpawn() {
   const objs = activeMap(doc).objects;
   for (let i = selectedIds.length - 1; i >= 0; i--) {
     const obj = objs.find((o) => o.id === selectedIds[i]);
@@ -295,8 +295,18 @@ function previewSpawn() {
   return null;
 }
 
+function previewSpawn() {
+  const selected = selectedSpawn();
+  if (selected) return selected;
+  const room = localFocusRoom(doc, selectedIds, lastRoomId);
+  if (!room) return null;
+  const spawns = activeMap(doc).objects.filter((o) => o.kind === "spawn" && o.roomId === room.id);
+  if (!spawns.length) return null;
+  return spawns.find((s) => s.enabled) || spawns[0];
+}
+
 function previewRoom() {
-  const spawn = previewSpawn();
+  const spawn = selectedSpawn();
   if (spawn) return roomById(doc, spawn.roomId) || localFocusRoom(doc, selectedIds, lastRoomId);
   return localFocusRoom(doc, selectedIds, lastRoomId);
 }
@@ -305,15 +315,16 @@ const previewView = new PreviewView(document.getElementById("preview-canvas"), {
   getDoc: () => doc,
   getRoom: () => previewRoom(),
   getSpawn: () => previewSpawn(),
+  getEditSpawn: () => selectedSpawn(),
   nailImg: document.getElementById("preview-nail-png"),
   onRotate: (yaw) => {
-    const spawn = previewSpawn();
+    const spawn = selectedSpawn();
     if (!spawn) return;
     spawn.rot = clampEnemyRot(Math.round(yaw / (Math.PI / 4)));
     markDirty();
   },
   onMove: (x, z) => {
-    const spawn = previewSpawn();
+    const spawn = selectedSpawn();
     if (!spawn) return;
     spawn.x = Math.max(WORLD_MIN, Math.min(WORLD_MAX, Math.round(x - 1)));
     spawn.z = Math.max(WORLD_MIN, Math.min(WORLD_MAX, Math.round(z - 1)));

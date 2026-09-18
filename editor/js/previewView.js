@@ -230,6 +230,7 @@ export class PreviewView {
    *   getDoc: () => any,
    *   getRoom: () => any,
    *   getSpawn: () => any,
+   *   getEditSpawn?: () => any,
    *   onRotate?: (yaw: number) => void,
    *   onMove?: (x: number, z: number) => void,
    *   onEditStart?: () => void,
@@ -251,7 +252,7 @@ export class PreviewView {
     this.lastX = 0;
     this.lastY = 0;
     this.live = null;
-    this.roomCams = new Map();
+    this.stickyCam = null;
     this.nailTints = new Map();
     pvDisableSmoothing(this.ctx);
     pvDisableSmoothing(this.dctx);
@@ -273,28 +274,47 @@ export class PreviewView {
     }
   }
 
+  #editSpawn() {
+    if (this.opts.getEditSpawn) return this.opts.getEditSpawn() || null;
+    return this.opts.getSpawn?.() || null;
+  }
+
+  #forgetSticky(room) {
+    if (this.#editSpawn()) {
+      this.stickyCam = null;
+      return;
+    }
+    if (this.stickyCam && (!room || this.stickyCam.roomId !== room.id)) {
+      this.stickyCam = null;
+    }
+  }
+
   #cam(room, spawn) {
     if (this.dragging && this.live) return this.live;
+    this.#forgetSticky(room);
+    if (this.#editSpawn() && spawn) return pvSpawnCam(spawn);
+    if (this.stickyCam) {
+      this.stickyCam.cam.pitch = 0;
+      return this.stickyCam.cam;
+    }
     if (spawn) return pvSpawnCam(spawn);
     if (!room) return null;
-    let cam = this.roomCams.get(room.id);
-    if (!cam) {
-      cam = pvDefaultCam(room);
-      this.roomCams.set(room.id, cam);
-    }
+    const cam = pvDefaultCam(room);
     cam.pitch = 0;
     return cam;
   }
 
   #onPointer(e) {
     const room = this.opts.getRoom?.();
-    const spawn = this.opts.getSpawn?.() || null;
+    const spawn = this.#editSpawn();
+    const viewSpawn = this.opts.getSpawn?.() || null;
     if (!room) return;
 
     if (e.type === "pointerdown") {
       if (e.button != null && e.button !== 0) return;
       this.dragging = true;
-      this.live = { ...this.#cam(room, spawn) };
+      this.dragMoved = false;
+      this.live = { ...this.#cam(room, viewSpawn) };
       this.lastX = e.clientX;
       this.lastY = e.clientY;
       if (spawn) this.opts.onEditStart?.();
@@ -309,7 +329,9 @@ export class PreviewView {
     if (e.type === "pointerup" || e.type === "lostpointercapture") {
       if (this.dragging) {
         if (spawn) this.opts.onEditEnd?.();
-        else if (this.live && room) this.roomCams.set(room.id, this.live);
+        else if (this.dragMoved && this.live && room) {
+          this.stickyCam = { roomId: room.id, cam: { ...this.live } };
+        }
       }
       this.dragging = false;
       this.live = null;
@@ -321,6 +343,7 @@ export class PreviewView {
 
     const dx = e.clientX - this.lastX;
     const dy = e.clientY - this.lastY;
+    if (dx || dy) this.dragMoved = true;
     this.lastX = e.clientX;
     this.lastY = e.clientY;
     const rect = this.display.getBoundingClientRect();
@@ -475,9 +498,10 @@ export class PreviewView {
   }
 
   hint() {
-    const spawn = this.opts.getSpawn?.();
     const room = this.opts.getRoom?.();
-    if (spawn) return "Spawn view — drag L/R to set angle · U/D to move";
+    if (this.#editSpawn()) return "Spawn view — drag L/R to set angle · U/D to move";
+    if (this.stickyCam) return "Drag L/R to rotate · U/D to walk";
+    if (this.opts.getSpawn?.()) return "Spawn view";
     if (room) return "Drag L/R to rotate · U/D to walk";
     return "Select a room";
   }
@@ -487,6 +511,7 @@ export class PreviewView {
     const doc = this.opts.getDoc?.();
     const room = this.opts.getRoom?.();
     const spawn = this.opts.getSpawn?.() || null;
+    this.#forgetSticky(room);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     pvDisableSmoothing(ctx);
     ctx.fillStyle = room ? colorHex(room.bgColor ?? ROOM_BG_DEFAULT) : "#000000";

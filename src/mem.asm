@@ -325,6 +325,8 @@ PATROL_MIN	= 6			; min clear cells along a cardinal before walking
 PATROL_SCAN	= 32		; max cells probed when picking a patrol point
 PATROL_WAIT_MS	= 1000		; idle after arriving; + rnd*4 → ~1–2s
 GRUNT_BACKOFF	= 8		; Chebyshev ≤ this → weight dodge away from player
+SCRAG_HOLD_R	= 12		; Chebyshev ≤ this + LOS → stop closing, spit
+SCRAG_REFIRE_MS	= 2000		; Q1 wiz_fast14 SUB_AttackFinished(2)
 OGRE_MELEE_R	= 6		; chainsaw Chebyshev; grenade uses enemy_range
 OGRE_SWING_FIRE	= 4		; clip-local hit; shoot uses enemy_fire_frame
 OGRE_SAW_DMG	= 6		; 6–9 with rnd&3
@@ -481,14 +483,12 @@ GREN_HIT_R		= 1
 GREN_WRIST_L		= 5			; skeleton "Wrist L"
 GREN_HW			= $40			; tail half-width 0.25
 GREN_VEL_ASR		= 5			; tip = view-vel >> 5
-; Scrag spit — single slot (overwrite if live)
-SPIT_TICK_MS		= 32
-SPIT_SPEED		= 28			; horizontal (same ASR as grenade)
-SPIT_LIFE_MS		= 3000
-SPIT_DMG		= 5
+; Scrag spit — tracer + delayed hitscan
+SPIT_DMG		= 9			; Quake wizard spike (unscaled; player HP is 100)
 SPIT_HIT_R		= 1
 SPIT_TIP_VERT		= 12			; muzzle tip bone
-SPIT_DRAW_ASR		= 4			; tip→tail length (vel >> this)
+SPIT_LEN		= 16			; tracer Chebyshev length toward player
+SPIT_FLASH_N		= 2			; draw frames of frozen segment
 SCRAG_FALL		= 1			; en_y drop per think while dying
 VIEW_SPR_X0	= 24 + VIEW_COL * 8	; 88 — viewport (0,0) → VIC
 VIEW_SPR_Y0	= 50 + VIEW_ROW * 8	; 122
@@ -734,25 +734,25 @@ stream_room	= $CF20
 ; Explosion particle vel — FX_N × vx/vy s8 (integrated at draw)
 fx_vx		= $CF21			; 24
 fx_vy		= $CF39			; 24
-; Scrag spit — scalar BSS $CF51–$CF62
+; Scrag spit — control + hitscan + tracer 8.8 start/end (12 bytes)
 spit_on		= $CF51
 spit_room	= $CF52
 spit_owner	= $CF53			; enemy index
-spit_acc	= $CF54
-spit_xl		= $CF55
-spit_xh		= $CF56
-spit_yl		= $CF57
-spit_yh		= $CF58
-spit_zl		= $CF59
-spit_zh		= $CF5A
-spit_vxl	= $CF5B
-spit_vxh	= $CF5C
-spit_vyl	= $CF5D
-spit_vyh	= $CF5E
-spit_vzl	= $CF5F
-spit_vzh	= $CF60
-spit_life_l	= $CF61
-spit_life_h	= $CF62
+spit_flash	= $CF54			; 0 = tracer done, hitscan next update
+spit_hitx	= $CF55			; player XZ at fire
+spit_hitz	= $CF56
+spit_oxl	= $CF57			; start 8.8
+spit_oxh	= $CF58
+spit_oyl	= $CF59
+spit_oyh	= $CF5A
+spit_ozl	= $CF5B
+spit_ozh	= $CF5C
+spit_xl		= $CF5D			; end 8.8
+spit_xh		= $CF5E
+spit_yl		= $CF5F
+spit_yh		= $CF60
+spit_zl		= $CF61
+spit_zh		= $CF62
 ; Evicted from KERNAL ZP ($90–$bf / SETNAM $b7–$bc). Abs OK — not (ptr),y.
 wish_dx		= $CF63			; signed move intent X
 wish_dz		= $CF64

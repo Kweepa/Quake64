@@ -4233,7 +4233,7 @@
       ]
     },
     "E1M4": {
-      "name": "The Installation",
+      "name": "The Grisly Grotto",
       "objects": [
         {
           "id": "c7acfec4-2746-4fb3-b6ed-d743bf8e3f4b",
@@ -4335,7 +4335,7 @@
           "id": "bcadaece-9d5c-41bc-83e1-ef521aa4a498",
           "kind": "pickup",
           "x": 144,
-          "y": 147,
+          "y": 145,
           "z": 63,
           "sx": 0.9270509831248422,
           "sy": 1.5,
@@ -5064,7 +5064,7 @@
           "id": "a446a289-ca28-437a-bc8e-dd067ca9a0c4",
           "kind": "enemy",
           "x": 85,
-          "y": 124,
+          "y": 122,
           "z": 77,
           "sx": 2,
           "sy": 4,
@@ -5081,7 +5081,7 @@
           "id": "e5f84cd2-7ba0-497c-a254-db7bfe49fb75",
           "kind": "enemy",
           "x": 87,
-          "y": 131,
+          "y": 125,
           "z": 98,
           "sx": 2,
           "sy": 4,
@@ -5089,7 +5089,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "rot": 2,
+          "rot": 1,
           "enemy": "Scrag",
           "patrol": false,
           "roomId": "39c84000-9ffc-448a-9cb7-ff085efe413c"

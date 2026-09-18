@@ -223,6 +223,8 @@ eu_approach
 	+ldy_mx en_type
 	cpy #ENT_KNIGHT
 	beq .eu_ap_kclose
+	cpy #ENT_SCRAG
+	beq .eu_ap_scrag
 	; Rottweiler: stand in melee range; repath when chase timer expires
 	jsr enemy_get_class
 	beq .eu_ap_acc			; grunt — keep strafing
@@ -250,6 +252,15 @@ eu_approach
 	lda #>DOG_REPATH_MS
 	sta en_timer_h,x
 	jmp .eu_ap_acc
+.eu_ap_scrag
+	ldx enemy_idx
+	jsr enemy_chebyshev
+	cmp #SCRAG_HOLD_R + 1
+	bcs .eu_ap_acc			; too far — close
+	jsr enemy_shot_clear
+	ldx enemy_idx
+	bcs .eu_ap_stand		; LOS — hover and spit
+	jmp .eu_ap_acc			; blocked — keep moving
 .eu_ap_kclose
 	jsr enemy_same_floor
 	bcc .eu_ap_acc			; other floor — keep closing
@@ -261,6 +272,9 @@ eu_approach
 	bcc .eu_ap_stand
 	jmp .eu_ap_acc
 .eu_ap_stand
+	+ldy_mx en_type
+	cpy #ENT_SCRAG
+	beq .eu_ap_rng			; keep SCRAG_REFIRE_MS
 	lda #0				; clear repath so resume chases immediately
 	sta en_timer,x
 	sta en_timer_h,x
@@ -654,7 +668,7 @@ enemy_anim_step
 +
 	; Ogre: re-swing if still in melee; grenade always back to chase.
 	; Knight: re-slash if still in melee.
-	; Scrag: wait for live spit to clear before re-attack.
+	; Scrag: always back to chase (Q1 AttackFinished).
 	; Grunt 50% re-shoot; Rott always re-bite if still in range
 	ldx enemy_idx
 	+ldy_mx en_type
@@ -687,10 +701,7 @@ enemy_anim_step
 	jmp .eas_n
 .eas_not_knight_re
 	cpy #ENT_SCRAG
-	bne .eas_not_scrag_re
-	lda spit_on
-	bne .eas_to_ap
-.eas_not_scrag_re
+	beq .eas_to_ap
 	jsr enemy_get_class
 	bne .eas_rng_chk
 	jsr rnd8
@@ -1145,7 +1156,7 @@ enemy_enter_knight_attack
 	ldx enemy_idx
 	jmp enemy_face_player
 
-; Enter approach: grunt APPROACH_MIN; Rott DOG_REPATH; knight immediate. Zero step; pick dodge.
+; Enter approach: grunt APPROACH_MIN; scrag SCRAG_REFIRE; Rott DOG_REPATH; knight immediate.
 enemy_enter_approach
 	stx enemy_idx
 	lda #EN_APPROACH
@@ -1161,6 +1172,14 @@ enemy_enter_approach
 	sta en_timer_h,x
 	jmp .eea_dodge
 .eea_not_k
+	cpy #ENT_SCRAG
+	bne .eea_not_s
+	lda #<SCRAG_REFIRE_MS
+	sta en_timer,x
+	lda #>SCRAG_REFIRE_MS
+	sta en_timer_h,x
+	jmp .eea_dodge
+.eea_not_s
 	jsr enemy_get_class
 	bne .eea_dog
 	lda #<APPROACH_MIN_MS

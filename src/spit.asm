@@ -1,11 +1,10 @@
-; Scrag spit — single no-gravity missile. No overwrite while live.
-; Cheap: ≤1 physics step/frame, inset+ceil/floor only (no solid_at),
-; draw = one xform + project_cam0_screen + plot_pixel (no stroke_mesh).
+; Scrag spit — 16-unit tracer (env-clamped 8.8 segment), then hitscan.
 !zone spit
 
 init_spit
 	lda #0
 	sta spit_on
+	sta spit_flash
 	rts
 
 ; X = Scrag enemy_idx. Clears live spit owned by X.
@@ -16,11 +15,12 @@ clear_spit_if_owner
 	bne .cso_rts
 	lda #0
 	sta spit_on
+	sta spit_flash
 .cso_rts
 	rts
 
-; enemy_idx = Scrag. Spawns from tip vert, aims at player.
-; No-op if a spit is already live (C=0). C=1 spawned.
+; Launch from wrist; end = 16 toward player midpoint, clamp to cutout/room.
+; C=1 spawned.
 spawn_scrag_spit
 	lda spit_on
 	beq .ssp_go
@@ -38,207 +38,189 @@ spawn_scrag_spit
 	+lda_mx en_room
 	sta spit_room
 	lda org_xl
-	sta spit_xl
+	sta spit_oxl
 	lda org_xh
-	sta spit_xh
+	sta spit_oxh
 	lda org_yl
-	sta spit_yl
+	sta spit_oyl
 	lda org_yh
-	sta spit_yh
+	sta spit_oyh
 	lda org_zl
-	sta spit_zl
+	sta spit_ozl
 	lda org_zh
-	sta spit_zh
+	sta spit_ozh
+	lda cam_xh
+	sta spit_hitx
+	lda cam_zh
+	sta spit_hitz
+	; dir hi: player midpoint − wrist
 	lda cam_xh
 	sec
-	sbc org_xh
-	sta rot0
-	lda cam_zh
-	sec
-	sbc org_zh
-	sta rot1
-	jsr atan2_yaw
-	sta rot2
-	tay
-	lda SINTAB,y
-	ldy #SPIT_SPEED
-	jsr smul7
-	sta spit_vxh
-	lda #0
-	sta spit_vxl
-	ldy rot2
-	lda COSTAB,y
-	ldy #SPIT_SPEED
-	jsr smul7
-	sta spit_vzh
-	lda #0
-	sta spit_vzl
-	; vy toward player eye (signed dy << 1 so ASR5 tracks)
+	sbc spit_oxh
+	sta spit_xl
 	lda cam_yh
 	sec
-	sbc spit_yh
-	asl
-	sta spit_vyh
+	sbc #EYE_HEIGHT - 2
+	sec
+	sbc spit_oyh
+	sta spit_yl
+	lda cam_zh
+	sec
+	sbc spit_ozh
+	sta spit_zl
+	lda spit_xl
+	jsr spit_abs
+	sta dlo
+	lda spit_yl
+	jsr spit_abs
+	cmp dlo
+	bcc +
+	sta dlo
++
+	lda spit_zl
+	jsr spit_abs
+	cmp dlo
+	bcc +
+	sta dlo
++
+	lda dlo
+	bne .ssp_dir
+	lda spit_oxl
+	sta spit_xl
+	lda spit_oxh
+	sta spit_xh
+	lda spit_oyl
+	sta spit_yl
+	lda spit_oyh
+	sta spit_yh
+	lda spit_ozl
+	sta spit_zl
+	lda spit_ozh
+	sta spit_zh
+	jmp .ssp_on
+.ssp_dir
+	lda spit_xl
+	jsr spit_scale
+	clc
+	adc spit_oxh
+	sta spit_xh
+	lda spit_oxl
+	sta spit_xl
+	lda spit_yl
+	jsr spit_scale
+	clc
+	adc spit_oyh
+	sta spit_yh
+	lda spit_oyl
+	sta spit_yl
+	lda spit_zl
+	jsr spit_scale
+	clc
+	adc spit_ozh
+	sta spit_zh
+	lda spit_ozl
+	sta spit_zl
+	lda spit_oxh
+	sta ln_ax
+	lda spit_oyh
+	sta ln_ay
+	lda spit_ozh
+	sta ln_az
+	lda spit_xh
+	sta ln_bx
+	lda spit_yh
+	sta ln_by
+	lda spit_zh
+	sta ln_bz
+	ldy spit_room
+	jsr line_cutouts_hit
+	bcs .ssp_clamp
+	ldy spit_room
+	jsr load_box_room
+	jsr line_hit_box
+	bcc .ssp_on
+.ssp_clamp
+	lda col_x
+	sta spit_xh
+	lda col_y
+	sta spit_yh
+	lda col_z
+	sta spit_zh
 	lda #0
-	sta spit_vyl
-	sta spit_acc
-	lda #<SPIT_LIFE_MS
-	sta spit_life_l
-	lda #>SPIT_LIFE_MS
-	sta spit_life_h
+	sta spit_xl
+	sta spit_yl
+	sta spit_zl
+.ssp_on
+	lda #SPIT_FLASH_N
+	sta spit_flash
 	lda #1
 	sta spit_on
 	sec
 	rts
 
+; A = signed Δhi, dlo = Chebyshev. A = Δ * SPIT_LEN / cheb.
+spit_scale
+	pha
+	jsr spit_abs
+	sta rot0
+	lda #0
+	sta rot1
+	sta rot2
+	asl rot0
+	rol rot1
+	rol rot2
+	asl rot0
+	rol rot1
+	rol rot2
+	asl rot0
+	rol rot1
+	rol rot2
+	asl rot0
+	rol rot1
+	rol rot2
+	jsr div24u8
+	pla
+	bpl .ss_p
+	lda rot0
+	eor #$ff
+	clc
+	adc #1
+	rts
+.ss_p
+	lda rot0
+	rts
+
+; After the tracer, hit if the player is still on the aim cell.
 update_spit
 	lda spit_on
-	bne .usp_go
-	rts
-.usp_go
-	lda spit_room
-	sta col_room
-	; At most one 32ms step per frame — never spiral under load.
-	clc
-	lda spit_acc
-	adc dt_ms
-	sta spit_acc
-	cmp #SPIT_TICK_MS
-	bcc .usp_hit
-	sbc #SPIT_TICK_MS
-	sta spit_acc
-	jsr spit_step
-	bcc .usp_die
-.usp_hit
+	beq .usp_rts
+	lda spit_flash
+	bne .usp_rts
 	jsr spit_hit_player
-	bcs .usp_die
-	sec
-	lda spit_life_l
-	sbc dt_ms
-	sta spit_life_l
-	lda spit_life_h
-	sbc dt_msh
-	sta spit_life_h
-	bcs .usp_rts
-.usp_die
 	lda #0
 	sta spit_on
 .usp_rts
 	rts
 
-; One ASR5 integrate on X/Z/Y. C=1 still live; C=0 hit wall/floor/ceil.
-spit_step
-	lda spit_vxl
-	ldy spit_vxh
-	jsr spit_asr_ay
-	clc
-	lda spit_xl
-	adc nlo
-	sta spit_xl
-	lda spit_xh
-	adc nhi
-	sta spit_xh
-	lda spit_vzl
-	ldy spit_vzh
-	jsr spit_asr_ay
-	clc
-	lda spit_zl
-	adc nlo
-	sta spit_zl
-	lda spit_zh
-	adc nhi
-	sta spit_zh
-	lda spit_xh
-	sta col_x
-	lda spit_zh
-	sta col_z
-	lda spit_room
-	jsr in_room_inset_a
-	bcc .sst_no
-	lda spit_vyl
-	ldy spit_vyh
-	jsr spit_asr_ay
-	clc
-	lda spit_yl
-	adc nlo
-	sta spit_yl
-	lda spit_yh
-	adc nhi
-	sta spit_yh
-	ldy spit_room
-	jsr load_box_room
-	clc
-	lda box_y
-	adc box_sy
-	cmp spit_yh
-	beq .sst_no
-	bcc .sst_no
-	lda spit_xh
-	sta col_x
-	lda spit_zh
-	sta col_z
-	lda spit_yh
-	sta fb_probe_y
-	ldy spit_room
-	jsr floor_below_y
-	bcc .sst_ok
-	lda proc_tmp2
-	cmp spit_yh
-	beq .sst_no
-	bcs .sst_no
-.sst_ok
-	sec
-	rts
-.sst_no
-	clc
-	rts
-
-spit_asr_ay
-	sta nlo
-	sty nhi
-	ldy #5
-.sa5
-	lda nhi
-	cmp #$80
-	ror nhi
-	ror nlo
-	dey
-	bne .sa5
-	rts
-
-; C=1 hit
+; C=1 hit. Aim cell vs current cam XZ.
 spit_hit_player
 	lda spit_room
 	cmp room_idx
 	bne .shp_no
-	lda spit_xh
+	lda spit_hitx
 	sec
 	sbc cam_xh
 	jsr spit_abs
 	cmp #SPIT_HIT_R + 1
 	bcs .shp_no
-	lda spit_zh
+	lda spit_hitz
 	sec
 	sbc cam_zh
 	jsr spit_abs
 	cmp #SPIT_HIT_R + 1
 	bcs .shp_no
-	lda cam_yh
-	sec
-	sbc #EYE_HEIGHT
-	sta pv0
-	clc
-	adc #PLAYER_H
-	sta pv1
-	lda spit_yh
-	cmp pv0
-	bcc .shp_no
-	cmp pv1
-	bcs .shp_no
 	lda #SPIT_DMG
-	jsr take_damage
-	sec
-	rts
+	jmp take_damage
 .shp_no
 	clc
 	rts
@@ -251,29 +233,26 @@ spit_abs
 +
 	rts
 
-; View trig already loaded by draw_enemies / draw_grenades.
-; Short line: tip at spit, tail one vel-step back; both projected.
+; Frozen 8.8 segment. draw_enemies leaves mulset as last mesh facing.
 draw_spit
-	lda spit_on
-	bne .dsp_go
-	rts
-.dsp_go
+	lda spit_flash
+	beq .dsp_rts
+	dec spit_flash
 	lda spit_room
 	cmp room_idx
-	beq .dsp_draw
-	rts
-.dsp_draw
-	lda spit_xl
+	bne .dsp_rts
+	jsr load_view_trig
+	lda spit_oxl
 	sta org_xl
-	lda spit_xh
+	lda spit_oxh
 	sta org_xh
-	lda spit_yl
+	lda spit_oyl
 	sta org_yl
-	lda spit_yh
+	lda spit_oyh
 	sta org_yh
-	lda spit_zl
+	lda spit_ozl
 	sta org_zl
-	lda spit_zh
+	lda spit_ozh
 	sta org_zh
 	ldx #0
 	jsr xform_world_vert88
@@ -281,59 +260,33 @@ draw_spit
 	bcc .dsp_rts
 	sta x0
 	sty y0
-	; tail = tip − (vel >> SPIT_DRAW_ASR)
-	lda spit_vxl
-	ldy spit_vxh
-	jsr spit_asr_draw
-	sec
 	lda spit_xl
-	sbc nlo
 	sta org_xl
 	lda spit_xh
-	sbc nhi
 	sta org_xh
-	lda spit_vyl
-	ldy spit_vyh
-	jsr spit_asr_draw
-	sec
 	lda spit_yl
-	sbc nlo
 	sta org_yl
 	lda spit_yh
-	sbc nhi
 	sta org_yh
-	lda spit_vzl
-	ldy spit_vzh
-	jsr spit_asr_draw
-	sec
 	lda spit_zl
-	sbc nlo
 	sta org_zl
 	lda spit_zh
-	sbc nhi
 	sta org_zh
 	ldx #0
 	jsr xform_world_vert88
 	jsr project_cam0_screen
+	bcs .dsp_end
+	lda #0
+	sta CAM_Z
+	lda #2
+	sta CAM_ZH
+	jsr project_cam0_screen
 	bcc .dsp_rts
+.dsp_end
 	sta x1
 	sty y1
 	jmp draw_line
 .dsp_rts
-	rts
-
-; Slightly longer than physics ASR5 so the stub reads at range.
-spit_asr_draw
-	sta nlo
-	sty nhi
-	ldy #SPIT_DRAW_ASR
-.sad
-	lda nhi
-	cmp #$80
-	ror nhi
-	ror nlo
-	dey
-	bne .sad
 	rts
 
 spit_end = *

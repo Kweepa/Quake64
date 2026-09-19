@@ -2013,8 +2013,9 @@ export function mapDisplayName(map, key) {
 
 /** Soft cap: 8-bit object indices / editor budget. */
 export const MAX_MAP_OBJECTS = 255;
-export const ROOM_MAX = 20; // keep in sync with tools/genmap.py
+export const ROOM_MAX = 24; // keep in sync with tools/genmap.py
 export const ROOM_MAX_TYPES = 2;
+export const ENEMY_MAX = 20; // keep in sync with tools/genmap.py / src/mem.asm
 export const MAP_MAX_BYTES = 4096;
 export const ENEMY_POSE_MAX = 4096;
 export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
@@ -2482,7 +2483,8 @@ export function mapStats(doc) {
     enemyTypeCount,
     overTypes,
     overRooms: (byKind.room || 0) > ROOM_MAX,
-    overBudget: overTypes || (byKind.room || 0) > ROOM_MAX,
+    overEnemies: (byKind.enemy || 0) > ENEMY_MAX,
+    overBudget: overTypes || (byKind.room || 0) > ROOM_MAX || (byKind.enemy || 0) > ENEMY_MAX,
   };
 }
 
@@ -2524,6 +2526,10 @@ export function formatMapStats(stats) {
     const label = n === 1 ? one : plurals[kind] || `${one}s`;
     if (kind === "room") {
       parts.push(`${n}/${ROOM_MAX} ${label}`);
+      continue;
+    }
+    if (kind === "enemy") {
+      parts.push(`${n}/${ENEMY_MAX} ${label}`);
       continue;
     }
     parts.push(`${n} ${label}`);

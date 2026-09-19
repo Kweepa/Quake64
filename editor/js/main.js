@@ -58,6 +58,7 @@ import {
   ENEMY_POSE_MAX,
   ROOM_MAX,
   ROOM_MAX_TYPES,
+  ENEMY_MAX,
   canAddEnemyType,
   clipForFrame,
   dummyFrameFor,
@@ -1248,6 +1249,11 @@ function finishPaletteDrop(e) {
     setStatus(`Max ${ROOM_MAX} rooms`, true);
     return;
   }
+  if (kind === "enemy" && activeMap(doc).objects.filter((o) => o.kind === "enemy").length >= ENEMY_MAX) {
+    layoutView.draw();
+    setStatus(`Max ${ENEMY_MAX} enemies`, true);
+    return;
+  }
   if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
     layoutView.draw();
     setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
@@ -1350,6 +1356,11 @@ function duplicateSelected() {
     if (obj.kind === "room" && roomsOf(doc).length >= ROOM_MAX) {
       skipped++;
       skipReason = `Max ${ROOM_MAX} rooms`;
+      continue;
+    }
+    if (obj.kind === "enemy" && activeMap(doc).objects.filter((o) => o.kind === "enemy").length >= ENEMY_MAX) {
+      skipped++;
+      skipReason = `Max ${ENEMY_MAX} enemies`;
       continue;
     }
     if (obj.kind === "enemy" && !canAddEnemyType(activeMap(doc), obj.enemy, obj.roomId)) {

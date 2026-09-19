@@ -24,7 +24,7 @@ BANK_LOADER	= $35
 ; Resident lives in the 248-byte gap between the charset B bottom margin glyph
 ; ($EE00-$EE07, written by copy_tab) and LOGTAB ($EF00). 236 B, 12 B spare.
 ; -DUSE_KRILL=1: loadraw at $EE08. Default 0: KERNAL LOAD ($FFD5).
-; NOT $CE82 — memorymap.md calls that unused but en_pat_n and the grenade SoA
+; NOT $CE82 — memorymap.md calls that unused but en_pain_i and the grenade SoA
 ; are there; see mem.asm's own "$CF20+ free" below.
 !ifndef USE_KRILL {
 	USE_KRILL = 0
@@ -304,7 +304,7 @@ FALL_DAMAGE	= 15			; HP on hard landing
 HURT_FLASH_MS	= 300			; red border duration
 ENEMY_CULL_R	= 2			; view-space |x| vs z+R (8.8 high)
 ENEMY_CULL_H	= 6			; view-space |y| vs z+H (figure height)
-ENEMY_MAX		= 16		; MAP_NENEMIES ≤ this
+ENEMY_MAX		= 20		; MAP_NENEMIES ≤ this
 EN_IDLE		= 0
 EN_PATROL		= 1
 EN_ALERT		= 2
@@ -489,7 +489,6 @@ SPIT_HIT_R		= 1
 SPIT_TIP_VERT		= 12			; muzzle tip bone
 SPIT_LEN		= 16			; tracer Chebyshev length toward player
 SPIT_FLASH_N		= 2			; draw frames of frozen segment
-SCRAG_FALL		= 1			; en_y drop per think while dying
 VIEW_SPR_X0	= 24 + VIEW_COL * 8	; 88 — viewport (0,0) → VIC
 VIEW_SPR_Y0	= 50 + VIEW_ROW * 8	; 122
 SPLAT_INSET_X	= 24		; melee cue never on viewport edge (0..191)
@@ -605,51 +604,50 @@ have_wpn	= $CD03			; bitfield HAVE_*
 bp_taken	= $CD04			; MAP_NBACKPACKS (≤ BP_MAX)
 player_hp	= $CD24			; 0..PLAYER_HP_MAX
 player_armour	= $CD25			; 0..PLAYER_ARMOUR_MAX
-en_state	= $CD26			; ENEMY_MAX: EN_* 
-en_frame	= $CD36			; ENEMY_MAX: local frame in current clip
-drop_taken	= $CD46			; ENEMY_MAX: 1=inactive/taken, 0=active
-drop_x		= $CD56
-drop_y		= $CD66
-drop_z		= $CD76
-drop_room	= $CD86
-drop_type	= $CD96			; BP_* when active
-en_hp		= $CDA6			; ENEMY_MAX
-en_timer	= $CDB6			; ENEMY_MAX: approach min / dog repath / death hold ms lo
-en_timer_h	= $CDC6			; ENEMY_MAX: approach min / dog repath / death hold ms hi
-en_step		= $CDD6			; ENEMY_MAX: walk acc lo
-en_step_h	= $CDE6			; ENEMY_MAX: walk acc hi
-en_dir		= $CDF6			; ENEMY_MAX: 0..7 dodge facing
-gunshot_wake	= $CE06			; 1 = gun fired this frame (room wake)
-ai_dirtry	= $CE07			; 5 bytes dodge dir candidates
-ai_turn		= $CE0C			; turnaround dir or $ff
-ai_probe	= $CE0D			; dir under test (probe must not clobber)
-emuz_vx		= $CE0E			; VIC X lo staged (IRQ apply_en)
-emuz_vy		= $CE0F			; VIC Y staged
-emuz_col		= $CE10			; sprite colour staged from col_fx
-emuz_pending	= $CE11			; enemy idx waiting to muzzle, $ff = none
-fb_probe_y	= $CE12			; floor_below: inclusive max walkable Y
-death_wait_l	= $CE13			; death hold ms acc
-death_wait_h	= $CE14
-col_room	= $CE15			; collision room for inset/floor/solid
-splat_xmsb	= $CE16			; $d010 bit7 when X>=256
-splat_vx		= $CE17
-splat_vy		= $CE18
-splat_col	= $CE19			; COL_SPLAT_HIT or col_line (miss)
-trig_seen	= $CE1A			; update_triggers: b0=hurt ticked, b1=msg overlap
-shot_hit_i	= $CE1B			; closest hitscan enemy, $ff = miss
-shot_hit_z	= $CE1C			; CAM_ZH of that hit
-hurt_flash_l	= $CE1D			; remaining red-border ms
-hurt_flash_h	= $CE1E
-bite_splat_i	= $CE1F			; dog idx pending blood splat, $ff = none
-status_ms_l	= $CE20			; status HUD remaining ms
-status_ms_h	= $CE21
-
-; $CE22–$CE81 free (was door runtime SoA)
-door_i0		= $CE22			; room door slice start
-door_i1		= $CE23			; exclusive end
-sw_match	= $CE24			; cooked door-tag id while unlocking
-; $CE25–$CE81 free
-en_pat_n	= $CE82			; ENEMY_MAX: patrol remaining cells
+en_state	= $CD26			; ENEMY_MAX: EN_*
+en_frame	= $CD3A			; ENEMY_MAX: local frame in current clip
+drop_taken	= $CD4E			; ENEMY_MAX: 1=inactive/taken, 0=active
+drop_x		= $CD62
+drop_y		= $CD76
+drop_z		= $CD8A
+drop_room	= $CD9E
+drop_type	= $CDB2			; BP_* when active
+en_hp		= $CDC6			; ENEMY_MAX
+en_timer	= $CDDA			; ENEMY_MAX: approach min / dog repath / death hold ms lo
+en_timer_h	= $CDEE			; ENEMY_MAX: approach min / dog repath / death hold ms hi
+en_step		= $CE02			; ENEMY_MAX: walk acc lo
+en_step_h	= $CE16			; ENEMY_MAX: walk acc hi
+en_dir		= $CE2A			; ENEMY_MAX: 0..7 dodge facing
+gunshot_wake	= $CE3E			; 1 = gun fired this frame (room wake)
+ai_dirtry	= $CE3F			; 5 bytes dodge dir candidates
+ai_turn		= $CE44			; turnaround dir or $ff
+ai_probe	= $CE45			; dir under test (probe must not clobber)
+emuz_vx		= $CE46			; VIC X lo staged (IRQ apply_en)
+emuz_vy		= $CE47			; VIC Y staged
+emuz_col		= $CE48			; sprite colour staged from col_fx
+emuz_pending	= $CE49			; enemy idx waiting to muzzle, $ff = none
+fb_probe_y	= $CE4A			; floor_below: inclusive max walkable Y
+death_wait_l	= $CE4B			; death hold ms acc
+death_wait_h	= $CE4C
+col_room	= $CE4D			; collision room for inset/floor/solid
+splat_xmsb	= $CE4E			; $d010 bit7 when X>=256
+splat_vx		= $CE4F
+splat_vy		= $CE50
+splat_col	= $CE51			; COL_SPLAT_HIT or col_line (miss)
+trig_seen	= $CE52			; update_triggers: b0=hurt ticked, b1=msg overlap
+shot_hit_i	= $CE53			; closest hitscan enemy, $ff = miss
+shot_hit_z	= $CE54			; CAM_ZH of that hit
+hurt_flash_l	= $CE55			; remaining red-border ms
+hurt_flash_h	= $CE56
+bite_splat_i	= $CE57			; dog idx pending blood splat, $ff = none
+status_ms_l	= $CE58			; status HUD remaining ms
+status_ms_h	= $CE59
+door_i0		= $CE5A			; room door slice start
+door_i1		= $CE5B			; exclusive end
+sw_match	= $CE5C			; cooked door-tag id while unlocking
+en_pat_n	= $CE5D			; ENEMY_MAX: patrol remaining cells
+en_pain_i	= $CE71			; ENEMY_MAX: pain/death/attack variant index
+; $CE85–$CE91 free
 have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD / HAVE_EARTH
 pu_kind		= $CE93			; 0 or BP_QUAD / BP_PENT / BP_RING
 pu_ms_l		= $CE94
@@ -660,8 +658,7 @@ fx_ozl		= $CE98
 fx_ox		= $CE99
 fx_oy		= $CE9A
 fx_oz		= $CE9B
-; $CE9C free (was fx_skip)
-en_pain_i	= $CE9D			; ENEMY_MAX: pain/death/attack variant index
+; $CE9C–$CEAC free (was fx_skip / en_pain_i)
 sample_ms_chk	= $CEAD			; shadow of sample_ms (init_irq); tripwire restore
 spd_trip	= $CEAE			; sample_ms corruption count (IRQ .top)
 ; Grenade SoA — 4 slots × 21 bytes, $CEAF–$CF02
@@ -729,7 +726,7 @@ fx_ms_l		= fxh_explode + FXH_MS_L
 fx_ms_h		= fxh_explode + FXH_MS_H
 ; Room whose pose banks are currently resident; $ff = none yet. Lives in the
 ; genuinely-free space above the effect timers -- NOT in the $CE82 hole that
-; memorymap.md claims is unused, because en_pat_n and the grenade SoA are there.
+; memorymap.md claims is unused, because en_pain_i and the grenade SoA are there.
 stream_room	= $CF20
 ; Explosion particle vel — FX_N × vx/vy s8 (integrated at draw)
 fx_vx		= $CF21			; 24

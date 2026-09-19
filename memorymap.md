@@ -113,7 +113,7 @@ E1M2 is still the tightest (pose-bound). Caps: `MAP_MAX_BYTES` 4096, `ENEMY_POSE
 | `$C980`–`$C9BF` | 64 | Sprite 6 enemy muzzle (`WPN_EMUZ`) |
 | `$C9C0`–`$C9FF` | 64 | Sprite 7 impact splat (`WPN_SPLAT`) |
 | `$CA00`–`$CE81` | 642 | Project / clip / game scratch (table below) |
-| `$CE82`–`$CFFF` | 382 | Play BSS: `en_pat_n`, grenade SoA (`$CEAF`–`$CF03`), hitscan/FX timers, Scrag spit scalar (`spit_*` at `$CF51`–`$CF62`); remainder free before charset A |
+| `$CE82`–`$CFFF` | 382 | Play BSS: last 3 B of `en_pain_i`, then `have_keys`, grenade SoA (`$CEAF`–`$CF03`), hitscan/FX timers, Scrag spit scalar (`spit_*` at `$CF51`–`$CF62`); remainder free before charset A |
 | `$D000`–`$D5FF` | 1536 | Charset A top cols 0–23 (viewport) |
 | `$D600`–`$D607` | 8 | Char 192 `$FF` margin glyph |
 | `$D608`–`$D747` | 320 | `SINTAB` (COSTAB = SINTAB+64 at `$D648`) |
@@ -257,42 +257,45 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CD04` | 32 | `bp_taken` | `BP_MAX` |
 | `$CD24` | 1 | `player_hp` | 0..`PLAYER_HP_MAX` |
 | `$CD25` | 1 | `player_armour` | starts 0; no pickups yet |
-| `$CD26` | 16 | `en_state` | `ENEMY_MAX` |
-| `$CD36` | 16 | `en_frame` | |
-| `$CD46` | 16 | `drop_taken` | |
-| `$CD56` | 16 | `drop_x` | |
-| `$CD66` | 16 | `drop_y` | |
-| `$CD76` | 16 | `drop_z` | |
-| `$CD86` | 16 | `drop_room` | |
-| `$CD96` | 16 | `drop_type` | |
-| `$CDA6` | 16 | `en_hp` | |
-| `$CDB6` | 16 | `en_timer` | |
-| `$CDC6` | 16 | `en_timer_h` | |
-| `$CDD6` | 16 | `en_step` | |
-| `$CDE6` | 16 | `en_step_h` | |
-| `$CDF6` | 16 | `en_dir` | |
-| `$CE06` | 1 | `gunshot_wake` | |
-| `$CE07` | 5 | `ai_dirtry` | Dodge candidates |
-| `$CE0C` | 1 | `ai_turn` | |
-| `$CE0D` | 1 | `ai_probe` | |
-| `$CE0E` | 1 | `emuz_vx` | Staged sprite 6 |
-| `$CE0F` | 1 | `emuz_vy` | |
-| `$CE10` | 1 | `emuz_col` | |
-| `$CE11` | 1 | `emuz_pending` | |
-| `$CE12` | 1 | `fb_probe_y` | floor_below inclusive max walkable Y |
-| `$CE13` | 2 | `death_wait_l/h` | Death hold ms |
-| `$CE15` | 1 | `col_room` | Collision room for inset/floor/solid |
-| `$CE16` | 1 | `splat_xmsb` | |
-| `$CE17` | 1 | `splat_vx` | |
-| `$CE18` | 1 | `splat_vy` | |
-| `$CE19` | 1 | `splat_col` | |
-| `$CE1A` | 1 | `trig_seen` | update_triggers: b0 hurt ticked, b1 msg overlap |
-| `$CE1B` | 1 | `shot_hit_i` | |
-| `$CE1C` | 1 | `shot_hit_z` | |
-| `$CE1D` | 1 | `hurt_flash_l` | Remaining red-border ms lo |
-| `$CE1E` | 1 | `hurt_flash_h` | Remaining red-border ms hi |
-| `$CE1F` | 1 | `bite_splat_i` | |
-| `$CE20` | 2 | `status_ms_l/h` | Status HUD remaining ms |
-| `$CE22` | 1 | `door_i0` | Room door slice start |
-| `$CE23` | 1 | `door_i1` | Exclusive end |
-| `$CE24`–`$CE81` | 94 | — | Free (was door runtime SoA) |
+| `$CD26` | 20 | `en_state` | `ENEMY_MAX` |
+| `$CD3A` | 20 | `en_frame` | |
+| `$CD4E` | 20 | `drop_taken` | |
+| `$CD62` | 20 | `drop_x` | |
+| `$CD76` | 20 | `drop_y` | |
+| `$CD8A` | 20 | `drop_z` | |
+| `$CD9E` | 20 | `drop_room` | |
+| `$CDB2` | 20 | `drop_type` | |
+| `$CDC6` | 20 | `en_hp` | |
+| `$CDDA` | 20 | `en_timer` | |
+| `$CDEE` | 20 | `en_timer_h` | |
+| `$CE02` | 20 | `en_step` | |
+| `$CE16` | 20 | `en_step_h` | |
+| `$CE2A` | 20 | `en_dir` | |
+| `$CE3E` | 1 | `gunshot_wake` | |
+| `$CE3F` | 5 | `ai_dirtry` | Dodge candidates |
+| `$CE44` | 1 | `ai_turn` | |
+| `$CE45` | 1 | `ai_probe` | |
+| `$CE46` | 1 | `emuz_vx` | Staged sprite 6 |
+| `$CE47` | 1 | `emuz_vy` | |
+| `$CE48` | 1 | `emuz_col` | |
+| `$CE49` | 1 | `emuz_pending` | |
+| `$CE4A` | 1 | `fb_probe_y` | floor_below inclusive max walkable Y |
+| `$CE4B` | 2 | `death_wait_l/h` | Death hold ms |
+| `$CE4D` | 1 | `col_room` | Collision room for inset/floor/solid |
+| `$CE4E` | 1 | `splat_xmsb` | |
+| `$CE4F` | 1 | `splat_vx` | |
+| `$CE50` | 1 | `splat_vy` | |
+| `$CE51` | 1 | `splat_col` | |
+| `$CE52` | 1 | `trig_seen` | update_triggers: b0 hurt ticked, b1 msg overlap |
+| `$CE53` | 1 | `shot_hit_i` | |
+| `$CE54` | 1 | `shot_hit_z` | |
+| `$CE55` | 1 | `hurt_flash_l` | Remaining red-border ms lo |
+| `$CE56` | 1 | `hurt_flash_h` | Remaining red-border ms hi |
+| `$CE57` | 1 | `bite_splat_i` | |
+| `$CE58` | 2 | `status_ms_l/h` | Status HUD remaining ms |
+| `$CE5A` | 1 | `door_i0` | Room door slice start |
+| `$CE5B` | 1 | `door_i1` | Exclusive end |
+| `$CE5C` | 1 | `sw_match` | |
+| `$CE5D` | 20 | `en_pat_n` | `ENEMY_MAX` |
+| `$CE71` | 20 | `en_pain_i` | `ENEMY_MAX` |
+| `$CE85`–`$CE91` | 13 | — | Free |

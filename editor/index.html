@@ -4385,8 +4385,9 @@ function mapDisplayName(map, key) {
 
 /** Soft cap: 8-bit object indices / editor budget. */
 const MAX_MAP_OBJECTS = 255;
-const ROOM_MAX = 20; // keep in sync with tools/genmap.py
+const ROOM_MAX = 24; // keep in sync with tools/genmap.py
 const ROOM_MAX_TYPES = 2;
+const ENEMY_MAX = 20; // keep in sync with tools/genmap.py / src/mem.asm
 const MAP_MAX_BYTES = 4096;
 const ENEMY_POSE_MAX = 4096;
 const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
@@ -4854,7 +4855,8 @@ function mapStats(doc) {
     enemyTypeCount,
     overTypes,
     overRooms: (byKind.room || 0) > ROOM_MAX,
-    overBudget: overTypes || (byKind.room || 0) > ROOM_MAX,
+    overEnemies: (byKind.enemy || 0) > ENEMY_MAX,
+    overBudget: overTypes || (byKind.room || 0) > ROOM_MAX || (byKind.enemy || 0) > ENEMY_MAX,
   };
 }
 
@@ -4896,6 +4898,10 @@ function formatMapStats(stats) {
     const label = n === 1 ? one : plurals[kind] || `${one}s`;
     if (kind === "room") {
       parts.push(`${n}/${ROOM_MAX} ${label}`);
+      continue;
+    }
+    if (kind === "enemy") {
+      parts.push(`${n}/${ENEMY_MAX} ${label}`);
       continue;
     }
     parts.push(`${n} ${label}`);
@@ -13391,6 +13397,11 @@ function finishPaletteDrop(e) {
     setStatus(`Max ${ROOM_MAX} rooms`, true);
     return;
   }
+  if (kind === "enemy" && activeMap(doc).objects.filter((o) => o.kind === "enemy").length >= ENEMY_MAX) {
+    layoutView.draw();
+    setStatus(`Max ${ENEMY_MAX} enemies`, true);
+    return;
+  }
   if (kind === "enemy" && !canAddEnemyType(activeMap(doc), place.enemy, owner?.id)) {
     layoutView.draw();
     setStatus(`Max ${ROOM_MAX_TYPES} enemy types per room`, true);
@@ -13493,6 +13504,11 @@ function duplicateSelected() {
     if (obj.kind === "room" && roomsOf(doc).length >= ROOM_MAX) {
       skipped++;
       skipReason = `Max ${ROOM_MAX} rooms`;
+      continue;
+    }
+    if (obj.kind === "enemy" && activeMap(doc).objects.filter((o) => o.kind === "enemy").length >= ENEMY_MAX) {
+      skipped++;
+      skipReason = `Max ${ENEMY_MAX} enemies`;
       continue;
     }
     if (obj.kind === "enemy" && !canAddEnemyType(activeMap(doc), obj.enemy, obj.roomId)) {

@@ -10,7 +10,6 @@ import {
   isFigureObject,
   isGhostKind,
   figureTemplateName,
-  roomsOf,
   clampEnemyRot,
   roomGeometry,
   preserveRoomSplits,
@@ -33,6 +32,7 @@ import {
   projectLine,
   projectPoint,
   rayAabb,
+  rayTriangle,
   screenRay,
   worldToCamera,
 } from "./math3d.js";
@@ -939,52 +939,128 @@ export class LayoutView {
     return null;
   }
 
-  /** Drop pose from screen: nearest ray-hit room floor (except room/doorway), else grid. */
+  /** Selected room or owner of the newest selected object — not lastRoomId. */
+  #selectedPlaceRoom(doc) {
+    const ids = this.#selectedIds();
+    const objs = activeMap(doc).objects;
+    for (let i = ids.length - 1; i >= 0; i--) {
+      const obj = objs.find((o) => o.id === ids[i]);
+      if (!obj) continue;
+      if (obj.kind === "room") return obj;
+      const r = roomById(doc, obj.roomId);
+      if (r) return r;
+    }
+    return null;
+  }
+
+  #rayHitRoom(room, ray) {
+    let best = null;
+    for (const c of roomGeometry(room).colliders) {
+      const hit = rayAabb(ray.origin, ray.dir, c);
+      if (!hit || hit.t < 0) continue;
+      if (!best || hit.t < best.t) best = hit;
+    }
+    return best;
+  }
+
+  /** Top of elevator / solid platform, or ramp surface. */
+  #rayWalkableTop(obj, ray) {
+    if (obj.kind === "elevator" || (obj.kind === "platform" && obj.collide !== false)) {
+      const y = (obj.y | 0) + (obj.sy | 0);
+      const hit = intersectPlane(ray.origin, ray.dir, { x: 0, y, z: 0 }, { x: 0, y: 1, z: 0 });
+      if (!hit) return null;
+      const p = hit.point;
+      if (p.x < obj.x || p.x > obj.x + obj.sx || p.z < obj.z || p.z > obj.z + obj.sz) return null;
+      return { t: hit.t, point: p, y };
+    }
+    if (obj.kind !== "slope") return null;
+    const { p0, p1, p2, p3 } = rampCorners(obj);
+    let best = null;
+    for (const tri of [
+      [p0, p1, p2],
+      [p0, p2, p3],
+    ]) {
+      const hit = rayTriangle(ray.origin, ray.dir, tri[0], tri[1], tri[2]);
+      if (hit && (!best || hit.t < best.t)) best = hit;
+    }
+    if (!best) return null;
+    return { t: best.t, point: best.point, y: best.point.y };
+  }
+
+  /** Drop pose from screen: visible rooms, selected first; walkable tops beat floor. */
   placeAtScreen(mx, my, kind) {
     const doc = this.opts.getDoc();
     const ray = screenRay(mx, my, this.camera, this.cssW, this.cssH);
     const def = KINDS[kind] || KINDS.crate;
     const sx = def.defaultSize[0];
     const sz = def.defaultSize[2];
-    if (kind !== "room" && kind !== "doorway") {
+    const pose = (x, y, z, room, floorSnap) => ({
+      x: Math.round(x - sx / 2),
+      y,
+      z: Math.round(z - sz / 2),
+      room,
+      floorSnap: floorSnap !== false,
+    });
+
+    if (kind !== "room") {
+      const visible = this.#visibleObjects(doc);
+      const visRooms = visible.filter((o) => o.kind === "room");
+      const focus = this.#selectedPlaceRoom(doc);
       let bestRoom = null;
-      let bestT = Infinity;
-      for (const room of roomsOf(doc)) {
-        const g = roomGeometry(room);
-        for (const c of g.colliders) {
-          const hit = rayAabb(ray.origin, ray.dir, c);
-          if (!hit || hit.t < 0 || hit.t >= bestT) continue;
-          bestT = hit.t;
-          bestRoom = { room, point: hit.point };
+      let bestHit = null;
+      if (focus && visRooms.some((r) => r.id === focus.id)) {
+        const hit = this.#rayHitRoom(focus, ray);
+        if (hit) {
+          bestRoom = focus;
+          bestHit = hit;
         }
       }
+      if (!bestRoom) {
+        let bestT = Infinity;
+        for (const room of visRooms) {
+          const hit = this.#rayHitRoom(room, ray);
+          if (!hit || hit.t >= bestT) continue;
+          bestT = hit.t;
+          bestRoom = room;
+          bestHit = hit;
+        }
+      }
+
+      if (kind !== "doorway" && kind !== "switch") {
+        let walk = null;
+        for (const obj of visible) {
+          const hit = this.#rayWalkableTop(obj, ray);
+          if (!hit) continue;
+          if (!walk || hit.t < walk.t) walk = { ...hit, obj };
+        }
+        if (walk) {
+          const fy = bestRoom ? roomFloorY(bestRoom, walk.point.x, walk.point.z) : null;
+          const floor =
+            fy != null
+              ? intersectPlane(ray.origin, ray.dir, { x: 0, y: fy, z: 0 }, { x: 0, y: 1, z: 0 })
+              : null;
+          if (!floor || walk.t <= floor.t + 1e-4) {
+            const room = roomById(doc, walk.obj.roomId) || bestRoom;
+            return pose(walk.point.x, Math.round(walk.y), walk.point.z, room, false);
+          }
+        }
+      }
+
       if (bestRoom) {
-        const fy = roomFloorY(bestRoom.room, bestRoom.point.x, bestRoom.point.z);
+        const fy = roomFloorY(bestRoom, bestHit.point.x, bestHit.point.z);
         const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: fy, z: 0 }, { x: 0, y: 1, z: 0 });
-        const pt = floor?.point || bestRoom.point;
-        return {
-          x: Math.round(pt.x - sx / 2),
-          y: fy,
-          z: Math.round(pt.z - sz / 2),
-          room: bestRoom.room,
-        };
+        const pt = floor?.point || bestHit.point;
+        return pose(pt.x, fy, pt.z, bestRoom, true);
       }
     }
+
     const gy = this.gridY;
     const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: gy, z: 0 }, { x: 0, y: 1, z: 0 });
     if (floor) {
-      return {
-        x: Math.round(floor.point.x - sx / 2),
-        y: gy,
-        z: Math.round(floor.point.z - sz / 2),
-      };
+      return pose(floor.point.x, gy, floor.point.z, undefined, true);
     }
     const { forward } = lookVectors(this.camera.yaw, this.camera.pitch);
-    return {
-      x: Math.round(this.camera.x + forward.x * 12 - sx / 2),
-      y: gy,
-      z: Math.round(this.camera.z + forward.z * 12 - sz / 2),
-    };
+    return pose(this.camera.x + forward.x * 12, gy, this.camera.z + forward.z * 12, undefined, true);
   }
 
   #focusBox(doc, objs) {

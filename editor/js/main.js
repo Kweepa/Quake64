@@ -1186,7 +1186,7 @@ function previewObjectAtScreen(place, mx, my) {
     extra.enabled = !activeMap(doc).objects.some((o) => o.kind === "spawn");
   }
   const obj = createObject(kind, p.x, p.y, p.z, extra);
-  if (owner && kind !== "room" && kind !== "doorway") {
+  if (owner && kind !== "room" && kind !== "doorway" && p.floorSnap !== false) {
     obj.y = roomFloorY(owner, obj.x + obj.sx / 2, obj.z + obj.sz / 2);
   }
   clampObject(obj);

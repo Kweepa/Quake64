@@ -116,6 +116,43 @@ export function rayAabb(origin, dir, box) {
   };
 }
 
+/** Möller–Trumbore. t ≥ 0; culls degenerate/back-parallel. */
+export function rayTriangle(origin, dir, v0, v1, v2) {
+  const EPS = 1e-8;
+  const e1x = v1.x - v0.x;
+  const e1y = v1.y - v0.y;
+  const e1z = v1.z - v0.z;
+  const e2x = v2.x - v0.x;
+  const e2y = v2.y - v0.y;
+  const e2z = v2.z - v0.z;
+  const px = dir.y * e2z - dir.z * e2y;
+  const py = dir.z * e2x - dir.x * e2z;
+  const pz = dir.x * e2y - dir.y * e2x;
+  const det = e1x * px + e1y * py + e1z * pz;
+  if (Math.abs(det) < EPS) return null;
+  const inv = 1 / det;
+  const tx = origin.x - v0.x;
+  const ty = origin.y - v0.y;
+  const tz = origin.z - v0.z;
+  const u = (tx * px + ty * py + tz * pz) * inv;
+  if (u < 0 || u > 1) return null;
+  const qx = ty * e1z - tz * e1y;
+  const qy = tz * e1x - tx * e1z;
+  const qz = tx * e1y - ty * e1x;
+  const v = (dir.x * qx + dir.y * qy + dir.z * qz) * inv;
+  if (v < 0 || u + v > 1) return null;
+  const t = (e2x * qx + e2y * qy + e2z * qz) * inv;
+  if (t < 0) return null;
+  return {
+    t,
+    point: {
+      x: origin.x + dir.x * t,
+      y: origin.y + dir.y * t,
+      z: origin.z + dir.z * t,
+    },
+  };
+}
+
 export function intersectPlane(origin, dir, point, normal) {
   const denom = dir.x * normal.x + dir.y * normal.y + dir.z * normal.z;
   if (Math.abs(denom) < 1e-8) return null;

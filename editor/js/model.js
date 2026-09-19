@@ -2749,7 +2749,8 @@ export function localVisibleIds(doc, focus, includeNeighbours) {
   return ids;
 }
 
-export function objectVisible(doc, obj, localMode, focus, neighbours) {
+export function objectVisible(doc, obj, localMode, focus, neighbours, roomsOnly) {
+  if (roomsOnly && obj.kind !== "room" && obj.kind !== "doorway") return false;
   if (!localMode) return true;
   return localVisibleIds(doc, focus, neighbours).has(obj.id);
 }
@@ -3031,6 +3032,7 @@ export function defaultEditorState() {
     mode: "layout",
     localDraw: false,
     neighbourDraw: false,
+    roomsOnlyDraw: false,
     selectedIds: [],
     enemy: "Grunt",
     frameIndex: 0,
@@ -3124,6 +3126,7 @@ export function parseEditorState(raw) {
   if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons" || raw.mode === "items" || raw.mode === "sounds") d.mode = raw.mode;
   d.localDraw = !!raw.localDraw;
   d.neighbourDraw = !!raw.neighbourDraw;
+  d.roomsOnlyDraw = !!raw.roomsOnlyDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
   d.frameIndex = Math.max(0, num(raw.frameIndex, 0) | 0);

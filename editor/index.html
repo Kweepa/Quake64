@@ -1029,6 +1029,7 @@ button:disabled {
       <button type="button" id="btn-draw-all" class="active">All</button>
       <button type="button" id="btn-draw-local">Local</button>
       <button type="button" id="btn-draw-neighbours" title="Door-linked rooms (when Local is on)">Neighbours</button>
+      <button type="button" id="btn-draw-rooms-only" title="Hide contents; rooms and doors only">Rooms Only</button>
     </div>
     <div class="toolbar-actions">
       <button type="button" id="btn-undo" title="Ctrl+Z" disabled>Undo</button>
@@ -5121,7 +5122,8 @@ function localVisibleIds(doc, focus, includeNeighbours) {
   return ids;
 }
 
-function objectVisible(doc, obj, localMode, focus, neighbours) {
+function objectVisible(doc, obj, localMode, focus, neighbours, roomsOnly) {
+  if (roomsOnly && obj.kind !== "room" && obj.kind !== "doorway") return false;
   if (!localMode) return true;
   return localVisibleIds(doc, focus, neighbours).has(obj.id);
 }
@@ -5403,6 +5405,7 @@ function defaultEditorState() {
     mode: "layout",
     localDraw: false,
     neighbourDraw: false,
+    roomsOnlyDraw: false,
     selectedIds: [],
     enemy: "Grunt",
     frameIndex: 0,
@@ -5496,6 +5499,7 @@ function parseEditorState(raw) {
   if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons" || raw.mode === "items" || raw.mode === "sounds") d.mode = raw.mode;
   d.localDraw = !!raw.localDraw;
   d.neighbourDraw = !!raw.neighbourDraw;
+  d.roomsOnlyDraw = !!raw.roomsOnlyDraw;
   if (Array.isArray(raw.selectedIds)) d.selectedIds = raw.selectedIds.map(String);
   if (typeof raw.enemy === "string" && raw.enemy) d.enemy = raw.enemy;
   d.frameIndex = Math.max(0, num(raw.frameIndex, 0) | 0);
@@ -8386,7 +8390,10 @@ class LayoutView {
     const local = this.opts.getLocalMode?.() || false;
     const focus = this.opts.getFocusRoom?.() || null;
     const neighbours = !!(local && this.opts.getNeighbourMode?.());
-    return activeMap(doc).objects.filter((o) => objectVisible(doc, o, local, focus, neighbours));
+    const roomsOnly = !!this.opts.getRoomsOnlyMode?.();
+    return activeMap(doc).objects.filter((o) =>
+      objectVisible(doc, o, local, focus, neighbours, roomsOnly)
+    );
   }
 
   #objectSegments(doc, obj) {
@@ -9024,6 +9031,7 @@ class OverheadView {
     const cam = this.opts.getCamera();
     const local = this.opts.getLocalMode?.() || false;
     const neighbourOn = !!this.opts.getNeighbourMode?.();
+    const roomsOnly = !!this.opts.getRoomsOnlyMode?.();
     const camRoom = currentRoom(doc, cam);
     const focus = local ? this.opts.getFocusRoom?.() || null : camRoom;
     const neigh = focus ? neighbourRooms(doc, focus) : [];
@@ -9091,6 +9099,7 @@ class OverheadView {
 
     for (const obj of activeMap(doc).objects) {
       if (obj.kind === "room") continue;
+      if (roomsOnly && obj.kind !== "doorway") continue;
       const faded = vis && !vis.has(obj.id);
       const col = faded ? "#444" : KINDS[obj.kind].color;
       if (isGhostKind(obj.kind)) ctx.setLineDash([4, 3]);
@@ -9614,9 +9623,14 @@ class PreviewView {
         this.#stroke(ctx, cam, g.verts[e.a], g.verts[e.b], line);
       }
       const ids = localVisibleIds(doc, room, false);
+      const roomsOnly = !!this.opts.getRoomsOnlyMode?.();
       for (const obj of activeMap(doc).objects) {
         if (!ids.has(obj.id)) continue;
-        if (obj.kind === "room" || obj.kind === "spawn" || isGhostKind(obj.kind)) continue;
+        if (roomsOnly) {
+          if (obj.kind !== "doorway") continue;
+        } else if (obj.kind === "room" || obj.kind === "spawn" || isGhostKind(obj.kind)) {
+          continue;
+        }
         this.#drawObject(ctx, doc, obj, cam, line);
       }
       this.#drawNail(ctx, room);
@@ -12335,6 +12349,7 @@ let doc = createDefaultDocument();
 let editorMode = "layout";
 let localDraw = false;
 let neighbourDraw = false;
+let roomsOnlyDraw = false;
 let selectedIds = [];
 let pendingPlace = null;
 let enemyIndex = 0;
@@ -12379,6 +12394,7 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   getSelectedIds: () => selectedIds,
   getLocalMode: () => localDraw && editorMode === "layout",
   getNeighbourMode: () => neighbourDraw,
+  getRoomsOnlyMode: () => roomsOnlyDraw,
   getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
   onSelectIds: (ids, additive) => {
     const added = [];
@@ -12432,6 +12448,7 @@ const overheadView = new OverheadView(document.getElementById("overhead-canvas")
   getSelectedIds: () => selectedIds,
   getLocalMode: () => localDraw,
   getNeighbourMode: () => neighbourDraw,
+  getRoomsOnlyMode: () => roomsOnlyDraw,
   getFocusRoom: () => localFocusRoom(doc, selectedIds, lastRoomId),
 });
 
@@ -12465,6 +12482,7 @@ const previewView = new PreviewView(document.getElementById("preview-canvas"), {
   getRoom: () => previewRoom(),
   getSpawn: () => previewSpawn(),
   getEditSpawn: () => selectedSpawn(),
+  getRoomsOnlyMode: () => roomsOnlyDraw,
   nailImg: document.getElementById("preview-nail-png"),
   onRotate: (yaw) => {
     const spawn = selectedSpawn();
@@ -12791,6 +12809,7 @@ function collectEditorState() {
     mode: editorMode,
     localDraw,
     neighbourDraw,
+    roomsOnlyDraw,
     selectedIds: [...selectedIds],
     enemy: enemy?.name || "Grunt",
     frameIndex,
@@ -12877,6 +12896,7 @@ function applyEditorState(ed) {
     const amb = document.getElementById("chk-show-ambience");
     if (amb) amb.checked = showAmbience;
     setNeighbourDraw(ed.neighbourDraw, false);
+    setRoomsOnlyDraw(ed.roomsOnlyDraw, false);
     setDrawMode(ed.localDraw);
     setMode(ed.mode);
   } finally {
@@ -13203,8 +13223,9 @@ function setMode(mode) {
   const soundsLeft = document.getElementById("sounds-left");
   if (soundsLeft) soundsLeft.hidden = mode !== "sounds";
   document.getElementById("draw-mode-group").classList.toggle("inactive", mode !== "layout");
-  for (const id of ["btn-draw-all", "btn-draw-local", "btn-draw-neighbours"]) {
-    document.getElementById(id).disabled = mode !== "layout";
+  for (const id of ["btn-draw-all", "btn-draw-local", "btn-draw-neighbours", "btn-draw-rooms-only"]) {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = mode !== "layout";
   }
   document.getElementById("overhead-panel").hidden = mode !== "layout";
   document.getElementById("preview-panel").hidden = mode !== "layout";
@@ -13252,12 +13273,16 @@ function syncDrawButtons() {
   document.getElementById("btn-draw-all").classList.toggle("active", !localDraw);
   document.getElementById("btn-draw-local").classList.toggle("active", localDraw);
   document.getElementById("btn-draw-neighbours")?.classList.toggle("active", neighbourDraw);
+  document.getElementById("btn-draw-rooms-only")?.classList.toggle("active", roomsOnlyDraw);
 }
 
 function drawModeStatus() {
-  if (!localDraw) return "All rooms";
-  if (!localFocusRoom(doc, selectedIds, lastRoomId)) return "Local: no room selected";
-  return neighbourDraw ? "Local + neighbours" : "Local draw";
+  let msg;
+  if (!localDraw) msg = "All rooms";
+  else if (!localFocusRoom(doc, selectedIds, lastRoomId)) msg = "Local: no room selected";
+  else msg = neighbourDraw ? "Local + neighbours" : "Local draw";
+  if (roomsOnlyDraw) msg += " (rooms only)";
+  return msg;
 }
 
 function setDrawMode(local) {
@@ -13275,6 +13300,17 @@ function setNeighbourDraw(on, redraw = true) {
   if (redraw) {
     const msg = drawModeStatus();
     if (localDraw) setStatus(msg, msg.startsWith("Local: no"));
+    refreshAll();
+    markUi();
+  }
+}
+
+function setRoomsOnlyDraw(on, redraw = true) {
+  roomsOnlyDraw = !!on;
+  syncDrawButtons();
+  if (redraw) {
+    const msg = drawModeStatus();
+    setStatus(msg, msg.startsWith("Local: no"));
     refreshAll();
     markUi();
   }
@@ -15715,6 +15751,9 @@ document.getElementById("btn-draw-local").addEventListener("click", () => {
 });
 document.getElementById("btn-draw-neighbours")?.addEventListener("click", () => {
   setNeighbourDraw(!neighbourDraw);
+});
+document.getElementById("btn-draw-rooms-only")?.addEventListener("click", () => {
+  setRoomsOnlyDraw(!roomsOnlyDraw);
 });
 document.getElementById("btn-ortho-top").addEventListener("click", () => setOrthoMode("top"));
 document.getElementById("btn-ortho-left").addEventListener("click", () => setOrthoMode("left"));

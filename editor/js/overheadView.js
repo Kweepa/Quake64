@@ -104,6 +104,7 @@ export class OverheadView {
     const cam = this.opts.getCamera();
     const local = this.opts.getLocalMode?.() || false;
     const neighbourOn = !!this.opts.getNeighbourMode?.();
+    const roomsOnly = !!this.opts.getRoomsOnlyMode?.();
     const camRoom = currentRoom(doc, cam);
     const focus = local ? this.opts.getFocusRoom?.() || null : camRoom;
     const neigh = focus ? neighbourRooms(doc, focus) : [];
@@ -171,6 +172,7 @@ export class OverheadView {
 
     for (const obj of activeMap(doc).objects) {
       if (obj.kind === "room") continue;
+      if (roomsOnly && obj.kind !== "doorway") continue;
       const faded = vis && !vis.has(obj.id);
       const col = faded ? "#444" : KINDS[obj.kind].color;
       if (isGhostKind(obj.kind)) ctx.setLineDash([4, 3]);

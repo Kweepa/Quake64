@@ -6588,8 +6588,8 @@
           "doorType": "Arch",
           "doorScale": 1,
           "tag": "",
-          "locked": false,
-          "otherRoomId": "2ce4109e-bfa0-4de3-a429-6d28b248c2f1"
+          "otherRoomId": "2ce4109e-bfa0-4de3-a429-6d28b248c2f1",
+          "locked": false
         },
         {
           "id": "2ce4109e-bfa0-4de3-a429-6d28b248c2f1",
@@ -6699,7 +6699,7 @@
           "face": "+z",
           "axis": "z",
           "dir": -1,
-          "flags": 2,
+          "flags": 0,
           "roomId": "3e54c340-6f7b-4f2b-9d3f-62b8afcf2c41"
         },
         {

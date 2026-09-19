@@ -525,9 +525,14 @@ export class PreviewView {
         this.#stroke(ctx, cam, g.verts[e.a], g.verts[e.b], line);
       }
       const ids = localVisibleIds(doc, room, false);
+      const roomsOnly = !!this.opts.getRoomsOnlyMode?.();
       for (const obj of activeMap(doc).objects) {
         if (!ids.has(obj.id)) continue;
-        if (obj.kind === "room" || obj.kind === "spawn" || isGhostKind(obj.kind)) continue;
+        if (roomsOnly) {
+          if (obj.kind !== "doorway") continue;
+        } else if (obj.kind === "room" || obj.kind === "spawn" || isGhostKind(obj.kind)) {
+          continue;
+        }
         this.#drawObject(ctx, doc, obj, cam, line);
       }
       this.#drawNail(ctx, room);

@@ -770,7 +770,10 @@ export class LayoutView {
     const local = this.opts.getLocalMode?.() || false;
     const focus = this.opts.getFocusRoom?.() || null;
     const neighbours = !!(local && this.opts.getNeighbourMode?.());
-    return activeMap(doc).objects.filter((o) => objectVisible(doc, o, local, focus, neighbours));
+    const roomsOnly = !!this.opts.getRoomsOnlyMode?.();
+    return activeMap(doc).objects.filter((o) =>
+      objectVisible(doc, o, local, focus, neighbours, roomsOnly)
+    );
   }
 
   #objectSegments(doc, obj) {

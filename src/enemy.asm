@@ -417,32 +417,6 @@ eu_pain
 
 ; ------------------------------------------------------------------
 eu_dying
-	ldx enemy_idx
-	+ldy_mx en_type
-	cpy #ENT_SCRAG
-	bne eu_next
-	+lda_mx en_x
-	sta col_x
-	+lda_mx en_z
-	sta col_z
-	+lda_mx en_y
-	sta fb_probe_y
-	jsr floor_below
-	bcc eu_next
-	ldx enemy_idx
-	+lda_mx en_y
-	cmp proc_tmp2
-	beq eu_next
-	bcc eu_next
-	sec
-	sbc #SCRAG_FALL
-	bcc .eud_clamp
-	cmp proc_tmp2
-	bcs .eud_store
-.eud_clamp
-	lda proc_tmp2
-.eud_store
-	+sta_mx en_y
 	jmp eu_next
 
 ; ------------------------------------------------------------------
@@ -737,6 +711,12 @@ enemy_anim_step
 	jmp .eas_n
 .eas_die
 	inc en_frame,x
+	+ldy_mx en_type
+	cpy #ENT_SCRAG
+	bne .eas_die_nsc
+	jsr scrag_death_drop
+	ldx enemy_idx
+.eas_die_nsc
 	lda en_frame,x
 	jsr pain_var_off
 	cmp enemy_death_len,y
@@ -755,6 +735,56 @@ enemy_anim_step
 	lda #>DEATH_HOLD_MS
 	sta en_timer_h,x
 	jmp .eas_n
+
+; Scrag: drop (en_y − floor) / frames_left so the last death frame lands.
+; X = enemy_idx. Clobbers rot0/1/2, dlo, nlo, Y.
+scrag_death_drop
+	+lda_mx en_x
+	sta col_x
+	+lda_mx en_z
+	sta col_z
+	+lda_mx en_y
+	sta fb_probe_y
+	+ldy_mx en_room
+	jsr floor_below_y
+	bcc .sdf_rts
+	ldx enemy_idx
+	+lda_mx en_y
+	cmp proc_tmp2
+	beq .sdf_rts
+	bcc .sdf_rts
+	sec
+	sbc proc_tmp2
+	pha				; H
+	lda en_frame,x
+	jsr pain_var_off
+	sta rot1
+	lda enemy_death_len,y
+	sec
+	sbc rot1
+	bne .sdf_n
+	lda #1
+.sdf_n
+	sta dlo
+	pla
+	sta rot0
+	lda #0
+	sta rot1
+	sta rot2
+	jsr div24u8
+	ldx enemy_idx
+	+lda_mx en_y
+	sec
+	sbc rot0
+	bcc .sdf_clamp
+	cmp proc_tmp2
+	bcs .sdf_store
+.sdf_clamp
+	lda proc_tmp2
+.sdf_store
+	+sta_mx en_y
+.sdf_rts
+	rts
 
 ; ------------------------------------------------------------------
 ; A = Chebyshev |dx|,|dz| max vs player (cam_xh/zh). X = enemy_idx

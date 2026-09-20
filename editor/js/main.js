@@ -2641,6 +2641,17 @@ function renderLayoutObjectFields(root, objs) {
         )
       );
     }
+    const enableCur = unanimous(objs, (o) => o.enableTag || "");
+    root.appendChild(
+      field(
+        "Armed by",
+        textInputMixed(enableCur, {
+          maxLength: MAX_TAG_LEN,
+          placeholder: "switch tag (optional)",
+          onChange: (v) => apply((obj) => (obj.enableTag = clampTag(v))),
+        })
+      )
+    );
   }
 
   if (usesLinkTag(kind)) {
@@ -2650,7 +2661,12 @@ function renderLayoutObjectFields(root, objs) {
         "Tag",
         textInputMixed(tagCur, {
           maxLength: MAX_TAG_LEN,
-          placeholder: kind === "elevator" ? "elevator link" : "destination tag",
+          placeholder:
+            kind === "elevator"
+              ? "elevator link"
+              : kind === "switch"
+                ? "elevator, door, or trigger"
+                : "destination tag",
           onChange: (v) => apply((obj) => (obj.tag = clampTag(v))),
         })
       )

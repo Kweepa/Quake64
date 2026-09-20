@@ -295,7 +295,7 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CE90` | 2 | `status_ms_l/h` | Status HUD remaining ms |
 | `$CE92` | 1 | `door_i0` | Room door slice start |
 | `$CE93` | 1 | `door_i1` | Exclusive end |
-| `$CE94` | 1 | `sw_match` | |
+| `$CE94` | 1 | `sw_match` | Cooked door/enable-tag id while unlocking/arming |
 | `$CE95` | 24 | `en_pat_n` | `ENEMY_MAX` |
 | `$CEAD` | 24 | `en_pain_i` | `ENEMY_MAX` |
 | `$CEC5` | 1 | `have_keys` | |

@@ -393,6 +393,9 @@ def cook_one(level: dict, map_key: str) -> bytes:
     }
     SW_DEST_DOOR = 0
     SW_DEST_ELEV = 1
+    SW_DEST_TRIG = 2
+    TRIG_ENABLE_SHIFT = 3
+    TRIG_ENABLE_MAX = 15
 
     doors_by_tag: dict[str, list] = {}
     for d in doors:
@@ -428,6 +431,27 @@ def cook_one(level: dict, map_key: str) -> bytes:
             raise SystemExit(
                 f"{map_key} remote door tag {tag!r} has no switch or unlock trigger"
             )
+
+    enable_tag_ids: dict[str, int] = {}
+    for t in triggers:
+        et = (t.get("enableTag") or "").strip()
+        if not et:
+            continue
+        if et not in enable_tag_ids:
+            n = len(enable_tag_ids) + 1
+            if n > TRIG_ENABLE_MAX:
+                raise SystemExit(
+                    f"{map_key} has too many trigger enable tags (max {TRIG_ENABLE_MAX})"
+                )
+            enable_tag_ids[et] = n
+    enable_ctrl = {tag: False for tag in enable_tag_ids}
+    for s in switches:
+        tag = obj_tag(s)
+        if tag in enable_ctrl:
+            enable_ctrl[tag] = True
+    for tag, ok in enable_ctrl.items():
+        if not ok:
+            raise SystemExit(f"{map_key} trigger enable tag {tag!r} has no switch")
 
     # Rooms SoA
     room_x = [r["x"] for r in rooms]
@@ -710,11 +734,13 @@ def cook_one(level: dict, map_key: str) -> bytes:
         tag = obj_tag(s)
         tagged_doors = doors_by_tag.get(tag, [])
         in_elev = tag in elev_by_tag
+        in_trig = tag in enable_tag_ids
+        hits = int(in_elev) + int(bool(tagged_doors)) + int(in_trig)
         if not tag:
             kind, arg = 255, 0
-        elif in_elev and tagged_doors:
+        elif hits > 1:
             raise SystemExit(
-                f"{map_key} switch tag {tag!r} matches both elevator and doorway"
+                f"{map_key} switch tag {tag!r} matches more than one of elevator, doorway, trigger"
             )
         elif in_elev:
             kind, arg = SW_DEST_ELEV, elev_by_tag[tag]
@@ -725,6 +751,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
                         f"{map_key} switch tag {tag!r} matches a non-remote doorway"
                     )
             kind, arg = SW_DEST_DOOR, door_tag_ids[tag]
+        elif in_trig:
+            kind, arg = SW_DEST_TRIG, enable_tag_ids[tag]
         else:
             raise SystemExit(f"{map_key} switch tag {tag!r} has no destination")
         sw_x.append(s["x"])
@@ -825,8 +853,10 @@ def cook_one(level: dict, map_key: str) -> bytes:
         tr_sx.append(t["sx"])
         tr_sy.append(t["sy"])
         tr_sz.append(t["sz"])
+        et = (t.get("enableTag") or "").strip()
+        gated = (enable_tag_ids[et] << TRIG_ENABLE_SHIFT) if et else 0
         tr_room.append(ri)
-        tr_purpose.append(purpose)
+        tr_purpose.append(purpose | gated)
         tr_arg.append(arg)
         tr_id.append(map_id[id(t)])
 
@@ -1103,8 +1133,11 @@ TRIG_TELE	= 3
 TRIG_ELEV	= 4
 TRIG_SUMMON	= 5
 TRIG_UNLOCK	= 6
+TRIG_PURPOSE_MASK	= 7
+TRIG_GATED_MASK	= $78
 SW_DEST_DOOR	= 0
 SW_DEST_ELEV	= 1
+SW_DEST_TRIG	= 2
 FACE_PZ	= 0
 FACE_MZ	= 1
 FACE_PX	= 2

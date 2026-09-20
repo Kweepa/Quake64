@@ -19,7 +19,7 @@
 * Non-room labels that would wrap stay on **one line** and elide with an ellipsis (`…`). Room names may wrap.
 
 ## Tags (editor) → indices (game)
-* Shared **tag** strings in the editor link controllers to targets (switch ↔ elevator, trigger ↔ elevator/dest, door ↔ key).
+* Shared **tag** strings in the editor link controllers to targets (switch ↔ elevator, switch ↔ trigger arm, trigger ↔ elevator/dest, door ↔ key).
 * Export resolves tags to **indices**. The 6502 side never stores or compares tag strings.
 
 ## Locked doors
@@ -36,6 +36,7 @@
   * **Activate elevator** — destination **tag** targets an elevator; toggles to the other stop on entry if that elevator is idle.
   * **Summon elevator** — destination **tag** targets an elevator; on entry, if idle, sends it to the stop nearer the player’s feet (no-op if already there or moving).
 * There is no separate teleporter entry object — teleport entry is a trigger with purpose **Teleport**.
+* Optional **Armed by** tag: if set, the volume does nothing until a switch with that tag is used. One switch can arm every trigger that shares the tag. Destination **tag** (teleport / elevator / unlock) is independent.
 * **Teleport dest** stays its own placeable (exit point + facing + tag). The dest object's room is the arrival room. Editor marks the dest; the game does not draw it.
 
 ## Patrol

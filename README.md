@@ -18,7 +18,7 @@ The map is **rooms as axis-aligned hulls**, not a global mesh. Floor plans can b
 
 Ramps use the AABB for **rise/run** (`height = slope_y + (local * sy) / run` in 8.8) so the eye rides the slope. Elevators, switches, and crates share the same box tests. Step off a ledge and you fall; a hard landing costs health.
 
-Walk-over **backpacks** grant ammo, weapons, health, armour, keys, and the exclusive powerups (quad / pentagram / ring). Killed enemies can drop a pack. Message, hurt, teleport, and elevator **triggers** are undrawn AABBs; end-of-level advances `e1mN` or returns to the menu endings.
+Walk-over **backpacks** grant ammo, weapons, health, armour, keys, and the exclusive powerups (quad / pentagram / ring). Killed enemies can drop a pack. Message, hurt, teleport, and elevator **triggers** are undrawn AABBs; a switch can arm a trigger that would otherwise stay inert. End-of-level advances `e1mN` or returns to the menu endings.
 
 Off-screen **items** (AABB meshes) and **enemies** skip rotate/project/draw. Horizontal and vertical tests use a fat 45° cone (`|axis| ≤ z` plus a size pad) so the miss is drawing something a bit off-screen, not dropping something that is still in the 192×128 view. The active room’s bounding lines are not frustum-culled.
 

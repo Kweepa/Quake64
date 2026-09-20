@@ -1631,20 +1631,25 @@ try_proximity
 	jsr .prox_switch
 	bcc .tp_sn
 	+lda_mx sw_kind
-	bne .tp_elev
+	bne .tp_nk
 	+lda_mx sw_tag
 	jsr door_unlock_tag
-	lda #SOUND_MISC_MENU2
-	jsr play_sound
-	jmp .tp_el
-.tp_elev
+	jmp .tp_sfx
+.tp_nk
 	cmp #SW_DEST_ELEV
+	beq .tp_elev
+	cmp #SW_DEST_TRIG
 	bne .tp_el
+	+lda_mx sw_tag
+	jsr trig_arm_tag
+	jmp .tp_sfx
+.tp_elev
 	+ldy_mx sw_tag
 	tya
 	tax
 	jsr elev_activate
 	bcs .tp_el
+.tp_sfx
 	lda #SOUND_MISC_MENU2
 	jsr play_sound
 	jmp .tp_el			; one switch per press
@@ -2075,10 +2080,36 @@ near_box_xz
 	rts
 
 ; ------------------------------------------------------------------
+; A = cooked enable-tag id (1..15). Clear tr_purpose bits 3–6 on matches.
+; ------------------------------------------------------------------
+trig_arm_tag
+	sta sw_match
+	ldx #0
+.tat
+	cpx	map_ntrigs
+	bcs .tat_done
+	+lda_mx tr_purpose
+	lsr
+	lsr
+	lsr
+	cmp sw_match
+	bne .tat_n
+	+lda_mx tr_purpose
+	and #TRIG_PURPOSE_MASK
+	+sta_mx tr_purpose
+.tat_n
+	inx
+	bne .tat
+.tat_done
+	rts
+
+; ------------------------------------------------------------------
 ; update_triggers — every same-room volume: XZ plus
 ; [box_y, box_y+sy) vs the player feet–eye line (player_overlaps_y).
 ; Bit N = Nth trigger in this room (SoA order). Enter fires per bit;
 ; stay = hold (msg HUD / hurt tick); leave clears the bit.
+; tr_purpose bits 3–6 = enable-tag id (0 = live). Nonzero = gated until
+; a matching switch jsr trig_arm_tag (clears those bits).
 ; End / teleport: jmp (do not continue the scan).
 ; ------------------------------------------------------------------
 update_triggers
@@ -2108,6 +2139,11 @@ update_triggers
 .ut_bit
 	lda ut_bits,y
 	sta pv1				; mask
+	+lda_mx tr_purpose
+	and #TRIG_GATED_MASK
+	beq .ut_live
+	jmp .ut_out			; gated: clear occupancy, no fire
+.ut_live
 	+lda_mx tr_x
 	sta box_x
 	+lda_mx tr_y

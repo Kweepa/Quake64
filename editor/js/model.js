@@ -1805,6 +1805,9 @@ export function clampObject(obj) {
     obj.purpose = clampTriggerPurpose(obj.purpose);
     obj.text = clampTriggerText(obj.text);
     obj.tag = clampTag(obj.tag);
+    const et = clampTag(obj.enableTag);
+    if (et) obj.enableTag = et;
+    else delete obj.enableTag;
   }
   if (obj.kind === "room") {
     obj.name = clampName(obj.name);
@@ -1875,6 +1878,7 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.purpose = clampTriggerPurpose(extra.purpose);
     obj.text = extra.text;
     obj.tag = extra.tag;
+    obj.enableTag = extra.enableTag;
   }
   if (kind === "room") {
     obj.name = clampName(extra.name);
@@ -2917,6 +2921,7 @@ function parseObjects(list) {
       purpose: o.purpose,
       name: o.name,
       tag: o.tag,
+      enableTag: o.enableTag,
       lockKey: o.lockKey,
       doorType: o.doorType,
       doorScale: o.doorScale,
@@ -2964,6 +2969,7 @@ function parseObjects(list) {
       if (o.text != null) obj.text = clampTriggerText(o.text);
       if (o.purpose != null) obj.purpose = clampTriggerPurpose(o.purpose);
       if (o.tag != null) obj.tag = clampTag(o.tag);
+      if (o.enableTag != null) obj.enableTag = clampTag(o.enableTag);
     }
     if (o.kind === "room") {
       if (o.name != null) obj.name = clampName(o.name);

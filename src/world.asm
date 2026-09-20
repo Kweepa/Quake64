@@ -331,8 +331,6 @@ uf_rc_floor
 	beq .urf_rts
 	jsr point_in_rc_xz
 	bcc .urf_rts
-	jsr rc_overlaps_player_y
-	bcc .urf_rts
 	lda proc_tmp0
 	bne .urf_min
 	+lda_mx rc_y

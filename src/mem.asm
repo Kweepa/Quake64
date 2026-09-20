@@ -24,8 +24,8 @@ BANK_LOADER	= $35
 ; Resident lives in the 248-byte gap between the charset B bottom margin glyph
 ; ($EE00-$EE07, written by copy_tab) and LOGTAB ($EF00). 236 B, 12 B spare.
 ; -DUSE_KRILL=1: loadraw at $EE08. Default 0: KERNAL LOAD ($FFD5).
-; NOT $CE82 — memorymap.md calls that unused but en_pain_i and the grenade SoA
-; are there; see mem.asm's own "$CF20+ free" below.
+; Play BSS is $CD00–$CFBA. Do not park Krill there; resident is $EE08.
+; see mem.asm's own "$CFBB+ free" below.
 !ifndef USE_KRILL {
 	USE_KRILL = 0
 }
@@ -304,7 +304,7 @@ FALL_DAMAGE	= 15			; HP on hard landing
 HURT_FLASH_MS	= 300			; red border duration
 ENEMY_CULL_R	= 2			; view-space |x| vs z+R (8.8 high)
 ENEMY_CULL_H	= 6			; view-space |y| vs z+H (figure height)
-ENEMY_MAX		= 20		; MAP_NENEMIES ≤ this
+ENEMY_MAX		= 24		; MAP_NENEMIES ≤ this
 EN_IDLE		= 0
 EN_PATROL		= 1
 EN_ALERT		= 2
@@ -605,207 +605,203 @@ bp_taken	= $CD04			; MAP_NBACKPACKS (≤ BP_MAX)
 player_hp	= $CD24			; 0..PLAYER_HP_MAX
 player_armour	= $CD25			; 0..PLAYER_ARMOUR_MAX
 en_state	= $CD26			; ENEMY_MAX: EN_*
-en_frame	= $CD3A			; ENEMY_MAX: local frame in current clip
-drop_taken	= $CD4E			; ENEMY_MAX: 1=inactive/taken, 0=active
-drop_x		= $CD62
-drop_y		= $CD76
-drop_z		= $CD8A
-drop_room	= $CD9E
-drop_type	= $CDB2			; BP_* when active
-en_hp		= $CDC6			; ENEMY_MAX
-en_timer	= $CDDA			; ENEMY_MAX: approach min / dog repath / death hold ms lo
-en_timer_h	= $CDEE			; ENEMY_MAX: approach min / dog repath / death hold ms hi
-en_step		= $CE02			; ENEMY_MAX: walk acc lo
-en_step_h	= $CE16			; ENEMY_MAX: walk acc hi
-en_dir		= $CE2A			; ENEMY_MAX: 0..7 dodge facing
-gunshot_wake	= $CE3E			; 1 = gun fired this frame (room wake)
-ai_dirtry	= $CE3F			; 5 bytes dodge dir candidates
-ai_turn		= $CE44			; turnaround dir or $ff
-ai_probe	= $CE45			; dir under test (probe must not clobber)
-emuz_vx		= $CE46			; VIC X lo staged (IRQ apply_en)
-emuz_vy		= $CE47			; VIC Y staged
-emuz_col		= $CE48			; sprite colour staged from col_fx
-emuz_pending	= $CE49			; enemy idx waiting to muzzle, $ff = none
-fb_probe_y	= $CE4A			; floor_below: inclusive max walkable Y
-death_wait_l	= $CE4B			; death hold ms acc
-death_wait_h	= $CE4C
-col_room	= $CE4D			; collision room for inset/floor/solid
-splat_xmsb	= $CE4E			; $d010 bit7 when X>=256
-splat_vx		= $CE4F
-splat_vy		= $CE50
-splat_col	= $CE51			; COL_SPLAT_HIT or col_line (miss)
-trig_seen	= $CE52			; update_triggers: b0=hurt ticked, b1=msg overlap
-shot_hit_i	= $CE53			; closest hitscan enemy, $ff = miss
-shot_hit_z	= $CE54			; CAM_ZH of that hit
-hurt_flash_l	= $CE55			; remaining red-border ms
-hurt_flash_h	= $CE56
-bite_splat_i	= $CE57			; dog idx pending blood splat, $ff = none
-status_ms_l	= $CE58			; status HUD remaining ms
-status_ms_h	= $CE59
-door_i0		= $CE5A			; room door slice start
-door_i1		= $CE5B			; exclusive end
-sw_match	= $CE5C			; cooked door-tag id while unlocking
-en_pat_n	= $CE5D			; ENEMY_MAX: patrol remaining cells
-en_pain_i	= $CE71			; ENEMY_MAX: pain/death/attack variant index
-; $CE85–$CE91 free
-have_keys	= $CE92			; HAVE_SILVER / HAVE_GOLD / HAVE_EARTH
-pu_kind		= $CE93			; 0 or BP_QUAD / BP_PENT / BP_RING
-pu_ms_l		= $CE94
-pu_ms_h		= $CE95
-fx_oxl		= $CE96			; world origin 8.8 (same as grenade)
-fx_oyl		= $CE97
-fx_ozl		= $CE98
-fx_ox		= $CE99
-fx_oy		= $CE9A
-fx_oz		= $CE9B
-; $CE9C–$CEAC free (was fx_skip / en_pain_i)
-sample_ms_chk	= $CEAD			; shadow of sample_ms (init_irq); tripwire restore
-spd_trip	= $CEAE			; sample_ms corruption count (IRQ .top)
-; Grenade SoA — 4 slots × 21 bytes, $CEAF–$CF02
-gr_on		= $CEAF
-gr_room		= $CEB3
-gr_owner	= $CEB7
-gr_flags	= $CEBB
-gr_acc		= $CEBF
-gr_xl		= $CEC3
-gr_xh		= $CEC7
-gr_yl		= $CECB
-gr_yh		= $CECF
-gr_zl		= $CED3
-gr_zh		= $CED7
-gr_vxl		= $CEDB
-gr_vxh		= $CEDF
-gr_vyl		= $CEE3
-gr_vyh		= $CEE7
-gr_vzl		= $CEEB
-gr_vzh		= $CEEF
-gr_fuse_l	= $CEF3
-gr_fuse_h	= $CEF7
-gr_life_l	= $CEFB
-gr_life_h	= $CEFF
-; $CF03 free (was gren_save_room)
+en_frame	= $CD3E			; ENEMY_MAX: local frame in current clip
+drop_taken	= $CD56			; ENEMY_MAX: 1=inactive/taken, 0=active
+drop_x		= $CD6E
+drop_y		= $CD86
+drop_z		= $CD9E
+drop_room	= $CDB6
+drop_type	= $CDCE			; BP_* when active
+en_hp		= $CDE6			; ENEMY_MAX
+en_timer	= $CDFE			; ENEMY_MAX: approach min / dog repath / death hold ms lo
+en_timer_h	= $CE16			; ENEMY_MAX: approach min / dog repath / death hold ms hi
+en_step		= $CE2E			; ENEMY_MAX: walk acc lo
+en_step_h	= $CE46			; ENEMY_MAX: walk acc hi
+en_dir		= $CE5E			; ENEMY_MAX: 0..7 dodge facing
+gunshot_wake	= $CE76			; 1 = gun fired this frame (room wake)
+ai_dirtry	= $CE77			; 5 bytes dodge dir candidates
+ai_turn		= $CE7C			; turnaround dir or $ff
+ai_probe	= $CE7D			; dir under test (probe must not clobber)
+emuz_vx		= $CE7E			; VIC X lo staged (IRQ apply_en)
+emuz_vy		= $CE7F			; VIC Y staged
+emuz_col		= $CE80			; sprite colour staged from col_fx
+emuz_pending	= $CE81			; enemy idx waiting to muzzle, $ff = none
+fb_probe_y	= $CE82			; floor_below: inclusive max walkable Y
+death_wait_l	= $CE83			; death hold ms acc
+death_wait_h	= $CE84
+col_room	= $CE85			; collision room for inset/floor/solid
+splat_xmsb	= $CE86			; $d010 bit7 when X>=256
+splat_vx		= $CE87
+splat_vy		= $CE88
+splat_col	= $CE89			; COL_SPLAT_HIT or col_line (miss)
+trig_seen	= $CE8A			; update_triggers: b0=hurt ticked, b1=msg overlap
+shot_hit_i	= $CE8B			; closest hitscan enemy, $ff = miss
+shot_hit_z	= $CE8C			; CAM_ZH of that hit
+hurt_flash_l	= $CE8D			; remaining red-border ms
+hurt_flash_h	= $CE8E
+bite_splat_i	= $CE8F			; dog idx pending blood splat, $ff = none
+status_ms_l	= $CE90			; status HUD remaining ms
+status_ms_h	= $CE91
+door_i0		= $CE92			; room door slice start
+door_i1		= $CE93			; exclusive end
+sw_match	= $CE94			; cooked door-tag id while unlocking
+en_pat_n	= $CE95			; ENEMY_MAX: patrol remaining cells
+en_pain_i	= $CEAD			; ENEMY_MAX: pain/death/attack variant index
+have_keys	= $CEC5			; HAVE_SILVER / HAVE_GOLD / HAVE_EARTH
+pu_kind		= $CEC6			; 0 or BP_QUAD / BP_PENT / BP_RING
+pu_ms_l		= $CEC7
+pu_ms_h		= $CEC8
+fx_oxl		= $CEC9			; world origin 8.8 (same as grenade)
+fx_oyl		= $CECA
+fx_ozl		= $CECB
+fx_ox		= $CECC
+fx_oy		= $CECD
+fx_oz		= $CECE
+sample_ms_chk	= $CECF			; shadow of sample_ms (init_irq); tripwire restore
+spd_trip	= $CED0			; sample_ms corruption count (IRQ .top)
+; Grenade SoA — 4 slots × 21 bytes, $CED1–$CF24
+gr_on		= $CED1
+gr_room		= $CED5
+gr_owner	= $CED9
+gr_flags	= $CEDD
+gr_acc		= $CEE1
+gr_xl		= $CEE5
+gr_xh		= $CEE9
+gr_yl		= $CEED
+gr_yh		= $CEF1
+gr_zl		= $CEF5
+gr_zh		= $CEF9
+gr_vxl		= $CEFD
+gr_vxh		= $CF01
+gr_vyl		= $CF05
+gr_vyh		= $CF09
+gr_vzl		= $CF0D
+gr_vzh		= $CF11
+gr_fuse_l	= $CF15
+gr_fuse_h	= $CF19
+gr_life_l	= $CF1D
+gr_life_h	= $CF21
+; $CF25 free (was gren_save_room)
 ; Hitscan params (live during gun_hitscan / splat_aim_jitter)
-scan_hit_x	= $CF04			; |sx−CX| max (inclusive)
-scan_hit_y	= $CF05			; |sy−64| max, $ff = no Y gate (both guns)
-scan_dmg_max	= $CF06			; dmg = this − (z>>2), min 1
-scan_dmg_all	= $CF07			; 1 = damage every cone hit (SSG)
-scan_jx_mask	= $CF08			; splat rnd X mask
-scan_jx_bias	= $CF09
-scan_jy_mask	= $CF0A
-scan_jy_bias	= $CF0B
+scan_hit_x	= $CF26			; |sx−CX| max (inclusive)
+scan_hit_y	= $CF27			; |sy−64| max, $ff = no Y gate (both guns)
+scan_dmg_max	= $CF28			; dmg = this − (z>>2), min 1
+scan_dmg_all	= $CF29			; 1 = damage every cone hit (SSG)
+scan_jx_mask	= $CF2A			; splat rnd X mask
+scan_jx_bias	= $CF2B
+scan_jy_mask	= $CF2C
+scan_jy_bias	= $CF2D
 ; Timed FX headers: +0 on/phase, +1 skip, +2 ms_l, +3 ms_h
 FXH_ON		= 0
 FXH_SKIP	= 1
 FXH_MS_L	= 2
 FXH_MS_H	= 3
 FXH_COUNT	= 5
-fxh_flash4	= $CF0C
+fxh_flash4	= $CF2E
 flash_phase	= fxh_flash4 + FXH_ON	; sprite 4: 0 off, 1 yellow, 2 red
 flash_skip	= fxh_flash4 + FXH_SKIP
 flash_ms_l	= fxh_flash4 + FXH_MS_L
 flash_ms_h	= fxh_flash4 + FXH_MS_H
-fxh_flash5	= $CF10
+fxh_flash5	= $CF32
 flash5_phase	= fxh_flash5 + FXH_ON	; sprite 5 (nail right)
 flash5_skip	= fxh_flash5 + FXH_SKIP
 flash5_ms_l	= fxh_flash5 + FXH_MS_L
 flash5_ms_h	= fxh_flash5 + FXH_MS_H
-fxh_emuz	= $CF14
+fxh_emuz	= $CF36
 emuz_on		= fxh_emuz + FXH_ON	; 1 = sprite 6 enabled
 emuz_skip	= fxh_emuz + FXH_SKIP
 emuz_ms_l	= fxh_emuz + FXH_MS_L
 emuz_ms_h	= fxh_emuz + FXH_MS_H
-fxh_splat	= $CF18
+fxh_splat	= $CF3A
 splat_on	= fxh_splat + FXH_ON	; 1 = sprite 7 enabled
 splat_skip	= fxh_splat + FXH_SKIP
 splat_ms_l	= fxh_splat + FXH_MS_L
 splat_ms_h	= fxh_splat + FXH_MS_H
-fxh_explode	= $CF1C
+fxh_explode	= $CF3E
 fx_on		= fxh_explode + FXH_ON	; 1 = explosion live
 fx_skip		= fxh_explode + FXH_SKIP
 fx_ms_l		= fxh_explode + FXH_MS_L
 fx_ms_h		= fxh_explode + FXH_MS_H
-; Room whose pose banks are currently resident; $ff = none yet. Lives in the
-; genuinely-free space above the effect timers -- NOT in the $CE82 hole that
-; memorymap.md claims is unused, because en_pain_i and the grenade SoA are there.
-stream_room	= $CF20
+; Room whose pose banks are currently resident; $ff = none yet.
+stream_room	= $CF42
 ; Explosion particle vel — FX_N × vx/vy s8 (integrated at draw)
-fx_vx		= $CF21			; 24
-fx_vy		= $CF39			; 24
+fx_vx		= $CF43			; 24
+fx_vy		= $CF5B			; 24
 ; Scrag spit — control + hitscan + tracer 8.8 start/end (12 bytes)
-spit_on		= $CF51
-spit_room	= $CF52
-spit_owner	= $CF53			; enemy index
-spit_flash	= $CF54			; 0 = tracer done, hitscan next update
-spit_hitx	= $CF55			; player XZ at fire
-spit_hitz	= $CF56
-spit_oxl	= $CF57			; start 8.8
-spit_oxh	= $CF58
-spit_oyl	= $CF59
-spit_oyh	= $CF5A
-spit_ozl	= $CF5B
-spit_ozh	= $CF5C
-spit_xl		= $CF5D			; end 8.8
-spit_xh		= $CF5E
-spit_yl		= $CF5F
-spit_yh		= $CF60
-spit_zl		= $CF61
-spit_zh		= $CF62
+spit_on		= $CF73
+spit_room	= $CF74
+spit_owner	= $CF75			; enemy index
+spit_flash	= $CF76			; 0 = tracer done, hitscan next update
+spit_hitx	= $CF77			; player XZ at fire
+spit_hitz	= $CF78
+spit_oxl	= $CF79			; start 8.8
+spit_oxh	= $CF7A
+spit_oyl	= $CF7B
+spit_oyh	= $CF7C
+spit_ozl	= $CF7D
+spit_ozh	= $CF7E
+spit_xl		= $CF7F			; end 8.8
+spit_xh		= $CF80
+spit_yl		= $CF81
+spit_yh		= $CF82
+spit_zl		= $CF83
+spit_zh		= $CF84
 ; Evicted from KERNAL ZP ($90–$bf / SETNAM $b7–$bc). Abs OK — not (ptr),y.
-wish_dx		= $CF63			; signed move intent X
-wish_dz		= $CF64
-wish_dxh	= $CF65			; wish 8.8 high
-wish_dzh	= $CF66
-save_xh		= $CF67
-save_zh		= $CF68
-save_xl		= $CF69
-save_zl		= $CF6A
-col_x		= $CF6B			; collision test point
-col_z		= $CF6C
-col_y		= $CF6D
-obj_i		= $CF6E
-face_bits	= $CF6F			; which box faces visible
-box_x		= $CF70			; AABB scratch (util indexes box_*,x)
-box_y		= $CF71
-box_z		= $CF72
-box_sx		= $CF73
-box_sy		= $CF74
-box_sz		= $CF75
-msg_off		= $CF76			; offset into map_text
-vel_ms		= $CF77			; hold duration ms (lo)
-vel_msh		= $CF78
-turn_acc_l	= $CF79
-turn_acc_h	= $CF7A
-dt_msh		= $CF7B			; frame dt milliseconds (hi)
-inv_l		= $CF7C			; (FOCAL<<16)/(z>>k) lo, mesh project
-inv_h		= $CF7D
-inv_k		= $CF7E
-mesh_vmask	= $CF7F
-mesh_nwork	= $CF80
-random8		= $CF81
-scale_s		= $CF82
-fn_lx		= $CF83			; frustum inward normals (XZ)
-fn_lz		= $CF84
-fn_rx		= $CF85
-fn_rz		= $CF86
-fn_fx		= $CF87
-fn_fz		= $CF88
-pv0		= $CF89			; glyph / ramp / door fill
-pv1		= $CF8A
-pv2		= $CF8B
-pv3		= $CF8C
-pv4		= $CF8D
-col_bg		= $CF8E			; active room background → $d021
-col_fx		= $CF8F			; active room FX
-col_line	= $CF90			; active room lines → colour RAM
-palette_room	= $CF91			; last room_idx palette ($ff = none)
-far_scale	= $CF92			; FOCAL/z integer, far enemy project
-col_wpn		= $CF93			; weapon sprite colour → $d027–$d02a
-sfx_ch		= $CF94			; current channel 0..2
-sfx_id		= $CF95			; sound id / freq scratch
-sample_ms	= $CF96			; PAL 20 / NTSC 17 — set at init
-ps_save_x	= $CF97
-ps_save_y	= $CF98
-; $CF99+ free
+wish_dx		= $CF85			; signed move intent X
+wish_dz		= $CF86
+wish_dxh	= $CF87			; wish 8.8 high
+wish_dzh	= $CF88
+save_xh		= $CF89
+save_zh		= $CF8A
+save_xl		= $CF8B
+save_zl		= $CF8C
+col_x		= $CF8D			; collision test point
+col_z		= $CF8E
+col_y		= $CF8F
+obj_i		= $CF90
+face_bits	= $CF91			; which box faces visible
+box_x		= $CF92			; AABB scratch (util indexes box_*,x)
+box_y		= $CF93
+box_z		= $CF94
+box_sx		= $CF95
+box_sy		= $CF96
+box_sz		= $CF97
+msg_off		= $CF98			; offset into map_text
+vel_ms		= $CF99			; hold duration ms (lo)
+vel_msh		= $CF9A
+turn_acc_l	= $CF9B
+turn_acc_h	= $CF9C
+dt_msh		= $CF9D			; frame dt milliseconds (hi)
+inv_l		= $CF9E			; (FOCAL<<16)/(z>>k) lo, mesh project
+inv_h		= $CF9F
+inv_k		= $CFA0
+mesh_vmask	= $CFA1
+mesh_nwork	= $CFA2
+random8		= $CFA3
+scale_s		= $CFA4
+fn_lx		= $CFA5			; frustum inward normals (XZ)
+fn_lz		= $CFA6
+fn_rx		= $CFA7
+fn_rz		= $CFA8
+fn_fx		= $CFA9
+fn_fz		= $CFAA
+pv0		= $CFAB			; glyph / ramp / door fill
+pv1		= $CFAC
+pv2		= $CFAD
+pv3		= $CFAE
+pv4		= $CFAF
+col_bg		= $CFB0			; active room background → $d021
+col_fx		= $CFB1			; active room FX
+col_line	= $CFB2			; active room lines → colour RAM
+palette_room	= $CFB3			; last room_idx palette ($ff = none)
+far_scale	= $CFB4			; FOCAL/z integer, far enemy project
+col_wpn		= $CFB5			; weapon sprite colour → $d027–$d02a
+sfx_ch		= $CFB6			; current channel 0..2
+sfx_id		= $CFB7			; sound id / freq scratch
+sample_ms	= $CFB8			; PAL 20 / NTSC 17 — set at init
+ps_save_x	= $CFB9
+ps_save_y	= $CFBA
+; $CFBB+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

@@ -2015,7 +2015,7 @@ export function mapDisplayName(map, key) {
 export const MAX_MAP_OBJECTS = 255;
 export const ROOM_MAX = 24; // keep in sync with tools/genmap.py
 export const ROOM_MAX_TYPES = 2;
-export const ENEMY_MAX = 20; // keep in sync with tools/genmap.py / src/mem.asm
+export const ENEMY_MAX = 24; // keep in sync with tools/genmap.py / src/mem.asm
 export const MAP_MAX_BYTES = 4096;
 export const ENEMY_POSE_MAX = 4096;
 export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose

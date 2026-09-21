@@ -8150,7 +8150,7 @@
           "doorType": "Tech",
           "doorScale": 1.5,
           "tag": "",
-          "otherRoomId": null,
+          "otherRoomId": "5702c10c-957d-4691-85bf-21979e572529",
           "locked": true
         },
         {

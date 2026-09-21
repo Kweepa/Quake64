@@ -216,7 +216,42 @@ en_sfx_old	= enemy_sfx_evt_hi + ENEMY_PTR_N	; local frame before this anim step
 en_sfx_new	= en_sfx_old + 1		; logical frame after the step
 en_sfx_n	= en_sfx_new + 1		; remaining events while scanning
 en_sfx_armed	= en_sfx_n + 1			; 1 = frame changed this anim step
-; next free en_sfx_armed + 1  ($06F6)
+; next free en_sfx_armed + 1  ($06F7)
+ENEMY_DATA_BASE	= $06F7			; boot-loaded immutable enemy_data_blob.asm
+!if ENEMY_DATA_BASE <= en_sfx_armed {
+	!error "Enemy metadata overlaps play BSS"
+}
+AI_ENTRY_LO	= $0876			; streamed AI entry pointer per enemy type
+AI_ENTRY_HI	= $087E
+ENEMY_DATA_LIMIT	= AI_ENTRY_LO
+AI_BANK_LO	= $0886			; base of complete fused bank per type
+AI_BANK_HI	= $088E
+AI_LOW_END	= $0896
+!if AI_LOW_END > REBOOT_STUB {
+	!error "Low-RAM enemy data/AI pointers overlap reboot stub"
+}
+
+AI_BANK_MAGIC0	= 'Q'
+AI_BANK_MAGIC1	= 'A'
+AI_BANK_MAGIC2	= 'I'
+AI_BANK_MAGIC3	= '1'
+AIH_CODE_SIZE	= 4
+AIH_RELOC_N	= 6
+AIH_MAP_N	= 8
+AIH_ENTRY	= 10
+AIH_POSE_OFF	= 12
+AIH_SIZE	= 14
+AI_LINK_BASE	= $A000
+AI_CMD_ATTACK_TICK	= 0
+AI_CMD_FIRE		= 1
+AI_CMD_ATTACK_END	= 2
+AI_CMD_DYING_STEP	= 3
+AI_CMD_APPROACH_MOVE	= 4
+AI_CMD_APPROACH_ATTACK	= 5
+AI_CMD_APPROACH_ENTER	= 6
+AI_AP_MOVE		= 0
+AI_AP_STAND		= 1
+AI_AP_NEXT		= 2
 
 ; Unique charset-tail LUTs. Char 192 ($x600) is $FF×8 in all four halves.
 ; ALOG is two pages (ALOGHI replaces ALOGTAB+$100). COSTAB = SINTAB+64.
@@ -806,6 +841,19 @@ mv0_xh		= $CFBD
 mv0_zl		= $CFBE
 mv0_zh		= $CFBF
 ; $CFC0+ free
+ai_code_lo	= $CFC0			; runtime code base while patching a bank
+ai_code_hi	= $CFC1
+ai_delta_lo	= $CFC2			; runtime code base - AI_LINK_BASE
+ai_delta_hi	= $CFC3
+ai_reloc_nlo	= $CFC4
+ai_reloc_nhi	= $CFC5
+ai_map_nlo	= $CFC6
+ai_map_nhi	= $CFC7
+ai_pose_lo	= $CFC8
+ai_pose_hi	= $CFC9
+ai_cmd		= $CFCA
+ai_field	= $CFCB
+; $CFCC+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

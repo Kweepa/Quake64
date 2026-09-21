@@ -10,8 +10,14 @@
 *.o
 *.sym
 overlay.bin
+memory-report*.json
+heap-report*.json
 enemies/sfx_*.bin
 enemies/sound_ids.json
+enemies/*.pose
+enemies/ai_*.bin
+enemies/ai_*.rel
+src/ai_game_syms.asm
 __pycache__/
 *.pyc
 

@@ -48,6 +48,11 @@ python tools\gen_splash.py
 if errorlevel 1 exit /b 1
 
 pushd src
+"%ACME%" enemy_data_blob.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 "%ACME%" tables.asm
 if errorlevel 1 (
   popd
@@ -75,6 +80,7 @@ if errorlevel 1 (
 )
 popd
 
+if exist src\enemydata.prg move /y src\enemydata.prg enemydata.prg >nul
 if exist src\tab.prg move /y src\tab.prg tab.prg >nul
 if exist src\sqt.prg move /y src\sqt.prg sqt.prg >nul
 if exist src\fnt.prg move /y src\fnt.prg fnt.prg >nul
@@ -88,6 +94,45 @@ if errorlevel 1 (
   exit /b 1
 )
 popd
+
+rem Bootstrap fixed GAME symbols, then build relocatable per-type AI modules.
+pushd src
+"%ACME%" -v3 --vicelabels ..\game-ai.lbl quake64.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+python tools\genaisymbols.py --labels game-ai.lbl
+if errorlevel 1 exit /b 1
+pushd src
+"%ACME%" ai_rott.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" ai_knight.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" ai_ogre.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" ai_scrag.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+python tools\genaimeta.py
+if errorlevel 1 exit /b 1
+python tools\genaibanks.py
+if errorlevel 1 exit /b 1
+python tools\checkaibanks.py
+if errorlevel 1 exit /b 1
 
 rem Krill disk first (loadraw @ $EE08, needs TDE / real 1541)
 pushd src
@@ -124,7 +169,11 @@ if errorlevel 1 (
 popd
 if exist src\game.prg move /y src\game.prg game.prg >nul
 
-python tools\checkheap.py --labels game-krill.lbl
+python tools\genaisymbols.py --labels game-ai.lbl --verify-labels game-krill.lbl
+if errorlevel 1 exit /b 1
+python tools\memoryreport.py --labels game-krill.lbl --json memory-report-krill.json
+if errorlevel 1 exit /b 1
+python tools\checkheap.py --labels game-krill.lbl --min-slack 1024 --json heap-report-krill.json
 if errorlevel 1 exit /b 1
 
 python tools\mkdisk.py --krill --out quake64-krill.d64
@@ -165,7 +214,11 @@ if errorlevel 1 (
 popd
 if exist src\game.prg move /y src\game.prg game.prg >nul
 
-python tools\checkheap.py
+python tools\genaisymbols.py --labels game-ai.lbl --verify-labels game.lbl
+if errorlevel 1 exit /b 1
+python tools\memoryreport.py --labels game.lbl --json memory-report.json
+if errorlevel 1 exit /b 1
+python tools\checkheap.py --min-slack 1024 --json heap-report.json
 if errorlevel 1 exit /b 1
 
 python tools\mkdisk.py --out quake64.d64

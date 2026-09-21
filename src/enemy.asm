@@ -10,10 +10,8 @@ en_opp
 	!byte 4, 5, 6, 7, 0, 1, 2, 3
 
 ; Facing half-plane for sight. 0=any, 1=need+, $ff=need-
-cs_need_dx
-	!byte 0, 1, 1, 1, 0, $ff, $ff, $ff
-cs_need_dz
-	!byte 1, 1, 0, $ff, $ff, $ff, 0, 1
+cs_need_dx = en_dx
+cs_need_dz = en_dz
 
 enemies_update
 	; tick anim accumulator → advance frames / one-shot transitions
@@ -54,8 +52,6 @@ enemies_update
 	lda en_state,x
 	cmp #EN_GONE
 	beq .eu_skip
-	cmp #EN_PAIN
-	bcs .eu_do			; pain/dying always tick
 	+lda_mx en_room
 	cmp room_idx
 	bne .eu_skip
@@ -219,66 +215,15 @@ eu_approach
 	sta en_timer,x
 	sta en_timer_h,x
 .eu_ap_step
-	; Knight: stand in melee range (don't sidestep out of the swing)
 	+ldy_mx en_type
-	cpy #ENT_KNIGHT
-	beq .eu_ap_kclose
-	cpy #ENT_SCRAG
-	beq .eu_ap_scrag
-	; Rottweiler: stand in melee range; repath when chase timer expires
-	jsr enemy_get_class
-	beq .eu_ap_acc			; grunt — keep strafing
-	jsr enemy_same_floor
-	bcs .eu_ap_same
-	ldx enemy_idx
-	lda en_timer,x
-	ora en_timer_h,x
-	bne .eu_ap_acc			; retry window — walk even if floors differ
-	jmp enemy_dog_wait
-.eu_ap_same
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	+ldy_mx en_type
-	cmp enemy_range,y
-	beq .eu_ap_stand
-	bcc .eu_ap_stand
-	lda en_timer,x
-	ora en_timer_h,x
-	bne .eu_ap_acc
-	jsr select_dodge_dir
-	ldx enemy_idx
-	lda #<DOG_REPATH_MS
-	sta en_timer,x
-	lda #>DOG_REPATH_MS
-	sta en_timer_h,x
-	jmp .eu_ap_acc
-.eu_ap_scrag
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	cmp #SCRAG_HOLD_R + 1
-	bcs .eu_ap_acc			; too far — close
-	jsr enemy_shot_clear
-	ldx enemy_idx
-	bcs .eu_ap_stand		; LOS — hover and spit
-	jmp .eu_ap_acc			; blocked — keep moving
-.eu_ap_kclose
-	jsr enemy_same_floor
-	bcc .eu_ap_acc			; other floor — keep closing
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	+ldy_mx en_type
-	cmp enemy_range,y
-	beq .eu_ap_stand
-	bcc .eu_ap_stand
-	jmp .eu_ap_acc
-.eu_ap_stand
-	+ldy_mx en_type
-	cpy #ENT_SCRAG
-	beq .eu_ap_rng			; keep SCRAG_REFIRE_MS
-	lda #0				; clear repath so resume chases immediately
-	sta en_timer,x
-	sta en_timer_h,x
-	jmp .eu_ap_rng
+	lda AI_ENTRY_HI,y
+	beq .eu_ap_acc			; resident Grunt-class movement
+	lda #AI_CMD_APPROACH_MOVE
+	jsr ai_invoke
+	cmp #AI_AP_STAND
+	beq .eu_ap_rng
+	cmp #AI_AP_NEXT
+	beq .eu_ap_next
 .eu_ap_acc
 	clc
 	lda en_step,x
@@ -317,99 +262,26 @@ eu_approach
 	beq .eu_ap_ready
 	jmp eu_next
 .eu_ap_ready
-	cpy #ENT_OGRE
-	beq .eu_ap_ogre
-	cpy #ENT_KNIGHT
-	beq .eu_ap_knight
-	jsr enemy_get_class
+	+ldy_mx en_type
+	lda AI_ENTRY_HI,y
 	beq .eu_ap_glos
-	jsr enemy_same_floor
-	bcs .eu_ap_doatk
-	jmp eu_next			; dog — no bite through a hole
-.eu_ap_knight
-	jsr enemy_same_floor
-	bcs .eu_ap_doatk
-	jmp eu_next			; no slash down a hole
-.eu_ap_ogre
-	jsr enemy_chebyshev
-	cmp #OGRE_MELEE_R + 1
-	bcs .eu_ap_ogre_g
-	jsr enemy_same_floor
-	bcc .eu_ap_ogre_g		; ledge — grenade if LOS
-	lda #0				; swing
-	jsr enemy_enter_ogre_attack
-	jmp eu_next
-.eu_ap_ogre_g
-	jsr enemy_shot_clear
-	bcs .eu_ap_ogre_sh
-	jmp eu_next
-.eu_ap_ogre_sh
-	lda #1				; shoot
-	jsr enemy_enter_ogre_attack
+	lda #AI_CMD_APPROACH_ATTACK
+	jsr ai_invoke
 	jmp eu_next
 .eu_ap_glos
 	jsr enemy_shot_clear
-	bcs .eu_ap_doatk
-	jmp eu_next			; corner / hole in the way
-.eu_ap_doatk
-	ldx enemy_idx
-	+ldy_mx en_type
-	cpy #ENT_KNIGHT
-	bne .eu_ap_doatk_pick
-	lda #0				; runattack
-	jsr enemy_enter_knight_attack
-	jmp eu_next
-.eu_ap_doatk_pick
-	lda #EN_ATTACK
-	sta en_state,x
-	lda #0
-	sta en_frame,x
-	jsr pick_attack_var
-	jsr enemy_face_player
+	bcc .eu_ap_next			; corner / hole in the way
+	jsr enemy_enter_attack
+.eu_ap_next
 	jmp eu_next
 
 ; ------------------------------------------------------------------
 eu_attack
 	ldx enemy_idx
 	+ldy_mx en_type
-	cpy #ENT_KNIGHT
-	beq .eu_atk_k
+	lda #AI_CMD_ATTACK_TICK
+	jsr ai_invoke
 	jmp eu_next
-.eu_atk_k
-	lda en_pain_i,x
-	beq .eu_atk_run
-	jmp eu_next			; attackb — planted
-.eu_atk_run
-	lda en_frame,x
-	cmp #KNIGHT_RUNATK_FIRE	; opening charge, then plant for the hit
-	bcc .eu_atk_lunge
-	jmp eu_next
-.eu_atk_lunge
-	clc
-	lda en_step,x
-	adc dt_ms
-	sta en_step,x
-	lda en_step_h,x
-	adc dt_msh
-	sta en_step_h,x
-.eu_atk_slp
-	lda en_step_h,x
-	bne .eu_atk_go
-	lda en_step,x
-	cmp #ENEMY_STEP_MS
-	bcs .eu_atk_go
-	jmp eu_next
-.eu_atk_go
-	sec
-	lda en_step,x
-	sbc #ENEMY_STEP_MS
-	sta en_step,x
-	lda en_step_h,x
-	sbc #0
-	sta en_step_h,x
-	jsr enemy_patrol_step	; blocked = stop; no dodge
-	ldx enemy_idx
-	jmp .eu_atk_slp
 
 ; ------------------------------------------------------------------
 eu_pain
@@ -466,9 +338,12 @@ enemy_anim_step
 	sta en_sfx_armed
 	lda en_state,x
 	cmp #EN_GONE
-	beq .eas_n
+	beq .eas_nx
 	cmp #EN_DEAD
-	beq .eas_n
+	beq .eas_nx
+	+lda_mx en_room
+	cmp room_idx
+	bne .eas_nx
 	lda en_frame,x
 	sta en_sfx_old
 	lda #1
@@ -593,33 +468,11 @@ enemy_anim_step
 	pha
 	cmp rot1
 	bcc .eas_atlen_go			; new < fire → not yet
-	jsr enemy_get_class
-	bne .eas_bite			; Rottweiler — leap bite
 	+ldy_mx en_type
-	cpy #ENT_OGRE
-	bne .eas_not_ogre_fire
-	lda en_pain_i,x
-	bne .eas_ogre_g
-	jsr enemy_saw
-	jmp .eas_atk_rest
-.eas_ogre_g
-	lda enemy_idx
-	sta emuz_pending
-	jsr spawn_ogre_grenade
-	jmp .eas_atk_rest
-.eas_not_ogre_fire
-	cpy #ENT_KNIGHT
-	bne .eas_not_knight_fire
-	jsr enemy_slash
-	jmp .eas_atk_rest
-.eas_not_knight_fire
-	cpy #ENT_SCRAG
-	bne .eas_gun
-	lda spit_on
-	bne .eas_atk_rest		; one spit at a time — no overwrite
-	lda enemy_idx
-	sta emuz_pending
-	jsr spawn_scrag_spit
+	lda AI_ENTRY_HI,y
+	beq .eas_gun
+	lda #AI_CMD_FIRE
+	jsr ai_invoke
 	jmp .eas_atk_rest
 .eas_gun
 	lda enemy_idx
@@ -629,10 +482,6 @@ enemy_anim_step
 	ldx enemy_idx
 	+ldy_mx en_type
 	jmp .eas_atlen_go
-.eas_bite
-	jsr enemy_bite
-	ldx enemy_idx
-	+ldy_mx en_type
 .eas_atlen_go
 	pla
 	jsr pain_var_off
@@ -640,47 +489,16 @@ enemy_anim_step
 	bcs +
 	jmp .eas_n
 +
-	; Ogre: re-swing if still in melee; grenade always back to chase.
-	; Knight: re-slash if still in melee.
-	; Scrag: always back to chase (Q1 AttackFinished).
-	; Grunt 50% re-shoot; Rott always re-bite if still in range
 	ldx enemy_idx
 	+ldy_mx en_type
-	cpy #ENT_OGRE
-	bne .eas_not_ogre
-	lda en_pain_i,x
-	bne .eas_to_ap
-	jsr enemy_same_floor
-	bcc .eas_to_ap
-	jsr enemy_chebyshev
-	cmp #OGRE_MELEE_R + 1
-	bcs .eas_to_ap
-	lda #0
-	jsr enemy_enter_ogre_attack
+	lda AI_ENTRY_HI,y
+	beq .eas_grunt_again
+	lda #AI_CMD_ATTACK_END
+	jsr ai_invoke
 	jmp .eas_n
-.eas_not_ogre
-	cpy #ENT_KNIGHT
-	bne .eas_not_knight_re
-	jsr enemy_same_floor
-	bcc .eas_to_ap
-	jsr enemy_chebyshev
-	+ldy_mx en_type
-	cmp enemy_range,y
-	beq .eas_k_again
-	bcc .eas_k_again
-	jmp .eas_to_ap
-.eas_k_again
-	lda #1				; attackb follow-up
-	jsr enemy_enter_knight_attack
-	jmp .eas_n
-.eas_not_knight_re
-	cpy #ENT_SCRAG
-	beq .eas_to_ap
-	jsr enemy_get_class
-	bne .eas_rng_chk
+.eas_grunt_again
 	jsr rnd8
 	bmi .eas_to_ap
-.eas_rng_chk
 	ldx enemy_idx
 	jsr enemy_chebyshev
 	+ldy_mx en_type
@@ -692,15 +510,8 @@ enemy_anim_step
 	jmp .eas_n
 .eas_again
 	ldx enemy_idx
-	jsr enemy_get_class
-	bne .eas_dog_again
 	jsr enemy_shot_clear
 	bcc .eas_to_ap
-	jmp .eas_do_again
-.eas_dog_again
-	jsr enemy_same_floor
-	bcc .eas_to_ap
-.eas_do_again
 	ldx enemy_idx
 	lda #EN_ATTACK
 	sta en_state,x
@@ -712,10 +523,12 @@ enemy_anim_step
 .eas_die
 	inc en_frame,x
 	+ldy_mx en_type
-	cpy #ENT_SCRAG
-	bne .eas_die_nsc
-	jsr scrag_death_drop
+	lda AI_ENTRY_HI,y
+	beq .eas_die_nsc
+	lda #AI_CMD_DYING_STEP
+	jsr ai_invoke
 	ldx enemy_idx
+	+ldy_mx en_type
 .eas_die_nsc
 	lda en_frame,x
 	jsr pain_var_off
@@ -735,56 +548,6 @@ enemy_anim_step
 	lda #>DEATH_HOLD_MS
 	sta en_timer_h,x
 	jmp .eas_n
-
-; Scrag: drop (en_y − floor) / frames_left so the last death frame lands.
-; X = enemy_idx. Clobbers rot0/1/2, dlo, nlo, Y.
-scrag_death_drop
-	+lda_mx en_x
-	sta col_x
-	+lda_mx en_z
-	sta col_z
-	+lda_mx en_y
-	sta fb_probe_y
-	+ldy_mx en_room
-	jsr floor_below_y
-	bcc .sdf_rts
-	ldx enemy_idx
-	+lda_mx en_y
-	cmp proc_tmp2
-	beq .sdf_rts
-	bcc .sdf_rts
-	sec
-	sbc proc_tmp2
-	pha				; H
-	lda en_frame,x
-	jsr pain_var_off
-	sta rot1
-	lda enemy_death_len,y
-	sec
-	sbc rot1
-	bne .sdf_n
-	lda #1
-.sdf_n
-	sta dlo
-	pla
-	sta rot0
-	lda #0
-	sta rot1
-	sta rot2
-	jsr div24u8
-	ldx enemy_idx
-	+lda_mx en_y
-	sec
-	sbc rot0
-	bcc .sdf_clamp
-	cmp proc_tmp2
-	bcs .sdf_store
-.sdf_clamp
-	lda proc_tmp2
-.sdf_store
-	+sta_mx en_y
-.sdf_rts
-	rts
 
 ; ------------------------------------------------------------------
 ; A = Chebyshev |dx|,|dz| max vs player (cam_xh/zh). X = enemy_idx
@@ -1186,7 +949,17 @@ enemy_enter_knight_attack
 	ldx enemy_idx
 	jmp enemy_face_player
 
-; Enter approach: grunt APPROACH_MIN; scrag SCRAG_REFIRE; Rott DOG_REPATH; knight immediate.
+; Generic Grunt-class attack entry. Streamed types call this after policy checks.
+enemy_enter_attack
+	ldx enemy_idx
+	lda #EN_ATTACK
+	sta en_state,x
+	lda #0
+	sta en_frame,x
+	jsr pick_attack_var
+	jmp enemy_face_player
+
+; Enter approach: streamed types own their timer policy; Grunt-class stays resident.
 enemy_enter_approach
 	stx enemy_idx
 	lda #EN_APPROACH
@@ -1196,48 +969,16 @@ enemy_enter_approach
 	sta en_step,x
 	sta en_step_h,x
 	+ldy_mx en_type
-	cpy #ENT_KNIGHT
-	bne .eea_not_k
-	sta en_timer,x
-	sta en_timer_h,x
-	jmp .eea_dodge
-.eea_not_k
-	cpy #ENT_SCRAG
-	bne .eea_not_s
-	lda #<SCRAG_REFIRE_MS
-	sta en_timer,x
-	lda #>SCRAG_REFIRE_MS
-	sta en_timer_h,x
-	jmp .eea_dodge
-.eea_not_s
-	jsr enemy_get_class
-	bne .eea_dog
+	lda AI_ENTRY_HI,y
+	beq .eea_grunt
+	lda #AI_CMD_APPROACH_ENTER
+	jmp ai_invoke
+.eea_grunt
 	lda #<APPROACH_MIN_MS
 	sta en_timer,x
 	lda #>APPROACH_MIN_MS
 	sta en_timer_h,x
-	jmp .eea_dodge
-.eea_dog
-	lda #<DOG_REPATH_MS
-	sta en_timer,x
-	lda #>DOG_REPATH_MS
-	sta en_timer_h,x
-.eea_dodge
-	jsr select_dodge_dir
-	rts
-
-; Rottweiler: stand-idle when player is on another floor piece.
-enemy_dog_wait
-	ldx enemy_idx
-	lda #EN_IDLE
-	sta en_state,x
-	lda #0
-	sta en_frame,x
-	lda #<DOG_WAIT_MS
-	sta en_timer,x
-	lda #>DOG_WAIT_MS
-	sta en_timer_h,x
-	jmp eu_next
+	jmp select_dodge_dir
 
 ; C=1 |floor_y − en_y| ≤ FALL_LEDGE (same floor piece)
 enemy_same_floor
@@ -1259,85 +1000,6 @@ enemy_same_floor
 	rts
 .esf_yes
 	sec
-	rts
-
-; Rottweiler leap hit — recheck range, then rnd>>4 damage (0 = miss).
-enemy_bite
-	ldx enemy_idx
-	jsr enemy_same_floor
-	bcc .eb_rts
-	jsr enemy_chebyshev
-	+ldy_mx en_type
-	cmp enemy_range,y
-	beq .eb_roll
-	bcc .eb_roll
-	rts
-.eb_roll
-	jsr rnd8
-	lsr
-	lsr
-	lsr
-	lsr
-	beq .eb_rts
-	sta rot0
-	lda player_hp
-	beq .eb_rts
-	lda rot0
-	jsr take_damage
-	; latch splat for draw (same view-space origin as mesh — not AI re-project)
-	lda enemy_idx
-	sta bite_splat_i
-.eb_rts
-	rts
-
-; Ogre chainsaw — recheck melee range, 6–9 HP.
-enemy_saw
-	ldx enemy_idx
-	jsr enemy_same_floor
-	bcc .esaw_rts
-	jsr enemy_chebyshev
-	cmp #OGRE_MELEE_R + 1
-	bcs .esaw_rts
-	jsr rnd8
-	and #3
-	clc
-	adc #OGRE_SAW_DMG
-	sta rot0
-	lda player_hp
-	beq .esaw_rts
-	lda rot0
-	jsr take_damage
-	lda enemy_idx
-	sta bite_splat_i
-	lda #SOUND_OGRE_OGDRAG
-	jmp play_sound
-.esaw_rts
-	rts
-
-; Knight slash — recheck melee range, 4–7 HP.
-enemy_slash
-	ldx enemy_idx
-	jsr enemy_same_floor
-	bcc .esl_rts
-	jsr enemy_chebyshev
-	+ldy_mx en_type
-	cmp enemy_range,y
-	beq .esl_hit
-	bcc .esl_hit
-	rts
-.esl_hit
-	jsr rnd8
-	and #3
-	clc
-	adc #KNIGHT_SLASH_DMG
-	sta rot0
-	lda player_hp
-	beq .esl_rts
-	lda rot0
-	jsr take_damage
-	lda enemy_idx
-	sta bite_splat_i
-.esl_rts
 	rts
 
 ; Grunt fire frame: recheck LOS, distance-scaled hit roll, 8–15 HP.

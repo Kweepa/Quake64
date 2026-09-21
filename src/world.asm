@@ -1212,39 +1212,6 @@ rc_inset_ok
 	clc
 	rts
 
-; ------------------------------------------------------------------
-; col_in_room_y — col_x/col_z inside room (Y) colliders the player overlaps in Y.
-; C=1 inside
-; ------------------------------------------------------------------
-col_in_room_y
-	cpy #$ff
-	beq .cir_no
-	stx pv4
-	tya
-	jsr room_mul3
-	tax
-	jsr .cir_one
-	bcs .cir_yes
-	inx
-	jsr .cir_one
-	bcs .cir_yes
-	inx
-	jsr .cir_one
-.cir_yes
-	php
-	ldx pv4
-	plp
-	rts
-.cir_no
-	clc
-	rts
-.cir_one
-	jsr point_in_rc_xz
-	bcc .cir_one_n
-	jmp rc_overlaps_player_y
-.cir_one_n
-	rts
-
 ; Y = room. C=1 if col_x/z in a collider inset by 1 (enemy)
 room_cols_inset1
 	stx pv4

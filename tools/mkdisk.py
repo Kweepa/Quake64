@@ -39,6 +39,7 @@ FILES_TAIL = (
     ("fnt.prg", "fnt,p"),
     ("scr.prg", "scr,p"),
     ("sqt.prg", "sqt,p"),
+    ("enemydata.prg", "edata,p"),
     ("game.prg", "game,p"),
 )
 

@@ -15,6 +15,7 @@ replaying bind_tab over the packed payload.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -90,6 +91,13 @@ def used_types(per_room: dict[int, set[int]]) -> list[int]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Check LoadLevel heap vs GAME size")
     ap.add_argument("--labels", default="game.lbl")
+    ap.add_argument(
+        "--min-slack",
+        type=int,
+        default=0,
+        help="fail when any level has fewer than this many free heap bytes",
+    )
+    ap.add_argument("--json", type=Path, default=None, help="write the per-level manifest")
     args = ap.parse_args()
 
     lbl = Path(args.labels)
@@ -122,6 +130,18 @@ def main() -> None:
 
     failed = False
     any_level = False
+    report = {
+        "game": {
+            "load": locode,
+            "end": end_game,
+            "bytes": end_game - locode,
+            "heap_available": avail,
+        },
+        "level_prefix": prefix,
+        "room_max_types": ROOM_MAX_TYPES,
+        "enemy_sizes": {DOS_NAME[i]: poses[i] for i in range(ENEMY_NTYPES)},
+        "levels": {},
+    }
     for key in LEVEL_NAMES:
         prg = MAP_DIR / f"{key.lower()}.prg"
         if not prg.is_file() or prg.stat().st_size <= 2:
@@ -166,6 +186,21 @@ def main() -> None:
         pose_s = ",".join(worst_names) if worst_names else "-"
         where = f"room {worst_room}" if worst_room >= 0 else "no enemies"
         saved = level_sum - worst_sum
+        report["levels"][key] = {
+            "map_bytes": len(packed),
+            "load_peak": len(packed) + prefix,
+            "worst_room": worst_room,
+            "worst_types": worst_names,
+            "room_assets": worst_sum,
+            "play_peak": len(packed) + worst_sum,
+            "need": need,
+            "slack": slack,
+            "types": [DOS_NAME[t] for t in types],
+            "rooms": {
+                str(room): [DOS_NAME[t] for t in sorted(per_room[room])]
+                for room in sorted(per_room)
+            },
+        }
         head = (
             f"{key}  map {len(packed)}  prefix {prefix}  "
             f"worst {worst_sum} ({where}: {pose_s})"
@@ -176,10 +211,21 @@ def main() -> None:
             failed = True
         else:
             print(f"{head}  slack {slack}")
+            if slack < args.min_slack:
+                print(
+                    f"{key}: slack {slack} below release floor "
+                    f"{args.min_slack}",
+                    file=sys.stderr,
+                )
+                failed = True
 
     if not any_level:
         print("checkheap: no map PRGs", file=sys.stderr)
         sys.exit(1)
+    if args.json is not None:
+        out = args.json if args.json.is_absolute() else ROOT / args.json
+        out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+        print(f"Wrote {out}")
     if failed:
         sys.exit(1)
 

@@ -4,7 +4,7 @@
 
 ; --- build flags (Wolf64-style) -------------------------------------------
 PROFILE		= 0				; 1 = R/P/K/D bucket HUD + CIA samples
-HUD_FRAME_MS	= 1				; 1 = frame time ms on HUD row 0
+HUD_FRAME_MS	= 0				; 1 = frame time ms on HUD row 0
 HUD_POS		= 0				; 1 = X/Y/Z/yaw/pitch on HUD row 2
 INF_AMMO		= 1				; 1 = guns fire without spending ammo
 IRQ_DEBUG_SPLIT	= 0				; 1 = $d020 stripe at mid-split (tune 186)
@@ -18,6 +18,7 @@ IRQ_DEBUG_SPLIT	= 0				; 1 = $d020 stripe at mid-split (tune 186)
 }
 
 *= LOCODE_BASE
+mod_quake64
 start
 	sei
 	cld
@@ -115,160 +116,57 @@ main
 	jsr enemies_update
 	jmp main
 
-; A = signed 8-bit 8.8 step added to cam_xl/xh
-camaddx
-	sta rot2
-	ldx #0
-	cmp #0
-	bpl +
-	dex
-+
-	clc
-	adc cam_xl
-	sta cam_xl
-	txa
-	adc cam_xh
-	sta cam_xh
-	rts
-
-camaddy
-	sta rot2
-	ldx #0
-	cmp #0
-	bpl +
-	dex
-+
-	clc
-	adc cam_yl
-	sta cam_yl
-	txa
-	adc cam_yh
-	sta cam_yh
-	rts
-
-camaddz
-	sta rot2
-	ldx #0
-	cmp #0
-	bpl +
-	dex
-+
-	clc
-	adc cam_zl
-	sta cam_zl
-	txa
-	adc cam_zh
-	sta cam_zh
-	rts
-
-; A = signed 8-bit 8.8 step subtracted from cam
-camsbcx
-	eor #$ff
-	clc
-	adc #1
-	jmp camaddx
-
-camsbcy
-	eor #$ff
-	clc
-	adc #1
-	jmp camaddy
-
-camsbcz
-	eor #$ff
-	clc
-	adc #1
-	jmp camaddz
-
-apply_move
-	ldy yaw
-	lda SINTAB,y
-	sta rot0
-	ldy yaw
-	lda COSTAB,y
-	sta rot1
-
-	lda keys
-	and #KEY_W
-	beq .now
-	ldy pitch
-	lda COSTAB,y
-	tay
-	lda rot0
-	jsr smul7
-	jsr camaddx
-	ldy pitch
-	lda COSTAB,y
-	tay
-	lda rot1
-	jsr smul7
-	jsr camaddz
-	ldy pitch
-	lda SINTAB,y
-	jsr camsbcy
-.now
-	lda keys
-	and #KEY_S
-	beq .nos
-	ldy pitch
-	lda COSTAB,y
-	tay
-	lda rot0
-	jsr smul7
-	jsr camsbcx
-	ldy pitch
-	lda COSTAB,y
-	tay
-	lda rot1
-	jsr smul7
-	jsr camsbcz
-	ldy pitch
-	lda SINTAB,y
-	jsr camaddy
-.nos
-	lda keys
-	and #KEY_D
-	beq .nod
-	lda rot1
-	jsr camaddx
-	lda rot0
-	jsr camsbcz
-.nod
-	lda keys
-	and #KEY_A
-	beq .noa
-	lda rot1
-	jsr camsbcx
-	lda rot0
-	jsr camaddz
-.noa
-	rts
-
+mod_vic
 !source "vic.asm"
+mod_irq
 !source "irq.asm"
+mod_profil
 !source "profil.asm"
+mod_hud
 !source "hud.asm"
+mod_math
 !source "math.asm"
+mod_util
 !source "util.asm"
+mod_line
 !source "line.asm"
+mod_fx
 !source "fx.asm"
+mod_grenade
 !source "grenade.asm"
+mod_spit
 !source "spit.asm"
+mod_playsound
 !source "playsound.asm"
+mod_pcsounds
 !source "pcsounds.asm"
+mod_pcsfreq
 !source "pcsfreq.asm"
+mod_weapon
 !source "weapon.asm"
+mod_weapon_spr
 !source "weapon_spr.asm"
+mod_splat_spr
 !source "splat_spr.asm"
+mod_enemy_muzzle
 !source "enemy_muzzle.asm"
+mod_process
 !source "process.asm"
+mod_elevator
 !source "elevator.asm"
+mod_door
 !source "door.asm"
+mod_world
 !source "world.asm"
+mod_item_mesh
 !source "item_mesh.asm"
+mod_mesh
 !source "mesh.asm"
+mod_cube
 !source "cube.asm"
+mod_enemy
 !source "enemy.asm"
+mod_loader
 !source "loader.asm"
 
 !source "map_bss.asm"

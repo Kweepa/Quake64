@@ -310,14 +310,12 @@ LoadLevel
 	rts
 
 ; --- per-room pose streaming ----------------------------------------------
-; At most ROOM_MAX_TYPES (2) banks below map_base. Keep types still needed;
-; orphans stay loaded when the new room is a subset (AB→A keeps B for a cheap
-; double-back). Only dump orphans when a missing type must be loaded (AB→AC
-; dumps B). Compacting: dump at heap_top raises it; dump snug with the map
-; moves the survivor up. Pose data is draw-only (cube.asm filters en_room).
+; At most ROOM_MAX_TYPES (2) fused AI/pose/SFX banks below map_base. Orphans
+; stay loaded when the new room is a subset (AB→A keeps B for a cheap
+; double-back). A missing type resets the bank stack and reloads the active
+; room set. Pose data is draw-only (cube.asm filters en_room).
 ;
-; Bank base for type T = pose_map[T] - 2. First load sits under map_base; the
-; second packs below it (heap_top).
+; Bank: QAI1 header, reloc records, optional code, then pose payload.
 ; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…]
 ;       [sfx_count] {id,N,AD,freq,vol}* [evt_count] {logical_frame,id}*
 
@@ -387,6 +385,10 @@ clear_pose_ptrs
 	sta pose_map_hi,x
 	sta enemy_sfx_evt_lo,x
 	sta enemy_sfx_evt_hi,x
+	sta AI_ENTRY_LO,x
+	sta AI_ENTRY_HI,x
+	sta AI_BANK_LO,x
+	sta AI_BANK_HI,x
 	inx
 	cpx #ENEMY_NTYPES
 	bcc .cpp
@@ -407,139 +409,11 @@ clear_one_pose
 	sta pose_map_hi,x
 	sta enemy_sfx_evt_lo,x
 	sta enemy_sfx_evt_hi,x
+	sta AI_ENTRY_LO,x
+	sta AI_ENTRY_HI,x
+	sta AI_BANK_LO,x
+	sta AI_BANK_HI,x
 	rts
-
-; src_ptr → dst_ptr, size X=pages Y=frac. dst > src; overlap-safe (high→low).
-copy_block_up
-	txa
-	clc
-	adc src_ptr+1
-	sta src_ptr+1
-	txa
-	clc
-	adc dst_ptr+1
-	sta dst_ptr+1
-	cpy #0
-	beq .cbu_pages
-.cbu_frac
-	dey
-	lda (src_ptr),y
-	sta (dst_ptr),y
-	tya
-	bne .cbu_frac
-.cbu_pages
-	cpx #0
-	beq .cbu_rts
-	dec src_ptr+1
-	dec dst_ptr+1
-.cbu_page
-	dey				; 0 → 255
-	lda (src_ptr),y
-	sta (dst_ptr),y
-	tya
-	bne .cbu_page
-	dex
-	jmp .cbu_pages
-.cbu_rts
-	rts
-
-; Dump type pose_dump. Compacts if a keeper sits below the dumped bank.
-dump_pose_type
-	lda #$ff
-	sta pose_keep
-	ldx #0
-.dpt_find
-	cpx pose_dump
-	beq .dpt_fn
-	lda pose_map_hi,x
-	beq .dpt_fn
-	stx pose_keep
-.dpt_fn
-	inx
-	cpx #ENEMY_NTYPES
-	bcc .dpt_find
-	lda pose_keep
-	cmp #$ff
-	bne .dpt_keep
-	lda map_base
-	sta heap_top
-	lda map_base+1
-	sta heap_top+1
-	lda pose_dump
-	jmp clear_one_pose
-
-.dpt_keep
-	; dump_base = pose_map[dump]-2 → src_ptr
-	ldy pose_dump
-	sec
-	lda pose_map_lo,y
-	sbc #2
-	sta src_ptr
-	lda pose_map_hi,y
-	sbc #0
-	sta src_ptr+1
-	; keep_base = pose_map[keep]-2 → dst_ptr (scratch)
-	ldy pose_keep
-	sec
-	lda pose_map_lo,y
-	sbc #2
-	sta dst_ptr
-	lda pose_map_hi,y
-	sbc #0
-	sta dst_ptr+1
-	; dump_base < keep_base ⇒ dump is at heap_top
-	lda src_ptr
-	cmp dst_ptr
-	lda src_ptr+1
-	sbc dst_ptr+1
-	bcc .dpt_lower
-
-	; Dump snug with map: move keep up to map_base - size[keep]
-	ldy pose_keep
-	lda enemy_size_lo,y
-	sta bind_n
-	lda enemy_size_hi,y
-	sta map_sv_a
-	sec
-	lda map_base
-	sbc bind_n
-	sta load_dest
-	lda map_base+1
-	sbc map_sv_a
-	sta load_dest+1
-	lda dst_ptr
-	sta src_ptr
-	lda dst_ptr+1
-	sta src_ptr+1
-	lda load_dest
-	sta dst_ptr
-	lda load_dest+1
-	sta dst_ptr+1
-	ldx map_sv_a			; pages
-	ldy bind_n			; frac
-	jsr copy_block_up
-	ldy pose_keep
-	sty load_type
-	jsr patch_enemy_gx
-	lda load_dest
-	sta heap_top
-	lda load_dest+1
-	sta heap_top+1
-	lda pose_dump
-	jmp clear_one_pose
-
-.dpt_lower
-	; Raise heap_top past the dumped bank
-	ldy pose_dump
-	clc
-	lda src_ptr
-	adc enemy_size_lo,y
-	sta heap_top
-	lda src_ptr+1
-	adc enemy_size_hi,y
-	sta heap_top+1
-	lda pose_dump
-	jmp clear_one_pose
 
 ; A = type or $FF. Load if absent. C=0 ok, C=1 fail.
 load_pose_if_needed
@@ -566,7 +440,8 @@ load_pose_if_needed
 	tay
 	jsr LoadPrg
 	bcs .lpi_err
-	jsr patch_enemy_gx
+	jsr patch_enemy_bank
+	bcs .lpi_err
 .lpi_ok
 	clc
 	rts
@@ -574,29 +449,15 @@ load_pose_if_needed
 	sec
 	rts
 
-; Dump orphans then load missing. Only reached when need ⊈ resident, so at
-; least one LoadPrg runs. C=0 ok, C=1 out of heap / load fail.
+; A missing type invalidates the room cache. Drop all banks and reload the
+; active room's set; this avoids relocating already-patched executable banks.
+; Only reached when need ⊈ resident, so at least one LoadPrg runs.
 stream_room_enemies
-	ldx #0
-.sre_dump
-	lda pose_map_hi,x
-	beq .sre_dn
-	txa
-	cmp need0
-	beq .sre_dn
-	cmp need1
-	beq .sre_dn
-	stx pose_dump
-	txa
-	pha
-	jsr dump_pose_type
-	pla
-	tax
-.sre_dn
-	inx
-	cpx #ENEMY_NTYPES
-	bcc .sre_dump
-
+	jsr clear_pose_ptrs
+	lda map_base
+	sta heap_top
+	lda map_base+1
+	sta heap_top+1
 	lda need0
 	jsr load_pose_if_needed
 	bcs .sre_err
@@ -666,6 +527,240 @@ maybe_stream_room
 	rts
 .msr_fail
 	jmp load_fail_hang
+
+; Bind a fused QAI1 bank at load_dest. Internal relocation records point at
+; absolute operands linked at AI_LINK_BASE. Map records point at MAP_SMC
+; operands whose low byte is the map-field id. C=0 ok, C=1 malformed.
+patch_enemy_bank
+	lda load_dest
+	sta src_ptr
+	lda load_dest+1
+	sta src_ptr+1
+	ldy #0
+	lda (src_ptr),y
+	cmp #AI_BANK_MAGIC0
+	beq +
+	jmp .pab_bad
++
+	iny
+	lda (src_ptr),y
+	cmp #AI_BANK_MAGIC1
+	beq +
+	jmp .pab_bad
++
+	iny
+	lda (src_ptr),y
+	cmp #AI_BANK_MAGIC2
+	beq +
+	jmp .pab_bad
++
+	iny
+	lda (src_ptr),y
+	cmp #AI_BANK_MAGIC3
+	beq +
+	jmp .pab_bad
++
+
+	ldy #AIH_CODE_SIZE
+	lda (src_ptr),y
+	sta bind_n
+	iny
+	lda (src_ptr),y
+	sta map_sv_a
+	ldy #AIH_RELOC_N
+	lda (src_ptr),y
+	sta ai_reloc_nlo
+	iny
+	lda (src_ptr),y
+	sta ai_reloc_nhi
+	ldy #AIH_MAP_N
+	lda (src_ptr),y
+	sta ai_map_nlo
+	iny
+	lda (src_ptr),y
+	sta ai_map_nhi
+
+	; Runtime pose/code bases.
+	ldy #AIH_POSE_OFF
+	clc
+	lda (src_ptr),y
+	adc load_dest
+	sta ai_pose_lo
+	iny
+	lda (src_ptr),y
+	adc load_dest+1
+	sta ai_pose_hi
+	sec
+	lda ai_pose_lo
+	sbc bind_n
+	sta ai_code_lo
+	lda ai_pose_hi
+	sbc map_sv_a
+	sta ai_code_hi
+	sec
+	lda ai_code_lo
+	sbc #<AI_LINK_BASE
+	sta ai_delta_lo
+	lda ai_code_hi
+	sbc #>AI_LINK_BASE
+	sta ai_delta_hi
+
+	; Bank and optional command entry pointer for this type.
+	ldx load_type
+	lda load_dest
+	sta AI_BANK_LO,x
+	lda load_dest+1
+	sta AI_BANK_HI,x
+	ldy #AIH_ENTRY
+	lda (src_ptr),y
+	sta dst_ptr
+	iny
+	lda (src_ptr),y
+	sta dst_ptr+1
+	cmp #$ff
+	bne .pab_entry
+	lda dst_ptr
+	cmp #$ff
+	bne .pab_entry
+	lda #0
+	sta AI_ENTRY_LO,x
+	sta AI_ENTRY_HI,x
+	jmp .pab_records
+.pab_entry
+	clc
+	lda dst_ptr
+	adc load_dest
+	sta AI_ENTRY_LO,x
+	lda dst_ptr+1
+	adc load_dest+1
+	sta AI_ENTRY_HI,x
+
+.pab_records
+	clc
+	lda load_dest
+	adc #AIH_SIZE
+	sta src_ptr
+	lda load_dest+1
+	adc #0
+	sta src_ptr+1
+
+; Add runtime-code minus link-base to every internal absolute operand.
+.pab_rel
+	lda ai_reloc_nlo
+	ora ai_reloc_nhi
+	beq .pab_map
+	jsr .pab_record_dst
+	ldy #0
+	clc
+	lda (dst_ptr),y
+	adc ai_delta_lo
+	sta (dst_ptr),y
+	iny
+	lda (dst_ptr),y
+	adc ai_delta_hi
+	sta (dst_ptr),y
+	jsr .pab_dec_rel
+	jmp .pab_rel
+
+; Patch map accessor operands from the bound pointer table.
+.pab_map
+	lda ai_map_nlo
+	ora ai_map_nhi
+	beq .pab_pose
+	jsr .pab_record_dst
+	ldy #0
+	lda (dst_ptr),y
+	sta ai_field
+	lda src_ptr
+	sta reloc_base
+	lda src_ptr+1
+	sta reloc_base+1
+	lda ai_field
+	asl
+	clc
+	adc #<room_x
+	sta src_ptr
+	lda #>room_x
+	adc #0
+	sta src_ptr+1
+	ldy #0
+	lda (src_ptr),y
+	sta (dst_ptr),y
+	iny
+	lda (src_ptr),y
+	sta (dst_ptr),y
+	lda reloc_base
+	sta src_ptr
+	lda reloc_base+1
+	sta src_ptr+1
+	jsr .pab_dec_map
+	jmp .pab_map
+
+; Record word is a bank-relative operand offset. Advance the record stream.
+.pab_record_dst
+	ldy #0
+	lda (src_ptr),y
+	clc
+	adc load_dest
+	sta dst_ptr
+	iny
+	lda (src_ptr),y
+	adc load_dest+1
+	sta dst_ptr+1
+	clc
+	lda src_ptr
+	adc #2
+	sta src_ptr
+	bcc +
+	inc src_ptr+1
++
+	rts
+
+.pab_dec_rel
+	lda ai_reloc_nlo
+	bne +
+	dec ai_reloc_nhi
++
+	dec ai_reloc_nlo
+	rts
+.pab_dec_map
+	lda ai_map_nlo
+	bne +
+	dec ai_map_nhi
++
+	dec ai_map_nlo
+	rts
+
+.pab_pose
+	lda ai_pose_lo
+	sta load_dest
+	lda ai_pose_hi
+	sta load_dest+1
+	jsr patch_enemy_gx
+	ldx load_type
+	lda AI_BANK_LO,x
+	sta load_dest
+	lda AI_BANK_HI,x
+	sta load_dest+1
+	clc
+	rts
+.pab_bad
+	sec
+	rts
+
+; A=command, X=enemy index, Y=type. No entry means no-op.
+ai_invoke
+	sta ai_cmd
+	lda AI_ENTRY_HI,y
+	beq .aiv_rts
+	sta .aiv_call+2
+	lda AI_ENTRY_LO,y
+	sta .aiv_call+1
+	lda ai_cmd
+.aiv_call
+	jsr $ffff
+.aiv_rts
+	rts
 
 ; dest in load_dest; type in load_type.
 ; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…] [sfx blob]

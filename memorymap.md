@@ -2,6 +2,11 @@
 
 CPU space (`$0000–$BFFF`) is boot, GAME, and the downward heap. VIC bank 3 (`$C000–$FFFF`) is screens, charsets, sprites, LUTs, and play scratch. Source of truth for abs addresses is [`src/mem.asm`](src/mem.asm); zero page is [`src/zp.asm`](src/zp.asm); map SoA pointers are [`src/map_bss.asm`](src/map_bss.asm). GAME module bounds below are from `game.lbl` (KERNAL assemble). Accessing `$D000–$FFFF` as RAM requires `$01` to unmap I/O and the KERNAL. Colour RAM (`$D800`) is the I/O overlay of charset A bottom.
 
+`build.bat` regenerates `memory-report.json` / `memory-report-krill.json` and
+`heap-report.json` / `heap-report-krill.json`. Those reports and the build's
+1 KiB minimum-slack gate are authoritative; the tables below describe the
+latest checked build.
+
 The playable disks are [`quake64.d64`](quake64.d64) (KERNAL `$FFD5`, VICE virtual 1541) and [`quake64-krill.d64`](quake64-krill.d64) (`loadraw`, true drive emulation / real 1541). Both KERNAL-load a split koala cover (`splashc` colour/matrix first, then `splash` bitmap) in VIC bank 1. The Krill disk then installs the resident at `$EE08` before `menu`. The cover uses the menu’s matrix/bitmap (`$5C00` / `$6000`); splashc stages at `$4000` so `MENU` can grow past `$4000` without flashing the picture. `run_menu` switches to hires and wipes it. After the menu, boot stages `tab` into charset tails, then `fnt` / `scr` / `sqt` / `game`.
 
 Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and **6 unique world Z** (rooms still cook at 4 unique).
@@ -17,85 +22,109 @@ Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and
 | `$0100`–`$01FF` | 256 | Stack |
 | `$0200`–`$03FF` | 512 | Mostly free. `MAP_SMC_HI` `$02` is a GAME operand sentinel, not occupancy. Live KERNAL shadows: `$02A1` (CIA2 ICR), `$02A6` (PAL/NTSC), `$0314`/`$0318` (IRQ/NMI vectors, also `$FFFA`) |
 | `$0400`–`$051F` | 288 | Map header + SoA pointers (`map_bss.asm`; `bind_map`) |
-| `$0520`–`$06DE` | 447 | Play BSS (table below). Next free `$06DF` |
-| `$06DF`–`$08F8` | 538 | Free during play (boot leftover `$0801`–`$08F8` is overwritten on `reboot_game`) |
+| `$0524`–`$06F6` | 467 | Play BSS (frame/pose pointers and streamed-SFX state) |
+| `$06F7`–`$0875` | 383 | Boot-loaded immutable enemy metadata (`enemydata.prg`) |
+| `$0876`–`$0885` | 16 | Streamed AI entry pointers (8 lo + 8 hi) |
+| `$0886`–`$0895` | 16 | Fused enemy-bank base pointers (8 lo + 8 hi) |
+| `$0896`–`$08F8` | 99 | Free during play |
 | `$08F9`–`$08FB` | 3 | `REBOOT_STUB` (`JMP reboot_game`) |
 | `$08FC` | 1 | `level_num` |
 | `$08FD`–`$08FF` | 3 | `effects_vol` / `game_complete` / `difficulty` (survive GAME load) |
-| `$0900`–`$9545` | 35910 | GAME (`end_game` `$9546`). Menu overlay lived here first |
-| `$9546`–`$BFFF` | 10938 | Heap (map with bind/reloc prefix, per-room poses). Krill GAME is 48 B shorter |
+| `$0900`–`$9711` | 36370 | GAME (`end_game` `$9712`). Menu overlay lived here first |
+| `$9712`–`$BFFF` | 10478 | Heap (map plus at most two fused AI/pose/SFX banks). Krill GAME is 26 B shorter |
 
-### Play BSS `$0520+`
+### Play BSS and streamed-bank pointers `$0524+`
 
 | Address | Size | Label |
 | :--- | ---: | :--- |
-| `$0520`–`$0589` | 106 | `frame13_lo` |
-| `$058A`–`$05F3` | 106 | `frame13_hi` |
-| `$05F4`–`$0623` | 48 | `enemy_gx/y/z` lo/hi (`ENEMY_PTR_N`=8) |
-| `$0624`–`$063B` | 24 | `box_vis_edges` |
-| `$063C`–`$0647` | 12 | `box_vis_vert` |
-| `$0648`–`$0687` | 64 | `room_pack_edges` |
-| `$0688`–`$06A7` | 32 | `room_pack_vert` |
-| `$06A8`–`$06B4` | 13 | `pose_gx` |
-| `$06B5`–`$06C1` | 13 | `pose_gy` |
-| `$06C2`–`$06CE` | 13 | `pose_gz` |
-| `$06CF`–`$06D6` | 8 | `pose_map_lo` |
-| `$06D7`–`$06DE` | 8 | `pose_map_hi` |
+| `$0524`–`$058D` | 106 | `frame13_lo` |
+| `$058E`–`$05F7` | 106 | `frame13_hi` |
+| `$05F8`–`$0627` | 48 | `enemy_gx/y/z` lo/hi (`ENEMY_PTR_N`=8) |
+| `$0628`–`$063F` | 24 | `box_vis_edges` |
+| `$0640`–`$064B` | 12 | `box_vis_vert` |
+| `$064C`–`$068B` | 64 | `room_pack_edges` |
+| `$068C`–`$06AB` | 32 | `room_pack_vert` |
+| `$06AC`–`$06B8` | 13 | `pose_gx` |
+| `$06B9`–`$06C5` | 13 | `pose_gy` |
+| `$06C6`–`$06D2` | 13 | `pose_gz` |
+| `$06D3`–`$06DA` | 8 | `pose_map_lo` |
+| `$06DB`–`$06E2` | 8 | `pose_map_hi` |
+| `$06E3`–`$06F2` | 16 | streamed clip-SFX event pointers |
+| `$06F3`–`$06F6` | 4 | clip-SFX animation scratch/latch |
+| `$06F7`–`$0875` | 383 | immutable enemy metadata |
+| `$0876`–`$0895` | 32 | streamed AI entry and fused-bank pointers |
 
 ### GAME `$0900`–`end_game`
 
-Assembled in `!source` order from [`src/quake64.asm`](src/quake64.asm). Bounds are the first emitted label of each file through the next. Nested `!source` is listed on its own row. Krill vs KERNAL only changes `LoadPrg` inside `loader.asm` (48 B).
+Assembled in `!source` order from [`src/quake64.asm`](src/quake64.asm). Bounds
+are the zero-byte `mod_*` labels emitted before each source. Krill vs KERNAL
+only changes `LoadPrg` inside `loader.asm` (26 B).
 
 | Address | Size | File | Notes |
 | :--- | ---: | :--- | :--- |
-| `$0900`–`$0A92` | 403 | `quake64.asm` | `start` / `main` / cam add |
-| `$0A93`–`$0C46` | 436 | `vic.asm` | VIC init, charset clear, `$d018` |
-| `$0C47`–`$0F97` | 849 | `irq.asm` | raster chain, keys |
-| `$0F98`–`$106B` | 212 | `profil.asm` | CIA2 cascade (buckets if `PROFILE`) |
-| `$106C`–`$14B9` | 1102 | `hud.asm` | HUD + pickup strings |
-| `$14BA`–`$1ABD` | 1540 | `math.asm` | smul / log / persp / `ATAN32` / rnd |
-| `$1ABE`–`$1D67` | 682 | `util.asm` | AABB / line-box |
-| `$1D68`–`$1FD0` | 617 | `line.asm` | Bresenham setup, `col_lo/hi` |
-| `$1FD1`–`$2766` | 1942 | `_line_bodies.asm` | unrolled plot (from `line.asm`) |
-| `$2767`–`$2983` | 541 | `fx.asm` | explosion particles |
-| `$2984`–`$2F45` | 1474 | `grenade.asm` | |
-| `$2F46`–`$3172` | 557 | `playsound.asm` | SID mixer |
-| `$3173`–`$39F2` | 2176 | `pcsounds.asm` | resident PC-speaker envelopes |
-| `$39F3`–`$3AF2` | 256 | `pcsfreq.asm` | Fn hi LUT (256) |
-| `$3AF3`–`$42BA` | 1992 | `weapon.asm` | |
-| `$42BB`–`$486A` | 1456 | `weapon_spr.asm` | packed view-model sprites |
-| `$486B`–`$489E` | 52 | `splat_spr.asm` | |
-| `$489F`–`$48E6` | 72 | `enemy_muzzle.asm` | |
-| `$48E7`–`$4A2A` | 324 | `process.asm` | door/elev process SoA |
-| `$4A2B`–`$4BFD` | 467 | `elevator.asm` | |
-| `$4BFE`–`$4E19` | 540 | `door.asm` | |
-| `$4E1A`–`$5CC3` | 3754 | `world.asm` | move, collision, pickups, triggers |
-| `$5CC4`–`$5FD7` | 788 | `item_mesh.asm` | backpack / door meshes |
-| `$5FD8`–`$6B73` | 2972 | `mesh.asm` | rooms, slopes, world stroke |
-| `$6B74`–`$6CF2` | 383 | `enemy_data.asm` | clip tables / stats (from `cube.asm`) |
-| `$6CF3`–`$7EC1` | 4559 | `cube.asm` | enemy xform / project / clip / draw |
-| `$7EC2`–`$8E62` | 4001 | `enemy.asm` | AI, hitscan, damage |
-| `$8E63`–`$9545` | 1763 | `loader.asm` | sizes + `LoadPrg` / `LoadLevel` / pose stream / `bind_map` header. Bind+patch overlay lives on the map prefix (`overlay.asm`), not in GAME |
+| `$0900`–`$09CB` | 204 | `quake64.asm` | `start` / `main` |
+| `$09CC`–`$0B87` | 444 | `vic.asm` | VIC init, charset clear, `$d018` |
+| `$0B88`–`$0EF1` | 874 | `irq.asm` | raster chain, keys |
+| `$0EF2`–`$0FCB` | 218 | `profil.asm` | CIA2 cascade (buckets if `PROFILE`) |
+| `$0FCC`–`$13D0` | 1029 | `hud.asm` | HUD + pickup strings |
+| `$13D1`–`$19D7` | 1543 | `math.asm` | smul / log / persp / `ATAN32` / rnd |
+| `$19D8`–`$1CA9` | 722 | `util.asm` | AABB / line-box |
+| `$1CAA`–`$26A8` | 2559 | `line.asm` | Bresenham setup + generated unrolled bodies |
+| `$26A9`–`$28C8` | 544 | `fx.asm` | explosion particles |
+| `$28C9`–`$2EE2` | 1562 | `grenade.asm` | |
+| `$2EE3`–`$3138` | 598 | `spit.asm` | |
+| `$3139`–`$3376` | 574 | `playsound.asm` | SID mixer |
+| `$3377`–`$377A` | 1028 | `pcsounds.asm` | resident PC-speaker envelopes/tables |
+| `$377B`–`$387A` | 256 | `pcsfreq.asm` | Fn hi LUT (256) |
+| `$387B`–`$404A` | 2000 | `weapon.asm` | |
+| `$404B`–`$45FA` | 1456 | `weapon_spr.asm` | packed view-model sprites |
+| `$45FB`–`$462E` | 52 | `splat_spr.asm` | |
+| `$462F`–`$4676` | 72 | `enemy_muzzle.asm` | |
+| `$4677`–`$47BC` | 326 | `process.asm` | door/elev process SoA |
+| `$47BD`–`$4998` | 476 | `elevator.asm` | |
+| `$4999`–`$4B9B` | 515 | `door.asm` | |
+| `$4B9C`–`$5CC7` | 4396 | `world.asm` | move, collision, pickups, triggers |
+| `$5CC8`–`$609D` | 982 | `item_mesh.asm` | backpack / door meshes |
+| `$609E`–`$6D27` | 3210 | `mesh.asm` | rooms, slopes, world stroke |
+| `$6D28`–`$7F2B` | 4612 | `cube.asm` | enemy xform / project / clip / draw |
+| `$7F2C`–`$8F28` | 4093 | `enemy.asm` | resident AI core, hitscan, damage |
+| `$8F29`–`$9711` | 2025 | `loader.asm` | disk/map load and fused AI/pose/SFX bank relocation |
 
-Largest slices: `cube` 4559, `enemy` 4001, `world` 3754, `mesh` 2972, `pcsounds` 2176, `weapon` 1992, `_line_bodies` 1942, `loader` 1763, `math` 1540, `grenade` 1474, `weapon_spr` 1456, `hud` 1102.
+Largest slices: `cube` 4612, `world` 4396, `enemy` 4093, `mesh` 3210,
+`line` 2559, `loader` 2025, `weapon` 2000, `grenade` 1562,
+`math` 1543, and `weapon_spr` 1456.
 
 Macros-only (no bytes): `mem.asm`, `zp.asm`, `map_counts.asm`, `mapacc.asm`, `map_bss.asm`, `level_prefix.asm`. `_rotate_body.asm` is inlined in `load_view_trig` (no own label). `overlay.asm` assembles to `overlay.bin` and is prepended to each map.
 
-### Heap `$9546`–`$C000`
+### Heap `$9712`–`$C000`
 
-Grows down from `SCR_A`. `LoadLevel` one-shots each E1Mn (4-byte header + PIC overlay + reloc dest words + packed map). `bind_map` copies the 24-byte header and name, SMC-`jsr`s the overlay (`bind_apply` then `patch_map_smc`), then `heap_top = map_base` dumps the prefix. Then at most `ROOM_MAX_TYPES` (2) pose banks for the current room. Play peak = `packed + worst-room pose sum`. Load peak = `packed + LEVEL_PREFIX` (1691). Gate is `packed + max(prefix, worst-room poses)`. `tools/checkheap.py` enforces that. `MAP_MAX_BYTES` 4096 is a packed cap; prefix is extra.
+Grows down from `SCR_A`. `LoadLevel` one-shots each E1Mn (4-byte header +
+PIC overlay + reloc dest words + packed map). `bind_map` copies the 24-byte
+header and name, SMC-`jsr`s the overlay (`bind_apply` then `patch_map_smc`),
+then `heap_top = map_base` dumps the prefix. At most `ROOM_MAX_TYPES` (2)
+fused enemy banks are then resident for the current room. Play peak is packed
+map plus the worst room's banks; load peak is packed map plus `LEVEL_PREFIX`.
+`tools/checkheap.py` enforces the larger peak and a 1024-byte release floor.
+`MAP_MAX_BYTES` 4096 is a packed-map cap; prefix is extra.
 
-Pose payload bytes (from `enemy_sizes.asm`, includes trailing sfx blob): grunt 2354, knight 1662, rott 2112, scrag 1544, ogre 2523, shambl 2394, chthon 2804, zombie 2804.
+Enemy bank bytes (from `enemy_sizes.asm`, including QAI1 header, optional
+relocatable behavior code, pose data, SFX, and clip events): grunt 2488,
+knight 2369, rott 2384, scrag 2353, ogre 2836, shambler 2526, chthon 2934,
+zombie 2936.
 
-Current gate (`game.lbl`, avail 10938):
+Current gate (`game.lbl`, avail 10478, `LEVEL_PREFIX` 2220):
 
 | Level | Map | Worst room poses | Need | Slack |
 | :--- | ---: | :--- | ---: | ---: |
-| E1M1 | 2289 | 4466 (room 2: grunt, rott) | 6755 | 4183 |
-| E1M2 | 3081 | 4877 (room 0: grunt, ogre) | 7958 | 2980 |
-| E1M3 | 3515 | 2804 (room 1: zombie) | 6319 | 4619 |
+| E1M1 | 2332 | 4872 (room 2: grunt, rott) | 7204 | 3274 |
+| E1M2 | 3115 | 5324 (room 0: grunt, ogre) | 8439 | 2039 |
+| E1M3 | 3555 | 2936 (room 1: zombie) | 6491 | 3987 |
+| E1M4 | 2345 | 5205 (room 7: knight, ogre) | 7550 | 2928 |
+| E1M5 | 3651 | 5205 (room 3: knight, ogre) | 8856 | 1622 |
+| E1M6 | 2234 | 2936 (room 8: zombie) | 5170 | 5308 |
 
-E1M2 is still the tightest (pose-bound). Caps: `MAP_MAX_BYTES` 4096, `ENEMY_POSE_MAX` 4096.
+E1M5 is the tightest and remains above the enforced 1024-byte release floor.
+Caps: `MAP_MAX_BYTES` 4096, pose payload 4096, fused bank 8192.
 
 ## VIC Bank 3 overview
 
@@ -113,7 +142,7 @@ E1M2 is still the tightest (pose-bound). Caps: `MAP_MAX_BYTES` 4096, `ENEMY_POSE
 | `$C980`–`$C9BF` | 64 | Sprite 6 enemy muzzle (`WPN_EMUZ`) |
 | `$C9C0`–`$C9FF` | 64 | Sprite 7 impact splat (`WPN_SPLAT`) |
 | `$CA00`–`$CE81` | 642 | Project / clip / game scratch (table below) |
-| `$CE82`–`$CFFF` | 382 | Play BSS: `en_pain_i` ends `$CEC4`, then `have_keys`, grenade SoA (`$CED1`–`$CF24`), hitscan/FX timers, Scrag spit scalar (`spit_*` at `$CF73`–`$CF84`); remainder free `$CFBB+` before charset A |
+| `$CE82`–`$CFFF` | 382 | Play BSS: enemy state, grenade SoA, hitscan/FX, Scrag spit, movement scratch, and AI-bank relocation scratch through `$CFCB`; remainder free `$CFCC+` before charset A |
 | `$D000`–`$D5FF` | 1536 | Charset A top cols 0–23 (viewport) |
 | `$D600`–`$D607` | 8 | Char 192 `$FF` margin glyph |
 | `$D608`–`$D747` | 320 | `SINTAB` (COSTAB = SINTAB+64 at `$D648`) |

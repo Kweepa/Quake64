@@ -22,6 +22,7 @@ STREAM_FOLDERS = {
     "dog": ["rott"],
     "ogre": ["ogre"],
     "soldier": HUM_DOS,
+    "wizard": ["scrag"],
 }
 
 # Locked aliases must exist so game lda #SOUND_* still assembles.

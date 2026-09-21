@@ -71,9 +71,7 @@ boot_start
 	jmp .next
 
 .done
-	ldx #$ff
-	txs
-	jmp LOCODE_BASE
+	jmp finish_boot
 
 .fail
 	lda #$35
@@ -148,7 +146,34 @@ name_tab
 name_splashc
 	!text "SPLASHC"
 
+; EDAT overwrites $06F7-$0875, including boot_start's file-table loop.
+; GAME must already be resident, and this final loader/return path must stay
+; above the overwritten range.
+finish_boot
+	ldx #<name_edat
+	ldy #>name_edat
+	jsr load_file
+	bcs .late_fail
+	ldx #$ff
+	txs
+	jmp LOCODE_BASE
+.late_fail
+	jmp .late_fail
+
+name_edat
+	!text "EDATA"
+	!byte 0
+
 end_boot = *
+!if finish_boot < ENEMY_DATA_LIMIT {
+	!error "EDAT final-load path is overwritten by enemy metadata"
+}
+!if load_sa1 < ENEMY_DATA_LIMIT {
+	!error "EDAT overwrites KERNAL loader used by final-load path"
+}
+!if load_file < ENEMY_DATA_LIMIT {
+	!error "EDAT overwrites final load_file routine"
+}
 !if end_boot > REBOOT_STUB {
 	!error "Boot overlaps REBOOT_STUB; end=$", end_boot
 }

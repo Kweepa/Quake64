@@ -454,7 +454,7 @@ gren_col_xz
 	sta col_z
 	rts
 
-; C=1 allowed (room colliders only — door holes bounce)
+; C=1 allowed (room colliders only — doors do not pass grenades)
 gren_pos_ok
 	lda col_room
 	jsr in_room_inset_a

@@ -1298,7 +1298,7 @@ room_cols_inset1
 
 ; ------------------------------------------------------------------
 ; in_room_inset — col_x/col_z inside room_idx colliders (PLAYER_R inset)?
-; in_room_inset_a — A = room. C=1 yes. No door holes.
+; in_room_inset_a — A = room. C=1 yes.
 ; ------------------------------------------------------------------
 in_room_inset
 	lda room_idx
@@ -1316,22 +1316,10 @@ in_room_inset_a
 	rts
 
 ; ------------------------------------------------------------------
-; in_room_or_portal — col_x/col_z allowed for room_idx?
-; Inside a collider inset by PLAYER_R (shared faces not inset), or open door hole.
-; C=1 allowed
-; ------------------------------------------------------------------
-in_room_or_portal
-	jsr in_room_inset
-	bcs .irp_yes
-	jmp door_portal_ok
-.irp_yes
-	rts
-
-; ------------------------------------------------------------------
 ; pos_ok — cam would be ok at col_x/col_z
 ; ------------------------------------------------------------------
 pos_ok
-	jsr in_room_or_portal
+	jsr in_room_inset
 	bcc .po_no
 	jsr enemies_block_player
 	bcc .po_no
@@ -1347,7 +1335,7 @@ pos_ok
 step_up_ok
 	ldy room_idx
 	jsr peek_rc_floor
-	bcc .suo_yes			; portal hole / no collider
+	bcc .suo_yes			; no collider
 	sec
 	lda cam_yh
 	sbc #EYE_HEIGHT			; feet
@@ -1434,13 +1422,13 @@ apply_move_world
 	jsr wish_add_z
 .am_noa
 	lda cam_xl
-	sta rot0			; start 8.8 XZ (HITWALL if fully blocked)
+	sta mv0_xl
 	lda cam_xh
-	sta rot1
+	sta mv0_xh
 	lda cam_zl
-	sta rot2
+	sta mv0_zl
 	lda cam_zh
-	sta dt_tmp
+	sta mv0_zh
 	lda cam_xl
 	sta save_xl
 	lda cam_xh
@@ -1449,6 +1437,8 @@ apply_move_world
 	sta save_zl
 	lda cam_zh
 	sta save_zh
+	lda #0
+	sta door_blk
 
 	clc
 	lda cam_xl
@@ -1467,6 +1457,7 @@ apply_move_world
 	sta cam_xl
 	lda save_xh
 	sta cam_xh
+	inc door_blk			; bit0 = X blocked
 .am_zx
 	lda cam_xh
 	sta save_xh
@@ -1489,29 +1480,33 @@ apply_move_world
 	sta cam_zl
 	lda save_zh
 	sta cam_zh
+	lda #2
+	ora door_blk
+	sta door_blk
 .am_done
+	jsr try_door_wish
+	bcs .am_hydro
 	lda wish_dx
 	ora wish_dxh
 	ora wish_dz
 	ora wish_dzh
-	beq .am_sw
+	beq .am_rts
 	lda cam_xl
-	cmp rot0
-	bne .am_sw
+	cmp mv0_xl
+	bne .am_rts
 	lda cam_xh
-	cmp rot1
-	bne .am_sw
+	cmp mv0_xh
+	bne .am_rts
 	lda cam_zl
-	cmp rot2
-	bne .am_sw
+	cmp mv0_zl
+	bne .am_rts
 	lda cam_zh
-	cmp dt_tmp
-	bne .am_sw
+	cmp mv0_zh
+	bne .am_rts
 	lda #SOUND_WEAPONS_TINK1
 	jsr play_sound
-.am_sw
-	jsr try_room_switch
-	bcc .am_rts
+	rts
+.am_hydro
 	lda #SOUND_DOORS_HYDRO1
 	jsr play_sound
 .am_rts
@@ -1604,12 +1599,11 @@ neg_a
 	rts
 
 ; ------------------------------------------------------------------
-; Proximity: doors + switches (K) + automatic elevators
+; Proximity: switches (K) + automatic elevators
 ; ------------------------------------------------------------------
 SW_USE_RANGE	= 4			; max XZ distance to switch AABB
 
 try_proximity
-	jsr try_door_proximity
 	; K rising edge — one fire per press
 	lda key_use
 	bne .tp_kd

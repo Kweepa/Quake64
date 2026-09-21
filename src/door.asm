@@ -1,4 +1,4 @@
-; Doors — per-room baked face; collision, portals, proximity
+; Doors — per-room baked face; collision, wish AABB
 !zone door
 
 ; ------------------------------------------------------------------
@@ -160,61 +160,6 @@ door_blocks_y
 	rts
 
 ; ------------------------------------------------------------------
-; door_hole_hit — X=door; col_x/col_z in wide opening, thin axis ±1
-; C=1 inside hole (exclusive max)
-; ------------------------------------------------------------------
-door_hole_hit
-	+lda_mx door_face
-	cmp #FACE_PX
-	bcs .dhh_x
-	; Z-facing: wide=X unexpanded, thin=Z ±1
-	+lda_mx door_x
-	sta box_x
-	+lda_mx door_sx
-	sta box_sx
-	+lda_mx door_z
-	beq .dhh_z0
-	sec
-	sbc #1
-	sta box_z
-	clc
-	+lda_mx door_sz
-	adc #2
-	sta box_sz
-	jmp point_in_box_xz
-.dhh_z0
-	+lda_mx door_z
-	sta box_z
-	clc
-	+lda_mx door_sz
-	adc #1
-	sta box_sz
-	jmp point_in_box_xz
-.dhh_x
-	+lda_mx door_z
-	sta box_z
-	+lda_mx door_sz
-	sta box_sz
-	+lda_mx door_x
-	beq .dhh_x0
-	sec
-	sbc #1
-	sta box_x
-	clc
-	+lda_mx door_sx
-	adc #2
-	sta box_sx
-	jmp point_in_box_xz
-.dhh_x0
-	+lda_mx door_x
-	sta box_x
-	clc
-	+lda_mx door_sx
-	adc #1
-	sta box_sx
-	jmp point_in_box_xz
-
-; ------------------------------------------------------------------
 ; door_y_ok — X=door; C=1 if feet−door_y in [-DOOR_Y_SLACK, +DOOR_Y_SLACK]
 ; feet = cam_yh − EYE_HEIGHT. Preserve X.
 ; ------------------------------------------------------------------
@@ -236,184 +181,145 @@ door_y_ok
 	rts
 
 ; ------------------------------------------------------------------
-; door_can_pass — X=door; col_x/col_z set. C=1 live portal at this Y.
-; Unlocked, has dest, XZ in hole, feet within DOOR_Y_SLACK of sill.
+; try_door_wish — blocked wish into a door slab at sill height.
+; Save cam, add wish on blocked axes, hit door AABB + door_y_ok.
+; Unlocked + other: snap through, C=1. Locked: key HUD, restore, C=0.
 ; ------------------------------------------------------------------
-door_can_pass
-	jsr door_unlocked
-	bcc .dcp_no
-	jsr door_other_room
-	cmp #$ff
-	beq .dcp_no
-	jsr door_hole_hit
-	bcc .dcp_no
-	jmp door_y_ok
-.dcp_no
+try_door_wish
+	lda door_blk
+	bne .tdw_go
 	clc
 	rts
-
-; ------------------------------------------------------------------
-; door_portal_ok — col_x/col_z in a live door hole of room_idx? C=1 yes
-; ------------------------------------------------------------------
-door_portal_ok
-	jsr door_slice
-	ldx door_i0
-.dpo
-	cpx door_i1
-	bcs .dpo_no
-	jsr door_can_pass
-	bcs .dpo_yes
-	inx
-	bne .dpo
-.dpo_no
-	clc
-	rts
-.dpo_yes
-	sec
-	rts
-
-; ------------------------------------------------------------------
-; try_room_switch — cross a live door hole of room_idx into the other
-; room (XZ left current, inside other). Never probes unrelated rooms.
-; C=1 if room_idx changed
-; ------------------------------------------------------------------
-try_room_switch
-	jsr door_slice
-	ldx door_i0
-.trs
-	cpx door_i1
-	bcs .trs_no
-	jsr door_can_pass
-	bcc .trs_n
+.tdw_go
+	lda cam_xl
+	sta save_xl
 	lda cam_xh
-	sta col_x
+	sta save_xh
+	lda cam_zl
+	sta save_zl
 	lda cam_zh
-	sta col_z
-	ldy room_idx
-	jsr col_in_room_y
-	bcs .trs_n			; still in visible room
-	jsr door_other_room
-	tay
-	jsr col_in_room_y
-	bcc .trs_n
-	tya
-	jsr set_room_idx
-	sec
-	rts
-.trs_n
-	inx
-	beq .trs_no
-	jmp .trs
-.trs_no
+	sta save_zh
+	lda door_blk
+	lsr
+	bcc .tdw_z
 	clc
-	rts
-
-; ------------------------------------------------------------------
-; try_door_proximity — locked door without key → "key required" HUD
-; ------------------------------------------------------------------
-try_door_proximity
+	lda cam_xl
+	adc wish_dx
+	sta cam_xl
+	lda cam_xh
+	adc wish_dxh
+	sta cam_xh
+.tdw_z
+	lda door_blk
+	and #2
+	beq .tdw_scan
+	clc
+	lda cam_zl
+	adc wish_dz
+	sta cam_zl
+	lda cam_zh
+	adc wish_dzh
+	sta cam_zh
+.tdw_scan
 	jsr door_slice
 	ldx door_i0
-.tdp
+.tdw
 	cpx door_i1
-	bcs .tdp_rts
-	jsr door_unlocked
-	bcs .tdp_n
-	jsr prox_door
-	bcc .tdp_n
-	ldx obj_i
-	+lda_mx door_key
-	jsr hud_key_req
-	ldx obj_i
-.tdp_n
-	inx
-	beq .tdp_rts
-	jmp .tdp
-.tdp_rts
-	rts
-
-; X=door; C=1 if in front trigger box (door width × DOOR_PROX deep) and Y overlaps
-prox_door
-	stx obj_i
-	+lda_mx door_face
-	cmp #FACE_PX
-	bcs .pd_x
-	cmp #FACE_MZ
-	beq .pd_mz
-	; FACE_PZ: wide=X, front extends +Z from door face
+	bcs .tdw_miss
 	+lda_mx door_x
-	sta box_x
-	+lda_mx door_sx
-	sta box_sx
-	clc
-	+lda_mx door_z
-	+adc_mx door_sz
-	sta box_z
-	lda #DOOR_PROX
-	sta box_sz
-	jmp .pd_xz
-.pd_mz
-	; FACE_MZ: wide=X, front extends -Z from door face
-	+lda_mx door_x
-	sta box_x
-	+lda_mx door_sx
-	sta box_sx
-	+lda_mx door_z
+	beq .tdw_x0
 	sec
-	sbc #DOOR_PROX
-	bcs +
-	lda #0
-+
-	sta box_z
-	lda #DOOR_PROX
-	sta box_sz
-	jmp .pd_xz
-.pd_x
-	cmp #FACE_MX
-	beq .pd_mx
-	; FACE_PX: wide=Z, front extends +X from door face
-	+lda_mx door_z
-	sta box_z
-	+lda_mx door_sz
-	sta box_sz
+	sbc #1
+.tdw_x0
+	sta box_x
 	clc
-	+lda_mx door_x
-	+adc_mx door_sx
-	sta box_x
-	lda #DOOR_PROX
+	+lda_mx door_sx
+	adc #2
 	sta box_sx
-	jmp .pd_xz
-.pd_mx
-	; FACE_MX: wide=Z, front extends -X from door face
 	+lda_mx door_z
-	sta box_z
-	+lda_mx door_sz
-	sta box_sz
-	+lda_mx door_x
+	beq .tdw_z0
 	sec
-	sbc #DOOR_PROX
-	bcs +
-	lda #0
-+
-	sta box_x
-	lda #DOOR_PROX
-	sta box_sx
-.pd_xz
+	sbc #1
+.tdw_z0
+	sta box_z
+	clc
+	+lda_mx door_sz
+	adc #2
+	sta box_sz
 	lda cam_xh
 	sta col_x
 	lda cam_zh
 	sta col_z
 	jsr point_in_box_xz
-	bcc .pd_no
-	ldx obj_i
-	+lda_mx door_y
-	sta box_y
-	+lda_mx door_sy
-	sta box_sy
-	jsr player_overlaps_y
-	ldx obj_i
+	bcc .tdw_n
+	jsr door_y_ok
+	bcc .tdw_n
+	jsr door_unlocked
+	bcc .tdw_lock
+	jsr door_other_room
+	cmp #$ff
+	beq .tdw_n
+	jsr .tdw_snap
+	jsr door_other_room
+	jsr set_room_idx
+	sec
 	rts
-.pd_no
+.tdw_lock
+	+lda_mx door_key
+	jsr hud_key_req
+	jmp .tdw_miss
+.tdw_n
+	inx
+	beq .tdw_miss
+	jmp .tdw
+.tdw_miss
+	lda save_xl
+	sta cam_xl
+	lda save_xh
+	sta cam_xh
+	lda save_zl
+	sta cam_zl
+	lda save_zh
+	sta cam_zh
+.tdw_no
 	clc
-	ldx obj_i
 	rts
+
+; Dest side of the slab (baked face points into this room). Frac 0.
+.tdw_snap
+	+lda_mx door_face
+	lsr				; C=minus, A=0 Z / 1 X
+	php
+	cmp #1
+	bcs .tdw_sx
+	+lda_mx door_z
+	plp
+	bcs .tdw_adz
+	beq .tdw_zst
+	sec
+	sbc #1
+.tdw_zst
+	sta cam_zh
+	lda #0
+	sta cam_zl
+	rts
+.tdw_adz
+	clc
+	+adc_mx door_sz
+	jmp .tdw_zst
+.tdw_sx
+	+lda_mx door_x
+	plp
+	bcs .tdw_adx
+	beq .tdw_xst
+	sec
+	sbc #1
+.tdw_xst
+	sta cam_xh
+	lda #0
+	sta cam_xl
+	rts
+.tdw_adx
+	clc
+	+adc_mx door_sx
+	jmp .tdw_xst

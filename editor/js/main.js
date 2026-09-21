@@ -76,6 +76,8 @@ import {
   tryConnectDoor,
   doorDoublyConnected,
   snapDoorBetweenRooms,
+  snapDoorToFace,
+  snapSwitchToFace,
   snapSwitchToRoom,
   usesLinkTag,
   doorUsesTag,
@@ -1169,10 +1171,9 @@ function canvasClientToScreen(e) {
   };
 }
 
-/** Owner room for palette drop: doorway → selected/last; else ray-hit room, miss → selected/last. */
+/** Owner room for palette drop: ray-hit room, miss → selected/last. */
 function placeOwner(kind, hitRoom) {
   if (kind === "room") return null;
-  if (kind === "doorway") return placementRoom();
   return hitRoom || placementRoom();
 }
 
@@ -1186,7 +1187,11 @@ function previewObjectAtScreen(place, mx, my) {
     extra.enabled = !activeMap(doc).objects.some((o) => o.kind === "spawn");
   }
   const obj = createObject(kind, p.x, p.y, p.z, extra);
-  if (owner && kind !== "room" && kind !== "doorway" && p.floorSnap !== false) {
+  if (kind === "doorway" && p.face) {
+    snapDoorToFace(obj, p.face, p.hitY);
+  } else if (kind === "switch" && p.face) {
+    snapSwitchToFace(obj, p.face, p.hitY);
+  } else if (owner && kind !== "room" && p.floorSnap !== false) {
     obj.y = roomFloorY(owner, obj.x + obj.sx / 2, obj.z + obj.sz / 2);
   }
   clampObject(obj);
@@ -1285,10 +1290,7 @@ function finishPaletteDrop(e) {
   const obj = previewObjectAtScreen(place, mx, my);
   activeMap(doc).objects.push(obj);
   if (kind === "doorway") {
-    assignDoorRooms(doc, obj, owner);
-    clampObject(obj);
-  } else if (kind === "switch" && owner) {
-    snapSwitchToRoom(obj, owner);
+    assignDoorRooms(doc, obj, owner, false);
     clampObject(obj);
   }
   if (kind === "room") lastRoomId = obj.id;

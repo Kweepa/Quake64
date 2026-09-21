@@ -290,8 +290,7 @@ OC_BOT		= 8
 ; Player / world
 EYE_HEIGHT	= 3
 PLAYER_H	= 4			; Y collision height [feet, feet+PLAYER_H)
-DOOR_PROX	= 3			; open trigger: depth in front of door face
-DOOR_Y_SLACK	= 1			; |feet − door_y| to punch the portal hole
+DOOR_Y_SLACK	= 1			; |feet − door_y| to fire a wish-through
 MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
 ENEMY_BLOCK_R	= 1			; XZ Chebyshev vs player (same cell + neighbors)
@@ -801,7 +800,12 @@ sfx_id		= $CFB7			; sound id / freq scratch
 sample_ms	= $CFB8			; PAL 20 / NTSC 17 — set at init
 ps_save_x	= $CFB9
 ps_save_y	= $CFBA
-; $CFBB+ free
+door_blk	= $CFBB			; bit0 X slide blocked, bit1 Z
+mv0_xl		= $CFBC			; cam 8.8 at start of apply_move_world
+mv0_xh		= $CFBD
+mv0_zl		= $CFBE
+mv0_zh		= $CFBF
+; $CFC0+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

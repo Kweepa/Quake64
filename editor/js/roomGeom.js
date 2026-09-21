@@ -996,6 +996,66 @@ export function roomFloorY(room, x, z) {
   return y;
 }
 
+const HULL_HIT_EPS = 1e-4;
+
+function rayAxisPlane(origin, dir, axis, plane) {
+  const d = dir[axis];
+  if (Math.abs(d) < 1e-8) return null;
+  const t = (plane - origin[axis]) / d;
+  if (t < 0) return null;
+  return {
+    t,
+    point: {
+      x: origin.x + dir.x * t,
+      y: origin.y + dir.y * t,
+      z: origin.z + dir.z * t,
+    },
+  };
+}
+
+function hullFaceUV(face, p) {
+  if (face.axis === "x") return { a: p.y, b: p.z };
+  if (face.axis === "y") return { a: p.x, b: p.z };
+  return { a: p.x, b: p.y };
+}
+
+/** Ray vs one hull rectangle. Bounds use a small epsilon; plane equality is not required. */
+export function rayHullFace(origin, dir, face, eps = HULL_HIT_EPS) {
+  if (!face || face.a1 <= face.a0 || face.b1 <= face.b0) return null;
+  const hit = rayAxisPlane(origin, dir, face.axis, face.plane);
+  if (!hit) return null;
+  const { a, b } = hullFaceUV(face, hit.point);
+  if (a < face.a0 - eps || a > face.a1 + eps || b < face.b0 - eps || b > face.b1 + eps) return null;
+  return { t: hit.t, point: hit.point, face };
+}
+
+/** Nearest hull-face hit on a room. `pred(face)` optional. */
+export function rayRoomHull(room, origin, dir, pred) {
+  const faces = roomGeometry(room).hullFaces || [];
+  let best = null;
+  for (const f of faces) {
+    if (pred && !pred(f)) continue;
+    const hit = rayHullFace(origin, dir, f);
+    if (!hit) continue;
+    if (!best || hit.t < best.t) best = hit;
+  }
+  return best;
+}
+
+/** Highest -Y hull fragment covering (x, z), or null if outside the footprint. */
+export function xzOnRoomFloor(room, x, z) {
+  const faces = roomGeometry(room).hullFaces || [];
+  let best = null;
+  for (const f of faces) {
+    if (f.axis !== "y" || f.sign !== -1) continue;
+    if (x < f.a0 - HULL_HIT_EPS || x > f.a1 + HULL_HIT_EPS || z < f.b0 - HULL_HIT_EPS || z > f.b1 + HULL_HIT_EPS) {
+      continue;
+    }
+    if (!best || f.plane > best.plane) best = f;
+  }
+  return best;
+}
+
 const DOOR_FACE_IDS = ["+x", "-x", "+z", "-z"];
 
 function faceYRange(f) {
@@ -1131,11 +1191,11 @@ function wallDims(size, face) {
 }
 
 /** Flush AABB onto hull face. `inside` puts the box in the room (switch); doors sit outside.
- * Keep Y (and off-face lateral) so a door at the bottom of a shaft does not jump to another fragment. */
-function snapBoxToHullFace(obj, f, size, inside) {
+ * Keep Y (and off-face lateral) so a door at the bottom of a shaft does not jump to another fragment.
+ * `placeHitY` (placement) centers Y on the ray hit and clamps into the fragment. */
+function snapBoxToHullFace(obj, f, size, inside, placeHitY) {
   const cx = obj.x + obj.sx / 2;
   const cz = obj.z + obj.sz / 2;
-  const floorY = obj.y | 0;
   const dims = wallDims(size, f);
   obj.face = f.faceId;
   obj.sx = dims.sx;
@@ -1145,7 +1205,14 @@ function snapBoxToHullFace(obj, f, size, inside) {
     if (inside) return sign > 0 ? plane - thick : plane;
     return sign > 0 ? plane : plane - thick;
   };
-  obj.y = floorY;
+  if (placeHitY != null && Number.isFinite(placeHitY)) {
+    const [fy0, fy1] = faceYRange(f);
+    obj.y = Math.round(placeHitY - obj.sy / 2);
+    const maxY = fy1 - obj.sy;
+    obj.y = maxY >= fy0 ? Math.max(fy0, Math.min(maxY, obj.y)) : fy0;
+  } else {
+    obj.y = obj.y | 0;
+  }
   if (f.axis === "x") {
     obj.x = along(f.sign, f.plane, obj.sx);
     obj.z = Math.round(cz - obj.sz / 2);
@@ -1163,6 +1230,21 @@ function snapBoxToHullFace(obj, f, size, inside) {
   if (obj.y < 0) obj.y = 0;
   if (obj.z < 0) obj.z = 0;
   return obj;
+}
+
+export function snapToHullFace(obj, face, size, inside, placeHitY) {
+  if (!obj || !face) return obj;
+  return snapBoxToHullFace(obj, face, size, inside, placeHitY);
+}
+
+export function snapDoorToFace(door, face, placeHitY) {
+  if (!door || !face) return door;
+  return snapBoxToHullFace(door, face, doorSnapSize(door), false, placeHitY);
+}
+
+export function snapSwitchToFace(sw, face, placeHitY) {
+  if (!sw || !face) return sw;
+  return snapBoxToHullFace(sw, face, SWITCH_SIZE, true, placeHitY);
 }
 
 export function snapDoorToRoom(door, room) {

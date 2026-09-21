@@ -1371,6 +1371,8 @@ draw_world
 	jsr draw_box
 	; crates
 .dw_items
+	jsr crush_draw
+
 	ldx #0
 .dw_c
 	cpx	map_ncrates

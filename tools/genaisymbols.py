@@ -32,6 +32,11 @@ REQUIRED = [
     "spawn_ogre_grenade",
     "spawn_scrag_spit",
     "SOUND_OGRE_OGDRAG",
+    "pos_ok",
+    "crush_kill",
+    "crush_load_box",
+    "point_in_box_xz",
+    "player_overlaps_y",
 ]
 
 

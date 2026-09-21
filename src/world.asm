@@ -862,6 +862,10 @@ solid_at
 	lda room_idx
 	sta col_room
 solid_at_col
+	jsr crush_solid
+	bcc .sa_cstart
+	jmp .sa_yes
+.sa_cstart
 	; crates — solid on Y overlap (not when on/above top or under)
 	ldx #0
 .sa_c

@@ -53,6 +53,7 @@ ENEMY_FILES = [
     ("enemies/shambl.prg", "shambl,p"),
     ("enemies/chthon.prg", "chthon,p"),
     ("enemies/zombie.prg", "zombie,p"),
+    ("enemies/crush.prg", "crush,p"),
 ]
 
 

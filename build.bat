@@ -126,6 +126,11 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
+"%ACME%" ai_crush.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 popd
 python tools\genaimeta.py
 if errorlevel 1 exit /b 1

@@ -118,6 +118,7 @@ plot_pixel
 	rts
 
 draw_line
+	cld
 	lda x0
 	cmp #192
 	bcc +

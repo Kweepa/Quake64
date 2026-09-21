@@ -253,6 +253,17 @@ bind_tab
 	+bind_add elev_dest, map_nelevs
 	+bind_add elev_room, map_nelevs
 	+bind_add elev_id, map_nelevs
+	+bind_add crush_x, map_ncrush
+	+bind_add crush_y, map_ncrush
+	+bind_add crush_z, map_ncrush
+	+bind_add crush_sx, map_ncrush
+	+bind_add crush_sy, map_ncrush
+	+bind_add crush_sz, map_ncrush
+	+bind_add crush_home, map_ncrush
+	+bind_add crush_dest, map_ncrush
+	+bind_add crush_face, map_ncrush
+	+bind_add crush_dir, map_ncrush
+	+bind_add crush_room, map_ncrush
 	+bind_add sw_x, map_nswitches
 	+bind_add sw_y, map_nswitches
 	+bind_add sw_z, map_nswitches

@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from mkreloc import parse_labels, parse_mem_const
-from perroom import ROOM_MAX_TYPES, packed_payload, per_room_types
+from perroom import ROOM_MAX_TYPES, packed_payload, per_room_types, field_offsets
 
 ROOT = Path(__file__).resolve().parents[1]
 MAP_DIR = ROOT / "maps"
@@ -81,6 +81,29 @@ def enemy_sizes() -> list[int]:
     return sizes
 
 
+def crush_bank_size() -> int:
+    prg = ENEMY_DIR / "crush.prg"
+    if prg.is_file() and prg.stat().st_size > 2:
+        return len(prg_payload(prg))
+    return 0
+
+
+def crush_rooms(payload: bytes) -> set[int]:
+    offs, counts = field_offsets(payload)
+    packed = packed_payload(payload)
+    n = counts.get("map_ncrush", 0)
+    if not n or "crush_room" not in offs:
+        return set()
+    rooms = packed[offs["crush_room"] : offs["crush_room"] + n]
+    nrooms = counts.get("map_nrooms", 0)
+    out: set[int] = set()
+    for r in rooms:
+        if nrooms and r >= nrooms:
+            raise SystemExit(f"checkheap: crusher room {r} out of range (>= {nrooms})")
+        out.add(r)
+    return out
+
+
 def used_types(per_room: dict[int, set[int]]) -> list[int]:
     out: set[int] = set()
     for ts in per_room.values():
@@ -118,6 +141,7 @@ def main() -> None:
     prefix = parse_level_prefix()
     avail = scr_a - end_game
     poses = enemy_sizes()
+    crush_sz = crush_bank_size()
 
     print(
         f"heap  GAME ${locode:04X}-${end_game:04X}  "
@@ -153,6 +177,7 @@ def main() -> None:
         packed = packed_payload(payload)
 
         per_room = per_room_types(payload)
+        c_rooms = crush_rooms(payload)
         for room, ts in sorted(per_room.items()):
             if len(ts) > ROOM_MAX_TYPES:
                 print(
@@ -174,12 +199,16 @@ def main() -> None:
         level_sum = sum(poses[t] for t in types)
 
         worst_room, worst_sum, worst_names = -1, 0, []
-        for room in sorted(per_room):
-            s = sum(poses[t] for t in per_room[room])
+        for room in sorted(set(per_room) | c_rooms):
+            s = sum(poses[t] for t in per_room.get(room, ()))
+            names = [DOS_NAME[t] for t in sorted(per_room.get(room, ()))]
+            if room in c_rooms and crush_sz:
+                s += crush_sz
+                names = names + ["crush"]
             if s > worst_sum:
                 worst_room = room
                 worst_sum = s
-                worst_names = [DOS_NAME[t] for t in sorted(per_room[room])]
+                worst_names = names
 
         need = len(packed) + max(prefix, worst_sum)
         slack = avail - need

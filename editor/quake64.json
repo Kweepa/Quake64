@@ -1,6 +1,6 @@
 {
   "version": 10,
-  "activeLevel": "E1M6",
+  "activeLevel": "E1M5",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -5661,7 +5661,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 0,
-          "enabled": true,
+          "enabled": false,
           "roomId": "5a27cfc1-63ed-4fd2-bd91-f1cbb0cd9528"
         },
         {
@@ -6488,23 +6488,6 @@
           "tag": "",
           "otherRoomId": "3e54c340-6f7b-4f2b-9d3f-62b8afcf2c41",
           "locked": false
-        },
-        {
-          "id": "df4e2cb1-c03a-4a1c-9ac3-f4b4952097c8",
-          "kind": "enemy",
-          "x": 100,
-          "y": 116,
-          "z": 129,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 6,
-          "enemy": "Rottweiler",
-          "patrol": true,
-          "roomId": "ee7ac3fe-6aa6-4622-a643-3d2009808772"
         },
         {
           "id": "72e6a570-2627-4f00-a704-38a235715e22",
@@ -7991,6 +7974,77 @@
           "dir": 1,
           "roomId": "993497f0-db83-4c39-9434-0467b167d53c",
           "pickup": "health 50%"
+        },
+        {
+          "id": "1f9af9bc-783b-4764-a2bd-03a19ce6c9b5",
+          "kind": "crusher",
+          "x": 72,
+          "y": 123,
+          "z": 124,
+          "sx": 5,
+          "sy": 2,
+          "sz": 6,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "ee7ac3fe-6aa6-4622-a643-3d2009808772",
+          "crushAxis": "x",
+          "crushDir": 1,
+          "crushAuto": false,
+          "crushLow": -2,
+          "crushHigh": 2
+        },
+        {
+          "id": "20644d33-d876-46a0-b665-80c1ee25bb50",
+          "kind": "crusher",
+          "x": 85,
+          "y": 123,
+          "z": 136,
+          "sx": 15,
+          "sy": 2,
+          "sz": 7,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "ee7ac3fe-6aa6-4622-a643-3d2009808772",
+          "crushAxis": "z",
+          "crushDir": -1,
+          "crushAuto": false,
+          "crushLow": 33,
+          "crushHigh": 37
+        },
+        {
+          "id": "1ac808c5-6c1b-4904-abef-5bdc660e60ff",
+          "kind": "spawn",
+          "x": 76,
+          "y": 122,
+          "z": 104,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 0,
+          "enabled": true,
+          "roomId": "ee7ac3fe-6aa6-4622-a643-3d2009808772"
+        },
+        {
+          "id": "9ffae47c-8080-4aa6-8780-f308b402f7fe",
+          "kind": "enemy",
+          "x": 90,
+          "y": 117,
+          "z": 133,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 2,
+          "enemy": "Scrag",
+          "patrol": false,
+          "roomId": "ee7ac3fe-6aa6-4622-a643-3d2009808772"
         }
       ]
     },
@@ -8038,7 +8092,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 0,
-          "enabled": true,
+          "enabled": false,
           "roomId": "5702c10c-957d-4691-85bf-21979e572529"
         },
         {
@@ -8542,12 +8596,12 @@
         {
           "id": "3a478ba8-ea8f-4687-95c9-3b7f1b9562da",
           "kind": "room",
-          "x": 73,
+          "x": 69,
           "y": 90,
-          "z": 59,
-          "sx": 28,
-          "sy": 8,
-          "sz": 7,
+          "z": 51,
+          "sx": 41,
+          "sy": 6,
+          "sz": 15,
           "face": "+z",
           "axis": "z",
           "dir": 1,
@@ -8556,11 +8610,20 @@
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
-          "shape": "box",
+          "shape": "T",
           "rx": 0,
           "ry": 0,
           "rz": 0,
-          "cuts": []
+          "cuts": [
+            {
+              "su": 14,
+              "sv": 9
+            },
+            {
+              "su": 20,
+              "sv": 9
+            }
+          ]
         },
         {
           "id": "2be51bc1-d1bc-4e21-a7da-1441d21745d9",
@@ -8708,7 +8771,7 @@
         {
           "id": "72c66fd6-3c3c-46d6-9716-727e9e74e452",
           "kind": "pickup",
-          "x": 74,
+          "x": 71,
           "y": 90,
           "z": 62,
           "sx": 0.9270509831248422,
@@ -8733,7 +8796,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 4,
-          "enabled": false,
+          "enabled": true,
           "roomId": "82533313-7848-44cd-a8c7-31238fa2d7c6"
         },
         {
@@ -9202,16 +9265,16 @@
         {
           "id": "f634a8a1-7885-4063-8c1f-910cca0d3274",
           "kind": "enemy",
-          "x": 78,
+          "x": 86,
           "y": 90,
-          "z": 62,
+          "z": 54,
           "sx": 2,
           "sy": 4,
           "sz": 2,
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "rot": 2,
+          "rot": 0,
           "enemy": "Ogre",
           "patrol": false,
           "roomId": "3a478ba8-ea8f-4687-95c9-3b7f1b9562da"
@@ -9232,6 +9295,25 @@
           "enemy": "Ogre",
           "patrol": false,
           "roomId": "82533313-7848-44cd-a8c7-31238fa2d7c6"
+        },
+        {
+          "id": "1bb85be4-be50-4d9d-a942-28f2e96cc1dc",
+          "kind": "crusher",
+          "x": 102,
+          "y": 90,
+          "z": 60,
+          "sx": 4,
+          "sy": 5,
+          "sz": 6,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "3a478ba8-ea8f-4687-95c9-3b7f1b9562da",
+          "crushAxis": "x",
+          "crushDir": -1,
+          "crushAuto": true,
+          "crushLow": 0,
+          "crushHigh": 1
         }
       ]
     },

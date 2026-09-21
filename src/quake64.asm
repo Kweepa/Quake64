@@ -69,6 +69,7 @@ start
 	cli
 
 main
+	cld
 !if PROFILE = 1 {
 	jsr prof_reset_frame
 } else {
@@ -107,6 +108,7 @@ main
 	jsr maybe_stream_room			; after movement, before the next draw
 	jsr try_proximity
 	jsr proc_update
+	jsr crush_update
 	jsr update_floor
 	jsr update_fall
 	jsr update_grenades
@@ -154,6 +156,8 @@ mod_process
 !source "process.asm"
 mod_elevator
 !source "elevator.asm"
+mod_crusher
+!source "crusher.asm"
 mod_door
 !source "door.asm"
 mod_world

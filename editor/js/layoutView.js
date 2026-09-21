@@ -22,6 +22,8 @@ import {
   itemMeshFor,
   itemMeshWorldSegs,
   elevStopBottoms,
+  crushStopOrigins,
+  crushAxisX,
 } from "./model.js";
 import {
   BOX_EDGES,
@@ -1240,6 +1242,8 @@ export class LayoutView {
     if (selIds.length === 1) {
       const elev = objs.find((o) => o.id === selIds[0] && o.kind === "elevator");
       if (elev) this.#drawElevDestGhosts(ctx, doc, elev, cam, w, h);
+      const crush = objs.find((o) => o.id === selIds[0] && o.kind === "crusher");
+      if (crush) this.#drawCrushDestGhosts(ctx, doc, crush, cam, w, h);
     }
 
     if (this.drag?.kind === "box") {
@@ -1370,6 +1374,52 @@ export class LayoutView {
       ];
       for (let i = 0; i < 4; i++) {
         this.#line3(ctx, corners[i], corners[(i + 1) % 4], cam, w, h);
+      }
+    }
+    ctx.setLineDash([]);
+  }
+
+  #drawCrushDestGhosts(ctx, doc, obj, cam, w, h) {
+    const stops = crushStopOrigins(doc, obj);
+    const axisX = crushAxisX(obj);
+    const live = axisX ? obj.x | 0 : obj.z | 0;
+    const y0 = obj.y | 0;
+    const sy = obj.sy | 0;
+    const sx = obj.sx | 0;
+    const sz = obj.sz | 0;
+    ctx.strokeStyle = KINDS.crusher.color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    for (const origin of [stops.dest, stops.home]) {
+      if (origin === live) continue;
+      const x0 = axisX ? origin : obj.x | 0;
+      const z0 = axisX ? obj.z | 0 : origin;
+      const corners = [
+        { x: x0, y: y0, z: z0 },
+        { x: x0 + sx, y: y0, z: z0 },
+        { x: x0 + sx, y: y0 + sy, z: z0 },
+        { x: x0, y: y0 + sy, z: z0 },
+        { x: x0, y: y0, z: z0 + sz },
+        { x: x0 + sx, y: y0, z: z0 + sz },
+        { x: x0 + sx, y: y0 + sy, z: z0 + sz },
+        { x: x0, y: y0 + sy, z: z0 + sz },
+      ];
+      const edges = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 5],
+        [5, 6],
+        [6, 7],
+        [7, 4],
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7],
+      ];
+      for (const [a, b] of edges) {
+        this.#line3(ctx, corners[a], corners[b], cam, w, h);
       }
     }
     ctx.setLineDash([]);

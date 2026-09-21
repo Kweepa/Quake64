@@ -31,6 +31,9 @@ en_n6	!text "CHTHON"
 	!byte 0
 en_n7	!text "ZOMBIE"
 	!byte 0
+crush_name
+	!text "CRUSH"
+	!byte 0
 
 ; FormatDosName — E1MN from level_num (1..8); 1541 names are PETSCII A–Z
 FormatDosName
@@ -359,8 +362,13 @@ room_need_resident
 .rnr1
 	ldy need1
 	cpy #$ff
-	beq .rnr_yes
+	beq .rnr_crush
 	lda pose_map_hi,y
+	beq .rnr_no
+.rnr_crush
+	lda crush_need
+	beq .rnr_yes
+	lda crush_entry_hi
 	beq .rnr_no
 .rnr_yes
 	clc
@@ -392,6 +400,9 @@ clear_pose_ptrs
 	inx
 	cpx #ENEMY_NTYPES
 	bcc .cpp
+	lda #0
+	sta crush_entry_lo
+	sta crush_entry_hi
 	jsr unbind_streamed_sfx
 	rts
 
@@ -449,6 +460,35 @@ load_pose_if_needed
 	sec
 	rts
 
+; Load crush overlay if crush_need and not resident. C=0 ok, C=1 fail.
+load_crush_if_needed
+	lda crush_need
+	beq .lci_ok
+	lda crush_entry_hi
+	bne .lci_ok
+	lda crush_size_lo
+	ora crush_size_hi
+	beq .lci_err
+	lda crush_size_lo
+	pha
+	lda crush_size_hi
+	tay
+	pla
+	jsr heap_alloc
+	bcs .lci_err
+	ldx #<crush_name
+	ldy #>crush_name
+	jsr LoadPrg
+	bcs .lci_err
+	jsr patch_crush_bank
+	bcs .lci_err
+.lci_ok
+	clc
+	rts
+.lci_err
+	sec
+	rts
+
 ; A missing type invalidates the room cache. Drop all banks and reload the
 ; active room's set; this avoids relocating already-patched executable banks.
 ; Only reached when need ⊈ resident, so at least one LoadPrg runs.
@@ -463,6 +503,8 @@ stream_room_enemies
 	bcs .sre_err
 	lda need1
 	jsr load_pose_if_needed
+	bcs .sre_err
+	jsr load_crush_if_needed
 	bcs .sre_err
 	jsr rebind_streamed_sfx
 	clc
@@ -528,38 +570,21 @@ maybe_stream_room
 .msr_fail
 	jmp load_fail_hang
 
-; Bind a fused QAI1 bank at load_dest. Internal relocation records point at
-; absolute operands linked at AI_LINK_BASE. Map records point at MAP_SMC
-; operands whose low byte is the map-field id. C=0 ok, C=1 malformed.
-patch_enemy_bank
+; Parse QAI1 at load_dest: magic, sizes, pose/code bases, reloc delta.
+; Leaves src_ptr at load_dest. C=0 ok, C=1 malformed.
+patch_ai_open
 	lda load_dest
 	sta src_ptr
 	lda load_dest+1
 	sta src_ptr+1
 	ldy #0
+.pai_mag
 	lda (src_ptr),y
-	cmp #AI_BANK_MAGIC0
-	beq +
-	jmp .pab_bad
-+
+	cmp ai_bank_magic,y
+	bne .pai_bad
 	iny
-	lda (src_ptr),y
-	cmp #AI_BANK_MAGIC1
-	beq +
-	jmp .pab_bad
-+
-	iny
-	lda (src_ptr),y
-	cmp #AI_BANK_MAGIC2
-	beq +
-	jmp .pab_bad
-+
-	iny
-	lda (src_ptr),y
-	cmp #AI_BANK_MAGIC3
-	beq +
-	jmp .pab_bad
-+
+	cpy #4
+	bcc .pai_mag
 
 	ldy #AIH_CODE_SIZE
 	lda (src_ptr),y
@@ -580,7 +605,6 @@ patch_enemy_bank
 	lda (src_ptr),y
 	sta ai_map_nhi
 
-	; Runtime pose/code bases.
 	ldy #AIH_POSE_OFF
 	clc
 	lda (src_ptr),y
@@ -604,13 +628,17 @@ patch_enemy_bank
 	lda ai_code_hi
 	sbc #>AI_LINK_BASE
 	sta ai_delta_hi
+	clc
+	rts
+.pai_bad
+	sec
+	rts
 
-	; Bank and optional command entry pointer for this type.
-	ldx load_type
-	lda load_dest
-	sta AI_BANK_LO,x
-	lda load_dest+1
-	sta AI_BANK_HI,x
+ai_bank_magic
+	!byte AI_BANK_MAGIC0, AI_BANK_MAGIC1, AI_BANK_MAGIC2, AI_BANK_MAGIC3
+
+; Header entry → dst_ptr (0,0 if $ffff). src_ptr must be load_dest.
+patch_ai_resolve_entry
 	ldy #AIH_ENTRY
 	lda (src_ptr),y
 	sta dst_ptr
@@ -618,24 +646,26 @@ patch_enemy_bank
 	lda (src_ptr),y
 	sta dst_ptr+1
 	cmp #$ff
-	bne .pab_entry
+	bne .pre_rel
 	lda dst_ptr
 	cmp #$ff
-	bne .pab_entry
+	bne .pre_rel
 	lda #0
-	sta AI_ENTRY_LO,x
-	sta AI_ENTRY_HI,x
-	jmp .pab_records
-.pab_entry
+	sta dst_ptr
+	sta dst_ptr+1
+	rts
+.pre_rel
 	clc
 	lda dst_ptr
 	adc load_dest
-	sta AI_ENTRY_LO,x
+	sta dst_ptr
 	lda dst_ptr+1
 	adc load_dest+1
-	sta AI_ENTRY_HI,x
+	sta dst_ptr+1
+	rts
 
-.pab_records
+; Internal relocs then MAP_SMC patches. Crush banks have map_n=0.
+patch_ai_records
 	clc
 	lda load_dest
 	adc #AIH_SIZE
@@ -643,13 +673,11 @@ patch_enemy_bank
 	lda load_dest+1
 	adc #0
 	sta src_ptr+1
-
-; Add runtime-code minus link-base to every internal absolute operand.
-.pab_rel
+.par_rel
 	lda ai_reloc_nlo
 	ora ai_reloc_nhi
-	beq .pab_map
-	jsr .pab_record_dst
+	beq .par_map
+	jsr .par_record_dst
 	ldy #0
 	clc
 	lda (dst_ptr),y
@@ -659,15 +687,13 @@ patch_enemy_bank
 	lda (dst_ptr),y
 	adc ai_delta_hi
 	sta (dst_ptr),y
-	jsr .pab_dec_rel
-	jmp .pab_rel
-
-; Patch map accessor operands from the bound pointer table.
-.pab_map
+	jsr .par_dec_rel
+	jmp .par_rel
+.par_map
 	lda ai_map_nlo
 	ora ai_map_nhi
-	beq .pab_pose
-	jsr .pab_record_dst
+	beq .par_ok
+	jsr .par_record_dst
 	ldy #0
 	lda (dst_ptr),y
 	sta ai_field
@@ -693,11 +719,9 @@ patch_enemy_bank
 	sta src_ptr
 	lda reloc_base+1
 	sta src_ptr+1
-	jsr .pab_dec_map
-	jmp .pab_map
-
-; Record word is a bank-relative operand offset. Advance the record stream.
-.pab_record_dst
+	jsr .par_dec_map
+	jmp .par_map
+.par_record_dst
 	ldy #0
 	lda (src_ptr),y
 	clc
@@ -715,23 +739,39 @@ patch_enemy_bank
 	inc src_ptr+1
 +
 	rts
-
-.pab_dec_rel
+.par_dec_rel
 	lda ai_reloc_nlo
 	bne +
 	dec ai_reloc_nhi
 +
 	dec ai_reloc_nlo
 	rts
-.pab_dec_map
+.par_dec_map
 	lda ai_map_nlo
 	bne +
 	dec ai_map_nhi
 +
 	dec ai_map_nlo
 	rts
+.par_ok
+	rts
 
-.pab_pose
+; Bind a fused QAI1 bank at load_dest. C=0 ok, C=1 malformed.
+patch_enemy_bank
+	jsr patch_ai_open
+	bcs .pab_bad
+	ldx load_type
+	lda load_dest
+	sta AI_BANK_LO,x
+	lda load_dest+1
+	sta AI_BANK_HI,x
+	jsr patch_ai_resolve_entry
+	ldx load_type
+	lda dst_ptr
+	sta AI_ENTRY_LO,x
+	lda dst_ptr+1
+	sta AI_ENTRY_HI,x
+	jsr patch_ai_records
 	lda ai_pose_lo
 	sta load_dest
 	lda ai_pose_hi
@@ -747,6 +787,23 @@ patch_enemy_bank
 .pab_bad
 	sec
 	rts
+
+; Crush overlay: same header/relocs, entry → crush_entry, no pose.
+patch_crush_bank
+	jsr patch_ai_open
+	bcs .pcb_bad
+	jsr patch_ai_resolve_entry
+	lda dst_ptr
+	sta crush_entry_lo
+	lda dst_ptr+1
+	sta crush_entry_hi
+	jsr patch_ai_records
+	clc
+	rts
+.pcb_bad
+	sec
+	rts
+
 
 ; A=command, X=enemy index, Y=type. No entry means no-op.
 ai_invoke

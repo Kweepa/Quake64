@@ -15,6 +15,11 @@ import {
   elevHeightsAuto,
   clampElevHeights,
   elevStopBottoms,
+  crushStopsAuto,
+  clampCrushStops,
+  crushStopOrigins,
+  crushAxisX,
+  crushDirPlus,
   clampTriggerPurpose,
   TRIGGER_PURPOSES,
   TRIGGER_PURPOSE_LABELS,
@@ -2715,6 +2720,90 @@ function renderLayoutObjectFields(root, objs) {
             apply((obj) => {
               obj.elevHigh = n;
               clampElevHeights(obj);
+            })
+          )
+        )
+      );
+    }
+  }
+
+  if (kind === "crusher") {
+    const axisCur = unanimous(objs, (o) => (crushAxisX(o) ? "x" : "z"));
+    root.appendChild(
+      field(
+        "Axis",
+        selectMixed(
+          axisCur,
+          [
+            { value: "x", text: "X" },
+            { value: "z", text: "Z" },
+          ],
+          (v) =>
+            apply((obj) => {
+              obj.crushAxis = v === "z" ? "z" : "x";
+              clampCrushStops(obj);
+            })
+        )
+      )
+    );
+    const dirCur = unanimous(objs, (o) => (crushDirPlus(o) ? "1" : "-1"));
+    root.appendChild(
+      field(
+        "Initial dir",
+        selectMixed(
+          dirCur,
+          [
+            { value: "1", text: "+" },
+            { value: "-1", text: "−" },
+          ],
+          (v) =>
+            apply((obj) => {
+              obj.crushDir = v === "-1" ? -1 : 1;
+              clampCrushStops(obj);
+            })
+        )
+      )
+    );
+    const allAuto = objs.every((o) => crushStopsAuto(o));
+    root.appendChild(
+      toggleField("Auto stops", allAuto, () =>
+        apply((obj) => {
+          obj.crushAuto = !allAuto;
+          if (!obj.crushAuto) {
+            const room = roomById(doc, obj.roomId);
+            const axisX = crushAxisX(obj);
+            const origin = room ? ((axisX ? room.x : room.z) | 0) : 0;
+            const stops = crushStopOrigins(doc, { ...obj, crushAuto: true });
+            obj.crushLow = stops.home - origin;
+            obj.crushHigh = stops.dest - origin;
+            clampCrushStops(obj);
+          }
+        })
+      )
+    );
+    const auto = unanimous(objs, (o) => crushStopsAuto(o));
+    if (auto === false) {
+      for (const obj of objs) clampCrushStops(obj);
+      const lowCur = unanimous(objs, (o) => o.crushLow | 0);
+      const highCur = unanimous(objs, (o) => o.crushHigh | 0);
+      root.appendChild(
+        field(
+          "Low (vs room)",
+          numberInputMixed(lowCur, (n) =>
+            apply((obj) => {
+              obj.crushLow = n;
+              clampCrushStops(obj);
+            })
+          )
+        )
+      );
+      root.appendChild(
+        field(
+          "High (vs room)",
+          numberInputMixed(highCur, (n) =>
+            apply((obj) => {
+              obj.crushHigh = n;
+              clampCrushStops(obj);
             })
           )
         )

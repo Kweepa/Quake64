@@ -539,6 +539,14 @@ export const KINDS = {
     fixed: false,
     slope: false,
   },
+  crusher: {
+    id: "crusher",
+    label: "Crusher",
+    color: "#e07040",
+    defaultSize: [4, 6, 4],
+    fixed: false,
+    slope: false,
+  },
   slope: {
     id: "slope",
     label: "Ramp",
@@ -695,6 +703,7 @@ export const PALETTE_ORDER = [
   "platform",
   "crate",
   "elevator",
+  "crusher",
   "spawn",
   "trigger",
   "teleporter_dest",
@@ -717,6 +726,79 @@ export function clampElevHeights(obj) {
   obj.elevHigh = high;
   obj.elevAuto = elevHeightsAuto(obj);
   delete obj.elevType;
+}
+
+export function crushStopsAuto(obj) {
+  return obj?.crushAuto !== false;
+}
+
+export function crushAxisX(obj) {
+  return (obj?.crushAxis || "x") !== "z";
+}
+
+export function crushDirPlus(obj) {
+  return (obj?.crushDir ?? 1) >= 0;
+}
+
+export function clampCrushStops(obj) {
+  obj.crushAxis = crushAxisX(obj) ? "x" : "z";
+  obj.crushDir = crushDirPlus(obj) ? 1 : -1;
+  obj.crushAuto = crushStopsAuto(obj);
+  let low = Number.isFinite(Number(obj.crushLow)) ? obj.crushLow | 0 : 0;
+  let high = Number.isFinite(Number(obj.crushHigh)) ? obj.crushHigh | 0 : 1;
+  if (high <= low) high = low + 1;
+  obj.crushLow = low;
+  obj.crushHigh = high;
+}
+
+/** Travel-axis origins { home, dest } matching tools/genmap.py crush_stops. */
+export function crushStopOrigins(doc, obj) {
+  const room = roomUnderObject(doc, obj) || roomById(doc, obj.roomId);
+  const axisX = crushAxisX(obj);
+  const origin = room ? (axisX ? room.x : room.z) | 0 : 0;
+  const placed = (axisX ? obj.x : obj.z) | 0;
+  const size = (axisX ? obj.sx : obj.sz) | 0;
+  if (!crushStopsAuto(obj)) {
+    clampCrushStops(obj);
+    return { home: origin + obj.crushLow, dest: origin + obj.crushHigh };
+  }
+  const home = placed;
+  let dest = home;
+  if (room) {
+    const cols = roomGeometry(room).colliders || [room];
+    let best = cols[0];
+    let bestVol = -1;
+    const ox0 = obj.x | 0;
+    const oy0 = obj.y | 0;
+    const oz0 = obj.z | 0;
+    const ox1 = ox0 + (obj.sx | 0);
+    const oy1 = oy0 + (obj.sy | 0);
+    const oz1 = oz0 + (obj.sz | 0);
+    for (const c of cols) {
+      const cx0 = c.x | 0;
+      const cy0 = c.y | 0;
+      const cz0 = c.z | 0;
+      const cx1 = cx0 + (c.sx | 0);
+      const cy1 = cy0 + (c.sy | 0);
+      const cz1 = cz0 + (c.sz | 0);
+      const ix = Math.max(0, Math.min(ox1, cx1) - Math.max(ox0, cx0));
+      const iy = Math.max(0, Math.min(oy1, cy1) - Math.max(oy0, cy0));
+      const iz = Math.max(0, Math.min(oz1, cz1) - Math.max(oz0, cz0));
+      const vol = ix * iy * iz;
+      if (vol > bestVol) {
+        best = c;
+        bestVol = vol;
+      }
+    }
+    if (crushDirPlus(obj)) {
+      const base = (axisX ? best.x : best.z) | 0;
+      const span = (axisX ? best.sx : best.sz) | 0;
+      dest = base + span - size;
+    } else {
+      dest = (axisX ? best.x : best.z) | 0;
+    }
+  }
+  return { home, dest };
 }
 
 function xzAabbGap(a, b) {
@@ -1834,6 +1916,7 @@ export function clampObject(obj) {
   }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") clampElevHeights(obj);
+  if (obj.kind === "crusher") clampCrushStops(obj);
   if (obj.kind === "pickup") obj.pickup = clampPickupType(obj.pickup);
   if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
   if (obj.kind === "doorway") {
@@ -1916,6 +1999,13 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.elevAuto = extra.elevAuto !== false;
     if (extra.elevLow != null) obj.elevLow = extra.elevLow | 0;
     if (extra.elevHigh != null) obj.elevHigh = extra.elevHigh | 0;
+  }
+  if (kind === "crusher") {
+    obj.crushAxis = extra.crushAxis === "z" ? "z" : "x";
+    obj.crushDir = extra.crushDir != null && extra.crushDir < 0 ? -1 : 1;
+    obj.crushAuto = extra.crushAuto !== false;
+    if (extra.crushLow != null) obj.crushLow = extra.crushLow | 0;
+    if (extra.crushHigh != null) obj.crushHigh = extra.crushHigh | 0;
   }
   if (kind === "pickup") obj.pickup = clampPickupType(extra.pickup);
   if (kind === "doorway") {
@@ -2034,7 +2124,7 @@ export const MAP_MAX_BYTES = 4096;
 export const ENEMY_POSE_MAX = 4096;
 export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 
-/** Packed map header: 11 counts + 3 type ids + 6 spawn + 4 mesh lens. */
+/** Packed map header: 12 counts + 2 type pads + 6 spawn + 4 mesh lens. */
 export const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
@@ -2395,6 +2485,7 @@ export const C64_OBJECT_BYTES = {
   slope: 11,
   platform: 8,
   elevator: 11,
+  crusher: 11,
   switch: 10,
   enemy: 8,
   trigger: 10,
@@ -2512,6 +2603,7 @@ export function formatMapStats(stats) {
     "slope",
     "platform",
     "elevator",
+    "crusher",
     "switch",
     "enemy",
     "trigger",
@@ -2526,6 +2618,7 @@ export function formatMapStats(stats) {
     slope: "ramps",
     platform: "platforms",
     elevator: "elevators",
+    crusher: "crushers",
     switch: "switches",
     enemy: "enemies",
     trigger: "triggers",
@@ -2940,6 +3033,11 @@ function parseObjects(list) {
       elevAuto: o.elevAuto,
       elevLow: o.elevLow,
       elevHigh: o.elevHigh,
+      crushAxis: o.crushAxis,
+      crushDir: o.crushDir,
+      crushAuto: o.crushAuto,
+      crushLow: o.crushLow,
+      crushHigh: o.crushHigh,
       pickup: o.pickup,
       backpack: o.backpack,
       order: o.order,
@@ -3012,6 +3110,13 @@ function parseObjects(list) {
       if (o.elevLow != null) obj.elevLow = o.elevLow | 0;
       if (o.elevHigh != null) obj.elevHigh = o.elevHigh | 0;
       delete obj.elevType;
+    }
+    if (o.kind === "crusher") {
+      obj.crushAxis = o.crushAxis === "z" ? "z" : "x";
+      obj.crushDir = o.crushDir != null && o.crushDir < 0 ? -1 : 1;
+      obj.crushAuto = o.crushAuto !== false;
+      if (o.crushLow != null) obj.crushLow = o.crushLow | 0;
+      if (o.crushHigh != null) obj.crushHigh = o.crushHigh | 0;
     }
     if (o.kind === "pickup" || o.kind === "backpack") {
       obj.pickup = clampPickupType(o.pickup || o.backpack);

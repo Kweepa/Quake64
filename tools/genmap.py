@@ -29,7 +29,7 @@ ENEMY_TYPE = {
 }
 MAP_MAX_BYTES = 4096
 ROOM_MAX_TYPES = 2
-HDR_TYPE_SLOTS = 3  # packed header pad; unused by streaming
+HDR_TYPE_SLOTS = 2  # packed header pad after map_ncrush; unused by streaming
 ROOM_MAX = 24  # keep in sync with editor/js/model.js
 CRATE_MAX = 16
 SLOPE_MAX = 16
@@ -112,6 +112,70 @@ def aabb_overlap(a: dict, b: dict) -> bool:
 
 def aabb_volume(box: dict) -> int:
     return int(box["sx"]) * int(box["sy"]) * int(box["sz"])
+
+
+def crush_axis_x(obj: dict) -> bool:
+    return (obj.get("crushAxis") or "x") != "z"
+
+
+def crush_dir_plus(obj: dict) -> bool:
+    return int(obj.get("crushDir") if obj.get("crushDir") is not None else 1) >= 0
+
+
+def crush_face_of(obj: dict) -> int:
+    plus = crush_dir_plus(obj)
+    if crush_axis_x(obj):
+        return FACE["+x"] if plus else FACE["-x"]
+    return FACE["+z"] if plus else FACE["-z"]
+
+
+def crush_containing(obj: dict, room: dict) -> dict:
+    geom = room_geometry(room)
+    cols = geom.get("colliders") or [room]
+    best = None
+    best_vol = -1
+    ox0, oy0, oz0 = int(obj["x"]), int(obj["y"]), int(obj["z"])
+    ox1 = ox0 + int(obj["sx"])
+    oy1 = oy0 + int(obj["sy"])
+    oz1 = oz0 + int(obj["sz"])
+    for c in cols:
+        cx0, cy0, cz0 = int(c["x"]), int(c["y"]), int(c["z"])
+        cx1 = cx0 + int(c["sx"])
+        cy1 = cy0 + int(c["sy"])
+        cz1 = cz0 + int(c["sz"])
+        ix = max(0, min(ox1, cx1) - max(ox0, cx0))
+        iy = max(0, min(oy1, cy1) - max(oy0, cy0))
+        iz = max(0, min(oz1, cz1) - max(oz0, cz0))
+        vol = ix * iy * iz
+        if vol > best_vol:
+            best, best_vol = c, vol
+    return best or cols[0]
+
+
+def crush_stops(obj: dict, room: dict) -> tuple[int, int, int]:
+    """(face, home, dest) travel-axis origins. Auto dest is collider wall inset by size."""
+    face = crush_face_of(obj)
+    axis_x = face >= FACE["+x"]
+    origin = int(room["x"] if axis_x else room["z"])
+    placed = int(obj["x"] if axis_x else obj["z"])
+    size = int(obj["sx"] if axis_x else obj["sz"])
+    if obj.get("crushAuto") is False:
+        lo = int(obj.get("crushLow") or 0)
+        hi = int(obj.get("crushHigh") or 1)
+        if hi <= lo:
+            hi = lo + 1
+        home = origin + lo
+        dest = origin + hi
+        return face, home, dest
+    home = placed
+    col = crush_containing(obj, room)
+    if face in (FACE["+x"], FACE["+z"]):
+        base = int(col["x"] if axis_x else col["z"])
+        span = int(col["sx"] if axis_x else col["sz"])
+        dest = base + span - size
+    else:
+        dest = int(col["x"] if axis_x else col["z"])
+    return face, home, dest
 
 
 def room_index(rooms: list[dict], obj: dict, kind: str) -> int:
@@ -335,6 +399,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     plats = [o for o in objs if o["kind"] == "platform"]
     switches = [o for o in objs if o["kind"] == "switch"]
     elevs = [o for o in objs if o["kind"] == "elevator"]
+    crushers = [o for o in objs if o["kind"] == "crusher"]
     enemies = [o for o in objs if o["kind"] == "enemy"]
     triggers = [o for o in objs if o["kind"] == "trigger"]
     dests = [o for o in objs if o["kind"] == "teleporter_dest"]
@@ -724,6 +789,32 @@ def cook_one(level: dict, map_key: str) -> bytes:
         elev_room.append(ri)
         elev_id.append(map_id[id(e)])
 
+    # Crushers (X/Z ping-pong; live pos is packed x or z)
+    crush_x, crush_y, crush_z = [], [], []
+    crush_sx, crush_sy, crush_sz = [], [], []
+    crush_home, crush_dest, crush_face, crush_dir, crush_room = [], [], [], [], []
+    for c in crushers:
+        ri = room_index(rooms, c, "crusher")
+        room = rooms[ri]
+        face, home, dest = crush_stops(c, room)
+        x, z = int(c["x"]), int(c["z"])
+        if face >= FACE["+x"]:
+            x = home
+        else:
+            z = home
+        d = 0xFF if (face & 1) else 1
+        crush_x.append(x)
+        crush_y.append(int(c["y"]))
+        crush_z.append(z)
+        crush_sx.append(int(c["sx"]))
+        crush_sy.append(int(c["sy"]))
+        crush_sz.append(int(c["sz"]))
+        crush_home.append(home)
+        crush_dest.append(dest)
+        crush_face.append(face)
+        crush_dir.append(d)
+        crush_room.append(ri)
+
     # Switches
     sw_x, sw_y, sw_z = [], [], []
     sw_sx, sw_sy, sw_sz = [], [], []
@@ -906,6 +997,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
     for lst, cap, what in caps:
         if len(lst) > cap:
             raise SystemExit(f"{map_key} has {len(lst)} {what} (max {cap})")
+    if len(crushers) > 255:
+        raise SystemExit(f"{map_key} has {len(crushers)} crushers (u8 count)")
 
     type_ids: list[int] = []
     for t in en_type:
@@ -951,6 +1044,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
             len(triggers),
             len(dests),
             len(backpacks),
+            len(crushers),
         ]
     )
     payload.extend(type_ids)
@@ -1063,6 +1157,17 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(elev_dest)
     add(elev_room)
     add(elev_id)
+    add(crush_x)
+    add(crush_y)
+    add(crush_z)
+    add(crush_sx)
+    add(crush_sy)
+    add(crush_sz)
+    add(crush_home)
+    add(crush_dest)
+    add(crush_face)
+    add(crush_dir)
+    add(crush_room)
     add(sw_x)
     add(sw_y)
     add(sw_z)

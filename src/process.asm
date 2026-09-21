@@ -10,6 +10,7 @@ proc_init
 	cpx #PROC_NUM
 	bne .pi
 	jsr elev_init
+	jsr crush_init
 	lda #0
 	sta in_use
 	sta key_use

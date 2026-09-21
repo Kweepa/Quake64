@@ -2144,6 +2144,66 @@ function roomFloorY(room, x, z) {
   return y;
 }
 
+const HULL_HIT_EPS = 1e-4;
+
+function rayAxisPlane(origin, dir, axis, plane) {
+  const d = dir[axis];
+  if (Math.abs(d) < 1e-8) return null;
+  const t = (plane - origin[axis]) / d;
+  if (t < 0) return null;
+  return {
+    t,
+    point: {
+      x: origin.x + dir.x * t,
+      y: origin.y + dir.y * t,
+      z: origin.z + dir.z * t,
+    },
+  };
+}
+
+function hullFaceUV(face, p) {
+  if (face.axis === "x") return { a: p.y, b: p.z };
+  if (face.axis === "y") return { a: p.x, b: p.z };
+  return { a: p.x, b: p.y };
+}
+
+/** Ray vs one hull rectangle. Bounds use a small epsilon; plane equality is not required. */
+function rayHullFace(origin, dir, face, eps = HULL_HIT_EPS) {
+  if (!face || face.a1 <= face.a0 || face.b1 <= face.b0) return null;
+  const hit = rayAxisPlane(origin, dir, face.axis, face.plane);
+  if (!hit) return null;
+  const { a, b } = hullFaceUV(face, hit.point);
+  if (a < face.a0 - eps || a > face.a1 + eps || b < face.b0 - eps || b > face.b1 + eps) return null;
+  return { t: hit.t, point: hit.point, face };
+}
+
+/** Nearest hull-face hit on a room. `pred(face)` optional. */
+function rayRoomHull(room, origin, dir, pred) {
+  const faces = roomGeometry(room).hullFaces || [];
+  let best = null;
+  for (const f of faces) {
+    if (pred && !pred(f)) continue;
+    const hit = rayHullFace(origin, dir, f);
+    if (!hit) continue;
+    if (!best || hit.t < best.t) best = hit;
+  }
+  return best;
+}
+
+/** Highest -Y hull fragment covering (x, z), or null if outside the footprint. */
+function xzOnRoomFloor(room, x, z) {
+  const faces = roomGeometry(room).hullFaces || [];
+  let best = null;
+  for (const f of faces) {
+    if (f.axis !== "y" || f.sign !== -1) continue;
+    if (x < f.a0 - HULL_HIT_EPS || x > f.a1 + HULL_HIT_EPS || z < f.b0 - HULL_HIT_EPS || z > f.b1 + HULL_HIT_EPS) {
+      continue;
+    }
+    if (!best || f.plane > best.plane) best = f;
+  }
+  return best;
+}
+
 const DOOR_FACE_IDS = ["+x", "-x", "+z", "-z"];
 
 function faceYRange(f) {
@@ -2279,11 +2339,11 @@ function wallDims(size, face) {
 }
 
 /** Flush AABB onto hull face. `inside` puts the box in the room (switch); doors sit outside.
- * Keep Y (and off-face lateral) so a door at the bottom of a shaft does not jump to another fragment. */
-function snapBoxToHullFace(obj, f, size, inside) {
+ * Keep Y (and off-face lateral) so a door at the bottom of a shaft does not jump to another fragment.
+ * `placeHitY` (placement) centers Y on the ray hit and clamps into the fragment. */
+function snapBoxToHullFace(obj, f, size, inside, placeHitY) {
   const cx = obj.x + obj.sx / 2;
   const cz = obj.z + obj.sz / 2;
-  const floorY = obj.y | 0;
   const dims = wallDims(size, f);
   obj.face = f.faceId;
   obj.sx = dims.sx;
@@ -2293,7 +2353,14 @@ function snapBoxToHullFace(obj, f, size, inside) {
     if (inside) return sign > 0 ? plane - thick : plane;
     return sign > 0 ? plane : plane - thick;
   };
-  obj.y = floorY;
+  if (placeHitY != null && Number.isFinite(placeHitY)) {
+    const [fy0, fy1] = faceYRange(f);
+    obj.y = Math.round(placeHitY - obj.sy / 2);
+    const maxY = fy1 - obj.sy;
+    obj.y = maxY >= fy0 ? Math.max(fy0, Math.min(maxY, obj.y)) : fy0;
+  } else {
+    obj.y = obj.y | 0;
+  }
   if (f.axis === "x") {
     obj.x = along(f.sign, f.plane, obj.sx);
     obj.z = Math.round(cz - obj.sz / 2);
@@ -2311,6 +2378,21 @@ function snapBoxToHullFace(obj, f, size, inside) {
   if (obj.y < 0) obj.y = 0;
   if (obj.z < 0) obj.z = 0;
   return obj;
+}
+
+function snapToHullFace(obj, face, size, inside, placeHitY) {
+  if (!obj || !face) return obj;
+  return snapBoxToHullFace(obj, face, size, inside, placeHitY);
+}
+
+function snapDoorToFace(door, face, placeHitY) {
+  if (!door || !face) return door;
+  return snapBoxToHullFace(door, face, doorSnapSize(door), false, placeHitY);
+}
+
+function snapSwitchToFace(sw, face, placeHitY) {
+  if (!sw || !face) return sw;
+  return snapBoxToHullFace(sw, face, SWITCH_SIZE, true, placeHitY);
 }
 
 function snapDoorToRoom(door, room) {
@@ -2902,6 +2984,14 @@ const KINDS = {
     fixed: false,
     slope: false,
   },
+  crusher: {
+    id: "crusher",
+    label: "Crusher",
+    color: "#e07040",
+    defaultSize: [4, 6, 4],
+    fixed: false,
+    slope: false,
+  },
   slope: {
     id: "slope",
     label: "Ramp",
@@ -3058,6 +3148,7 @@ const PALETTE_ORDER = [
   "platform",
   "crate",
   "elevator",
+  "crusher",
   "spawn",
   "trigger",
   "teleporter_dest",
@@ -3080,6 +3171,79 @@ function clampElevHeights(obj) {
   obj.elevHigh = high;
   obj.elevAuto = elevHeightsAuto(obj);
   delete obj.elevType;
+}
+
+function crushStopsAuto(obj) {
+  return obj?.crushAuto !== false;
+}
+
+function crushAxisX(obj) {
+  return (obj?.crushAxis || "x") !== "z";
+}
+
+function crushDirPlus(obj) {
+  return (obj?.crushDir ?? 1) >= 0;
+}
+
+function clampCrushStops(obj) {
+  obj.crushAxis = crushAxisX(obj) ? "x" : "z";
+  obj.crushDir = crushDirPlus(obj) ? 1 : -1;
+  obj.crushAuto = crushStopsAuto(obj);
+  let low = Number.isFinite(Number(obj.crushLow)) ? obj.crushLow | 0 : 0;
+  let high = Number.isFinite(Number(obj.crushHigh)) ? obj.crushHigh | 0 : 1;
+  if (high <= low) high = low + 1;
+  obj.crushLow = low;
+  obj.crushHigh = high;
+}
+
+/** Travel-axis origins { home, dest } matching tools/genmap.py crush_stops. */
+function crushStopOrigins(doc, obj) {
+  const room = roomUnderObject(doc, obj) || roomById(doc, obj.roomId);
+  const axisX = crushAxisX(obj);
+  const origin = room ? (axisX ? room.x : room.z) | 0 : 0;
+  const placed = (axisX ? obj.x : obj.z) | 0;
+  const size = (axisX ? obj.sx : obj.sz) | 0;
+  if (!crushStopsAuto(obj)) {
+    clampCrushStops(obj);
+    return { home: origin + obj.crushLow, dest: origin + obj.crushHigh };
+  }
+  const home = placed;
+  let dest = home;
+  if (room) {
+    const cols = roomGeometry(room).colliders || [room];
+    let best = cols[0];
+    let bestVol = -1;
+    const ox0 = obj.x | 0;
+    const oy0 = obj.y | 0;
+    const oz0 = obj.z | 0;
+    const ox1 = ox0 + (obj.sx | 0);
+    const oy1 = oy0 + (obj.sy | 0);
+    const oz1 = oz0 + (obj.sz | 0);
+    for (const c of cols) {
+      const cx0 = c.x | 0;
+      const cy0 = c.y | 0;
+      const cz0 = c.z | 0;
+      const cx1 = cx0 + (c.sx | 0);
+      const cy1 = cy0 + (c.sy | 0);
+      const cz1 = cz0 + (c.sz | 0);
+      const ix = Math.max(0, Math.min(ox1, cx1) - Math.max(ox0, cx0));
+      const iy = Math.max(0, Math.min(oy1, cy1) - Math.max(oy0, cy0));
+      const iz = Math.max(0, Math.min(oz1, cz1) - Math.max(oz0, cz0));
+      const vol = ix * iy * iz;
+      if (vol > bestVol) {
+        best = c;
+        bestVol = vol;
+      }
+    }
+    if (crushDirPlus(obj)) {
+      const base = (axisX ? best.x : best.z) | 0;
+      const span = (axisX ? best.sx : best.sz) | 0;
+      dest = base + span - size;
+    } else {
+      dest = (axisX ? best.x : best.z) | 0;
+    }
+  }
+  return { home, dest };
 }
 
 function xzAabbGap(a, b) {
@@ -4197,6 +4361,7 @@ function clampObject(obj) {
   }
   if (usesLinkTag(obj.kind)) obj.tag = clampTag(obj.tag);
   if (obj.kind === "elevator") clampElevHeights(obj);
+  if (obj.kind === "crusher") clampCrushStops(obj);
   if (obj.kind === "pickup") obj.pickup = clampPickupType(obj.pickup);
   if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
   if (obj.kind === "doorway") {
@@ -4279,6 +4444,13 @@ function createObject(kind, x, y, z, extra = {}) {
     obj.elevAuto = extra.elevAuto !== false;
     if (extra.elevLow != null) obj.elevLow = extra.elevLow | 0;
     if (extra.elevHigh != null) obj.elevHigh = extra.elevHigh | 0;
+  }
+  if (kind === "crusher") {
+    obj.crushAxis = extra.crushAxis === "z" ? "z" : "x";
+    obj.crushDir = extra.crushDir != null && extra.crushDir < 0 ? -1 : 1;
+    obj.crushAuto = extra.crushAuto !== false;
+    if (extra.crushLow != null) obj.crushLow = extra.crushLow | 0;
+    if (extra.crushHigh != null) obj.crushHigh = extra.crushHigh | 0;
   }
   if (kind === "pickup") obj.pickup = clampPickupType(extra.pickup);
   if (kind === "doorway") {
@@ -4397,7 +4569,7 @@ const MAP_MAX_BYTES = 4096;
 const ENEMY_POSE_MAX = 4096;
 const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 
-/** Packed map header: 11 counts + 3 type ids + 6 spawn + 4 mesh lens. */
+/** Packed map header: 12 counts + 2 type pads + 6 spawn + 4 mesh lens. */
 const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
@@ -4758,6 +4930,7 @@ const C64_OBJECT_BYTES = {
   slope: 11,
   platform: 8,
   elevator: 11,
+  crusher: 11,
   switch: 10,
   enemy: 8,
   trigger: 10,
@@ -4875,6 +5048,7 @@ function formatMapStats(stats) {
     "slope",
     "platform",
     "elevator",
+    "crusher",
     "switch",
     "enemy",
     "trigger",
@@ -4889,6 +5063,7 @@ function formatMapStats(stats) {
     slope: "ramps",
     platform: "platforms",
     elevator: "elevators",
+    crusher: "crushers",
     switch: "switches",
     enemy: "enemies",
     trigger: "triggers",
@@ -5303,6 +5478,11 @@ function parseObjects(list) {
       elevAuto: o.elevAuto,
       elevLow: o.elevLow,
       elevHigh: o.elevHigh,
+      crushAxis: o.crushAxis,
+      crushDir: o.crushDir,
+      crushAuto: o.crushAuto,
+      crushLow: o.crushLow,
+      crushHigh: o.crushHigh,
       pickup: o.pickup,
       backpack: o.backpack,
       order: o.order,
@@ -5375,6 +5555,13 @@ function parseObjects(list) {
       if (o.elevLow != null) obj.elevLow = o.elevLow | 0;
       if (o.elevHigh != null) obj.elevHigh = o.elevHigh | 0;
       delete obj.elevType;
+    }
+    if (o.kind === "crusher") {
+      obj.crushAxis = o.crushAxis === "z" ? "z" : "x";
+      obj.crushDir = o.crushDir != null && o.crushDir < 0 ? -1 : 1;
+      obj.crushAuto = o.crushAuto !== false;
+      if (o.crushLow != null) obj.crushLow = o.crushLow | 0;
+      if (o.crushHigh != null) obj.crushHigh = o.crushHigh | 0;
     }
     if (o.kind === "pickup" || o.kind === "backpack") {
       obj.pickup = clampPickupType(o.pickup || o.backpack);
@@ -8616,12 +8803,17 @@ class LayoutView {
     return null;
   }
 
-  #rayHitRoom(room, ray) {
+  /** Hull hit across rooms. Selected room wins if the ray hits it at all. */
+  #nearestRoomHull(rooms, ray, pred, focus) {
+    if (focus && rooms.some((r) => r.id === focus.id)) {
+      const hit = rayRoomHull(focus, ray.origin, ray.dir, pred);
+      if (hit) return { ...hit, room: focus };
+    }
     let best = null;
-    for (const c of roomGeometry(room).colliders) {
-      const hit = rayAabb(ray.origin, ray.dir, c);
-      if (!hit || hit.t < 0) continue;
-      if (!best || hit.t < best.t) best = hit;
+    for (const room of rooms) {
+      const hit = rayRoomHull(room, ray.origin, ray.dir, pred);
+      if (!hit) continue;
+      if (!best || hit.t < best.t) best = { ...hit, room };
     }
     return best;
   }
@@ -8650,7 +8842,28 @@ class LayoutView {
     return { t: best.t, point: best.point, y: best.point.y };
   }
 
-  /** Drop pose from screen: visible rooms, selected first; walkable tops beat floor. */
+  /** If a non-floor hull hit still maps onto a floor fragment, drop there (no ray slide). */
+  #floorPoseFromHull(hit, pose) {
+    const f = hit.face;
+    if (!f) return null;
+    if (f.axis === "y" && f.sign === -1) {
+      return pose(hit.point.x, Math.round(f.plane), hit.point.z, hit.room, true);
+    }
+    if (f.axis === "y") {
+      const floor = xzOnRoomFloor(hit.room, hit.point.x, hit.point.z);
+      if (!floor) return null;
+      return pose(hit.point.x, Math.round(floor.plane), hit.point.z, hit.room, true);
+    }
+    let x = hit.point.x;
+    let z = hit.point.z;
+    if (f.axis === "x") x = f.plane - f.sign;
+    else if (f.axis === "z") z = f.plane - f.sign;
+    const floor = xzOnRoomFloor(hit.room, x, z);
+    if (!floor) return null;
+    return pose(x, Math.round(floor.plane), z, hit.room, true);
+  }
+
+  /** Drop pose from screen: hull faces under the cursor; walkable tops beat floor. */
   placeAtScreen(mx, my, kind) {
     const doc = this.opts.getDoc();
     const ray = screenRay(mx, my, this.camera, this.cssW, this.cssH);
@@ -8669,58 +8882,58 @@ class LayoutView {
       const visible = this.#visibleObjects(doc);
       const visRooms = visible.filter((o) => o.kind === "room");
       const focus = this.#selectedPlaceRoom(doc);
-      let bestRoom = null;
-      let bestHit = null;
-      if (focus && visRooms.some((r) => r.id === focus.id)) {
-        const hit = this.#rayHitRoom(focus, ray);
-        if (hit) {
-          bestRoom = focus;
-          bestHit = hit;
-        }
-      }
-      if (!bestRoom) {
-        let bestT = Infinity;
-        for (const room of visRooms) {
-          const hit = this.#rayHitRoom(room, ray);
-          if (!hit || hit.t >= bestT) continue;
-          bestT = hit.t;
-          bestRoom = room;
-          bestHit = hit;
-        }
-      }
 
-      if (kind !== "doorway" && kind !== "switch") {
+      if (kind === "doorway" || kind === "switch") {
+        const wall = this.#nearestRoomHull(visRooms, ray, (f) => f.axis !== "y", focus);
+        if (wall) {
+          return {
+            ...pose(
+              wall.point.x,
+              Math.round(wall.point.y - def.defaultSize[1] / 2),
+              wall.point.z,
+              wall.room,
+              false
+            ),
+            face: wall.face,
+            hitY: wall.point.y,
+          };
+        }
+      } else {
+        const floorHit = this.#nearestRoomHull(
+          visRooms,
+          ray,
+          (f) => f.axis === "y" && f.sign === -1,
+          focus
+        );
         let walk = null;
         for (const obj of visible) {
           const hit = this.#rayWalkableTop(obj, ray);
           if (!hit) continue;
           if (!walk || hit.t < walk.t) walk = { ...hit, obj };
         }
-        if (walk) {
-          const fy = bestRoom ? roomFloorY(bestRoom, walk.point.x, walk.point.z) : null;
-          const floor =
-            fy != null
-              ? intersectPlane(ray.origin, ray.dir, { x: 0, y: fy, z: 0 }, { x: 0, y: 1, z: 0 })
-              : null;
-          if (!floor || walk.t <= floor.t + 1e-4) {
-            const room = roomById(doc, walk.obj.roomId) || bestRoom;
-            return pose(walk.point.x, Math.round(walk.y), walk.point.z, room, false);
-          }
+        if (walk && (!floorHit || walk.t <= floorHit.t + 1e-4)) {
+          const room = roomById(doc, walk.obj.roomId) || floorHit?.room;
+          return pose(walk.point.x, Math.round(walk.y), walk.point.z, room, false);
         }
-      }
-
-      if (bestRoom) {
-        const fy = roomFloorY(bestRoom, bestHit.point.x, bestHit.point.z);
-        const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: fy, z: 0 }, { x: 0, y: 1, z: 0 });
-        const pt = floor?.point || bestHit.point;
-        return pose(pt.x, fy, pt.z, bestRoom, true);
+        if (floorHit) {
+          return pose(
+            floorHit.point.x,
+            Math.round(floorHit.face.plane),
+            floorHit.point.z,
+            floorHit.room,
+            true
+          );
+        }
+        const any = this.#nearestRoomHull(visRooms, ray, null, focus);
+        const dropped = any && this.#floorPoseFromHull(any, pose);
+        if (dropped) return dropped;
       }
     }
 
     const gy = this.gridY;
-    const floor = intersectPlane(ray.origin, ray.dir, { x: 0, y: gy, z: 0 }, { x: 0, y: 1, z: 0 });
-    if (floor) {
-      return pose(floor.point.x, gy, floor.point.z, undefined, true);
+    const grid = intersectPlane(ray.origin, ray.dir, { x: 0, y: gy, z: 0 }, { x: 0, y: 1, z: 0 });
+    if (grid) {
+      return pose(grid.point.x, gy, grid.point.z, undefined, true);
     }
     const { forward } = lookVectors(this.camera.yaw, this.camera.pitch);
     return pose(this.camera.x + forward.x * 12, gy, this.camera.z + forward.z * 12, undefined, true);
@@ -8876,6 +9089,8 @@ class LayoutView {
     if (selIds.length === 1) {
       const elev = objs.find((o) => o.id === selIds[0] && o.kind === "elevator");
       if (elev) this.#drawElevDestGhosts(ctx, doc, elev, cam, w, h);
+      const crush = objs.find((o) => o.id === selIds[0] && o.kind === "crusher");
+      if (crush) this.#drawCrushDestGhosts(ctx, doc, crush, cam, w, h);
     }
 
     if (this.drag?.kind === "box") {
@@ -9006,6 +9221,52 @@ class LayoutView {
       ];
       for (let i = 0; i < 4; i++) {
         this.#line3(ctx, corners[i], corners[(i + 1) % 4], cam, w, h);
+      }
+    }
+    ctx.setLineDash([]);
+  }
+
+  #drawCrushDestGhosts(ctx, doc, obj, cam, w, h) {
+    const stops = crushStopOrigins(doc, obj);
+    const axisX = crushAxisX(obj);
+    const live = axisX ? obj.x | 0 : obj.z | 0;
+    const y0 = obj.y | 0;
+    const sy = obj.sy | 0;
+    const sx = obj.sx | 0;
+    const sz = obj.sz | 0;
+    ctx.strokeStyle = KINDS.crusher.color;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    for (const origin of [stops.dest, stops.home]) {
+      if (origin === live) continue;
+      const x0 = axisX ? origin : obj.x | 0;
+      const z0 = axisX ? obj.z | 0 : origin;
+      const corners = [
+        { x: x0, y: y0, z: z0 },
+        { x: x0 + sx, y: y0, z: z0 },
+        { x: x0 + sx, y: y0 + sy, z: z0 },
+        { x: x0, y: y0 + sy, z: z0 },
+        { x: x0, y: y0, z: z0 + sz },
+        { x: x0 + sx, y: y0, z: z0 + sz },
+        { x: x0 + sx, y: y0 + sy, z: z0 + sz },
+        { x: x0, y: y0 + sy, z: z0 + sz },
+      ];
+      const edges = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 5],
+        [5, 6],
+        [6, 7],
+        [7, 4],
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7],
+      ];
+      for (const [a, b] of edges) {
+        this.#line3(ctx, corners[a], corners[b], cam, w, h);
       }
     }
     ctx.setLineDash([]);
@@ -13450,10 +13711,9 @@ function canvasClientToScreen(e) {
   };
 }
 
-/** Owner room for palette drop: doorway → selected/last; else ray-hit room, miss → selected/last. */
+/** Owner room for palette drop: ray-hit room, miss → selected/last. */
 function placeOwner(kind, hitRoom) {
   if (kind === "room") return null;
-  if (kind === "doorway") return placementRoom();
   return hitRoom || placementRoom();
 }
 
@@ -13467,7 +13727,11 @@ function previewObjectAtScreen(place, mx, my) {
     extra.enabled = !activeMap(doc).objects.some((o) => o.kind === "spawn");
   }
   const obj = createObject(kind, p.x, p.y, p.z, extra);
-  if (owner && kind !== "room" && kind !== "doorway" && p.floorSnap !== false) {
+  if (kind === "doorway" && p.face) {
+    snapDoorToFace(obj, p.face, p.hitY);
+  } else if (kind === "switch" && p.face) {
+    snapSwitchToFace(obj, p.face, p.hitY);
+  } else if (owner && kind !== "room" && p.floorSnap !== false) {
     obj.y = roomFloorY(owner, obj.x + obj.sx / 2, obj.z + obj.sz / 2);
   }
   clampObject(obj);
@@ -13566,10 +13830,7 @@ function finishPaletteDrop(e) {
   const obj = previewObjectAtScreen(place, mx, my);
   activeMap(doc).objects.push(obj);
   if (kind === "doorway") {
-    assignDoorRooms(doc, obj, owner);
-    clampObject(obj);
-  } else if (kind === "switch" && owner) {
-    snapSwitchToRoom(obj, owner);
+    assignDoorRooms(doc, obj, owner, false);
     clampObject(obj);
   }
   if (kind === "room") lastRoomId = obj.id;
@@ -14994,6 +15255,90 @@ function renderLayoutObjectFields(root, objs) {
             apply((obj) => {
               obj.elevHigh = n;
               clampElevHeights(obj);
+            })
+          )
+        )
+      );
+    }
+  }
+
+  if (kind === "crusher") {
+    const axisCur = unanimous(objs, (o) => (crushAxisX(o) ? "x" : "z"));
+    root.appendChild(
+      field(
+        "Axis",
+        selectMixed(
+          axisCur,
+          [
+            { value: "x", text: "X" },
+            { value: "z", text: "Z" },
+          ],
+          (v) =>
+            apply((obj) => {
+              obj.crushAxis = v === "z" ? "z" : "x";
+              clampCrushStops(obj);
+            })
+        )
+      )
+    );
+    const dirCur = unanimous(objs, (o) => (crushDirPlus(o) ? "1" : "-1"));
+    root.appendChild(
+      field(
+        "Initial dir",
+        selectMixed(
+          dirCur,
+          [
+            { value: "1", text: "+" },
+            { value: "-1", text: "−" },
+          ],
+          (v) =>
+            apply((obj) => {
+              obj.crushDir = v === "-1" ? -1 : 1;
+              clampCrushStops(obj);
+            })
+        )
+      )
+    );
+    const allAuto = objs.every((o) => crushStopsAuto(o));
+    root.appendChild(
+      toggleField("Auto stops", allAuto, () =>
+        apply((obj) => {
+          obj.crushAuto = !allAuto;
+          if (!obj.crushAuto) {
+            const room = roomById(doc, obj.roomId);
+            const axisX = crushAxisX(obj);
+            const origin = room ? ((axisX ? room.x : room.z) | 0) : 0;
+            const stops = crushStopOrigins(doc, { ...obj, crushAuto: true });
+            obj.crushLow = stops.home - origin;
+            obj.crushHigh = stops.dest - origin;
+            clampCrushStops(obj);
+          }
+        })
+      )
+    );
+    const auto = unanimous(objs, (o) => crushStopsAuto(o));
+    if (auto === false) {
+      for (const obj of objs) clampCrushStops(obj);
+      const lowCur = unanimous(objs, (o) => o.crushLow | 0);
+      const highCur = unanimous(objs, (o) => o.crushHigh | 0);
+      root.appendChild(
+        field(
+          "Low (vs room)",
+          numberInputMixed(lowCur, (n) =>
+            apply((obj) => {
+              obj.crushLow = n;
+              clampCrushStops(obj);
+            })
+          )
+        )
+      );
+      root.appendChild(
+        field(
+          "High (vs room)",
+          numberInputMixed(highCur, (n) =>
+            apply((obj) => {
+              obj.crushHigh = n;
+              clampCrushStops(obj);
             })
           )
         )

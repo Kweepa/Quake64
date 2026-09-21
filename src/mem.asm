@@ -227,8 +227,32 @@ ENEMY_DATA_LIMIT	= AI_ENTRY_LO
 AI_BANK_LO	= $0886			; base of complete fused bank per type
 AI_BANK_HI	= $088E
 AI_LOW_END	= $0896
-!if AI_LOW_END > REBOOT_STUB {
-	!error "Low-RAM enemy data/AI pointers overlap reboot stub"
+; Crusher SoA pointers + tiny play scratch. Not in $0400 — that table
+; ends at frame13_lo. Access via lda_cy/sta_cy (mp_l),y.
+crush_x		= AI_LOW_END
+crush_y		= crush_x + 2
+crush_z		= crush_y + 2
+crush_sx	= crush_z + 2
+crush_sy	= crush_sx + 2
+crush_sz	= crush_sy + 2
+crush_home	= crush_sz + 2
+crush_dest	= crush_home + 2
+crush_face	= crush_dest + 2
+crush_dir	= crush_face + 2		; live sign $01 / $FF
+crush_room	= crush_dir + 2
+crush_entry_lo	= crush_room + 2
+crush_entry_hi	= crush_entry_lo + 1
+crush_need	= crush_entry_hi + 1	; 1 = current room owns a crusher
+crush_skip	= crush_need + 1	; $ff none, else SoA index for pos_ok
+crush_st	= crush_skip + 1	; sta_cy scratch
+crush_acc_l	= crush_st + 1
+crush_acc_h	= crush_acc_l + 1
+crush_i		= crush_acc_h + 1
+crush_lo	= crush_i + 1		; min(home,dest) while stepping
+crush_hi	= crush_lo + 1
+CRUSH_BSS_END	= crush_hi + 1
+!if CRUSH_BSS_END > REBOOT_STUB {
+	!error "crusher BSS overlaps reboot stub"
 }
 
 AI_BANK_MAGIC0	= 'Q'
@@ -416,6 +440,7 @@ proc_tmp4	= $CBBC
 proc_tmp5	= $CBBD
 MOTION_STEP_MS	= 64
 ELEV_STEP_MS	= 128			; half elevator travel speed vs doors
+CRUSH_STEP_MS	= 512			; 1/4 elevator travel (4× ELEV_STEP_MS)
 DOOR_RECLOSE_MS	= 5000
 ELEV_WAIT_MS	= 5000
 STATUS_MS	= 5000			; backpack / status HUD line

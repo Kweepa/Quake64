@@ -16,7 +16,8 @@ map_nenemies	= $0407
 map_ntrigs	= $0408
 map_ndests	= $0409
 map_nbackpacks	= $040A
-map_type0	= $040B
+; was map_type0 (unused streaming type pad)
+map_ncrush	= $040B
 map_type1	= $040C
 map_type2	= $040D
 map_nux	= $040E

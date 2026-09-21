@@ -6,6 +6,7 @@
 ; ------------------------------------------------------------------
 set_room_idx
 	sta room_idx
+	jsr crush_reset
 	lda #0
 	sta trig_inside
 	lda msg_on
@@ -181,13 +182,20 @@ door_y_ok
 	rts
 
 ; ------------------------------------------------------------------
-; try_door_wish — blocked wish into a door slab at sill height.
+; try_door_wish — blocked dest-ward wish into a door slab at sill height.
 ; Save cam, add wish on blocked axes, hit door AABB + door_y_ok.
-; Unlocked + other: snap through, C=1. Locked: key HUD, restore, C=0.
+; Wish on the door axis must point through. Unlocked + other: snap
+; into dest inset, C=1. Locked: key HUD, restore, C=0.
 ; ------------------------------------------------------------------
 try_door_wish
 	lda door_blk
+	beq .tdw_idle
+	lda wish_dx
+	ora wish_dxh
+	ora wish_dz
+	ora wish_dzh
 	bne .tdw_go
+.tdw_idle
 	clc
 	rts
 .tdw_go
@@ -254,6 +262,8 @@ try_door_wish
 	bcc .tdw_n
 	jsr door_y_ok
 	bcc .tdw_n
+	jsr .tdw_thru
+	bcc .tdw_n
 	jsr door_unlocked
 	bcc .tdw_lock
 	jsr door_other_room
@@ -285,7 +295,46 @@ try_door_wish
 	clc
 	rts
 
-; Dest side of the slab (baked face points into this room). Frac 0.
+; Dest-ward wish on the door axis. Plus face: hi BMI. Minus: lo|hi != 0, hi BPL.
+.tdw_thru
+	+lda_mx door_face
+	lsr				; C=minus, A=0 Z / 1 X
+	bcs .tdw_tm
+	cmp #1
+	bcs .tdw_tpx
+	lda wish_dzh
+	bmi .tdw_tyes
+	clc
+	rts
+.tdw_tpx
+	lda wish_dxh
+	bmi .tdw_tyes
+	clc
+	rts
+.tdw_tm
+	cmp #1
+	bcs .tdw_tmx
+	lda wish_dz
+	ora wish_dzh
+	beq .tdw_tno
+	lda wish_dzh
+	bmi .tdw_tno
+.tdw_tyes
+	sec
+	rts
+.tdw_tno
+	clc
+	rts
+.tdw_tmx
+	lda wish_dx
+	ora wish_dxh
+	beq .tdw_tno
+	lda wish_dxh
+	bmi .tdw_tno
+	sec
+	rts
+
+; Dest inset (PLAYER_R past the slab). Frac 0.
 .tdw_snap
 	+lda_mx door_face
 	lsr				; C=minus, A=0 Z / 1 X
@@ -295,9 +344,10 @@ try_door_wish
 	+lda_mx door_z
 	plp
 	bcs .tdw_adz
-	beq .tdw_zst
 	sec
-	sbc #1
+	sbc #2
+	bcs .tdw_zst
+	lda #0
 .tdw_zst
 	sta cam_zh
 	lda #0
@@ -306,14 +356,17 @@ try_door_wish
 .tdw_adz
 	clc
 	+adc_mx door_sz
+	clc
+	adc #1
 	jmp .tdw_zst
 .tdw_sx
 	+lda_mx door_x
 	plp
 	bcs .tdw_adx
-	beq .tdw_xst
 	sec
-	sbc #1
+	sbc #2
+	bcs .tdw_xst
+	lda #0
 .tdw_xst
 	sta cam_xh
 	lda #0
@@ -322,4 +375,6 @@ try_door_wish
 .tdw_adx
 	clc
 	+adc_mx door_sx
+	clc
+	adc #1
 	jmp .tdw_xst

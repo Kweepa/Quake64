@@ -51,6 +51,34 @@ def main() -> None:
             f"reloc={rel_n} map={map_n} pose={len(payload) - pose_off}"
         )
 
+    crush = ENEMY_DIR / "crush.prg"
+    if crush.is_file() and crush.stat().st_size > 2:
+        path = crush
+        dos = "crush"
+        raw = path.read_bytes()
+        payload = raw[2:]
+        magic, code_n, rel_n, map_n, entry, pose_off = struct.unpack_from(
+            "<4sHHHHH", payload, 0
+        )
+        if magic != MAGIC:
+            raise SystemExit(f"{path}: bad magic {magic!r}")
+        code_off = HEADER_SIZE + 2 * (rel_n + map_n)
+        if pose_off != code_off + code_n or pose_off >= len(payload):
+            raise SystemExit(f"{path}: inconsistent code/pose offsets")
+        if entry != NO_ENTRY and not (code_off <= entry < pose_off):
+            raise SystemExit(f"{path}: entry outside code")
+        words = list(struct.unpack_from(f"<{rel_n + map_n}H", payload, HEADER_SIZE))
+        internal = [off - code_off for off in words[:rel_n]]
+        map_sites = [off - code_off for off in words[rel_n:]]
+        code = payload[code_off:pose_off]
+        scanned_internal, scanned_map = scan(code, link, sentinel)
+        if internal != scanned_internal or map_sites != scanned_map:
+            raise SystemExit(f"{path}: relocation metadata does not match code")
+        print(
+            f"{dos}: ok bank={len(payload)} code={code_n} "
+            f"reloc={rel_n} map={map_n} pose={len(payload) - pose_off}"
+        )
+
 
 if __name__ == "__main__":
     main()

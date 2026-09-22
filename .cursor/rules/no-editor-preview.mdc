@@ -1,0 +1,14 @@
+---
+description: Do not open the map editor to verify a change
+alwaysApply: true
+---
+
+# Editor testing is Steve's
+
+Do not open the Quake64 editor to check a change. Steve tests it.
+
+- Do not load `editor/index.html` in a browser (`file://` or `http://`).
+- Do not start a local server so the editor can be viewed.
+- Do not drive the editor with browser tools (navigate, click, snapshot, CDP) to confirm UI.
+
+Edit `editor/js/` and `editor/styles.css`, run `python editor/bundle_editor.py` when the bundle needs updating, and stop. Report what changed. Leave the click-through to him.

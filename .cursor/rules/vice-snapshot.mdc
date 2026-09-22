@@ -1,0 +1,12 @@
+---
+description: Find the VICE snapshot by listing the repo root
+alwaysApply: true
+---
+
+# VICE snapshot location
+
+The play snapshot is a `*.vsf` in the repo root (`C:\dev\Quake64\vice-snapshot-*.vsf`). It is gitignored.
+
+- Find it by listing that directory (`Get-ChildItem *.vsf` or `dir *.vsf` in the root).
+- Do not look for it with git (`status`, `ls-files`, `log`). Git will not show it.
+- Do not run a workspace-wide or machine-wide file search for it.

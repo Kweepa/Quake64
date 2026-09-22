@@ -59,6 +59,7 @@ import {
   mapStats,
   formatMapStats,
   formatMapLoadTitle,
+  mapKindStatRows,
   packedPoseBytes,
   ENEMY_POSE_MAX,
   ROOM_MAX,
@@ -3048,6 +3049,16 @@ function renderInspector() {
         refreshAll();
       });
       root.appendChild(field("Name", nameInp));
+      for (const row of mapKindStatRows(mapStats(doc))) {
+        const line = document.createElement("div");
+        line.className = "field level-stat";
+        const label = document.createElement("span");
+        label.textContent = row.label;
+        const val = document.createElement("span");
+        val.textContent = String(row.n);
+        line.append(label, val);
+        root.appendChild(line);
+      }
       return;
     }
     h.textContent = layoutInspectorTitle(objs);

@@ -655,6 +655,17 @@ button:disabled {
   white-space: nowrap;
 }
 
+.field.level-stat {
+  margin-bottom: 0.12rem;
+}
+
+.field.level-stat > span:last-child {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
 .field.vec3 > span {
   flex: 0 0 3rem;
   min-width: 3rem;

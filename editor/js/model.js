@@ -2593,56 +2593,69 @@ export function mapStats(doc) {
   };
 }
 
+const MAP_KIND_ORDER = [
+  "room",
+  "doorway",
+  "crate",
+  "slope",
+  "platform",
+  "elevator",
+  "crusher",
+  "switch",
+  "enemy",
+  "trigger",
+  "spawn",
+  "pickup",
+  "teleporter_dest",
+];
+
+const MAP_KIND_PLURALS = {
+  room: "rooms",
+  doorway: "doors",
+  crate: "crates",
+  slope: "ramps",
+  platform: "platforms",
+  elevator: "elevators",
+  crusher: "crushers",
+  switch: "switches",
+  enemy: "enemies",
+  trigger: "triggers",
+  spawn: "spawns",
+  pickup: "pickups",
+  teleporter_dest: "dests",
+};
+
+function mapKindCountLabel(kind, n) {
+  const one = KINDS[kind]?.label?.toLowerCase() || kind;
+  return n === 1 ? one : MAP_KIND_PLURALS[kind] || `${one}s`;
+}
+
+/** Viewport strip: memory, capped counts, and the per-room type limit. */
 export function formatMapStats(stats) {
-  const load = `${stats.c64Bytes}:${stats.loadBytes}`;
-  const parts = [load, `${stats.total}/${stats.max} objects`];
-  const order = [
-    "room",
-    "doorway",
-    "crate",
-    "slope",
-    "platform",
-    "elevator",
-    "crusher",
-    "switch",
-    "enemy",
-    "trigger",
-    "spawn",
-    "pickup",
-    "teleporter_dest",
-  ];
-  const plurals = {
-    room: "rooms",
-    doorway: "doors",
-    crate: "crates",
-    slope: "ramps",
-    platform: "platforms",
-    elevator: "elevators",
-    crusher: "crushers",
-    switch: "switches",
-    enemy: "enemies",
-    trigger: "triggers",
-    spawn: "spawns",
-    pickup: "pickups",
-    teleporter_dest: "dests",
-  };
-  for (const kind of order) {
-    const n = stats.byKind[kind];
+  const rooms = stats.byKind.room || 0;
+  const enemies = stats.byKind.enemy || 0;
+  return [
+    `${stats.c64Bytes}:${stats.loadBytes}`,
+    `${stats.total}/${stats.max} objects`,
+    `${rooms}/${ROOM_MAX} ${mapKindCountLabel("room", rooms)}`,
+    `${enemies}/${ENEMY_MAX} ${mapKindCountLabel("enemy", enemies)}`,
+    `≤${ROOM_MAX_TYPES} types/room`,
+  ].join(" · ");
+}
+
+/** Kind counts for the empty-selection inspector. */
+export function mapKindStatRows(stats) {
+  const rows = [];
+  for (const kind of MAP_KIND_ORDER) {
+    const n = stats.byKind[kind] || 0;
     if (!n) continue;
-    const one = KINDS[kind]?.label?.toLowerCase() || kind;
-    const label = n === 1 ? one : plurals[kind] || `${one}s`;
-    if (kind === "room") {
-      parts.push(`${n}/${ROOM_MAX} ${label}`);
-      continue;
-    }
-    if (kind === "enemy") {
-      parts.push(`${n}/${ENEMY_MAX} ${label}`);
-      continue;
-    }
-    parts.push(`${n} ${label}`);
+    const label = mapKindCountLabel(kind, n);
+    rows.push({
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+      n,
+    });
   }
-  parts.push(`≤${ROOM_MAX_TYPES} types/room`);
-  return parts.join(" · ");
+  return rows;
 }
 
 export function formatMapLoadTitle(stats) {

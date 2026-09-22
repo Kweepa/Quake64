@@ -2128,7 +2128,7 @@ export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 export const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 8, 4];
+const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 8, 255];
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {
   Grunt: { stand: ["stand"], alert: ["load"], run: ["run"], walk: ["prowl"], attack: ["shoot"] },
@@ -2177,7 +2177,7 @@ const ROLE_CLIPS = {
   Zombie: {
     stand: ["stand"],
     alert: ["stand", 4],
-    run: ["run"],
+    run: ["walk"],
     walk: ["walk"],
     attack: ["atta", "attb", "attc"],
   },
@@ -2398,12 +2398,12 @@ export function packedPoseBytes(enemy, clips, frames) {
     });
   }
   for (const [role, start, length] of ranges) {
-    const extra =
-      typeof role === "string" && role.startsWith("attack") && fireOff >= 0
-        ? typeI === 1
-          ? [start + 5, start + 7]
-          : [start + fireOff]
-        : [];
+    let extra = [];
+    if (typeof role === "string" && role.startsWith("attack")) {
+      if (typeI === 1) extra = [start + 5, start + 7];
+      else if (name === "Zombie") extra = [start + length - 1];
+      else if (fireOff >= 0 && fireOff < 255) extra = [start + fireOff];
+    }
     for (const i of poseCadenceKeep(start, length, posePickKeys(frs, start, length, extra))) {
       keep.add(i);
     }
@@ -2828,7 +2828,14 @@ export function neighbourRooms(doc, room) {
   return out;
 }
 
-/** Selected room, or owner room of the newest selected object; else lastRoomId. */
+/** Enabled spawn, or the first spawn when none are marked. */
+function activeSpawnObject(doc) {
+  const spawns = activeMap(doc).objects.filter((o) => o.kind === "spawn");
+  if (!spawns.length) return null;
+  return spawns.find((s) => s.enabled) || spawns[0];
+}
+
+/** Selected room, or owner of the newest selected object; else lastRoomId; else the active spawn's room. */
 export function localFocusRoom(doc, selectedIds, lastId) {
   const ids = Array.isArray(selectedIds) ? selectedIds : [];
   const objs = activeMap(doc).objects;
@@ -2839,7 +2846,10 @@ export function localFocusRoom(doc, selectedIds, lastId) {
     const r = roomById(doc, obj.roomId);
     if (r) return r;
   }
-  return roomById(doc, lastId);
+  const remembered = roomById(doc, lastId);
+  if (remembered) return remembered;
+  const spawn = activeSpawnObject(doc);
+  return spawn ? roomById(doc, spawn.roomId) : null;
 }
 
 export function localVisibleIds(doc, focus, includeNeighbours) {

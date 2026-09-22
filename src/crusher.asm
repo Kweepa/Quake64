@@ -1,4 +1,4 @@
-; Crushers — GAME-resident bind/reset/solid/draw. Motion is streamed (ai_crush).
+; Crushers — GAME-resident bind/reset. Motion, solid, and draw are streamed (ai_crush).
 ; No count cap: live pos is packed x/z, snap-to-home on enter (unlike elev_y).
 !zone crusher
 
@@ -119,46 +119,28 @@ crush_load_box
 	bcc .clb
 	rts
 
-; Called from solid_at_col. col_room / col_x/z set. Y = crate step-up (ignored). C=1 blocked.
-crush_solid
-	sty crush_i			; preserve solid_at Y (step-up flag)
-	ldy #0
-.cs_lp
-	cpy map_ncrush
-	bcs .cs_no
-	cpy crush_skip
-	beq .cs_n
-	ldx #crush_room - crush_x
-	jsr crush_lda
-	cmp col_room
-	bne .cs_n
-	jsr crush_load_box
-	jsr player_overlaps_y
-	bcc .cs_n
-	jsr point_in_box_xz
-	bcs .cs_yes
-.cs_n
-	iny
-	bne .cs_lp
-.cs_no
-	ldy crush_i
-	clc
+; A = CRUSH_CMD_*. Y preserved. C from the bank; C=0 if it is not loaded.
+crush_enter
+	ldx crush_entry_hi
+	beq .ce_no
+	stx .ce_j+2
+	ldx crush_entry_lo
+	stx .ce_j+1
+.ce_j
+	jsr $ffff
 	rts
-.cs_yes
-	ldy crush_i
-	sec
+.ce_no
+	clc
 	rts
 
 crush_update
-	lda crush_entry_hi
-	beq .cu_rts
-	sta .cu_j+2
-	lda crush_entry_lo
-	sta .cu_j+1
-.cu_j
-	jmp $ffff
-.cu_rts
-	rts
+	lda #CRUSH_CMD_TICK
+	jmp crush_enter
+
+; Called from solid_at_col. col_room / col_x/z set. Y = crate step-up (ignored). C=1 blocked.
+crush_solid
+	lda #CRUSH_CMD_SOLID
+	jmp crush_enter
 
 ; Overlay kill — address is before loader so Krill vs KERNAL LoadPrg size
 ; does not shift the streamed operand.
@@ -166,25 +148,5 @@ crush_kill
 	jmp death_restart
 
 crush_draw
-	ldy #0
-.cd_lp
-	cpy map_ncrush
-	bcs .cd_rts
-	ldx #crush_room - crush_x
-	jsr crush_lda
-	cmp room_idx
-	bne .cd_n
-	sty crush_i
-	jsr crush_load_box
-	jsr frustum_hits
-	bcc .cd_r
-	lda #0
-	sta box_inside
-	jsr draw_box
-.cd_r
-	ldy crush_i
-.cd_n
-	iny
-	bne .cd_lp
-.cd_rts
-	rts
+	lda #CRUSH_CMD_DRAW
+	jmp crush_enter

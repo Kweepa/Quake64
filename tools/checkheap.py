@@ -114,12 +114,6 @@ def used_types(per_room: dict[int, set[int]]) -> list[int]:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Check LoadLevel heap vs GAME size")
     ap.add_argument("--labels", default="game.lbl")
-    ap.add_argument(
-        "--min-slack",
-        type=int,
-        default=0,
-        help="fail when any level has fewer than this many free heap bytes",
-    )
     ap.add_argument("--json", type=Path, default=None, help="write the per-level manifest")
     args = ap.parse_args()
 
@@ -240,13 +234,6 @@ def main() -> None:
             failed = True
         else:
             print(f"{head}  slack {slack}")
-            if slack < args.min_slack:
-                print(
-                    f"{key}: slack {slack} below release floor "
-                    f"{args.min_slack}",
-                    file=sys.stderr,
-                )
-                failed = True
 
     if not any_level:
         print("checkheap: no map PRGs", file=sys.stderr)

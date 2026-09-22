@@ -31,12 +31,19 @@ REQUIRED = [
     "play_sound",
     "spawn_ogre_grenade",
     "spawn_scrag_spit",
+    "enemy_try_step",
+    "gren_alloc",
+    "gren_fill_slot",
+    "ent_vert_world",
+    "atan2_yaw",
     "SOUND_OGRE_OGDRAG",
     "pos_ok",
     "crush_kill",
     "crush_load_box",
     "point_in_box_xz",
     "player_overlaps_y",
+    "frustum_hits",
+    "draw_box",
 ]
 
 

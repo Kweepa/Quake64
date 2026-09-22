@@ -11,6 +11,65 @@
 !zone crush_ai
 *= AI_LINK_BASE
 ai_crush_entry
+	cmp #CRUSH_CMD_SOLID
+	beq crush_solid
+	cmp #CRUSH_CMD_DRAW
+	beq crush_draw
+	jmp crush_tick
+
+; Called from solid_at_col. col_room / col_x/z set. Y = crate step-up (ignored). C=1 blocked.
+crush_solid
+	sty crush_i			; preserve solid_at Y (step-up flag)
+	ldy #0
+.cs_lp
+	cpy map_ncrush
+	bcs .cs_no
+	cpy crush_skip
+	beq .cs_n
+	+lda_cy crush_room
+	cmp col_room
+	bne .cs_n
+	jsr crush_load_box
+	jsr player_overlaps_y
+	bcc .cs_n
+	jsr point_in_box_xz
+	bcs .cs_yes
+.cs_n
+	iny
+	bne .cs_lp
+.cs_no
+	ldy crush_i
+	clc
+	rts
+.cs_yes
+	ldy crush_i
+	sec
+	rts
+
+crush_draw
+	ldy #0
+.cd_lp
+	cpy map_ncrush
+	bcs .cd_rts
+	+lda_cy crush_room
+	cmp room_idx
+	bne .cd_n
+	sty crush_i
+	jsr crush_load_box
+	jsr frustum_hits
+	bcc .cd_r
+	lda #0
+	sta box_inside
+	jsr draw_box
+.cd_r
+	ldy crush_i
+.cd_n
+	iny
+	bne .cd_lp
+.cd_rts
+	rts
+
+crush_tick
 	clc
 	lda crush_acc_l
 	adc dt_ms

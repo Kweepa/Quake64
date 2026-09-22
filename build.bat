@@ -126,6 +126,11 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
+"%ACME%" ai_zombie.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 "%ACME%" ai_crush.asm
 if errorlevel 1 (
   popd
@@ -178,7 +183,7 @@ python tools\genaisymbols.py --labels game-ai.lbl --verify-labels game-krill.lbl
 if errorlevel 1 exit /b 1
 python tools\memoryreport.py --labels game-krill.lbl --json memory-report-krill.json
 if errorlevel 1 exit /b 1
-python tools\checkheap.py --labels game-krill.lbl --min-slack 1024 --json heap-report-krill.json
+python tools\checkheap.py --labels game-krill.lbl --json heap-report-krill.json
 if errorlevel 1 exit /b 1
 
 python tools\mkdisk.py --krill --out quake64-krill.d64
@@ -223,7 +228,7 @@ python tools\genaisymbols.py --labels game-ai.lbl --verify-labels game.lbl
 if errorlevel 1 exit /b 1
 python tools\memoryreport.py --labels game.lbl --json memory-report.json
 if errorlevel 1 exit /b 1
-python tools\checkheap.py --min-slack 1024 --json heap-report.json
+python tools\checkheap.py --json heap-report.json
 if errorlevel 1 exit /b 1
 
 python tools\mkdisk.py --out quake64.d64

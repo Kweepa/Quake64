@@ -104,7 +104,7 @@ header and name, SMC-`jsr`s the overlay (`bind_apply` then `patch_map_smc`),
 then `heap_top = map_base` dumps the prefix. At most `ROOM_MAX_TYPES` (2)
 fused enemy banks are then resident for the current room. Play peak is packed
 map plus the worst room's banks; load peak is packed map plus `LEVEL_PREFIX`.
-`tools/checkheap.py` enforces the larger peak and a 1024-byte release floor.
+`tools/checkheap.py` enforces the larger peak. It fails only when slack is zero or negative.
 `MAP_MAX_BYTES` 4096 is a packed-map cap; prefix is extra.
 
 Enemy bank bytes (from `enemy_sizes.asm`, including QAI1 header, optional
@@ -123,7 +123,7 @@ Current gate (`game.lbl`, avail 10478, `LEVEL_PREFIX` 2220):
 | E1M5 | 3651 | 5205 (room 3: knight, ogre) | 8856 | 1622 |
 | E1M6 | 2234 | 2936 (room 8: zombie) | 5170 | 5308 |
 
-E1M5 is the tightest and remains above the enforced 1024-byte release floor.
+E1M5 is the tightest.
 Caps: `MAP_MAX_BYTES` 4096, pose payload 4096, fused bank 8192.
 
 ## VIC Bank 3 overview

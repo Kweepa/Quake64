@@ -25,7 +25,7 @@ PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
 DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 # Clip-local fire frames (matches enemy_fire_frame). Pinned as an attack key.
-FIRE_FRAME = [2, 5, 4, 6, 2, 4, 8, 4]
+FIRE_FRAME = [2, 5, 4, 6, 2, 4, 8, 255]  # Zombie: last frame of atta/attb/attc via AI_CMD_ATTACK_TICK
 # Mid-distance stick LOD threshold (CAM_ZH); Ogre needs more for chainsaw tip.
 DEFAULT_LOD_Z = {
     "Grunt": 4,
@@ -104,7 +104,7 @@ ROLE_CLIPS = {
     "Zombie": {
         "stand": ("stand", None),
         "alert": ("stand", 4),
-        "run": ("run", None),
+        "run": ("walk", None),
         "walk": ("walk", None),
         "attack": ["atta", "attb", "attc"],
     },
@@ -259,6 +259,15 @@ def apply_export_clips(enemy: dict) -> None:
     enemy["clips"] = new_clips
 
 
+def variant_key(enemy: dict, what: str) -> re.Pattern:
+    """Zombie: paina is flinch, paine is the knockdown/get-up death clip."""
+    if enemy.get("name") == "Zombie":
+        if what == "pain":
+            return re.compile(r"^paina?$")
+        return re.compile(r"^paine$")
+    return PAIN_KEY if what == "pain" else DEATH_KEY
+
+
 def find_variant_clips(enemy: dict, key_re: re.Pattern, what: str) -> list[tuple[int, int]]:
     out: list[tuple[int, int]] = []
     for c in enemy.get("clips") or []:
@@ -320,30 +329,9 @@ def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list
 
 
 def trim_to_budget(gx: list[int], gy: list[int], gz: list[int], enemy: dict) -> int:
-    nframes = len(gx) // NVERTS
-    max_frames = (ENEMY_POSE_MAX - 1) // (NVERTS * 3)
-    if nframes <= max_frames:
-        return nframes
-    print(f"warning: {enemy['name']} {nframes} frames > {max_frames}; truncating")
-    nframes = max_frames
-    n = nframes * NVERTS
-    gx[:] = gx[:n]
-    gy[:] = gy[:n]
-    gz[:] = gz[:n]
-    kept = []
-    for c in enemy.get("clips") or []:
-        start = int(c["start"])
-        if start >= nframes:
-            continue
-        length = min(int(c["len"]), nframes - start)
-        if length <= 0:
-            continue
-        nc = dict(c)
-        nc["start"] = start
-        nc["len"] = length
-        kept.append(nc)
-    enemy["clips"] = kept
-    return nframes
+    """Keep authored logical frames; packed .pose size is the real budget."""
+    del gy, gz, enemy
+    return len(gx) // NVERTS
 
 
 def s8_val(b: int) -> int:
@@ -380,7 +368,8 @@ def clip_ranges(enemy: dict, nframes: int) -> list[tuple[str, int, int]]:
     for i, (start, length) in enumerate(find_attack_clips(enemy)):
         if start < nframes and length > 0:
             out.append((f"attack{i}", start, min(length, nframes - start)))
-    for what, key in (("pain", PAIN_KEY), ("death", DEATH_KEY)):
+    for what in ("pain", "death"):
+        key = variant_key(enemy, what)
         for i, (start, length) in enumerate(find_variant_clips(enemy, key, what)):
             if start < nframes and length > 0:
                 out.append((f"{what}{i}", start, min(length, nframes - start)))
@@ -457,23 +446,37 @@ def cadence_keep(start: int, length: int, keys: list[int]) -> set[int]:
 
 
 def pack_poses(
-    gx: list[int], gy: list[int], gz: list[int], enemy: dict, nframes: int, type_i: int
+    gx: list[int],
+    gy: list[int],
+    gz: list[int],
+    enemy: dict,
+    nframes: int,
+    type_i: int,
+    skip_leftover: set[str] | None = None,
 ) -> tuple[list[int], list[int], list[int], list[int], int]:
     """Keep first/+2/keys/last per clip (roles and leftover JSON clips). pose_map: stored or $FF."""
+    skip_leftover = skip_leftover or set()
     frs = frames_xyz(gx, gy, gz, nframes)
     covered = [False] * nframes
     keep: set[int] = set()
     fire_off = FIRE_FRAME[type_i]
     for name, start, length in clip_ranges(enemy, nframes):
         extra: tuple[int, ...] = ()
-        if name.startswith("attack") and fire_off >= 0:
-            extra = (start + fire_off,)
+        if name.startswith("attack"):
+            if TYPES[type_i] == "Zombie":
+                extra = (start + length - 1,)
+            elif 0 <= fire_off < 255:
+                extra = (start + fire_off,)
             if type_i == 1:
                 extra = (start + 5, start + 7)
+        elif name.startswith("death") and TYPES[type_i] == "Zombie":
+            extra = (start + 10,)
         keep |= cadence_keep(start, length, pick_keys(frs, start, length, extra))
         for i in range(start, start + length):
             covered[i] = True
     for _name, start, length in json_clip_ranges(enemy, nframes):
+        if _name in skip_leftover:
+            continue
         if all(covered[start : start + length]):
             continue
         keep |= cadence_keep(start, length, pick_keys(frs, start, length))
@@ -554,15 +557,25 @@ def main() -> None:
         apply_export_clips(enemy)
         gx, gy, gz, lines, _clips = export_type(enemy)
         nframes = trim_to_budget(gx, gy, gz, enemy)
-        gx, gy, gz, pose_map, n_stored = pack_poses(gx, gy, gz, enemy, nframes, ti)
-        payload = bytes([n_stored, nframes]) + bytes(pose_map) + bytes(gx) + bytes(gy) + bytes(gz)
         dos = DOS_NAME[ti]
         sfx_path = ENEMY_DIR / f"sfx_{dos}.bin"
         if not sfx_path.is_file():
             raise SystemExit(f"missing {sfx_path}; run gensounds.py first")
-        payload += sfx_path.read_bytes()
-        payload += pack_clip_events(enemy, sound_ids)
-        if len(payload) > ENEMY_POSE_MAX:
+        skip_leftover: set[str] = set()
+        while True:
+            pgx, pgy, pgz, pose_map, n_stored = pack_poses(
+                gx, gy, gz, enemy, nframes, ti, skip_leftover
+            )
+            payload = bytes([n_stored, nframes]) + bytes(pose_map) + bytes(pgx) + bytes(pgy) + bytes(pgz)
+            payload += sfx_path.read_bytes()
+            payload += pack_clip_events(enemy, sound_ids)
+            if len(payload) <= ENEMY_POSE_MAX:
+                gx, gy, gz = pgx, pgy, pgz
+                break
+            if name == "Zombie" and "run" not in skip_leftover:
+                print(f"warning: {name} pose {len(payload)} exceeds {ENEMY_POSE_MAX}; dropping leftover run")
+                skip_leftover.add("run")
+                continue
             raise SystemExit(f"{name} pose {len(payload)} exceeds {ENEMY_POSE_MAX}")
         (ENEMY_DIR / f"{dos}.pose").write_bytes(payload)
         (ENEMY_DIR / f"{dos}.prg").write_bytes(struct.pack("<H", 0) + payload)
@@ -594,11 +607,11 @@ def main() -> None:
         attack_n.append(n)
         attack_start.extend(starts)
         attack_len.extend(lens)
-        n, starts, lens = pad_variants(find_variant_clips(enemy, PAIN_KEY, "pain"))
+        n, starts, lens = pad_variants(find_variant_clips(enemy, variant_key(enemy, "pain"), "pain"))
         pain_n.append(n)
         pain_start.extend(starts)
         pain_len.extend(lens)
-        n, starts, lens = pad_variants(find_variant_clips(enemy, DEATH_KEY, "death"))
+        n, starts, lens = pad_variants(find_variant_clips(enemy, variant_key(enemy, "death"), "death"))
         death_n.append(n)
         death_start.extend(starts)
         death_len.extend(lens)

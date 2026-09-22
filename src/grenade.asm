@@ -102,8 +102,6 @@ spawn_player_grenade
 	sbc #EYE_HEIGHT - 2
 	sta org_yh
 	ldx obj_i
-	lda room_idx
-	sta gr_room,x
 	lda yaw
 	sta rot2
 	lda #GREN_OWN_PL
@@ -121,10 +119,6 @@ spawn_ogre_grenade
 	jsr gren_alloc
 	bcc .sog_rts
 	stx obj_i
-	ldx enemy_idx
-	+lda_mx en_room
-	ldx obj_i
-	sta gr_room,x
 	lda cam_xh
 	sec
 	sbc org_xh
@@ -160,7 +154,7 @@ update_grenades
 
 gren_tick
 	stx obj_i
-	lda gr_room,x
+	lda room_idx
 	sta col_room
 	clc
 	lda gr_acc,x
@@ -226,8 +220,6 @@ gren_tick
 	jmp .gt_rts
 .gt_life
 	ldx obj_i
-	lda gr_on,x
-	beq .gt_rts
 	sec
 	lda gr_life_l,x
 	sbc dt_ms
@@ -256,6 +248,15 @@ gren_asr5
 
 ; A = <vel_lo, Y = <vel_hi. Negate and asr1.
 gren_bounce
+	pha
+	ldx obj_i
+	lda gr_flags,x
+	and #GREN_F_FLESH
+	beq .gb_n
+	pla
+	jmp gren_clear
+.gb_n
+	pla
 	sta .bl+1
 	sta .sl+1
 	sta .rl+1
@@ -386,7 +387,7 @@ gren_move_y
 	sta save_xh
 	lda gr_vyh,x
 	bmi .gmy_down
-	ldy gr_room,x
+	ldy room_idx
 	jsr load_box_room
 	clc
 	lda box_y
@@ -520,9 +521,6 @@ gren_hit_enemies
 
 gren_hit_player
 	ldx obj_i
-	lda gr_room,x
-	cmp room_idx
-	bne .ghp_rts
 	lda cam_xh
 	sta pv0
 	lda cam_zh
@@ -538,8 +536,23 @@ gren_hit_player
 	sta pv1
 	jsr gren_in_y
 	bcc .ghp_rts
+	ldx obj_i
+	lda gr_flags,x
+	and #GREN_F_FLESH
+	bne gren_flesh_hit
 	jmp gren_explode
 .ghp_rts
+	rts
+
+gren_flesh_hit
+	lda #FLESH_DMG
+	jsr take_damage
+	jmp gren_clear
+
+gren_clear
+	ldx obj_i
+	lda #0
+	sta gr_on,x
 	rts
 
 ; pv0/pv1 = other x/z. C=1 miss.
@@ -583,6 +596,11 @@ gren_abs
 
 gren_explode
 	ldx obj_i
+	lda gr_flags,x
+	and #GREN_F_FLESH
+	beq +
+	jmp gren_clear
++
 	lda fx_on
 	beq .gex_go
 	lda gr_flags,x
@@ -697,9 +715,6 @@ draw_grenades
 	bcs .dgr_rts
 	lda gr_on,x
 	beq .dgr_n
-	lda gr_room,x
-	cmp room_idx
-	bne .dgr_n
 	lda pv0
 	bne .dgr_go
 	inc pv0

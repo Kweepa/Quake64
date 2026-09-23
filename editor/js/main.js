@@ -827,6 +827,7 @@ function pushUndo() {
 
 function restore(json) {
   doc = normalizeDocument(JSON.parse(json));
+  deriveAllEnemyFrames();
   const have = new Set(activeMap(doc).objects.map((o) => o.id));
   selectedIds = selectedIds.filter((id) => have.has(id));
   selectedVerts = selectedVerts.filter((i) => i >= 0 && i < stickCount(activeEnemy()));
@@ -3322,6 +3323,8 @@ function setCustomSkeleton(e, on) {
     e.customSkeleton = false;
     e.stockGraph = null;
   }
+  markDirty();
+  retargetMdlFrames();
   updateAnimHint();
 }
 
@@ -3370,7 +3373,7 @@ function averageMeshBind(e, indices) {
     const local = Math.max(0, Math.min(frameLocal, (clip.len | 0) - 1));
     mdlFi = clip.mdlFrames?.[local]?.index ?? 0;
   }
-  const avg = averageJointPositions(mdlEditorVerts(mdl, mdlFi, mdlScale), [indices])[0];
+  const avg = averageJointPositions(mdlEditorVerts(mdl, mdlFi, DEFAULT_MDL_SCALE), [indices])[0];
   if (!avg) return { x: 0, y: 0, z: 0 };
   const clamp = clampVertFor(e);
   return {
@@ -3496,6 +3499,8 @@ function mergeCustomVerts(e) {
   selectedVerts = [surv];
   selectedLines = [];
   markDirty();
+  persistMdlRigBackup();
+  retargetMdlFrames({ status: true });
   refreshPanels();
   animView.draw();
 }
@@ -3523,6 +3528,8 @@ function deleteCustomVerts(e) {
   selectedVerts = [];
   selectedLines = [];
   markDirty();
+  persistMdlRigBackup();
+  retargetMdlFrames({ status: true });
   refreshPanels();
   animView.draw();
 }
@@ -3622,10 +3629,10 @@ async function loadSharewareFromHandle(handle) {
     setStatus(String(err.message || err), true);
   }
   if (restoreMdlRigBackup()) markDirty();
+  deriveAllEnemyFrames();
   refreshPanels();
   if (editorMode === "anim") {
     animView.draw();
-    retargetMdlFrames();
     refreshPanels();
   }
   if (editorMode === "weapons") weaponView.draw();
@@ -3665,25 +3672,52 @@ function rigBindingComplete(rig) {
   return rig.jointVerts.every((list) => list.length > 0);
 }
 
-/** Retarget checked MDL clips onto stick frames when all joints are bound. */
-function retargetMdlFrames(options = {}) {
-  const { status = false } = options;
-  const e = activeEnemy();
+/** Fill in-memory stick poses from the binding. Does not touch the saved document. */
+function deriveEnemyFrames(e) {
   if (!e) return false;
-  const mdl = activeMdl();
+  const mdl = sharewareModels[e.name];
   if (!mdl) return false;
   const rig = ensureEnemyRig(e);
   if (!rigBindingComplete(rig)) return false;
   const names = exportClipNames(e, mdl);
   if (!names.length) return false;
-  const rest = e.frames[0] || dummyFrameFor(e.name);
-  const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVertFor(e), names);
+  const rest = e.frames?.[0] || dummyFrameFor(e.name);
+  const { frames, clips } = buildStickFramesFromMdl(
+    mdl,
+    rig,
+    DEFAULT_MDL_SCALE,
+    rest,
+    clampVertFor(e),
+    names
+  );
   if (!frames.length) return false;
   const prevByName = new Map((e.clips || []).map((c) => [c.name, c]));
-  const keepName = activeTimelineClip()?.name;
   e.frames = frames;
   e.clips = clips.map((c) => withClipSound(c, prevByName.get(c.name)));
   e.exportClips = clips.map((c) => c.name);
+  return true;
+}
+
+function deriveAllEnemyFrames() {
+  const active = activeEnemy();
+  const keepName = active ? activeTimelineClip()?.name : null;
+  const keepLocal = frameLocal;
+  for (const e of doc.enemies || []) deriveEnemyFrames(e);
+  if (!active || !keepName) return;
+  const timeline = getTimeline(active);
+  const idx = timeline.findIndex((c) => c.name === keepName);
+  clipIndex = idx >= 0 ? idx : 0;
+  const clip = timeline[clipIndex];
+  frameLocal = clip ? Math.max(0, Math.min(keepLocal, (clip.len | 0) - 1)) : 0;
+  applyFrameLocal();
+}
+
+/** Retarget checked MDL clips onto stick frames when all joints are bound. */
+function retargetMdlFrames(options = {}) {
+  const { status = false, dirty = true } = options;
+  const e = activeEnemy();
+  const keepName = e ? activeTimelineClip()?.name : null;
+  if (!deriveEnemyFrames(e)) return false;
   frameLocal = 0;
   if (keepName) {
     const timeline = getTimeline(e);
@@ -3693,8 +3727,8 @@ function retargetMdlFrames(options = {}) {
     clipIndex = 0;
   }
   applyFrameLocal();
-  markDirty();
-  if (status) setStatus(`Retargeted ${frames.length} frames`);
+  if (dirty) markDirty();
+  if (status) setStatus(`Retargeted ${e.frames.length} frames`);
   return true;
 }
 
@@ -3909,10 +3943,7 @@ function setMdlScale(value) {
   const shown = String(mdlScale);
   if (range && range.value !== shown) range.value = shown;
   if (numInp && numInp.value !== shown) numInp.value = shown;
-  if (editorMode === "anim") {
-    retargetMdlFrames();
-    animView.draw();
-  }
+  if (editorMode === "anim") animView.draw();
   markUi();
 }
 
@@ -4047,6 +4078,7 @@ document.addEventListener("visibilitychange", () => {
 
 function applyLoadedDoc(loaded) {
   doc = normalizeDocument(loaded);
+  deriveAllEnemyFrames();
   persistMdlRigBackup();
   const stored = loadEditorSettings(docFileName());
   applyEditorState(stored || loaded.editor || doc.editor);

@@ -3024,27 +3024,67 @@ function parseSkelLines(raw, nv) {
 
 function inferSkelNv(raw) {
   let n;
-  if (Array.isArray(raw?.frames?.[0])) n = raw.frames[0].length;
-  else if (Array.isArray(raw?.mdlRig?.jointVerts)) n = raw.mdlRig.jointVerts.length;
-  else n = (raw?.verts | 0) || 13;
+  const joints = raw?.mdlRig?.jointVerts;
+  if (Array.isArray(joints) && joints.length) n = joints.length;
+  else if ((raw?.verts | 0) > 0) n = raw.verts | 0;
+  else if (Array.isArray(raw?.frames?.[0])) n = raw.frames[0].length;
+  else n = 13;
   if (n < 0) n = 0;
   if (n > SKEL_MAX_VERTS) n = SKEL_MAX_VERTS;
   return n;
 }
 
-function parseFramesN(rawFrames, name, nv, clamp = clampSkelVert) {
-  const rest = dummyFrameFor(name);
-  while (rest.length < nv) rest.push({ x: 0, y: 0, z: 0 });
-  const srcFrames = Array.isArray(rawFrames) ? rawFrames : [];
-  if (!srcFrames.length) return [rest.slice(0, nv).map((v) => ({ x: v.x, y: v.y, z: v.z }))];
-  return srcFrames.map((src) => {
-    const verts = [];
-    for (let i = 0; i < nv; i++) {
-      const v = src?.[i] || rest[i];
-      verts.push({ x: clamp(v.x), y: clamp(v.y), z: clamp(v.z) });
+/** Clip name + optional sound. start/len are filled when poses are derived. */
+function parseClipMeta(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const c of raw) {
+    const name = String(c?.name || "").trim();
+    if (!name || name === "legacy" || seen.has(name)) continue;
+    seen.add(name);
+    const clip = { name, start: 0, len: 1 };
+    const ident = String(c?.sound || "")
+      .trim()
+      .toUpperCase()
+      .replace(/^SOUND_/, "");
+    if (ident) {
+      clip.sound = ident;
+      clip.soundFrame = Math.max(0, c.soundFrame | 0);
     }
-    return verts;
-  });
+    out.push(clip);
+  }
+  return out;
+}
+
+function persistClip(c) {
+  const out = { name: c.name };
+  if (c.sound) {
+    out.sound = c.sound;
+    out.soundFrame = c.soundFrame | 0;
+  }
+  return out;
+}
+
+function persistGraph(g) {
+  if (!g || typeof g !== "object") return g;
+  const out = {
+    verts: g.verts,
+    lines: g.lines,
+    mdlRig: g.mdlRig,
+  };
+  if (Array.isArray(g.clips)) out.clips = g.clips.map(persistClip);
+  if (Array.isArray(g.exportClips)) out.exportClips = [...g.exportClips];
+  return out;
+}
+
+function persistEnemy(e) {
+  const out = { ...e };
+  delete out.frames;
+  if (Array.isArray(out.clips)) out.clips = out.clips.map(persistClip);
+  if (out.stockGraph) out.stockGraph = persistGraph(out.stockGraph);
+  if (out.customGraph) out.customGraph = persistGraph(out.customGraph);
+  return out;
 }
 
 function parseSkelGraph(raw, name, fixedNv) {
@@ -3053,10 +3093,10 @@ function parseSkelGraph(raw, name, fixedNv) {
   const graph = {
     verts: nv,
     lines: parseSkelLines(raw.lines, nv),
-    frames: parseFramesN(raw.frames, name, nv, fixedNv === 13 ? clampVert : clampSkelVert),
+    frames: [restPoseFrame(name, nv)],
     mdlRig: normalizeMdlRig(raw.mdlRig, nv),
   };
-  if (Array.isArray(raw.clips)) graph.clips = raw.clips;
+  if (Array.isArray(raw.clips)) graph.clips = parseClipMeta(raw.clips);
   if (Array.isArray(raw.exportClips)) graph.exportClips = raw.exportClips.map(String);
   return graph;
 }
@@ -3070,18 +3110,16 @@ export function dummyFrameFor(name) {
   }));
 }
 
-function parseEnemyFrames(rawFrames, name) {
-  const rest = dummyFrameFor(name);
-  const srcFrames = Array.isArray(rawFrames) ? rawFrames : [];
-  if (!srcFrames.length) return [rest.map((v) => ({ x: v.x, y: v.y, z: v.z }))];
-  return srcFrames.map((src) => {
-    const verts = [];
-    for (let i = 0; i < 13; i++) {
-      const v = src?.[i] || rest[i];
-      verts.push({ x: clampVert(v.x), y: clampVert(v.y), z: clampVert(v.z) });
-    }
-    return verts;
-  });
+/** One rest pose. Poses are derived from the binding once ID1 is open. */
+export function restPoseFrame(name, nv) {
+  const n = Math.max(1, nv | 0);
+  const base = dummyFrameFor(name);
+  const frame = [];
+  for (let i = 0; i < n; i++) {
+    const v = base[i] || { x: 0, y: 0, z: 0 };
+    frame.push({ x: v.x, y: v.y, z: v.z });
+  }
+  return frame;
 }
 
 export function createEnemy(name = "Grunt") {
@@ -3442,7 +3480,7 @@ export function gameDocument(doc) {
     version: doc.version,
     activeLevel: doc.activeLevel,
     maps: doc.maps,
-    enemies: doc.enemies,
+    enemies: (doc.enemies || []).map(persistEnemy),
     weapons: doc.weapons,
     items: doc.items,
     sounds: doc.sounds,
@@ -3543,17 +3581,17 @@ export function normalizeDocument(raw) {
         const nv = inferSkelNv(e);
         enemy.verts = nv;
         enemy.lines = parseSkelLines(e.lines, nv);
-        enemy.frames = parseFramesN(e.frames, enemy.name, nv);
+        enemy.frames = [restPoseFrame(enemy.name, nv)];
         enemy.mdlRig = normalizeMdlRig(e.mdlRig, nv);
         enemy.customGraph = null;
       } else {
         enemy.verts = 13;
         enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
-        enemy.frames = parseEnemyFrames(e.frames, enemy.name);
+        enemy.frames = [restPoseFrame(enemy.name, 13)];
         enemy.mdlRig = normalizeMdlRig(e.mdlRig);
         enemy.customGraph = parseSkelGraph(e.customGraph, enemy.name, 0);
       }
-      enemy.clips = normalizeClips(e.clips, enemy.frames.length);
+      enemy.clips = parseClipMeta(e.clips);
       enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;

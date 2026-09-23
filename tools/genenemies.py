@@ -10,6 +10,8 @@ import struct
 from copy import deepcopy
 from pathlib import Path
 
+from quakemdl import POSE_SCALE, editor_verts, js_round, load_enemy_mdls, select_mdl_clips
+
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "editor" / "quake64.json"
 OUT = ROOT / "src" / "enemy_data.asm"
@@ -264,6 +266,74 @@ def apply_export_clips(enemy: dict) -> None:
     enemy["clips"] = new_clips
 
 
+VERT_MIN = -128
+VERT_MAX = 127
+SKEL_VERT_MAX = 509
+
+
+def _clamp_pose(n: float, custom: bool) -> int:
+    v = js_round(n)
+    if custom:
+        return max(-SKEL_VERT_MAX, min(SKEL_VERT_MAX, v))
+    return max(VERT_MIN, min(VERT_MAX, v))
+
+
+def bake_poses_from_id1(enemy: dict, mdl: dict) -> None:
+    """Full-unit stick poses from jointVerts. Shift/pack stays in export_type."""
+    name = enemy.get("name", "?")
+    custom = bool(enemy.get("customSkeleton"))
+    nv = enemy_nv(enemy)
+    joints = (enemy.get("mdlRig") or {}).get("jointVerts") or []
+    if len(joints) != nv:
+        raise SystemExit(f"{name}: binding has {len(joints)} joints, skeleton has {nv}")
+    for i, group in enumerate(joints):
+        if not group:
+            raise SystemExit(f"{name}: joint {i} has no mesh verts")
+    names = enemy.get("exportClips")
+    if not isinstance(names, list):
+        names = None
+    kept = select_mdl_clips(mdl, names)
+    if not kept:
+        raise SystemExit(f"{name}: no MDL clips to bake")
+    sounds: dict[str, dict] = {}
+    for c in enemy.get("clips") or []:
+        sounds[str(c.get("name", ""))] = c
+        sounds.setdefault(clip_key(c.get("name", "")), c)
+    frames: list = []
+    clips: list[dict] = []
+    start = 0
+    for clip in kept:
+        dst = {"name": clip["name"], "start": start, "len": len(clip["frames"])}
+        src = sounds.get(clip["name"]) or sounds.get(clip_key(clip["name"]))
+        if src:
+            dst = clip_with_sound(dst, src)
+        clips.append(dst)
+        for fr in clip["frames"]:
+            verts = editor_verts(mdl, fr["index"], POSE_SCALE)
+            pose = []
+            for group in joints:
+                acc = []
+                for idx in group:
+                    i = int(idx)
+                    if 0 <= i < len(verts):
+                        acc.append(verts[i])
+                if not acc:
+                    raise SystemExit(f"{name}: joint binding missed the mesh")
+                n = len(acc)
+                pose.append(
+                    {
+                        "x": _clamp_pose(sum(v["x"] for v in acc) / n, custom),
+                        "y": _clamp_pose(sum(v["y"] for v in acc) / n, custom),
+                        "z": _clamp_pose(sum(v["z"] for v in acc) / n, custom),
+                    }
+                )
+            frames.append(pose)
+        start += len(clip["frames"])
+    enemy["frames"] = frames
+    enemy["clips"] = clips
+    enemy["exportClips"] = [c["name"] for c in clips]
+
+
 def variant_key(enemy: dict, what: str) -> re.Pattern:
     """Zombie: paina is flinch, paine is the knockdown/get-up death clip.
     Chthon: boss.mdl names the flinch shocka/b/c, not pain*."""
@@ -336,8 +406,8 @@ DEFAULT_EDGES = [
 def enemy_nv(enemy: dict) -> int:
     if not enemy.get("customSkeleton"):
         return NVERTS
-    frames = enemy.get("frames") or []
-    nv = len(frames[0]) if frames else int(enemy.get("verts") or 0)
+    joints = (enemy.get("mdlRig") or {}).get("jointVerts") or []
+    nv = len(joints) if joints else int(enemy.get("verts") or 0)
     if not 0 <= nv <= SKEL_MAX_VERTS:
         raise SystemExit(f"{enemy['name']}: custom skeleton vert count {nv} not in 0..{SKEL_MAX_VERTS}")
     return nv
@@ -678,6 +748,7 @@ def pack_poses(
 def main() -> None:
     doc = json.loads(DOC.read_text(encoding="utf-8"))
     by_name = {e["name"]: e for e in doc["enemies"]}
+    mdls = load_enemy_mdls(ROOT / "ref" / "id1")
     ids_path = ENEMY_DIR / "sound_ids.json"
     if not ids_path.is_file():
         raise SystemExit(f"missing {ids_path}; run gensounds.py first")
@@ -721,6 +792,7 @@ def main() -> None:
         if name not in by_name:
             raise SystemExit(f"missing enemy {name}")
         enemy = deepcopy(by_name[name])
+        bake_poses_from_id1(enemy, mdls[name])
         apply_export_clips(enemy)
         gx, gy, gz, lines, _clips, nv, shift = export_type(enemy)
         nframes = trim_to_budget(gx, gy, gz, enemy, nv)

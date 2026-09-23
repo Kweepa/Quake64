@@ -397,6 +397,12 @@ clear_pose_ptrs
 	sta AI_ENTRY_HI,x
 	sta AI_BANK_LO,x
 	sta AI_BANK_HI,x
+	sta skel_nv,x
+	sta skel_ne,x
+	sta skel_base_lo,x
+	sta skel_base_hi,x
+	sta skel_entry_lo,x
+	sta skel_entry_hi,x
 	inx
 	cpx #ENEMY_NTYPES
 	bcc .cpp
@@ -424,6 +430,12 @@ clear_one_pose
 	sta AI_ENTRY_HI,x
 	sta AI_BANK_LO,x
 	sta AI_BANK_HI,x
+	sta skel_nv,x
+	sta skel_ne,x
+	sta skel_base_lo,x
+	sta skel_base_hi,x
+	sta skel_entry_lo,x
+	sta skel_entry_hi,x
 	rts
 
 ; A = type or $FF. Load if absent. C=0 ok, C=1 fail.
@@ -777,6 +789,7 @@ patch_enemy_bank
 	sta load_dest
 	lda ai_pose_hi
 	sta load_dest+1
+	jsr skel_bind_prefix
 	jsr patch_enemy_gx
 	ldx load_type
 	lda AI_BANK_LO,x
@@ -820,6 +833,83 @@ ai_invoke
 .aiv_rts
 	rts
 
+; Pose prefix when the QAI1 flags bit is set. Advances load_dest past it.
+; X clobbered. load_type = enemy type.
+skel_bind_prefix
+	ldx load_type
+	lda AI_BANK_LO,x
+	sta src_ptr
+	lda AI_BANK_HI,x
+	sta src_ptr+1
+	ldy #AIH_FLAGS
+	lda (src_ptr),y
+	and #1
+	bne .sbp_on
+	lda #0
+	sta skel_nv,x
+	sta skel_ne,x
+	sta skel_base_lo,x
+	sta skel_base_hi,x
+	sta skel_entry_lo,x
+	sta skel_entry_hi,x
+	rts
+.sbp_on
+	lda load_dest
+	sta src_ptr
+	sta skel_base_lo,x
+	lda load_dest+1
+	sta src_ptr+1
+	sta skel_base_hi,x
+	ldy #2
+	lda (src_ptr),y
+	sta skel_nv,x
+	iny
+	lda (src_ptr),y
+	sta skel_ne,x
+	iny
+	lda (src_ptr),y
+	clc
+	adc AI_BANK_LO,x
+	sta skel_entry_lo,x
+	iny
+	lda (src_ptr),y
+	adc AI_BANK_HI,x
+	sta skel_entry_hi,x
+	ldy #0
+	lda (src_ptr),y
+	sta nlo
+	iny
+	lda (src_ptr),y
+	sta nhi
+	clc
+	lda load_dest
+	adc nlo
+	sta load_dest
+	lda load_dest+1
+	adc nhi
+	sta load_dest+1
+	rts
+
+; Y * skel_mul_n → nlo:nhi. Y destroyed. X preserved.
+skel_mul_ya
+	lda #0
+	sta nlo
+	sta nhi
+	cpy #0
+	beq .sm_rts
+.sm_lp
+	clc
+	lda nlo
+	adc skel_mul_n
+	sta nlo
+	bcc +
+	inc nhi
++
+	dey
+	bne .sm_lp
+.sm_rts
+	rts
+
 ; dest in load_dest; type in load_type.
 ; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…] [sfx blob]
 patch_enemy_gx
@@ -845,19 +935,24 @@ patch_enemy_gx
 	adc #0
 	sta enemy_gx_hi,y
 	ldx enemy_nframes,y
+	txa
+	tay
+	ldx load_type
+	jsr frame_stride
+	ldy load_type
 	clc
 	lda enemy_gx_lo,y
-	adc frame13_lo,x
+	adc nlo
 	sta enemy_gy_lo,y
 	lda enemy_gx_hi,y
-	adc frame13_hi,x
+	adc nhi
 	sta enemy_gy_hi,y
 	clc
 	lda enemy_gy_lo,y
-	adc frame13_lo,x
+	adc nlo
 	sta enemy_gz_lo,y
 	lda enemy_gy_hi,y
-	adc frame13_hi,x
+	adc nhi
 	sta enemy_gz_hi,y
 	rts
 
@@ -890,12 +985,17 @@ bind_type_sfx
 	rts
 .bts_go
 	ldx enemy_nframes,y
+	txa
+	tay
+	ldx map_sv_y
+	jsr frame_stride
+	ldy map_sv_y
 	clc
 	lda enemy_gz_lo,y
-	adc frame13_lo,x
+	adc nlo
 	sta src_ptr
 	lda enemy_gz_hi,y
-	adc frame13_hi,x
+	adc nhi
 	sta src_ptr+1
 	ldy #0
 	lda (src_ptr),y

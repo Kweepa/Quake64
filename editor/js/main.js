@@ -3,6 +3,8 @@ import {
   PALETTE_ORDER,
   ENEMY_TYPES,
   JOINT_NAMES,
+  SKEL_MAX_VERTS,
+  SKEL_MAX_LINES,
   cycleEnemyRot,
   clampEnemyRot,
   cycleSlopeOrient,
@@ -23,7 +25,8 @@ import {
   clampTriggerPurpose,
   TRIGGER_PURPOSES,
   TRIGGER_PURPOSE_LABELS,
-  clampVert,
+  clampVertFor,
+  vertLimitFor,
   C64_HEX,
   C64_NAMES,
   ROOM_BG_DEFAULT,
@@ -201,6 +204,8 @@ let pendingPlace = null;
 let enemyIndex = 0;
 let frameIndex = 0;
 let selectedVerts = [];
+let selectedLines = [];
+let pendingBind = null;
 let dirty = false;
 let saving = false;
 let autosaveTimer = null;
@@ -367,11 +372,13 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
   },
   hasStickFrame: () => !!stickClipFor(doc.enemies[enemyIndex], activeTimelineClip()),
   getSelectedVerts: () => selectedVerts,
+  getSelectedLines: () => selectedLines,
   onSelectVert: (i, additive) => {
     if (i < 0) selectedVerts = [];
     else if (additive) {
       if (!selectedVerts.includes(i)) selectedVerts.push(i);
     } else selectedVerts = [i];
+    selectedLines = [];
     markUi();
     refreshPanels();
   },
@@ -381,6 +388,16 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
         if (!selectedVerts.includes(i)) selectedVerts.push(i);
       }
     } else selectedVerts = [...indices];
+    selectedLines = [];
+    markUi();
+    refreshPanels();
+  },
+  onSelectLine: (i, additive) => {
+    if (i < 0) selectedLines = [];
+    else if (additive) {
+      if (!selectedLines.includes(i)) selectedLines.push(i);
+    } else selectedLines = [i];
+    selectedVerts = [];
     markUi();
     refreshPanels();
   },
@@ -410,7 +427,9 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     return {
       verts,
       edges: mdl.edges,
-      bindJoint,
+      binding: pendingBind != null || bindJoint >= 0,
+      bindJoint: pendingBind != null ? -1 : bindJoint,
+      meshSel: pendingBind != null ? pendingBind : rig.jointVerts[bindJoint] || [],
       jointVerts: rig.jointVerts,
       ghost: averageJointPositions(verts, rig.jointVerts),
       lines: e.lines,
@@ -418,10 +437,12 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     };
   },
   onSelectMeshVert: (i, additive) => {
-    assignMeshVerts([i], additive);
+    if (pendingBind) stageMeshBind([i], additive);
+    else assignMeshVerts([i], additive);
   },
   onSelectMeshVerts: (indices, additive) => {
-    assignMeshVerts(indices, additive);
+    if (pendingBind) stageMeshBind(indices, additive);
+    else assignMeshVerts(indices, additive);
   },
 });
 
@@ -808,7 +829,8 @@ function restore(json) {
   doc = normalizeDocument(JSON.parse(json));
   const have = new Set(activeMap(doc).objects.map((o) => o.id));
   selectedIds = selectedIds.filter((id) => have.has(id));
-  selectedVerts = selectedVerts.filter((i) => i >= 0 && i < 13);
+  selectedVerts = selectedVerts.filter((i) => i >= 0 && i < stickCount(activeEnemy()));
+  selectedLines = selectedLines.filter((i) => i >= 0 && i < (activeEnemy()?.lines.length || 0));
   if (enemyIndex >= doc.enemies.length) enemyIndex = 0;
   clampFrameIndex(activeEnemy());
   syncClipFromFrameIndex(activeEnemy());
@@ -1087,9 +1109,7 @@ function setMode(mode) {
           ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
           : mode === "sounds"
             ? "LMB drag paints volume (middle) or freq (bottom) · wheel scrolls ticks · Estimate from Quake is a one-shot first pass"
-            : bindJoint >= 0
-              ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
-              : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+            : animHintText();
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
@@ -1671,6 +1691,8 @@ function renderEnemyList() {
       const prevClip = activeTimelineClip()?.name;
       enemyIndex = i;
       selectedVerts = [];
+      selectedLines = [];
+      pendingBind = null;
       bindJoint = -1;
       clampFrameIndex(activeEnemy());
       const timeline = getTimeline(activeEnemy());
@@ -3088,6 +3110,15 @@ function renderInspector() {
   });
   root.appendChild(field("LOD Z", lodInp));
 
+  const skelChk = document.createElement("input");
+  skelChk.type = "checkbox";
+  skelChk.checked = !!e.customSkeleton;
+  skelChk.addEventListener("change", () => {
+    setCustomSkeleton(e, skelChk.checked);
+    refreshAll();
+  });
+  root.appendChild(field("Custom skeleton", skelChk));
+
   const timeline = getTimeline(e);
   const mdl = sharewareModels[e.name];
   const hasStick = !!stickClipFor(e, activeTimelineClip());
@@ -3214,23 +3245,27 @@ function renderInspector() {
   const stick = stickClipFor(e, clip);
   const stickFrame = stick ? stick.start + frameLocal : 0;
   const height = frameHeight(e.frames[stickFrame] || e.frames[0]);
-  counts.textContent = `13 verts · 13 lines · height ${height}`;
+  const nvShow = stickCount(e);
+  counts.textContent = `${nvShow} verts · ${e.lines.length} lines · height ${height}`;
   root.appendChild(counts);
 
   if (hasStick && selectedVerts.length === 1) {
     const vi = selectedVerts[0];
     const v = e.frames[stickFrame][vi];
+    const clamp = clampVertFor(e);
+    const lim = vertLimitFor(e);
+    const lo = e.customSkeleton ? -lim : -lim - 1;
     const setC = (k, val) => {
       pushUndo();
-      v[k] = clampVert(val);
+      v[k] = clamp(val);
       markDirty();
       refreshAll();
     };
     root.appendChild(
       vec3Field("XYZ", [
-        { value: v.x, onChange: (n) => setC("x", n), min: -64, max: 63 },
-        { value: v.y, onChange: (n) => setC("y", n), min: -64, max: 63 },
-        { value: v.z, onChange: (n) => setC("z", n), min: -64, max: 63 },
+        { value: v.x, onChange: (n) => setC("x", n), min: lo, max: lim },
+        { value: v.y, onChange: (n) => setC("y", n), min: lo, max: lim },
+        { value: v.z, onChange: (n) => setC("z", n), min: lo, max: lim },
       ])
     );
   }
@@ -3238,25 +3273,293 @@ function renderInspector() {
   renderQuakeSource(root, e);
 }
 
-function ensureEnemyRig(e) {
-  if (!e.mdlRig || !Array.isArray(e.mdlRig.jointVerts) || e.mdlRig.jointVerts.length !== 13) {
-    e.mdlRig = emptyMdlRig();
-  }
-  return e.mdlRig;
+function stickCount(e) {
+  if (!e?.customSkeleton) return 13;
+  if (Array.isArray(e.frames?.[0])) return e.frames[0].length;
+  return e.verts | 0;
 }
 
-function activeMdl() {
-  return sharewareModels[activeEnemy()?.name] || null;
+function jointLabel(e, i) {
+  if (e?.customSkeleton) return String(i);
+  return JOINT_NAMES[i] || String(i);
+}
+
+function cloneGraph(e) {
+  return {
+    verts: stickCount(e),
+    lines: e.lines.map((p) => [p[0], p[1]]),
+    frames: JSON.parse(JSON.stringify(e.frames)),
+    mdlRig: JSON.parse(JSON.stringify(e.mdlRig)),
+    clips: JSON.parse(JSON.stringify(e.clips || [])),
+    exportClips: e.exportClips ? [...e.exportClips] : undefined,
+  };
+}
+
+function applyGraph(e, g) {
+  e.verts = g.verts;
+  e.lines = g.lines.map((p) => [p[0], p[1]]);
+  e.frames = JSON.parse(JSON.stringify(g.frames));
+  e.mdlRig = JSON.parse(JSON.stringify(g.mdlRig));
+  if (g.clips) e.clips = JSON.parse(JSON.stringify(g.clips));
+  if (g.exportClips) e.exportClips = [...g.exportClips];
+}
+
+function setCustomSkeleton(e, on) {
+  if (!!e.customSkeleton === !!on) return;
+  pushUndo();
+  bindJoint = -1;
+  pendingBind = null;
+  selectedVerts = [];
+  selectedLines = [];
+  if (on) {
+    e.stockGraph = cloneGraph(e);
+    if (e.customGraph) applyGraph(e, e.customGraph);
+    e.customSkeleton = true;
+    e.customGraph = null;
+  } else {
+    e.customGraph = cloneGraph(e);
+    if (e.stockGraph) applyGraph(e, e.stockGraph);
+    e.customSkeleton = false;
+    e.stockGraph = null;
+  }
+  updateAnimHint();
+}
+
+function animHintText() {
+  const e = activeEnemy();
+  if (e?.customSkeleton && pendingBind) {
+    return "Box-select mesh verts · Shift add · V done · Esc cancels · F focus · RMB orbit";
+  }
+  if (bindJoint >= 0) {
+    return `Box-select mesh verts for ${jointLabel(e, bindJoint)} · Shift add · Esc stops bind · F focus · RMB orbit`;
+  }
+  if (e?.customSkeleton) {
+    return "LMB select verts or a line · Shift add · V bind · L add line · M merge · Del delete · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+  }
+  return "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
 }
 
 function updateAnimHint() {
   if (editorMode !== "anim") return;
   const hint = document.getElementById("hint");
   if (!hint) return;
-  hint.textContent =
-    bindJoint >= 0
-      ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
-      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+  hint.textContent = animHintText();
+}
+
+function stageMeshBind(indices, additive) {
+  if (!pendingBind) return;
+  const mdl = activeMdl();
+  const max = mdl ? mdl.numVerts : Infinity;
+  const set = new Set(additive ? pendingBind : []);
+  for (const i of indices) {
+    const n = i | 0;
+    if (n >= 0 && n < max) set.add(n);
+  }
+  pendingBind = [...set].sort((a, b) => a - b);
+  animView.draw();
+  refreshPanels();
+}
+
+function averageMeshBind(e, indices) {
+  const mdl = sharewareModels[e.name];
+  if (!mdl || !indices.length) return { x: 0, y: 0, z: 0 };
+  const timeline = getTimeline(e);
+  const clip = timeline[clipIndex] || timeline[0];
+  let mdlFi = 0;
+  if (clip) {
+    const local = Math.max(0, Math.min(frameLocal, (clip.len | 0) - 1));
+    mdlFi = clip.mdlFrames?.[local]?.index ?? 0;
+  }
+  const avg = averageJointPositions(mdlEditorVerts(mdl, mdlFi, mdlScale), [indices])[0];
+  if (!avg) return { x: 0, y: 0, z: 0 };
+  const clamp = clampVertFor(e);
+  return {
+    x: clamp(Math.round(avg.x)),
+    y: clamp(Math.round(avg.y)),
+    z: clamp(Math.round(avg.z)),
+  };
+}
+
+function commitCustomVert(e) {
+  const picked = pendingBind ? [...pendingBind] : [];
+  pendingBind = null;
+  if (!picked.length) {
+    updateAnimHint();
+    refreshPanels();
+    animView.draw();
+    return;
+  }
+  const nv = stickCount(e);
+  if (nv >= SKEL_MAX_VERTS) {
+    setStatus(`Vertex cap (${SKEL_MAX_VERTS})`, true);
+    updateAnimHint();
+    refreshPanels();
+    animView.draw();
+    return;
+  }
+  pushUndo();
+  ensureEnemyRig(e);
+  const pos = averageMeshBind(e, picked);
+  for (const fr of e.frames) fr.push({ ...pos });
+  e.mdlRig.jointVerts.push(picked);
+  e.verts = nv + 1;
+  selectedVerts = [nv];
+  selectedLines = [];
+  updateAnimHint();
+  markDirty();
+  persistMdlRigBackup();
+  retargetMdlFrames({ status: true });
+  refreshPanels();
+  animView.draw();
+}
+
+function toggleCustomBind(e) {
+  if (pendingBind) {
+    commitCustomVert(e);
+    return;
+  }
+  pendingBind = [];
+  bindJoint = -1;
+  selectedVerts = [];
+  selectedLines = [];
+  setOverlayOn(true);
+  updateAnimHint();
+  refreshPanels();
+  animView.draw();
+}
+
+function addCustomLine(e) {
+  if (selectedVerts.length !== 2) {
+    setStatus("Select two vertices", true);
+    return;
+  }
+  if (e.lines.length >= SKEL_MAX_LINES) {
+    setStatus("Line cap (64)", true);
+    return;
+  }
+  let a = selectedVerts[0] | 0;
+  let b = selectedVerts[1] | 0;
+  if (a === b) return;
+  if (a > b) {
+    const t = a;
+    a = b;
+    b = t;
+  }
+  if (e.lines.some(([x, y]) => x === a && y === b)) {
+    setStatus("Line already exists", true);
+    return;
+  }
+  pushUndo();
+  e.lines.push([a, b]);
+  markDirty();
+  refreshPanels();
+  animView.draw();
+}
+
+function mergeCustomVerts(e) {
+  if (selectedVerts.length !== 2) {
+    setStatus("Select two vertices", true);
+    return;
+  }
+  const keep = selectedVerts[0] | 0;
+  const drop = selectedVerts[1] | 0;
+  const nv = stickCount(e);
+  if (keep === drop || keep < 0 || drop < 0 || keep >= nv || drop >= nv) return;
+  pushUndo();
+  ensureEnemyRig(e);
+  const joints = e.mdlRig.jointVerts;
+  joints[keep] = [...new Set([...(joints[keep] || []), ...(joints[drop] || [])])].sort((a, b) => a - b);
+  const surv = keep > drop ? keep - 1 : keep;
+  const remap = (i) => (i === drop ? surv : i > drop ? i - 1 : i);
+  for (const fr of e.frames) fr.splice(drop, 1);
+  joints.splice(drop, 1);
+  const seen = new Set();
+  const lines = [];
+  for (const [a, b] of e.lines) {
+    let x = remap(a);
+    let y = remap(b);
+    if (x === y) continue;
+    if (x > y) {
+      const t = x;
+      x = y;
+      y = t;
+    }
+    const key = x + "," + y;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    lines.push([x, y]);
+  }
+  e.lines = lines;
+  e.verts = nv - 1;
+  if (bindJoint === drop) bindJoint = surv;
+  else if (bindJoint > drop) bindJoint--;
+  selectedVerts = [surv];
+  selectedLines = [];
+  markDirty();
+  refreshPanels();
+  animView.draw();
+}
+
+function deleteCustomVerts(e) {
+  const nv = stickCount(e);
+  const drop = new Set(selectedVerts.filter((i) => i >= 0 && i < nv));
+  if (!drop.size) return;
+  pushUndo();
+  const map = [];
+  let n = 0;
+  for (let i = 0; i < nv; i++) map[i] = drop.has(i) ? -1 : n++;
+  for (const fr of e.frames) {
+    const next = fr.filter((_, i) => !drop.has(i));
+    fr.length = 0;
+    fr.push(...next);
+  }
+  e.mdlRig.jointVerts = e.mdlRig.jointVerts.filter((_, i) => !drop.has(i));
+  e.lines = e.lines
+    .map(([a, b]) => [map[a], map[b]])
+    .filter(([a, b]) => a >= 0 && b >= 0 && a !== b)
+    .map(([a, b]) => (a < b ? [a, b] : [b, a]));
+  e.verts = n;
+  if (bindJoint >= 0) bindJoint = map[bindJoint] ?? -1;
+  selectedVerts = [];
+  selectedLines = [];
+  markDirty();
+  refreshPanels();
+  animView.draw();
+}
+
+function deleteCustomSelection(e) {
+  const lines = [...selectedLines].filter((i) => i >= 0 && i < e.lines.length).sort((a, b) => b - a);
+  if (lines.length) {
+    pushUndo();
+    for (const i of lines) e.lines.splice(i, 1);
+    selectedLines = [];
+    markDirty();
+    refreshPanels();
+    animView.draw();
+    return;
+  }
+  deleteCustomVerts(e);
+}
+
+function ensureEnemyRig(e) {
+  const n = stickCount(e);
+  if (!e.mdlRig || !Array.isArray(e.mdlRig.jointVerts)) {
+    e.mdlRig = { jointVerts: Array.from({ length: n }, () => []) };
+    return e.mdlRig;
+  }
+  const joints = e.mdlRig.jointVerts;
+  if (joints.length === n) return e.mdlRig;
+  if (!e.customSkeleton) {
+    e.mdlRig = emptyMdlRig();
+    return e.mdlRig;
+  }
+  while (joints.length < n) joints.push([]);
+  joints.length = n;
+  return e.mdlRig;
+}
+
+function activeMdl() {
+  return sharewareModels[activeEnemy()?.name] || null;
 }
 
 function assignMeshVerts(indices, additive) {
@@ -3374,7 +3677,7 @@ function retargetMdlFrames(options = {}) {
   const names = exportClipNames(e, mdl);
   if (!names.length) return false;
   const rest = e.frames[0] || dummyFrameFor(e.name);
-  const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVert, names);
+  const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVertFor(e), names);
   if (!frames.length) return false;
   const prevByName = new Map((e.clips || []).map((c) => [c.name, c]));
   const keepName = activeTimelineClip()?.name;
@@ -3428,15 +3731,31 @@ function renderQuakeSource(root, e) {
   }
   wrap.appendChild(status);
 
+  const rig = ensureEnemyRig(e);
+  const custom = !!e.customSkeleton;
+  const count = stickCount(e);
+
+  if (custom) {
+    const row = document.createElement("div");
+    row.className = "btn-row";
+    const bindBtn = document.createElement("button");
+    bindBtn.type = "button";
+    bindBtn.textContent = pendingBind ? "Done" : "Bind";
+    bindBtn.title = "V";
+    if (pendingBind) bindBtn.className = "active";
+    bindBtn.addEventListener("click", () => toggleCustomBind(e));
+    row.append(bindBtn);
+    wrap.appendChild(row);
+  } else {
   const jointList = document.createElement("ul");
   jointList.className = "joint-list";
-  const rig = ensureEnemyRig(e);
-  JOINT_NAMES.forEach((name, i) => {
+  for (let i = 0; i < count; i++) {
+    const name = jointLabel(e, i);
     const li = document.createElement("li");
     li.className = "joint-row" + (bindJoint === i ? " active" : "");
     const label = document.createElement("span");
     label.className = "joint-name";
-    const n = rig.jointVerts[i].length;
+    const n = rig.jointVerts[i]?.length || 0;
     label.classList.toggle("unbound", !n);
     label.textContent = n ? `${name} · ${n}` : name;
     const bindBtn = document.createElement("button");
@@ -3452,8 +3771,9 @@ function renderQuakeSource(root, e) {
     });
     li.append(label, bindBtn);
     jointList.appendChild(li);
-  });
+  }
   wrap.appendChild(jointList);
+  }
   root.appendChild(wrap);
 }
 
@@ -3610,7 +3930,7 @@ function nudgeVert(axis, delta) {
   pushUndo();
   for (const i of idxs) {
     const v = e.frames[frameIndex][i];
-    v[axis] = clampVert(v[axis] + delta);
+    v[axis] = clampVertFor(e)(v[axis] + delta);
   }
   markDirty();
   refreshAll();
@@ -3849,6 +4169,11 @@ window.addEventListener("keydown", (e) => {
       itemView.deleteSelection();
       return;
     }
+    if (editorMode === "anim" && activeEnemy()?.customSkeleton && !pendingBind) {
+      e.preventDefault();
+      deleteCustomSelection(activeEnemy());
+      return;
+    }
   }
   if (editorMode === "items" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     const k = e.key.toLowerCase();
@@ -3917,12 +4242,37 @@ window.addEventListener("keydown", (e) => {
   }
   if (editorMode === "anim") {
     if (e.key === "Escape") {
-      if (bindJoint >= 0) {
+      if (pendingBind || bindJoint >= 0) {
         e.preventDefault();
+        pendingBind = null;
         bindJoint = -1;
         updateAnimHint();
         refreshPanels();
         animView.draw();
+        return;
+      }
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "v") {
+      const en = activeEnemy();
+      if (en?.customSkeleton) {
+        e.preventDefault();
+        toggleCustomBind(en);
+        return;
+      }
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "l") {
+      const en = activeEnemy();
+      if (en?.customSkeleton && !pendingBind) {
+        e.preventDefault();
+        addCustomLine(en);
+        return;
+      }
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "m") {
+      const en = activeEnemy();
+      if (en?.customSkeleton && !pendingBind) {
+        e.preventDefault();
+        mergeCustomVerts(en);
         return;
       }
     }

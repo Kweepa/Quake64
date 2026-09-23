@@ -12,13 +12,6 @@ CIA2_CRA	= $dd0e
 CIA2_CRB	= $dd0f
 
 !if PROFILE = 1 {
-PROF_CLEAR	= 0
-PROF_ROT	= 1
-PROF_PROJ	= 2
-PROF_CLIP	= 3
-PROF_DRAW	= 4
-PROF_NBUCKET	= 5
-
 NV_ROT		= 0
 NV_PROJ		= 2
 NV_CLIP		= 4
@@ -78,8 +71,13 @@ calc_frame_dt
 .ok
 	rts
 
-; IRQ / SEI init only — CIA2 I/O. Main uses casc_now via prof_frame_sample.
+; CIA2 cascade → casc_now. Caller holds sei (main) or is the IRQ.
+; $01=$30 unmaps $DD04, so the read itself switches I/O in.
 prof_read_casc
+	lda $01
+	pha
+	lda #BANK_IO
+	sta $01
 .retry
 	lda CIA2_TB_HI
 	sta casc_now + 3
@@ -95,6 +93,8 @@ prof_read_casc
 	lda CIA2_TB_LO
 	cmp casc_now + 2
 	bne .retry
+	pla
+	sta $01
 	rts
 
 prof_store_t0
@@ -109,8 +109,9 @@ prof_store_t0
 	rts
 
 ; Period since last main-loop call → frame_cy (countdown: t0 − casc_now).
-; casc_now is latched from CIA in the IRQ; do not read $dd04 here.
+; casc_now is the last latch. Do not read $dd04 here.
 prof_frame_sample
+	sei
 	sec
 	lda frame_t0
 	sbc casc_now
@@ -124,10 +125,13 @@ prof_frame_sample
 	lda frame_t0 + 3
 	sbc casc_now + 3
 	sta frame_cy + 3
-	jmp prof_store_t0
+	jsr prof_store_t0
+	cli
+	rts
 
 !if PROFILE = 1 {
 prof_snap
+	sei
 	jsr prof_read_casc
 	lda casc_now
 	sta casc_snap
@@ -137,6 +141,7 @@ prof_snap
 	sta casc_snap + 2
 	lda casc_now + 3
 	sta casc_snap + 3
+	cli
 	rts
 
 prof_reset_frame
@@ -168,7 +173,9 @@ prof_add_nv
 	rts
 
 ; Y = bucket 0..N-1. Add (casc_snap − now) into prof_cy[Y], then snap.
+; sei covers the CIA read and the subtract. IRQ also writes casc_now.
 prof_add_bucket
+	sei
 	jsr prof_read_casc
 	tya
 	asl
@@ -208,6 +215,11 @@ prof_add_bucket
 	sta casc_snap + 2
 	lda casc_now + 3
 	sta casc_snap + 3
+	cli
+	rts
+}
+!if PROFILE = 0 {
+prof_add_bucket
 	rts
 }
 

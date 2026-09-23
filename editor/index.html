@@ -2521,6 +2521,8 @@ const WORLD_MAX = 255;
 const WORLD_SIZE = 256;
 const MAX_VERTS = 13;
 const MAX_LINES = 13;
+const SKEL_MAX_VERTS = 48;
+const SKEL_MAX_LINES = 64;
 const WEAPON_VERT = 12;
 const WRIST_R = 7;
 const JOINT_NAMES = [
@@ -2538,8 +2540,11 @@ const JOINT_NAMES = [
   "Ankle R",
   "Weapon",
 ];
-const VERT_MIN = -64;
-const VERT_MAX = 63;
+const VERT_MIN = -128;
+const VERT_MAX = 127;
+// Custom skeletons pack at round(v / 2^shift), shift 0..2; genenemies picks the shift.
+// 509 is the largest magnitude that still rounds into a signed byte at shift 2.
+const SKEL_VERT_MAX = 509;
 const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
 const ANIM_ORBIT_DIST_MIN = 16;
@@ -4001,6 +4006,19 @@ function clampVert(n) {
   return Math.max(VERT_MIN, Math.min(VERT_MAX, v));
 }
 
+function clampSkelVert(n) {
+  const v = n | 0;
+  return Math.max(-SKEL_VERT_MAX, Math.min(SKEL_VERT_MAX, v));
+}
+
+function vertLimitFor(enemy) {
+  return enemy?.customSkeleton ? SKEL_VERT_MAX : VERT_MAX;
+}
+
+function clampVertFor(enemy) {
+  return enemy?.customSkeleton ? clampSkelVert : clampVert;
+}
+
 function aabbEnd(box) {
   return {
     x: box.x + box.sx,
@@ -4529,8 +4547,20 @@ function figureTemplateName(obj) {
 }
 
 /** World-space first-frame stick verts for a placed enemy (1/8 scale, feet on floor center). */
+function enemyPreviewFrame(template) {
+  const frames = template?.frames;
+  if (!frames?.length) return null;
+  const want = ROLE_CLIPS[template.name]?.preview?.[0];
+  if (want) {
+    const clip = (template.clips || []).find((c) => poseClipKey(c.name) === poseClipKey(want));
+    const fi = clip ? clip.start | 0 : -1;
+    if (fi >= 0 && fi < frames.length) return frames[fi];
+  }
+  return frames[0];
+}
+
 function enemyPlacementWorldVerts(obj, template) {
-  const frame = template?.frames?.[0];
+  const frame = enemyPreviewFrame(template);
   if (!frame) return [];
   const ox = obj.x + obj.sx / 2;
   const oy = obj.y;
@@ -4577,7 +4607,7 @@ const ROOM_MAX = 24; // keep in sync with tools/genmap.py
 const ROOM_MAX_TYPES = 2;
 const ENEMY_MAX = 24; // keep in sync with tools/genmap.py / src/mem.asm
 const MAP_MAX_BYTES = 4096;
-const ENEMY_POSE_MAX = 4096;
+const ENEMY_POSE_MAX = 7680;
 const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 
 /** Packed map header: 12 counts + 2 type pads + 6 spawn + 4 mesh lens. */
@@ -4624,11 +4654,12 @@ const ROLE_CLIPS = {
     attack: ["smash"],
   },
   Chthon: {
-    stand: ["walk", 8],
-    alert: ["walk", 4],
-    run: ["walk"],
-    walk: ["walk"],
+    stand: ["rise"],
+    alert: ["rise"],
+    run: ["rise"],
+    walk: ["rise"],
     attack: ["attack"],
+    preview: ["attack"],
   },
   Zombie: {
     stand: ["stand"],
@@ -4715,8 +4746,9 @@ function findPoseAttackVariants(name, clips) {
   return out;
 }
 
-function findPoseVariants(clips, kind) {
-  const re = kind === "pain" ? /^pain[a-z]?$/ : /^(bdeath|death[a-z]?)$/;
+function findPoseVariants(clips, kind, name) {
+  let re = kind === "pain" ? /^pain[a-z]?$/ : /^(bdeath|death[a-z]?)$/;
+  if (kind === "pain" && name === "Chthon") re = /^shock[a-z]?$/;
   const out = [];
   for (const c of clips) {
     if (!re.test(poseClipKey(c.name))) continue;
@@ -4737,7 +4769,9 @@ function poseAccAt(frs, i) {
   const b = frs[i];
   const c = frs[i + 1];
   if (!a || !b || !c) return 0;
-  for (let v = 0; v < 13; v++) {
+  const nv = b.length;
+  for (let v = 0; v < nv; v++) {
+    if (!a[v] || !c[v]) continue;
     for (const k of ["x", "y", "z"]) {
       const d = Math.abs((c[v][k] | 0) - 2 * (b[v][k] | 0) + (a[v][k] | 0));
       if (d > m) m = d;
@@ -4848,7 +4882,7 @@ function packedPoseBytes(enemy, clips, frames) {
     ranges.push([`attack${i}`, start, Math.min(length, nLogical - start)]);
   });
   for (const kind of ["pain", "death"]) {
-    findPoseVariants(clipList, kind).forEach(([start, length], i) => {
+    findPoseVariants(clipList, kind, name).forEach(([start, length], i) => {
       if (start >= nLogical || length <= 0) return;
       ranges.push([`${kind}${i}`, start, Math.min(length, nLogical - start)]);
     });
@@ -4890,7 +4924,8 @@ function packedPoseBytes(enemy, clips, frames) {
   }
 
   const nStored = keep.size;
-  const bytes = 2 + nLogical + nStored * STICK_POSE_BYTES;
+  const nv = frs?.[0]?.length || 13;
+  const bytes = 2 + nLogical + nStored * nv * 3;
   return { bytes, nLogical, nStored };
 }
 
@@ -5402,22 +5437,84 @@ function emptyMdlRig() {
   return { jointVerts: Array.from({ length: 13 }, () => []) };
 }
 
-function normalizeMdlRig(raw) {
-  const rig = emptyMdlRig();
+function normalizeMdlRig(raw, nv = 13) {
+  const n = nv | 0;
+  const rig = { jointVerts: Array.from({ length: n }, () => []) };
   const src = raw?.jointVerts;
   if (!Array.isArray(src)) return rig;
-  for (let i = 0; i < 13; i++) {
+  for (let i = 0; i < n; i++) {
     const list = src[i];
     if (!Array.isArray(list)) continue;
     const seen = new Set();
     for (const v of list) {
-      const n = v | 0;
-      if (n < 0 || seen.has(n)) continue;
-      seen.add(n);
-      rig.jointVerts[i].push(n);
+      const idx = v | 0;
+      if (idx < 0 || seen.has(idx)) continue;
+      seen.add(idx);
+      rig.jointVerts[i].push(idx);
     }
   }
   return rig;
+}
+
+function parseSkelLines(raw, nv) {
+  const out = [];
+  const seen = new Set();
+  for (const pair of raw || []) {
+    if (!Array.isArray(pair) || pair.length < 2) continue;
+    let a = pair[0] | 0;
+    let b = pair[1] | 0;
+    if (a === b || a < 0 || b < 0 || a >= nv || b >= nv) continue;
+    if (a > b) {
+      const t = a;
+      a = b;
+      b = t;
+    }
+    const k = `${a},${b}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push([a, b]);
+    if (out.length >= SKEL_MAX_LINES) break;
+  }
+  return out;
+}
+
+function inferSkelNv(raw) {
+  let n;
+  if (Array.isArray(raw?.frames?.[0])) n = raw.frames[0].length;
+  else if (Array.isArray(raw?.mdlRig?.jointVerts)) n = raw.mdlRig.jointVerts.length;
+  else n = (raw?.verts | 0) || 13;
+  if (n < 0) n = 0;
+  if (n > SKEL_MAX_VERTS) n = SKEL_MAX_VERTS;
+  return n;
+}
+
+function parseFramesN(rawFrames, name, nv, clamp = clampSkelVert) {
+  const rest = dummyFrameFor(name);
+  while (rest.length < nv) rest.push({ x: 0, y: 0, z: 0 });
+  const srcFrames = Array.isArray(rawFrames) ? rawFrames : [];
+  if (!srcFrames.length) return [rest.slice(0, nv).map((v) => ({ x: v.x, y: v.y, z: v.z }))];
+  return srcFrames.map((src) => {
+    const verts = [];
+    for (let i = 0; i < nv; i++) {
+      const v = src?.[i] || rest[i];
+      verts.push({ x: clamp(v.x), y: clamp(v.y), z: clamp(v.z) });
+    }
+    return verts;
+  });
+}
+
+function parseSkelGraph(raw, name, fixedNv) {
+  if (!raw || typeof raw !== "object") return null;
+  const nv = fixedNv || inferSkelNv(raw);
+  const graph = {
+    verts: nv,
+    lines: parseSkelLines(raw.lines, nv),
+    frames: parseFramesN(raw.frames, name, nv, fixedNv === 13 ? clampVert : clampSkelVert),
+    mdlRig: normalizeMdlRig(raw.mdlRig, nv),
+  };
+  if (Array.isArray(raw.clips)) graph.clips = raw.clips;
+  if (Array.isArray(raw.exportClips)) graph.exportClips = raw.exportClips.map(String);
+  return graph;
 }
 
 function dummyFrameFor(name) {
@@ -5733,7 +5830,7 @@ function parseEditorState(raw) {
   d.clipIndex = Math.max(0, num(raw.clipIndex, 0) | 0);
   d.frameLocal = Math.max(0, num(raw.frameLocal, 0) | 0);
   if (Array.isArray(raw.selectedVerts)) {
-    d.selectedVerts = raw.selectedVerts.map((i) => i | 0).filter((i) => i >= 0 && i < 13);
+    d.selectedVerts = raw.selectedVerts.map((i) => i | 0).filter((i) => i >= 0 && i < SKEL_MAX_VERTS);
   }
   const cam = raw.layoutCamera || {};
   d.layoutCamera = parseLayoutCamera(cam, d.layoutCamera);
@@ -5896,11 +5993,23 @@ function normalizeDocument(raw) {
       const enemy = createEnemy(e.name || "Enemy");
       enemy.id = e.id || enemy.id;
       enemy.name = e.name || enemy.name;
-      enemy.verts = 13;
-      enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
-      enemy.frames = parseEnemyFrames(e.frames, enemy.name);
+      enemy.customSkeleton = !!e.customSkeleton;
+      enemy.stockGraph = parseSkelGraph(e.stockGraph, enemy.name, 13);
+      if (enemy.customSkeleton) {
+        const nv = inferSkelNv(e);
+        enemy.verts = nv;
+        enemy.lines = parseSkelLines(e.lines, nv);
+        enemy.frames = parseFramesN(e.frames, enemy.name, nv);
+        enemy.mdlRig = normalizeMdlRig(e.mdlRig, nv);
+        enemy.customGraph = null;
+      } else {
+        enemy.verts = 13;
+        enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
+        enemy.frames = parseEnemyFrames(e.frames, enemy.name);
+        enemy.mdlRig = normalizeMdlRig(e.mdlRig);
+        enemy.customGraph = parseSkelGraph(e.customGraph, enemy.name, 0);
+      }
       enemy.clips = normalizeClips(e.clips, enemy.frames.length);
-      enemy.mdlRig = normalizeMdlRig(e.mdlRig);
       enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;
@@ -7125,14 +7234,15 @@ function buildStickFramesFromMdl(mdl, rig, scale, restFrame, clampVert, clipName
     for (const fr of clip.frames) {
       const verts = mdlEditorVerts(mdl, fr.index, scale);
       const avg = averageJointPositions(verts, rig.jointVerts);
-      const pose = restFrame.map((v, i) => {
-        if (avg[i]) {
+      const pose = avg.map((p, i) => {
+        if (p) {
           return {
-            x: clampVert(Math.round(avg[i].x)),
-            y: clampVert(Math.round(avg[i].y)),
-            z: clampVert(Math.round(avg[i].z)),
+            x: clampVert(Math.round(p.x)),
+            y: clampVert(Math.round(p.y)),
+            z: clampVert(Math.round(p.z)),
           };
         }
+        const v = restFrame[i] || { x: 0, y: 0, z: 0 };
         return { x: v.x, y: v.y, z: v.z };
       });
       frames.push(pose);
@@ -10075,6 +10185,7 @@ class AnimView {
     this.orbit = { yaw: 0.5, pitch: 0.15, dist: 48, target: { x: 0, y: 10, z: 0 } };
     this.drag = null;
     this.hover = -1;
+    this.hoverLine = -1;
     this.hoverAxis = null;
     this.enabled = false;
     this._ro = new ResizeObserver(() => this.resize());
@@ -10122,7 +10233,11 @@ class AnimView {
 
   #binding() {
     const overlay = this.#overlay();
-    return overlay && overlay.bindJoint >= 0;
+    return !!(overlay && (overlay.binding || overlay.bindJoint >= 0));
+  }
+
+  #custom() {
+    return !!this.opts.getEnemy()?.customSkeleton;
   }
 
   #cam() {
@@ -10274,11 +10389,35 @@ class AnimView {
 
   #hitVert(mx, my) {
     const overlay = this.#overlay();
-    if (overlay && overlay.bindJoint >= 0) return this.#hitAmong(overlay.verts, mx, my, 8);
+    if (this.#binding()) return this.#hitAmong(overlay.verts, mx, my, 8);
     if (!this.#hasStick()) return -1;
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
     return this.#hitAmong(enemy.frames[frame], mx, my, 10);
+  }
+
+  #hitLine(mx, my) {
+    if (!this.#custom() || this.#binding() || !this.#hasStick()) return -1;
+    const enemy = this.opts.getEnemy();
+    const frame = this.opts.getFrame();
+    const verts = enemy.frames[frame];
+    if (!verts) return -1;
+    const cam = this.#cam();
+    let best = -1;
+    let bestD = 6;
+    enemy.lines.forEach(([ia, ib], i) => {
+      const a = verts[ia];
+      const b = verts[ib];
+      if (!a || !b) return;
+      const pl = projectLine(a, b, cam, this.cssW, this.cssH);
+      if (!pl) return;
+      const d = distPointToSegment2d(mx, my, pl.ax, pl.ay, pl.bx, pl.by);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
   }
 
   #hitAxis(mx, my) {
@@ -10387,6 +10526,16 @@ class AnimView {
       this.draw();
       return;
     }
+    if (!binding && this.#custom()) {
+      const li = this.#hitLine(p.x, p.y);
+      if (li >= 0) {
+        this.opts.onSelectLine?.(li, e.shiftKey);
+        this.drag = { kind: "select" };
+        this.canvas.setPointerCapture(e.pointerId);
+        this.draw();
+        return;
+      }
+    }
     this.drag = { kind: "box", start: p, end: p, additive: e.shiftKey };
     this.canvas.setPointerCapture(e.pointerId);
   }
@@ -10397,6 +10546,7 @@ class AnimView {
     if (!this.drag) {
       this.hoverAxis = this.#binding() ? null : this.#hitAxis(p.x, p.y);
       this.hover = this.hoverAxis ? -1 : this.#hitVert(p.x, p.y);
+      this.hoverLine = this.#binding() || this.hover >= 0 || this.hoverAxis ? -1 : this.#hitLine(p.x, p.y);
       this.draw();
       return;
     }
@@ -10461,7 +10611,7 @@ class AnimView {
         v.x = o.x;
         v.y = o.y;
         v.z = o.z;
-        v[this.drag.axis] = clampVert(o[this.drag.axis] + delta);
+        v[this.drag.axis] = clampVertFor(enemy)(o[this.drag.axis] + delta);
       }
       this.opts.onChange?.();
       this.draw();
@@ -10478,10 +10628,11 @@ class AnimView {
       n[this.drag.lock] = 1;
       const hit = intersectPlane(ray.origin, ray.dir, orig, n);
       if (!hit) return;
+      const clamp = clampVertFor(enemy);
       const next = {
-        x: this.drag.lock === "x" ? orig.x : clampVert(Math.round(hit.point.x)),
-        y: this.drag.lock === "y" ? orig.y : clampVert(Math.round(hit.point.y)),
-        z: this.drag.lock === "z" ? orig.z : clampVert(Math.round(hit.point.z)),
+        x: this.drag.lock === "x" ? orig.x : clamp(Math.round(hit.point.x)),
+        y: this.drag.lock === "y" ? orig.y : clamp(Math.round(hit.point.y)),
+        z: this.drag.lock === "z" ? orig.z : clamp(Math.round(hit.point.z)),
       };
       if (next.x === v.x && next.y === v.y && next.z === v.z) return;
       if (!this.drag.undoStarted) {
@@ -10519,7 +10670,7 @@ class AnimView {
   #vertsInBox(rect) {
     const overlay = this.#overlay();
     const verts =
-      overlay && overlay.bindJoint >= 0
+      overlay && (overlay.binding || overlay.bindJoint >= 0)
         ? overlay.verts
         : this.#hasStick()
           ? this.opts.getEnemy().frames[this.opts.getFrame()]
@@ -10539,7 +10690,9 @@ class AnimView {
     const additive = this.drag.additive;
     const binding = this.#binding();
     if (rect.w < ANIM_BOX_CLICK && rect.h < ANIM_BOX_CLICK) {
-      if (!binding && !additive) this.opts.onSelectVerts?.([]);
+      if (binding) {
+        if (!additive) this.opts.onSelectMeshVerts?.([], false);
+      } else if (!additive) this.opts.onSelectVerts?.([]);
       return;
     }
     const hits = this.#vertsInBox(rect);
@@ -10618,12 +10771,13 @@ class AnimView {
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
     const selected = this.opts.getSelectedVerts?.() || [];
+    const selectedLines = this.opts.getSelectedLines?.() || [];
     const overlay = this.#overlay();
-    const binding = overlay && overlay.bindJoint >= 0;
+    const binding = overlay && (overlay.binding || overlay.bindJoint >= 0);
     const stickOn = this.#hasStick();
     const verts = stickOn ? enemy.frames[frame] || enemy.frames[0] : null;
     let shown = selected;
-    let meshShown = overlay ? [...(overlay.jointVerts[overlay.bindJoint] || [])] : [];
+    let meshShown = overlay ? [...(overlay.meshSel || [])] : [];
     if (this.drag?.kind === "box") {
       const r = this.#boxRect();
       if (r.w >= ANIM_BOX_CLICK || r.h >= ANIM_BOX_CLICK) {
@@ -10673,9 +10827,11 @@ class AnimView {
 
     if (stickOn && verts) {
       ctx.lineWidth = 1.5;
-      for (const [i, j] of enemy.lines) {
-        this.#strokeSeg(ctx, cam, w, h, verts[i], verts[j], "#c8ccd4", 1.5);
-      }
+      enemy.lines.forEach(([i, j], li) => {
+        const sel = !binding && selectedLines.includes(li);
+        const ho = !binding && li === this.hoverLine;
+        this.#strokeSeg(ctx, cam, w, h, verts[i], verts[j], sel ? "#f2d36b" : ho ? "#fff" : "#c8ccd4", sel || ho ? 2.5 : 1.5);
+      });
 
       verts.forEach((v, i) => {
         const p = projectPoint(v, cam, w, h);
@@ -10693,7 +10849,7 @@ class AnimView {
     if (binding) {
       const assignedOther = new Set();
       overlay.jointVerts.forEach((list, ji) => {
-        if (ji === overlay.bindJoint) return;
+        if (overlay.bindJoint >= 0 && ji === overlay.bindJoint) return;
         for (const i of list) assignedOther.add(i);
       });
       overlay.verts.forEach((v, i) => {
@@ -10736,7 +10892,8 @@ class AnimView {
       label = "rest";
     }
     const frameTotal = stickOn && enemy.clips?.length ? enemy.frames.length : overlay ? "MDL" : enemy.frames.length;
-    ctx.fillText(`${enemy.name} · ${label} · 13 verts · ${frameTotal} frames`, 8, 16);
+    const nv = (stickOn ? enemy.frames[frame] || enemy.frames[0] : null)?.length || enemy.verts || 0;
+    ctx.fillText(`${enemy.name} · ${label} · ${nv} verts · ${frameTotal} frames`, 8, 16);
   }
 }
 
@@ -12769,6 +12926,8 @@ let pendingPlace = null;
 let enemyIndex = 0;
 let frameIndex = 0;
 let selectedVerts = [];
+let selectedLines = [];
+let pendingBind = null;
 let dirty = false;
 let saving = false;
 let autosaveTimer = null;
@@ -12935,11 +13094,13 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
   },
   hasStickFrame: () => !!stickClipFor(doc.enemies[enemyIndex], activeTimelineClip()),
   getSelectedVerts: () => selectedVerts,
+  getSelectedLines: () => selectedLines,
   onSelectVert: (i, additive) => {
     if (i < 0) selectedVerts = [];
     else if (additive) {
       if (!selectedVerts.includes(i)) selectedVerts.push(i);
     } else selectedVerts = [i];
+    selectedLines = [];
     markUi();
     refreshPanels();
   },
@@ -12949,6 +13110,16 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
         if (!selectedVerts.includes(i)) selectedVerts.push(i);
       }
     } else selectedVerts = [...indices];
+    selectedLines = [];
+    markUi();
+    refreshPanels();
+  },
+  onSelectLine: (i, additive) => {
+    if (i < 0) selectedLines = [];
+    else if (additive) {
+      if (!selectedLines.includes(i)) selectedLines.push(i);
+    } else selectedLines = [i];
+    selectedVerts = [];
     markUi();
     refreshPanels();
   },
@@ -12978,7 +13149,9 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     return {
       verts,
       edges: mdl.edges,
-      bindJoint,
+      binding: pendingBind != null || bindJoint >= 0,
+      bindJoint: pendingBind != null ? -1 : bindJoint,
+      meshSel: pendingBind != null ? pendingBind : rig.jointVerts[bindJoint] || [],
       jointVerts: rig.jointVerts,
       ghost: averageJointPositions(verts, rig.jointVerts),
       lines: e.lines,
@@ -12986,10 +13159,12 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     };
   },
   onSelectMeshVert: (i, additive) => {
-    assignMeshVerts([i], additive);
+    if (pendingBind) stageMeshBind([i], additive);
+    else assignMeshVerts([i], additive);
   },
   onSelectMeshVerts: (indices, additive) => {
-    assignMeshVerts(indices, additive);
+    if (pendingBind) stageMeshBind(indices, additive);
+    else assignMeshVerts(indices, additive);
   },
 });
 
@@ -13376,7 +13551,8 @@ function restore(json) {
   doc = normalizeDocument(JSON.parse(json));
   const have = new Set(activeMap(doc).objects.map((o) => o.id));
   selectedIds = selectedIds.filter((id) => have.has(id));
-  selectedVerts = selectedVerts.filter((i) => i >= 0 && i < 13);
+  selectedVerts = selectedVerts.filter((i) => i >= 0 && i < stickCount(activeEnemy()));
+  selectedLines = selectedLines.filter((i) => i >= 0 && i < (activeEnemy()?.lines.length || 0));
   if (enemyIndex >= doc.enemies.length) enemyIndex = 0;
   clampFrameIndex(activeEnemy());
   syncClipFromFrameIndex(activeEnemy());
@@ -13655,9 +13831,7 @@ function setMode(mode) {
           ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
           : mode === "sounds"
             ? "LMB drag paints volume (middle) or freq (bottom) · wheel scrolls ticks · Estimate from Quake is a one-shot first pass"
-            : bindJoint >= 0
-              ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
-              : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+            : animHintText();
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
@@ -14239,6 +14413,8 @@ function renderEnemyList() {
       const prevClip = activeTimelineClip()?.name;
       enemyIndex = i;
       selectedVerts = [];
+      selectedLines = [];
+      pendingBind = null;
       bindJoint = -1;
       clampFrameIndex(activeEnemy());
       const timeline = getTimeline(activeEnemy());
@@ -15656,6 +15832,15 @@ function renderInspector() {
   });
   root.appendChild(field("LOD Z", lodInp));
 
+  const skelChk = document.createElement("input");
+  skelChk.type = "checkbox";
+  skelChk.checked = !!e.customSkeleton;
+  skelChk.addEventListener("change", () => {
+    setCustomSkeleton(e, skelChk.checked);
+    refreshAll();
+  });
+  root.appendChild(field("Custom skeleton", skelChk));
+
   const timeline = getTimeline(e);
   const mdl = sharewareModels[e.name];
   const hasStick = !!stickClipFor(e, activeTimelineClip());
@@ -15782,23 +15967,27 @@ function renderInspector() {
   const stick = stickClipFor(e, clip);
   const stickFrame = stick ? stick.start + frameLocal : 0;
   const height = frameHeight(e.frames[stickFrame] || e.frames[0]);
-  counts.textContent = `13 verts · 13 lines · height ${height}`;
+  const nvShow = stickCount(e);
+  counts.textContent = `${nvShow} verts · ${e.lines.length} lines · height ${height}`;
   root.appendChild(counts);
 
   if (hasStick && selectedVerts.length === 1) {
     const vi = selectedVerts[0];
     const v = e.frames[stickFrame][vi];
+    const clamp = clampVertFor(e);
+    const lim = vertLimitFor(e);
+    const lo = e.customSkeleton ? -lim : -lim - 1;
     const setC = (k, val) => {
       pushUndo();
-      v[k] = clampVert(val);
+      v[k] = clamp(val);
       markDirty();
       refreshAll();
     };
     root.appendChild(
       vec3Field("XYZ", [
-        { value: v.x, onChange: (n) => setC("x", n), min: -64, max: 63 },
-        { value: v.y, onChange: (n) => setC("y", n), min: -64, max: 63 },
-        { value: v.z, onChange: (n) => setC("z", n), min: -64, max: 63 },
+        { value: v.x, onChange: (n) => setC("x", n), min: lo, max: lim },
+        { value: v.y, onChange: (n) => setC("y", n), min: lo, max: lim },
+        { value: v.z, onChange: (n) => setC("z", n), min: lo, max: lim },
       ])
     );
   }
@@ -15806,25 +15995,293 @@ function renderInspector() {
   renderQuakeSource(root, e);
 }
 
-function ensureEnemyRig(e) {
-  if (!e.mdlRig || !Array.isArray(e.mdlRig.jointVerts) || e.mdlRig.jointVerts.length !== 13) {
-    e.mdlRig = emptyMdlRig();
-  }
-  return e.mdlRig;
+function stickCount(e) {
+  if (!e?.customSkeleton) return 13;
+  if (Array.isArray(e.frames?.[0])) return e.frames[0].length;
+  return e.verts | 0;
 }
 
-function activeMdl() {
-  return sharewareModels[activeEnemy()?.name] || null;
+function jointLabel(e, i) {
+  if (e?.customSkeleton) return String(i);
+  return JOINT_NAMES[i] || String(i);
+}
+
+function cloneGraph(e) {
+  return {
+    verts: stickCount(e),
+    lines: e.lines.map((p) => [p[0], p[1]]),
+    frames: JSON.parse(JSON.stringify(e.frames)),
+    mdlRig: JSON.parse(JSON.stringify(e.mdlRig)),
+    clips: JSON.parse(JSON.stringify(e.clips || [])),
+    exportClips: e.exportClips ? [...e.exportClips] : undefined,
+  };
+}
+
+function applyGraph(e, g) {
+  e.verts = g.verts;
+  e.lines = g.lines.map((p) => [p[0], p[1]]);
+  e.frames = JSON.parse(JSON.stringify(g.frames));
+  e.mdlRig = JSON.parse(JSON.stringify(g.mdlRig));
+  if (g.clips) e.clips = JSON.parse(JSON.stringify(g.clips));
+  if (g.exportClips) e.exportClips = [...g.exportClips];
+}
+
+function setCustomSkeleton(e, on) {
+  if (!!e.customSkeleton === !!on) return;
+  pushUndo();
+  bindJoint = -1;
+  pendingBind = null;
+  selectedVerts = [];
+  selectedLines = [];
+  if (on) {
+    e.stockGraph = cloneGraph(e);
+    if (e.customGraph) applyGraph(e, e.customGraph);
+    e.customSkeleton = true;
+    e.customGraph = null;
+  } else {
+    e.customGraph = cloneGraph(e);
+    if (e.stockGraph) applyGraph(e, e.stockGraph);
+    e.customSkeleton = false;
+    e.stockGraph = null;
+  }
+  updateAnimHint();
+}
+
+function animHintText() {
+  const e = activeEnemy();
+  if (e?.customSkeleton && pendingBind) {
+    return "Box-select mesh verts · Shift add · V done · Esc cancels · F focus · RMB orbit";
+  }
+  if (bindJoint >= 0) {
+    return `Box-select mesh verts for ${jointLabel(e, bindJoint)} · Shift add · Esc stops bind · F focus · RMB orbit`;
+  }
+  if (e?.customSkeleton) {
+    return "LMB select verts or a line · Shift add · V bind · L add line · M merge · Del delete · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+  }
+  return "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
 }
 
 function updateAnimHint() {
   if (editorMode !== "anim") return;
   const hint = document.getElementById("hint");
   if (!hint) return;
-  hint.textContent =
-    bindJoint >= 0
-      ? `Box-select mesh verts for ${JOINT_NAMES[bindJoint]} · Shift add · Esc stops bind · F focus · RMB orbit`
-      : "LMB box-select verts · click-drag unselected on camera plane · gizmo moves selection · X/Y/Z nudge · [ ] frames · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom";
+  hint.textContent = animHintText();
+}
+
+function stageMeshBind(indices, additive) {
+  if (!pendingBind) return;
+  const mdl = activeMdl();
+  const max = mdl ? mdl.numVerts : Infinity;
+  const set = new Set(additive ? pendingBind : []);
+  for (const i of indices) {
+    const n = i | 0;
+    if (n >= 0 && n < max) set.add(n);
+  }
+  pendingBind = [...set].sort((a, b) => a - b);
+  animView.draw();
+  refreshPanels();
+}
+
+function averageMeshBind(e, indices) {
+  const mdl = sharewareModels[e.name];
+  if (!mdl || !indices.length) return { x: 0, y: 0, z: 0 };
+  const timeline = getTimeline(e);
+  const clip = timeline[clipIndex] || timeline[0];
+  let mdlFi = 0;
+  if (clip) {
+    const local = Math.max(0, Math.min(frameLocal, (clip.len | 0) - 1));
+    mdlFi = clip.mdlFrames?.[local]?.index ?? 0;
+  }
+  const avg = averageJointPositions(mdlEditorVerts(mdl, mdlFi, mdlScale), [indices])[0];
+  if (!avg) return { x: 0, y: 0, z: 0 };
+  const clamp = clampVertFor(e);
+  return {
+    x: clamp(Math.round(avg.x)),
+    y: clamp(Math.round(avg.y)),
+    z: clamp(Math.round(avg.z)),
+  };
+}
+
+function commitCustomVert(e) {
+  const picked = pendingBind ? [...pendingBind] : [];
+  pendingBind = null;
+  if (!picked.length) {
+    updateAnimHint();
+    refreshPanels();
+    animView.draw();
+    return;
+  }
+  const nv = stickCount(e);
+  if (nv >= SKEL_MAX_VERTS) {
+    setStatus(`Vertex cap (${SKEL_MAX_VERTS})`, true);
+    updateAnimHint();
+    refreshPanels();
+    animView.draw();
+    return;
+  }
+  pushUndo();
+  ensureEnemyRig(e);
+  const pos = averageMeshBind(e, picked);
+  for (const fr of e.frames) fr.push({ ...pos });
+  e.mdlRig.jointVerts.push(picked);
+  e.verts = nv + 1;
+  selectedVerts = [nv];
+  selectedLines = [];
+  updateAnimHint();
+  markDirty();
+  persistMdlRigBackup();
+  retargetMdlFrames({ status: true });
+  refreshPanels();
+  animView.draw();
+}
+
+function toggleCustomBind(e) {
+  if (pendingBind) {
+    commitCustomVert(e);
+    return;
+  }
+  pendingBind = [];
+  bindJoint = -1;
+  selectedVerts = [];
+  selectedLines = [];
+  setOverlayOn(true);
+  updateAnimHint();
+  refreshPanels();
+  animView.draw();
+}
+
+function addCustomLine(e) {
+  if (selectedVerts.length !== 2) {
+    setStatus("Select two vertices", true);
+    return;
+  }
+  if (e.lines.length >= SKEL_MAX_LINES) {
+    setStatus("Line cap (64)", true);
+    return;
+  }
+  let a = selectedVerts[0] | 0;
+  let b = selectedVerts[1] | 0;
+  if (a === b) return;
+  if (a > b) {
+    const t = a;
+    a = b;
+    b = t;
+  }
+  if (e.lines.some(([x, y]) => x === a && y === b)) {
+    setStatus("Line already exists", true);
+    return;
+  }
+  pushUndo();
+  e.lines.push([a, b]);
+  markDirty();
+  refreshPanels();
+  animView.draw();
+}
+
+function mergeCustomVerts(e) {
+  if (selectedVerts.length !== 2) {
+    setStatus("Select two vertices", true);
+    return;
+  }
+  const keep = selectedVerts[0] | 0;
+  const drop = selectedVerts[1] | 0;
+  const nv = stickCount(e);
+  if (keep === drop || keep < 0 || drop < 0 || keep >= nv || drop >= nv) return;
+  pushUndo();
+  ensureEnemyRig(e);
+  const joints = e.mdlRig.jointVerts;
+  joints[keep] = [...new Set([...(joints[keep] || []), ...(joints[drop] || [])])].sort((a, b) => a - b);
+  const surv = keep > drop ? keep - 1 : keep;
+  const remap = (i) => (i === drop ? surv : i > drop ? i - 1 : i);
+  for (const fr of e.frames) fr.splice(drop, 1);
+  joints.splice(drop, 1);
+  const seen = new Set();
+  const lines = [];
+  for (const [a, b] of e.lines) {
+    let x = remap(a);
+    let y = remap(b);
+    if (x === y) continue;
+    if (x > y) {
+      const t = x;
+      x = y;
+      y = t;
+    }
+    const key = x + "," + y;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    lines.push([x, y]);
+  }
+  e.lines = lines;
+  e.verts = nv - 1;
+  if (bindJoint === drop) bindJoint = surv;
+  else if (bindJoint > drop) bindJoint--;
+  selectedVerts = [surv];
+  selectedLines = [];
+  markDirty();
+  refreshPanels();
+  animView.draw();
+}
+
+function deleteCustomVerts(e) {
+  const nv = stickCount(e);
+  const drop = new Set(selectedVerts.filter((i) => i >= 0 && i < nv));
+  if (!drop.size) return;
+  pushUndo();
+  const map = [];
+  let n = 0;
+  for (let i = 0; i < nv; i++) map[i] = drop.has(i) ? -1 : n++;
+  for (const fr of e.frames) {
+    const next = fr.filter((_, i) => !drop.has(i));
+    fr.length = 0;
+    fr.push(...next);
+  }
+  e.mdlRig.jointVerts = e.mdlRig.jointVerts.filter((_, i) => !drop.has(i));
+  e.lines = e.lines
+    .map(([a, b]) => [map[a], map[b]])
+    .filter(([a, b]) => a >= 0 && b >= 0 && a !== b)
+    .map(([a, b]) => (a < b ? [a, b] : [b, a]));
+  e.verts = n;
+  if (bindJoint >= 0) bindJoint = map[bindJoint] ?? -1;
+  selectedVerts = [];
+  selectedLines = [];
+  markDirty();
+  refreshPanels();
+  animView.draw();
+}
+
+function deleteCustomSelection(e) {
+  const lines = [...selectedLines].filter((i) => i >= 0 && i < e.lines.length).sort((a, b) => b - a);
+  if (lines.length) {
+    pushUndo();
+    for (const i of lines) e.lines.splice(i, 1);
+    selectedLines = [];
+    markDirty();
+    refreshPanels();
+    animView.draw();
+    return;
+  }
+  deleteCustomVerts(e);
+}
+
+function ensureEnemyRig(e) {
+  const n = stickCount(e);
+  if (!e.mdlRig || !Array.isArray(e.mdlRig.jointVerts)) {
+    e.mdlRig = { jointVerts: Array.from({ length: n }, () => []) };
+    return e.mdlRig;
+  }
+  const joints = e.mdlRig.jointVerts;
+  if (joints.length === n) return e.mdlRig;
+  if (!e.customSkeleton) {
+    e.mdlRig = emptyMdlRig();
+    return e.mdlRig;
+  }
+  while (joints.length < n) joints.push([]);
+  joints.length = n;
+  return e.mdlRig;
+}
+
+function activeMdl() {
+  return sharewareModels[activeEnemy()?.name] || null;
 }
 
 function assignMeshVerts(indices, additive) {
@@ -15942,7 +16399,7 @@ function retargetMdlFrames(options = {}) {
   const names = exportClipNames(e, mdl);
   if (!names.length) return false;
   const rest = e.frames[0] || dummyFrameFor(e.name);
-  const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVert, names);
+  const { frames, clips } = buildStickFramesFromMdl(mdl, rig, mdlScale, rest, clampVertFor(e), names);
   if (!frames.length) return false;
   const prevByName = new Map((e.clips || []).map((c) => [c.name, c]));
   const keepName = activeTimelineClip()?.name;
@@ -15996,15 +16453,31 @@ function renderQuakeSource(root, e) {
   }
   wrap.appendChild(status);
 
+  const rig = ensureEnemyRig(e);
+  const custom = !!e.customSkeleton;
+  const count = stickCount(e);
+
+  if (custom) {
+    const row = document.createElement("div");
+    row.className = "btn-row";
+    const bindBtn = document.createElement("button");
+    bindBtn.type = "button";
+    bindBtn.textContent = pendingBind ? "Done" : "Bind";
+    bindBtn.title = "V";
+    if (pendingBind) bindBtn.className = "active";
+    bindBtn.addEventListener("click", () => toggleCustomBind(e));
+    row.append(bindBtn);
+    wrap.appendChild(row);
+  } else {
   const jointList = document.createElement("ul");
   jointList.className = "joint-list";
-  const rig = ensureEnemyRig(e);
-  JOINT_NAMES.forEach((name, i) => {
+  for (let i = 0; i < count; i++) {
+    const name = jointLabel(e, i);
     const li = document.createElement("li");
     li.className = "joint-row" + (bindJoint === i ? " active" : "");
     const label = document.createElement("span");
     label.className = "joint-name";
-    const n = rig.jointVerts[i].length;
+    const n = rig.jointVerts[i]?.length || 0;
     label.classList.toggle("unbound", !n);
     label.textContent = n ? `${name} · ${n}` : name;
     const bindBtn = document.createElement("button");
@@ -16020,8 +16493,9 @@ function renderQuakeSource(root, e) {
     });
     li.append(label, bindBtn);
     jointList.appendChild(li);
-  });
+  }
   wrap.appendChild(jointList);
+  }
   root.appendChild(wrap);
 }
 
@@ -16178,7 +16652,7 @@ function nudgeVert(axis, delta) {
   pushUndo();
   for (const i of idxs) {
     const v = e.frames[frameIndex][i];
-    v[axis] = clampVert(v[axis] + delta);
+    v[axis] = clampVertFor(e)(v[axis] + delta);
   }
   markDirty();
   refreshAll();
@@ -16417,6 +16891,11 @@ window.addEventListener("keydown", (e) => {
       itemView.deleteSelection();
       return;
     }
+    if (editorMode === "anim" && activeEnemy()?.customSkeleton && !pendingBind) {
+      e.preventDefault();
+      deleteCustomSelection(activeEnemy());
+      return;
+    }
   }
   if (editorMode === "items" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     const k = e.key.toLowerCase();
@@ -16485,12 +16964,37 @@ window.addEventListener("keydown", (e) => {
   }
   if (editorMode === "anim") {
     if (e.key === "Escape") {
-      if (bindJoint >= 0) {
+      if (pendingBind || bindJoint >= 0) {
         e.preventDefault();
+        pendingBind = null;
         bindJoint = -1;
         updateAnimHint();
         refreshPanels();
         animView.draw();
+        return;
+      }
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "v") {
+      const en = activeEnemy();
+      if (en?.customSkeleton) {
+        e.preventDefault();
+        toggleCustomBind(en);
+        return;
+      }
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "l") {
+      const en = activeEnemy();
+      if (en?.customSkeleton && !pendingBind) {
+        e.preventDefault();
+        addCustomLine(en);
+        return;
+      }
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.toLowerCase() === "m") {
+      const en = activeEnemy();
+      if (en?.customSkeleton && !pendingBind) {
+        e.preventDefault();
+        mergeCustomVerts(en);
         return;
       }
     }

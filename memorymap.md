@@ -104,7 +104,7 @@ header and name, SMC-`jsr`s the overlay (`bind_apply` then `patch_map_smc`),
 then `heap_top = map_base` dumps the prefix. At most `ROOM_MAX_TYPES` (2)
 fused enemy banks are then resident for the current room. Play peak is packed
 map plus the worst room's banks; load peak is packed map plus `LEVEL_PREFIX`.
-`tools/checkheap.py` enforces the larger peak. It fails only when slack is zero or negative.
+`tools/checkheap.py` enforces the larger peak. It fails when slack is zero or negative. With `PROFILE = 1` those maps are still printed as OVER, and the build continues.
 `MAP_MAX_BYTES` 4096 is a packed-map cap; prefix is extra.
 
 Enemy bank bytes (from `enemy_sizes.asm`, including QAI1 header, optional

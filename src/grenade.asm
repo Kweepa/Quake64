@@ -178,6 +178,9 @@ gren_tick
 	sbc #0
 	sta proc_tmp1
 	ldx obj_i
+	lda gr_flags,x
+	and #GREN_F_LAVA
+	bne .gt_move
 	sec
 	lda gr_vyl,x
 	sbc #<GREN_GRAV
@@ -185,6 +188,7 @@ gren_tick
 	lda gr_vyh,x
 	sbc #>GREN_GRAV
 	sta gr_vyh,x
+.gt_move
 	jsr gren_move_x
 	jsr gren_move_z
 	jsr gren_move_y
@@ -250,6 +254,12 @@ gren_asr5
 gren_bounce
 	pha
 	ldx obj_i
+	lda gr_flags,x
+	and #GREN_F_LAVA
+	beq .gb_flesh
+	pla
+	jmp gren_explode
+.gb_flesh
 	lda gr_flags,x
 	and #GREN_F_FLESH
 	beq .gb_n
@@ -538,6 +548,9 @@ gren_hit_player
 	bcc .ghp_rts
 	ldx obj_i
 	lda gr_flags,x
+	and #GREN_F_LAVA
+	bne gren_lava_hit
+	lda gr_flags,x
 	and #GREN_F_FLESH
 	bne gren_flesh_hit
 	jmp gren_explode
@@ -547,6 +560,22 @@ gren_hit_player
 gren_flesh_hit
 	lda #FLESH_DMG
 	jsr take_damage
+	jmp gren_clear
+
+; Direct hit is LAVA_DMG. The burst is the grenade explosion without a second splash.
+LAVA_DMG = 100
+gren_lava_hit
+	lda #LAVA_DMG
+	jsr take_damage
+	ldx obj_i
+	lda fx_on
+	beq .glh_fx
+	jmp gren_clear
+.glh_fx
+	jsr .gex_place
+	jsr start_explosion
+	lda #SOUND_WEAPONS_R_EXP3
+	jsr play_sound
 	jmp gren_clear
 
 gren_clear
@@ -608,6 +637,18 @@ gren_explode
 	sta gr_flags,x
 	rts
 .gex_go
+	jsr .gex_place
+	jsr gren_splash
+	jsr start_explosion
+	lda #SOUND_WEAPONS_R_EXP3
+	jsr play_sound
+	ldx obj_i
+	lda #0
+	sta gr_on,x
+	rts
+
+.gex_place
+	ldx obj_i
 	lda gr_xl,x
 	sta fx_oxl
 	lda gr_xh,x
@@ -623,13 +664,6 @@ gren_explode
 	lda gr_zh,x
 	sta fx_oz
 	sta ent_wz
-	jsr gren_splash
-	jsr start_explosion
-	lda #SOUND_WEAPONS_R_EXP3
-	jsr play_sound
-	ldx obj_i
-	lda #0
-	sta gr_on,x
 	rts
 
 ; Chebyshev 3D vs blast origin ent_wx/wy/wz. pv0/1/2 = target. nlo = d.

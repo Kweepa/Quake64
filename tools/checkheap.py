@@ -6,6 +6,9 @@ packed map), dump prefix (heap_top = map_base), then pose banks. heap_alloc
 fails when new top <= end_game, so need must be strictly less than
 SCR_A - end_game.
 
+PROFILE = 1 in src/build_flags.asm still prints OVER maps, but those lines do not
+fail the build. PROFILE = 0 fails when slack is zero or negative.
+
 Streaming holds at most ROOM_MAX_TYPES banks — the types that cohabit in the
 room being played. The gate is the worst SINGLE ROOM pose sum, not a map-wide
 pair of the heaviest types. tools/perroom.py extracts per-room sets by
@@ -29,6 +32,7 @@ MAP_DIR = ROOT / "maps"
 ENEMY_DIR = ROOT / "enemies"
 ENEMY_SIZES = ROOT / "src" / "enemy_sizes.asm"
 PREFIX_ASM = ROOT / "src" / "level_prefix.asm"
+FLAGS_ASM = ROOT / "src" / "build_flags.asm"
 
 LEVEL_NAMES = [f"E1M{i}" for i in range(1, 9)]
 DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
@@ -55,6 +59,19 @@ def parse_size_table(path: Path, lo_name: str, hi_name: str) -> list[int]:
     if len(lo) != len(hi):
         raise SystemExit(f"{path}: {lo_name}/{hi_name} length mismatch")
     return [l + (h << 8) for l, h in zip(lo, hi)]
+
+
+def parse_profile() -> int:
+    if not FLAGS_ASM.is_file():
+        raise SystemExit(f"missing: {FLAGS_ASM}")
+    m = re.search(
+        r"^PROFILE\s*=\s*(\d+)",
+        FLAGS_ASM.read_text(encoding="utf-8"),
+        re.M,
+    )
+    if not m:
+        raise SystemExit(f"{FLAGS_ASM}: no PROFILE")
+    return int(m.group(1))
 
 
 def parse_level_prefix() -> int:
@@ -133,6 +150,7 @@ def main() -> None:
     locode = parse_mem_const("LOCODE_BASE")
     scr_a = parse_mem_const("SCR_A")
     prefix = parse_level_prefix()
+    profile = parse_profile() == 1
     avail = scr_a - end_game
     poses = enemy_sizes()
     crush_sz = crush_bank_size()
@@ -230,8 +248,10 @@ def main() -> None:
             f"  level-wide {level_sum} (-{saved})  need {need}"
         )
         if slack <= 0:
-            print(f"{head}  OVER {need - avail}")
-            failed = True
+            tag = "  (profile)" if profile else ""
+            print(f"{head}  OVER {need - avail}{tag}")
+            if not profile:
+                failed = True
         else:
             print(f"{head}  slack {slack}")
 

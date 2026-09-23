@@ -270,14 +270,15 @@ export function buildStickFramesFromMdl(mdl, rig, scale, restFrame, clampVert, c
     for (const fr of clip.frames) {
       const verts = mdlEditorVerts(mdl, fr.index, scale);
       const avg = averageJointPositions(verts, rig.jointVerts);
-      const pose = restFrame.map((v, i) => {
-        if (avg[i]) {
+      const pose = avg.map((p, i) => {
+        if (p) {
           return {
-            x: clampVert(Math.round(avg[i].x)),
-            y: clampVert(Math.round(avg[i].y)),
-            z: clampVert(Math.round(avg[i].z)),
+            x: clampVert(Math.round(p.x)),
+            y: clampVert(Math.round(p.y)),
+            z: clampVert(Math.round(p.z)),
           };
         }
+        const v = restFrame[i] || { x: 0, y: 0, z: 0 };
         return { x: v.x, y: v.y, z: v.z };
       });
       frames.push(pose);

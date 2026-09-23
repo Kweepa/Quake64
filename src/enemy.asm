@@ -79,6 +79,16 @@ eu_gone
 ; ------------------------------------------------------------------
 eu_idle
 	ldx enemy_idx
+	+ldy_mx en_type
+	lda AI_ENTRY_HI,y
+	beq .eu_id_own
+	lda #AI_CMD_IDLE
+	jsr ai_invoke
+	cmp #AI_CMD_IDLE		; entry left A alone → not its idle
+	beq .eu_id_own
+	jmp eu_next
+.eu_id_own
+	ldx enemy_idx
 	lda en_timer,x
 	ora en_timer_h,x
 	beq .eu_id_sight

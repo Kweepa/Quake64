@@ -2,12 +2,7 @@
 !cpu 6510
 !to "game.prg", cbm
 
-; --- build flags (Wolf64-style) -------------------------------------------
-PROFILE		= 0				; 1 = R/P/K/D bucket HUD + CIA samples
-HUD_FRAME_MS	= 0				; 1 = frame time ms on HUD row 0
-HUD_POS		= 0				; 1 = X/Y/Z/yaw/pitch on HUD row 2
-INF_AMMO		= 1				; 1 = guns fire without spending ammo
-IRQ_DEBUG_SPLIT	= 0				; 1 = $d020 stripe at mid-split (tune 186)
+!source "build_flags.asm"
 
 !source "mem.asm"
 !source "zp.asm"

@@ -1,7 +1,7 @@
 import {
   aabbCenter,
   clipForFrame,
-  clampVert,
+  clampVertFor,
   ANIM_ORBIT_DIST_MIN,
   ANIM_ORBIT_DIST_MAX,
 } from "./model.js";
@@ -32,6 +32,7 @@ export class AnimView {
     this.orbit = { yaw: 0.5, pitch: 0.15, dist: 48, target: { x: 0, y: 10, z: 0 } };
     this.drag = null;
     this.hover = -1;
+    this.hoverLine = -1;
     this.hoverAxis = null;
     this.enabled = false;
     this._ro = new ResizeObserver(() => this.resize());
@@ -79,7 +80,11 @@ export class AnimView {
 
   #binding() {
     const overlay = this.#overlay();
-    return overlay && overlay.bindJoint >= 0;
+    return !!(overlay && (overlay.binding || overlay.bindJoint >= 0));
+  }
+
+  #custom() {
+    return !!this.opts.getEnemy()?.customSkeleton;
   }
 
   #cam() {
@@ -231,11 +236,35 @@ export class AnimView {
 
   #hitVert(mx, my) {
     const overlay = this.#overlay();
-    if (overlay && overlay.bindJoint >= 0) return this.#hitAmong(overlay.verts, mx, my, 8);
+    if (this.#binding()) return this.#hitAmong(overlay.verts, mx, my, 8);
     if (!this.#hasStick()) return -1;
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
     return this.#hitAmong(enemy.frames[frame], mx, my, 10);
+  }
+
+  #hitLine(mx, my) {
+    if (!this.#custom() || this.#binding() || !this.#hasStick()) return -1;
+    const enemy = this.opts.getEnemy();
+    const frame = this.opts.getFrame();
+    const verts = enemy.frames[frame];
+    if (!verts) return -1;
+    const cam = this.#cam();
+    let best = -1;
+    let bestD = 6;
+    enemy.lines.forEach(([ia, ib], i) => {
+      const a = verts[ia];
+      const b = verts[ib];
+      if (!a || !b) return;
+      const pl = projectLine(a, b, cam, this.cssW, this.cssH);
+      if (!pl) return;
+      const d = distPointToSegment2d(mx, my, pl.ax, pl.ay, pl.bx, pl.by);
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    });
+    return best;
   }
 
   #hitAxis(mx, my) {
@@ -344,6 +373,16 @@ export class AnimView {
       this.draw();
       return;
     }
+    if (!binding && this.#custom()) {
+      const li = this.#hitLine(p.x, p.y);
+      if (li >= 0) {
+        this.opts.onSelectLine?.(li, e.shiftKey);
+        this.drag = { kind: "select" };
+        this.canvas.setPointerCapture(e.pointerId);
+        this.draw();
+        return;
+      }
+    }
     this.drag = { kind: "box", start: p, end: p, additive: e.shiftKey };
     this.canvas.setPointerCapture(e.pointerId);
   }
@@ -354,6 +393,7 @@ export class AnimView {
     if (!this.drag) {
       this.hoverAxis = this.#binding() ? null : this.#hitAxis(p.x, p.y);
       this.hover = this.hoverAxis ? -1 : this.#hitVert(p.x, p.y);
+      this.hoverLine = this.#binding() || this.hover >= 0 || this.hoverAxis ? -1 : this.#hitLine(p.x, p.y);
       this.draw();
       return;
     }
@@ -418,7 +458,7 @@ export class AnimView {
         v.x = o.x;
         v.y = o.y;
         v.z = o.z;
-        v[this.drag.axis] = clampVert(o[this.drag.axis] + delta);
+        v[this.drag.axis] = clampVertFor(enemy)(o[this.drag.axis] + delta);
       }
       this.opts.onChange?.();
       this.draw();
@@ -435,10 +475,11 @@ export class AnimView {
       n[this.drag.lock] = 1;
       const hit = intersectPlane(ray.origin, ray.dir, orig, n);
       if (!hit) return;
+      const clamp = clampVertFor(enemy);
       const next = {
-        x: this.drag.lock === "x" ? orig.x : clampVert(Math.round(hit.point.x)),
-        y: this.drag.lock === "y" ? orig.y : clampVert(Math.round(hit.point.y)),
-        z: this.drag.lock === "z" ? orig.z : clampVert(Math.round(hit.point.z)),
+        x: this.drag.lock === "x" ? orig.x : clamp(Math.round(hit.point.x)),
+        y: this.drag.lock === "y" ? orig.y : clamp(Math.round(hit.point.y)),
+        z: this.drag.lock === "z" ? orig.z : clamp(Math.round(hit.point.z)),
       };
       if (next.x === v.x && next.y === v.y && next.z === v.z) return;
       if (!this.drag.undoStarted) {
@@ -476,7 +517,7 @@ export class AnimView {
   #vertsInBox(rect) {
     const overlay = this.#overlay();
     const verts =
-      overlay && overlay.bindJoint >= 0
+      overlay && (overlay.binding || overlay.bindJoint >= 0)
         ? overlay.verts
         : this.#hasStick()
           ? this.opts.getEnemy().frames[this.opts.getFrame()]
@@ -496,7 +537,9 @@ export class AnimView {
     const additive = this.drag.additive;
     const binding = this.#binding();
     if (rect.w < ANIM_BOX_CLICK && rect.h < ANIM_BOX_CLICK) {
-      if (!binding && !additive) this.opts.onSelectVerts?.([]);
+      if (binding) {
+        if (!additive) this.opts.onSelectMeshVerts?.([], false);
+      } else if (!additive) this.opts.onSelectVerts?.([]);
       return;
     }
     const hits = this.#vertsInBox(rect);
@@ -575,12 +618,13 @@ export class AnimView {
     const enemy = this.opts.getEnemy();
     const frame = this.opts.getFrame();
     const selected = this.opts.getSelectedVerts?.() || [];
+    const selectedLines = this.opts.getSelectedLines?.() || [];
     const overlay = this.#overlay();
-    const binding = overlay && overlay.bindJoint >= 0;
+    const binding = overlay && (overlay.binding || overlay.bindJoint >= 0);
     const stickOn = this.#hasStick();
     const verts = stickOn ? enemy.frames[frame] || enemy.frames[0] : null;
     let shown = selected;
-    let meshShown = overlay ? [...(overlay.jointVerts[overlay.bindJoint] || [])] : [];
+    let meshShown = overlay ? [...(overlay.meshSel || [])] : [];
     if (this.drag?.kind === "box") {
       const r = this.#boxRect();
       if (r.w >= ANIM_BOX_CLICK || r.h >= ANIM_BOX_CLICK) {
@@ -630,9 +674,11 @@ export class AnimView {
 
     if (stickOn && verts) {
       ctx.lineWidth = 1.5;
-      for (const [i, j] of enemy.lines) {
-        this.#strokeSeg(ctx, cam, w, h, verts[i], verts[j], "#c8ccd4", 1.5);
-      }
+      enemy.lines.forEach(([i, j], li) => {
+        const sel = !binding && selectedLines.includes(li);
+        const ho = !binding && li === this.hoverLine;
+        this.#strokeSeg(ctx, cam, w, h, verts[i], verts[j], sel ? "#f2d36b" : ho ? "#fff" : "#c8ccd4", sel || ho ? 2.5 : 1.5);
+      });
 
       verts.forEach((v, i) => {
         const p = projectPoint(v, cam, w, h);
@@ -650,7 +696,7 @@ export class AnimView {
     if (binding) {
       const assignedOther = new Set();
       overlay.jointVerts.forEach((list, ji) => {
-        if (ji === overlay.bindJoint) return;
+        if (overlay.bindJoint >= 0 && ji === overlay.bindJoint) return;
         for (const i of list) assignedOther.add(i);
       });
       overlay.verts.forEach((v, i) => {
@@ -693,6 +739,7 @@ export class AnimView {
       label = "rest";
     }
     const frameTotal = stickOn && enemy.clips?.length ? enemy.frames.length : overlay ? "MDL" : enemy.frames.length;
-    ctx.fillText(`${enemy.name} · ${label} · 13 verts · ${frameTotal} frames`, 8, 16);
+    const nv = (stickOn ? enemy.frames[frame] || enemy.frames[0] : null)?.length || enemy.verts || 0;
+    ctx.fillText(`${enemy.name} · ${label} · ${nv} verts · ${frameTotal} frames`, 8, 16);
   }
 }

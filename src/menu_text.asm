@@ -126,25 +126,33 @@ readthis_lo
 readthis_hi
 	!byte >readthis1_text, >readthis2_text, >readthis3_text, >readthis4_text, >readthis5_text, >readthis6_text
 
-ENDING_PAGES = 2
+ENDING_PAGES = 3
 
 ending1_text
+	!scr "CONGRATULATIONS",0
+	!scr " ",0
 	!scr "As the corpse of the monstrous entity",0
 	!scr "chthon sinks back into the lava whence",0
 	!scr "it rose, you grip the rune of earth magic",0
-	!scr "tightly. now that you have conquered",0
-	!scr "the dimension of the doomed, realm of",0
-	!scr "earth magic, you are ready to complete",0
-	!scr "your task.",0
+	!scr "tightly.",0
 	!byte 0
 
 ending2_text
-	!scr "A rune of magic power lies at the end",0
-	!scr "of each haunted land of quake. go forth",0
-	!scr "and seek the totality of the four runes!",0
+	!scr "now that you have conquered",0
+	!scr "the dimension of the doomed, realm of",0
+	!scr "earth magic, you are ready to complete",0
+	!scr "your task in the other three haunted",0
+	!scr "lands of quake.",0
+	!byte 0
+
+ending3_text
+	!scr "or are you? if you don't register quake,",0
+	!scr "you'll never know what awaits you in",0
+	!scr "the realm of black magic, the netherworld,",0
+	!scr "and the elder world!",0
 	!byte 0
 
 ending_lo
-	!byte <ending1_text, <ending2_text
+	!byte <ending1_text, <ending2_text, <ending3_text
 ending_hi
-	!byte >ending1_text, >ending2_text
+	!byte >ending1_text, >ending2_text, >ending3_text

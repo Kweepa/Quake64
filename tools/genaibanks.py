@@ -13,7 +13,7 @@ SIZES_OUT = ROOT / "src" / "enemy_sizes.asm"
 DOS_NAMES = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
 
 MAGIC = b"QAI1"
-HEADER_SIZE = 14
+HEADER_SIZE = 15
 NO_ENTRY = 0xFFFF
 ENEMY_BANK_MAX = 8192
 
@@ -41,6 +41,47 @@ def load_module(dos: str) -> tuple[bytes, list[int], list[int], int]:
     return code, internal, map_sites, entry
 
 
+def load_skel_draw() -> tuple[bytes, list[int], list[int]]:
+    code_path = ENEMY_DIR / "skel_draw.bin"
+    rel_path = ENEMY_DIR / "skel_draw.rel"
+    if not code_path.is_file() or not rel_path.is_file():
+        raise SystemExit("missing enemies/skel_draw.bin; assemble src/skel_draw.asm first")
+    meta = json.loads(rel_path.read_text(encoding="utf-8"))
+    code = code_path.read_bytes()
+    internal = [int(v) for v in meta.get("internal", [])]
+    map_sites = [int(v) for v in meta.get("map", [])]
+    if not code:
+        raise SystemExit(f"{code_path}: empty")
+    for kind, sites in (("internal", internal), ("map", map_sites)):
+        for off in sites:
+            if off < 0 or off + 1 >= len(code):
+                raise SystemExit(f"{rel_path}: {kind} relocation {off} outside module")
+    return code, internal, map_sites
+
+
+def attach_skel(
+    code: bytes,
+    internal: list[int],
+    map_sites: list[int],
+) -> tuple[bytes, list[int], list[int], int]:
+    """Append the skeleton module. It was linked at AI_LINK_BASE, so shift its
+    internal targets by the behavior-code length already sitting in front."""
+    skel_code, skel_internal, skel_map = load_skel_draw()
+    shift = len(code)
+    patched = bytearray(skel_code)
+    for off in skel_internal:
+        addr = patched[off] | (patched[off + 1] << 8)
+        addr = (addr + shift) & 0xFFFF
+        patched[off] = addr & 0xFF
+        patched[off + 1] = (addr >> 8) & 0xFF
+    return (
+        code + bytes(patched),
+        internal + [off + shift for off in skel_internal],
+        map_sites + [off + shift for off in skel_map],
+        shift,
+    )
+
+
 def fuse(
     dos: str,
     code: bytes,
@@ -48,19 +89,34 @@ def fuse(
     map_sites: list[int],
     entry: int,
     pose: bytes,
+    skel: int = 0,
 ) -> bytes:
+    skel_at = 0
+    if skel:
+        if len(pose) < 6:
+            raise SystemExit(f"{dos}: custom skeleton prefix shorter than 6 bytes")
+        code, internal, map_sites, skel_at = attach_skel(code, internal, map_sites)
+        pose_b = bytearray(pose)
+    else:
+        pose_b = bytearray(pose)
     records_size = 2 * (len(internal) + len(map_sites))
     code_off = HEADER_SIZE + records_size
     pose_off = code_off + len(code)
     entry_off = NO_ENTRY if entry == NO_ENTRY else code_off + entry
+    if skel:
+        skel_entry = code_off + skel_at
+        pose_b[4] = skel_entry & 0xFF
+        pose_b[5] = (skel_entry >> 8) & 0xFF
+    pose = bytes(pose_b)
     header = struct.pack(
-        "<4sHHHHH",
+        "<4sHHHHHB",
         MAGIC,
         len(code),
         len(internal),
         len(map_sites),
         entry_off,
         pose_off,
+        skel & 1,
     )
     records = b"".join(struct.pack("<H", code_off + off) for off in internal)
     records += b"".join(struct.pack("<H", code_off + off) for off in map_sites)
@@ -82,8 +138,10 @@ def main() -> None:
         if not pose_path.is_file():
             raise SystemExit(f"missing {pose_path}; run genenemies.py first")
         pose = pose_path.read_bytes()
+        skel_path = ENEMY_DIR / f"{dos}.skel"
+        skel = skel_path.read_bytes()[0] & 1 if skel_path.is_file() else 0
         code, internal, map_sites, entry = load_module(dos)
-        payload = fuse(dos, code, internal, map_sites, entry, pose)
+        payload = fuse(dos, code, internal, map_sites, entry, pose, skel)
         sizes.append(len(payload))
 
     SIZES_OUT.write_text(

@@ -65,6 +65,8 @@ export const WORLD_MAX = 255;
 export const WORLD_SIZE = 256;
 export const MAX_VERTS = 13;
 export const MAX_LINES = 13;
+export const SKEL_MAX_VERTS = 48;
+export const SKEL_MAX_LINES = 64;
 export const WEAPON_VERT = 12;
 export const WRIST_R = 7;
 export const JOINT_NAMES = [
@@ -82,8 +84,11 @@ export const JOINT_NAMES = [
   "Ankle R",
   "Weapon",
 ];
-export const VERT_MIN = -64;
-export const VERT_MAX = 63;
+export const VERT_MIN = -128;
+export const VERT_MAX = 127;
+// Custom skeletons pack at round(v / 2^shift), shift 0..2; genenemies picks the shift.
+// 509 is the largest magnitude that still rounds into a signed byte at shift 2.
+export const SKEL_VERT_MAX = 509;
 export const DEFAULT_MDL_SCALE = 0.7;
 const OLD_DEFAULT_MDL_SCALE = 0.57;
 export const ANIM_ORBIT_DIST_MIN = 16;
@@ -1545,6 +1550,19 @@ export function clampVert(n) {
   return Math.max(VERT_MIN, Math.min(VERT_MAX, v));
 }
 
+export function clampSkelVert(n) {
+  const v = n | 0;
+  return Math.max(-SKEL_VERT_MAX, Math.min(SKEL_VERT_MAX, v));
+}
+
+export function vertLimitFor(enemy) {
+  return enemy?.customSkeleton ? SKEL_VERT_MAX : VERT_MAX;
+}
+
+export function clampVertFor(enemy) {
+  return enemy?.customSkeleton ? clampSkelVert : clampVert;
+}
+
 export function aabbEnd(box) {
   return {
     x: box.x + box.sx,
@@ -2073,8 +2091,20 @@ export function figureTemplateName(obj) {
 }
 
 /** World-space first-frame stick verts for a placed enemy (1/8 scale, feet on floor center). */
+export function enemyPreviewFrame(template) {
+  const frames = template?.frames;
+  if (!frames?.length) return null;
+  const want = ROLE_CLIPS[template.name]?.preview?.[0];
+  if (want) {
+    const clip = (template.clips || []).find((c) => poseClipKey(c.name) === poseClipKey(want));
+    const fi = clip ? clip.start | 0 : -1;
+    if (fi >= 0 && fi < frames.length) return frames[fi];
+  }
+  return frames[0];
+}
+
 export function enemyPlacementWorldVerts(obj, template) {
-  const frame = template?.frames?.[0];
+  const frame = enemyPreviewFrame(template);
   if (!frame) return [];
   const ox = obj.x + obj.sx / 2;
   const oy = obj.y;
@@ -2121,7 +2151,7 @@ export const ROOM_MAX = 24; // keep in sync with tools/genmap.py
 export const ROOM_MAX_TYPES = 2;
 export const ENEMY_MAX = 24; // keep in sync with tools/genmap.py / src/mem.asm
 export const MAP_MAX_BYTES = 4096;
-export const ENEMY_POSE_MAX = 4096;
+export const ENEMY_POSE_MAX = 7680;
 export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 
 /** Packed map header: 12 counts + 2 type pads + 6 spawn + 4 mesh lens. */
@@ -2168,11 +2198,12 @@ const ROLE_CLIPS = {
     attack: ["smash"],
   },
   Chthon: {
-    stand: ["walk", 8],
-    alert: ["walk", 4],
-    run: ["walk"],
-    walk: ["walk"],
+    stand: ["rise"],
+    alert: ["rise"],
+    run: ["rise"],
+    walk: ["rise"],
     attack: ["attack"],
+    preview: ["attack"],
   },
   Zombie: {
     stand: ["stand"],
@@ -2259,8 +2290,9 @@ function findPoseAttackVariants(name, clips) {
   return out;
 }
 
-function findPoseVariants(clips, kind) {
-  const re = kind === "pain" ? /^pain[a-z]?$/ : /^(bdeath|death[a-z]?)$/;
+function findPoseVariants(clips, kind, name) {
+  let re = kind === "pain" ? /^pain[a-z]?$/ : /^(bdeath|death[a-z]?)$/;
+  if (kind === "pain" && name === "Chthon") re = /^shock[a-z]?$/;
   const out = [];
   for (const c of clips) {
     if (!re.test(poseClipKey(c.name))) continue;
@@ -2281,7 +2313,9 @@ function poseAccAt(frs, i) {
   const b = frs[i];
   const c = frs[i + 1];
   if (!a || !b || !c) return 0;
-  for (let v = 0; v < 13; v++) {
+  const nv = b.length;
+  for (let v = 0; v < nv; v++) {
+    if (!a[v] || !c[v]) continue;
     for (const k of ["x", "y", "z"]) {
       const d = Math.abs((c[v][k] | 0) - 2 * (b[v][k] | 0) + (a[v][k] | 0));
       if (d > m) m = d;
@@ -2392,7 +2426,7 @@ export function packedPoseBytes(enemy, clips, frames) {
     ranges.push([`attack${i}`, start, Math.min(length, nLogical - start)]);
   });
   for (const kind of ["pain", "death"]) {
-    findPoseVariants(clipList, kind).forEach(([start, length], i) => {
+    findPoseVariants(clipList, kind, name).forEach(([start, length], i) => {
       if (start >= nLogical || length <= 0) return;
       ranges.push([`${kind}${i}`, start, Math.min(length, nLogical - start)]);
     });
@@ -2434,7 +2468,8 @@ export function packedPoseBytes(enemy, clips, frames) {
   }
 
   const nStored = keep.size;
-  const bytes = 2 + nLogical + nStored * STICK_POSE_BYTES;
+  const nv = frs?.[0]?.length || 13;
+  const bytes = 2 + nLogical + nStored * nv * 3;
   return { bytes, nLogical, nStored };
 }
 
@@ -2946,22 +2981,84 @@ export function emptyMdlRig() {
   return { jointVerts: Array.from({ length: 13 }, () => []) };
 }
 
-export function normalizeMdlRig(raw) {
-  const rig = emptyMdlRig();
+export function normalizeMdlRig(raw, nv = 13) {
+  const n = nv | 0;
+  const rig = { jointVerts: Array.from({ length: n }, () => []) };
   const src = raw?.jointVerts;
   if (!Array.isArray(src)) return rig;
-  for (let i = 0; i < 13; i++) {
+  for (let i = 0; i < n; i++) {
     const list = src[i];
     if (!Array.isArray(list)) continue;
     const seen = new Set();
     for (const v of list) {
-      const n = v | 0;
-      if (n < 0 || seen.has(n)) continue;
-      seen.add(n);
-      rig.jointVerts[i].push(n);
+      const idx = v | 0;
+      if (idx < 0 || seen.has(idx)) continue;
+      seen.add(idx);
+      rig.jointVerts[i].push(idx);
     }
   }
   return rig;
+}
+
+function parseSkelLines(raw, nv) {
+  const out = [];
+  const seen = new Set();
+  for (const pair of raw || []) {
+    if (!Array.isArray(pair) || pair.length < 2) continue;
+    let a = pair[0] | 0;
+    let b = pair[1] | 0;
+    if (a === b || a < 0 || b < 0 || a >= nv || b >= nv) continue;
+    if (a > b) {
+      const t = a;
+      a = b;
+      b = t;
+    }
+    const k = `${a},${b}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push([a, b]);
+    if (out.length >= SKEL_MAX_LINES) break;
+  }
+  return out;
+}
+
+function inferSkelNv(raw) {
+  let n;
+  if (Array.isArray(raw?.frames?.[0])) n = raw.frames[0].length;
+  else if (Array.isArray(raw?.mdlRig?.jointVerts)) n = raw.mdlRig.jointVerts.length;
+  else n = (raw?.verts | 0) || 13;
+  if (n < 0) n = 0;
+  if (n > SKEL_MAX_VERTS) n = SKEL_MAX_VERTS;
+  return n;
+}
+
+function parseFramesN(rawFrames, name, nv, clamp = clampSkelVert) {
+  const rest = dummyFrameFor(name);
+  while (rest.length < nv) rest.push({ x: 0, y: 0, z: 0 });
+  const srcFrames = Array.isArray(rawFrames) ? rawFrames : [];
+  if (!srcFrames.length) return [rest.slice(0, nv).map((v) => ({ x: v.x, y: v.y, z: v.z }))];
+  return srcFrames.map((src) => {
+    const verts = [];
+    for (let i = 0; i < nv; i++) {
+      const v = src?.[i] || rest[i];
+      verts.push({ x: clamp(v.x), y: clamp(v.y), z: clamp(v.z) });
+    }
+    return verts;
+  });
+}
+
+function parseSkelGraph(raw, name, fixedNv) {
+  if (!raw || typeof raw !== "object") return null;
+  const nv = fixedNv || inferSkelNv(raw);
+  const graph = {
+    verts: nv,
+    lines: parseSkelLines(raw.lines, nv),
+    frames: parseFramesN(raw.frames, name, nv, fixedNv === 13 ? clampVert : clampSkelVert),
+    mdlRig: normalizeMdlRig(raw.mdlRig, nv),
+  };
+  if (Array.isArray(raw.clips)) graph.clips = raw.clips;
+  if (Array.isArray(raw.exportClips)) graph.exportClips = raw.exportClips.map(String);
+  return graph;
 }
 
 export function dummyFrameFor(name) {
@@ -3277,7 +3374,7 @@ export function parseEditorState(raw) {
   d.clipIndex = Math.max(0, num(raw.clipIndex, 0) | 0);
   d.frameLocal = Math.max(0, num(raw.frameLocal, 0) | 0);
   if (Array.isArray(raw.selectedVerts)) {
-    d.selectedVerts = raw.selectedVerts.map((i) => i | 0).filter((i) => i >= 0 && i < 13);
+    d.selectedVerts = raw.selectedVerts.map((i) => i | 0).filter((i) => i >= 0 && i < SKEL_MAX_VERTS);
   }
   const cam = raw.layoutCamera || {};
   d.layoutCamera = parseLayoutCamera(cam, d.layoutCamera);
@@ -3440,11 +3537,23 @@ export function normalizeDocument(raw) {
       const enemy = createEnemy(e.name || "Enemy");
       enemy.id = e.id || enemy.id;
       enemy.name = e.name || enemy.name;
-      enemy.verts = 13;
-      enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
-      enemy.frames = parseEnemyFrames(e.frames, enemy.name);
+      enemy.customSkeleton = !!e.customSkeleton;
+      enemy.stockGraph = parseSkelGraph(e.stockGraph, enemy.name, 13);
+      if (enemy.customSkeleton) {
+        const nv = inferSkelNv(e);
+        enemy.verts = nv;
+        enemy.lines = parseSkelLines(e.lines, nv);
+        enemy.frames = parseFramesN(e.frames, enemy.name, nv);
+        enemy.mdlRig = normalizeMdlRig(e.mdlRig, nv);
+        enemy.customGraph = null;
+      } else {
+        enemy.verts = 13;
+        enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
+        enemy.frames = parseEnemyFrames(e.frames, enemy.name);
+        enemy.mdlRig = normalizeMdlRig(e.mdlRig);
+        enemy.customGraph = parseSkelGraph(e.customGraph, enemy.name, 0);
+      }
       enemy.clips = normalizeClips(e.clips, enemy.frames.length);
-      enemy.mdlRig = normalizeMdlRig(e.mdlRig);
       enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;

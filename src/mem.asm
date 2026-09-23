@@ -251,9 +251,27 @@ crush_i		= crush_acc_h + 1
 crush_lo	= crush_i + 1		; min(home,dest) while stepping
 crush_hi	= crush_lo + 1
 CRUSH_BSS_END	= crush_hi + 1
+; Custom-skeleton runtime. skel_base = 0 means the shared 13-vert stick.
+; A bound prefix with skel_nv = 0 is an empty graph and draws nothing.
+skel_nv		= CRUSH_BSS_END			; ENEMY_PTR_N
+skel_ne		= skel_nv + ENEMY_PTR_N
+skel_base_lo	= skel_ne + ENEMY_PTR_N		; pose prefix in the bank
+skel_base_hi	= skel_base_lo + ENEMY_PTR_N
+skel_mul_n	= skel_base_hi + ENEMY_PTR_N
+skel_entry_lo	= skel_mul_n + 1		; streamed draw/lerp entry
+skel_entry_hi	= skel_entry_lo + ENEMY_PTR_N
+SKEL_BSS_END	= skel_entry_hi + ENEMY_PTR_N
 !if CRUSH_BSS_END > REBOOT_STUB {
 	!error "crusher BSS overlaps reboot stub"
 }
+!if SKEL_BSS_END > REBOOT_STUB {
+	!error "skeleton BSS overlaps reboot stub"
+}
+
+SKEL_MAX_VERTS	= 48
+SKEL_MAX_EDGES	= 64
+SKEL_PFX	= 7			; size.w, nv, ne, entry.w, shift; baked batches follow
+SKEL_PFX_SHIFT	= 6			; pose coords stored as v >> shift
 
 AI_BANK_MAGIC0	= 'Q'
 AI_BANK_MAGIC1	= 'A'
@@ -264,7 +282,8 @@ AIH_RELOC_N	= 6
 AIH_MAP_N	= 8
 AIH_ENTRY	= 10
 AIH_POSE_OFF	= 12
-AIH_SIZE	= 14
+AIH_FLAGS	= 14
+AIH_SIZE	= 15
 AI_LINK_BASE	= $A000
 AI_CMD_ATTACK_TICK	= 0
 AI_CMD_FIRE		= 1
@@ -273,6 +292,7 @@ AI_CMD_DYING_STEP	= 3
 AI_CMD_APPROACH_MOVE	= 4
 AI_CMD_APPROACH_ATTACK	= 5
 AI_CMD_APPROACH_ENTER	= 6
+AI_CMD_IDLE		= 7
 CRUSH_CMD_TICK		= 0
 CRUSH_CMD_SOLID		= 1
 CRUSH_CMD_DRAW		= 2
@@ -537,6 +557,7 @@ GREN_OWN_EN		= 1
 GREN_F_BOUNCE		= 1			; fuse running
 GREN_F_PEND		= 2			; waiting on fx_on
 GREN_F_FLESH		= 4			; zombie chunk: no bounce/explode
+GREN_F_LAVA		= 8			; straight flight, burst on contact
 GREN_TICK_MS		= 32
 GREN_FLOOR_XZ_ASR	= 1			; /2 XZ per floor hop
 GREN_GRAV		= $01EC			; 60 u/s² × 32ms as 8.8

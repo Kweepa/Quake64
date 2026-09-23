@@ -136,6 +136,16 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
+"%ACME%" ai_chthon.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+"%ACME%" skel_draw.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 popd
 python tools\genaimeta.py
 if errorlevel 1 exit /b 1

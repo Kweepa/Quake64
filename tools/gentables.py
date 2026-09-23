@@ -42,7 +42,7 @@ def main() -> None:
     FOCAL = 100
     inv = [(FOCAL << 16) // d for d in range(128, 256)]
     invzl = [v & 255 for v in inv]
-    invzh = [(v >> 8) & 255 for v in inv]
+    invzh = [((v + 128) >> 8) & 255 for v in inv]  # rounded 8-bit mantissa for .cam_to_proj
 
     ntab = len(alog) + len(logtab) + len(sintab) + len(invzl) + len(invzh)
     parts = [

@@ -150,40 +150,68 @@ ent_set_pose
 	jmp pose_lerp
 .esp_stored
 	tay
+	ldx ent_type
+	jsr frame_stride
 	clc
 	lda gx_ptr
-	adc frame13_lo,y
+	adc nlo
 	sta gx_ptr
 	lda gx_ptr+1
-	adc frame13_hi,y
+	adc nhi
 	sta gx_ptr+1
 	clc
 	lda gy_ptr
-	adc frame13_lo,y
+	adc nlo
 	sta gy_ptr
 	lda gy_ptr+1
-	adc frame13_hi,y
+	adc nhi
 	sta gy_ptr+1
 	clc
 	lda gz_ptr
-	adc frame13_lo,y
+	adc nlo
 	sta gz_ptr
 	lda gz_ptr+1
-	adc frame13_hi,y
+	adc nhi
 	sta gz_ptr+1
 	rts
 
-; Y = logical frame with pose_map[Y]=$FF. rot1/rot2 = pose_map ptr.
-; Neighbors Y-1 / Y+1 are stored. Average into pose_gx/gy/gz.
+; X = type, Y = frame or stored count. nlo:nhi = Y * pose stride.
+; No prefix: frame13 (Y*13). Prefix with nv = 0: stride 0. Otherwise nv.
+; Preserves X. Destroys Y on the multiply path.
+frame_stride
+	lda skel_base_hi,x
+	beq .fs_f13
+	lda skel_nv,x
+	bne .fs_nv
+	lda #0
+	sta nlo
+	sta nhi
+	rts
+.fs_f13
+	lda frame13_lo,y
+	sta nlo
+	lda frame13_hi,y
+	sta nhi
+	rts
+.fs_nv
+	sta skel_mul_n
+	jmp skel_mul_ya
+
 pose_lerp
+	ldx ent_type
+	lda skel_base_hi,x
+	beq .pl_res
+	lda #SKEL_CMD_LERP
+	jmp skel_call
+.pl_res
 	sty gidx
 	dey
 	lda (rot1),y
-	sta rot0				; left packed index
+	sta rot0
 	ldy gidx
 	iny
 	lda (rot1),y
-	sta gidx				; right packed index
+	sta gidx
 	ldx ent_type
 	ldy rot0
 	clc
@@ -569,6 +597,8 @@ cube_project
 	sta inv_h
 	lda COL_INVK,y
 	sta inv_k
+	lda inv_h
+	jsr mulset_au
 .col_py
 	ldx vindex
 	ldy cur_col
@@ -580,7 +610,7 @@ cube_project
 	sta nlo
 	lda CAM_YH,x
 	sta nhi
-	jsr .cam_to_proj
+	jsr .cam_to_proj_m
 	ldx vindex
 	lda nlo
 	sta PROJ_Y,x
@@ -662,18 +692,17 @@ proj_invz
 .invz
 	lda z_eye
 	sta dlo
+	ldx #0
 	lda z_eye_h
-	sta dhi
-	lda #0
-	sta inv_k
+	beq .gotk
 .fz
-	lda dhi
-	beq .gotz
-	lsr dhi
+	inx
+	lsr
 	ror dlo
-	inc inv_k
-	jmp .fz
-.gotz
+	cmp #0
+	bne .fz
+.gotk
+	stx inv_k
 	lda dlo
 	and #$7f
 	tax
@@ -683,22 +712,61 @@ proj_invz
 	sta inv_h
 	rts
 
-; nlo:nhi * inv >> (16+k) → nlo:nhi. Full coord (no pre-shift) so 8.8 LSBs survive.
+; nlo:nhi * inv_h >> (8+k) → nlo:nhi. inv_h is the rounded 8-bit mantissa
+; of inv (invzh), so inv_l is not read. Clobbers set A, dlo, X, Y.
 proj_cam_to_proj
 .cam_to_proj
-	lda inv_l
-	sta ylo
 	lda inv_h
-	sta yhi
-	jsr smul16u16h
-	ldx inv_k
+	sta pa_s1l
+	sta pa_s1h
+	eor #$ff
+	sta pa_s2l
+	sta pa_s2h
+; Same, with set A already holding inv_h.
+.cam_to_proj_m
+	lda nhi
+	sta mul_sign
+	bpl +
+	sec
+	lda #0
+	sbc nlo
+	sta nlo
+	lda #0
+	sbc nhi
+	sta nhi
++
+	ldy nlo
+	sec
+	lda (pa_s1l),y
+	sbc (pa_s2l),y
+	lda (pa_s1h),y
+	sbc (pa_s2h),y
+	sta dlo
+	ldy nhi
+	sec
+	lda (pa_s1l),y
+	sbc (pa_s2l),y
+	sta nlo
+	lda (pa_s1h),y
+	sbc (pa_s2h),y
+	tax
+	clc
+	lda nlo
+	adc dlo
+	sta nlo
+	bcc +
+	inx
++
+	txa
+	ldy inv_k
 	beq .csgn
 .cls
-	lsr nhi
+	lsr
 	ror nlo
-	dex
+	dey
 	bne .cls
 .csgn
+	sta nhi
 	bit mul_sign
 	bpl .cdone
 	sec
@@ -1093,7 +1161,7 @@ cube_clip
 	sta nlo
 	lda e0yh
 	sta nhi
-	jsr .cam_to_proj
+	jsr .cam_to_proj_m
 	lda nlo
 	sta oy0l
 	lda nhi
@@ -1116,7 +1184,7 @@ cube_clip
 	sta nlo
 	lda e1yh
 	sta nhi
-	jsr .cam_to_proj
+	jsr .cam_to_proj_m
 	lda nlo
 	sta oy1l
 	lda nhi
@@ -2357,8 +2425,15 @@ draw_enemies
 	ldx obj_i
 	+lda_mx en_type
 	sta ent_type
+	tay
 	+lda_mx en_rot
 	sta ent_rot
+	lda skel_base_hi,y
+	beq .de_std
+	lda #SKEL_CMD_DRAW
+	jsr skel_call
+	jmp .de_one_rts
+.de_std
 	lda #NVERTS
 	sta mesh_nv
 	lda #NEDGES
@@ -2411,6 +2486,27 @@ draw_enemies
 }
 .de_one_rts
 	ldx obj_i
+	rts
+
+
+SKEL_CMD_DRAW = 0
+SKEL_CMD_LERP = 1
+
+; A = command. ent_type set. Y preserved. jsr the streamed skeleton entry.
+skel_call
+	pha
+	ldx ent_type
+	lda skel_entry_hi,x
+	beq .sc_pop
+	sta .sc_jsr+2
+	lda skel_entry_lo,x
+	sta .sc_jsr+1
+	pla
+.sc_jsr
+	jsr $ffff
+	rts
+.sc_pop
+	pla
 	rts
 
 ; Pending melee splat: half-pixel 48+X×4 / 32−Y×2 via .pcs_bias, then jitter ×2.

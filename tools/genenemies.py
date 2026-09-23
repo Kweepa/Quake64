@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import random
 import re
 import struct
 from copy import deepcopy
@@ -17,9 +18,13 @@ SIZES_OUT = ROOT / "src" / "enemy_sizes.asm"
 ENEMY_DIR = ROOT / "enemies"
 
 NVERTS = 13
+SKEL_MAX_VERTS = 48
+SKEL_MAX_EDGES = 64
+MESH_BATCH_VERTS = 16  # mesh.asm MESH_MAX_VERTS
+MESH_BATCH_EDGES = 32
 TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon", "Zombie"]
 DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
-ENEMY_POSE_MAX = 4096
+ENEMY_POSE_MAX = 7680
 ENEMY_DATA_BASE = 0x06F7
 PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
@@ -95,10 +100,10 @@ ROLE_CLIPS = {
         "attack": ["smash"],
     },
     "Chthon": {
-        "stand": ("walk", 8),
-        "alert": ("walk", 4),
-        "run": ("walk", None),
-        "walk": ("walk", None),
+        "stand": ("rise", None),
+        "alert": ("rise", None),
+        "run": ("rise", None),
+        "walk": ("rise", None),
         "attack": ["attack"],
     },
     "Zombie": {
@@ -260,11 +265,15 @@ def apply_export_clips(enemy: dict) -> None:
 
 
 def variant_key(enemy: dict, what: str) -> re.Pattern:
-    """Zombie: paina is flinch, paine is the knockdown/get-up death clip."""
-    if enemy.get("name") == "Zombie":
+    """Zombie: paina is flinch, paine is the knockdown/get-up death clip.
+    Chthon: boss.mdl names the flinch shocka/b/c, not pain*."""
+    name = enemy.get("name")
+    if name == "Zombie":
         if what == "pain":
             return re.compile(r"^paina?$")
         return re.compile(r"^paine$")
+    if name == "Chthon" and what == "pain":
+        return re.compile(r"^shock[a-z]?$")
     return PAIN_KEY if what == "pain" else DEATH_KEY
 
 
@@ -307,44 +316,199 @@ def s8(n: int) -> int:
     return n & 0xFF
 
 
-def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list[int]], list[dict]]:
+DEFAULT_EDGES = [
+    [0, 1],
+    [1, 2],
+    [2, 0],
+    [2, 3],
+    [2, 4],
+    [4, 5],
+    [2, 6],
+    [6, 7],
+    [0, 8],
+    [8, 9],
+    [1, 10],
+    [10, 11],
+    [7, 12],
+]
+
+
+def enemy_nv(enemy: dict) -> int:
+    if not enemy.get("customSkeleton"):
+        return NVERTS
+    frames = enemy.get("frames") or []
+    nv = len(frames[0]) if frames else int(enemy.get("verts") or 0)
+    if not 0 <= nv <= SKEL_MAX_VERTS:
+        raise SystemExit(f"{enemy['name']}: custom skeleton vert count {nv} not in 0..{SKEL_MAX_VERTS}")
+    return nv
+
+
+SKEL_PFX = 7  # size.w, nv, ne, entry.w (entry patched by genaibanks), shift
+SKEL_SHIFT_MAX = 2
+
+
+def shift_round(v: int, shift: int) -> int:
+    return (int(v) + ((1 << shift) >> 1)) >> shift
+
+
+def pick_skel_shift(enemy: dict, frames: list) -> int:
+    """Smallest shift so every coord >> shift fits a signed byte. Never clamps."""
+    coords = [int(v[a]) for fr in frames for v in fr for a in ("x", "y", "z")]
+    for shift in range(SKEL_SHIFT_MAX + 1):
+        if all(-128 <= shift_round(c, shift) <= 127 for c in coords):
+            return shift
+    peak = max((abs(c) for c in coords), default=0)
+    raise SystemExit(
+        f"{enemy['name']}: custom skeleton coord {peak} needs shift > {SKEL_SHIFT_MAX}; "
+        "lower the MDL scale in the editor"
+    )
+
+
+def batch_cost(order: list[list[int]]) -> tuple[int, int]:
+    """(batches, vert slots) as baked_batches packs them: a batch closes at the first misfit."""
+    batches = slots = 0
+    i = 0
+    while i < len(order):
+        verts: set[int] = set()
+        n = 0
+        while i < len(order) and n < MESH_BATCH_EDGES:
+            a, b = order[i]
+            if len(verts) + (a not in verts) + (b not in verts) > MESH_BATCH_VERTS:
+                break
+            verts.update((a, b))
+            n += 1
+            i += 1
+        batches += 1
+        slots += len(verts)
+    return batches, slots
+
+
+def baked_batches(order: list[list[int]]) -> bytes:
+    """Per batch: nslot, nedge, slot→vert, slot pairs. nslot = 0 ends. Packs like batch_cost."""
+    out = bytearray()
+    i = 0
+    while i < len(order):
+        slots: list[int] = []
+        pairs: list[int] = []
+        while i < len(order) and len(pairs) < MESH_BATCH_EDGES * 2:
+            a, b = order[i]
+            if len(slots) + (a not in slots) + (b not in slots) > MESH_BATCH_VERTS:
+                break
+            for v in (a, b):
+                if v not in slots:
+                    slots.append(v)
+                pairs.append(slots.index(v))
+            i += 1
+        out += bytes([len(slots), len(pairs) // 2]) + bytes(slots) + bytes(pairs)
+    out.append(0)
+    return bytes(out)
+
+
+def greedy_edges(lines: list[tuple[int, int]], rng: random.Random | None) -> list[list[int]]:
+    left = list(lines)
+    out: list[list[int]] = []
+    while left:
+        verts: set[int] = set()
+        n = 0
+        while left and n < MESH_BATCH_EDGES:
+            cands = []
+            for i, (a, b) in enumerate(left):
+                need = (a not in verts) + (b not in verts)
+                if len(verts) + need <= MESH_BATCH_VERTS:
+                    cands.append((need, i))
+            if not cands:
+                break
+            low = min(c[0] for c in cands)
+            pool = [i for need, i in cands if need == low]
+            a, b = left.pop(pool[0] if rng is None else rng.choice(pool))
+            verts.update((a, b))
+            out.append([a, b])
+            n += 1
+    return out
+
+
+def cluster_edges(lines: list[list[int]]) -> tuple[list[list[int]], int, int]:
+    """Edge order that minimises batches then vert slots. Deterministic (fixed seeds)."""
+    src = [(int(a), int(b)) for a, b in lines]
+    best = [list(e) for e in src]
+    cost = batch_cost(best)
+    for seed in range(-1, 1000):
+        order = greedy_edges(src, None if seed < 0 else random.Random(seed))
+        c = batch_cost(order)
+        if c < cost:
+            best, cost = order, c
+    return best, cost[0], cost[1]
+
+
+def skel_prefix(nv: int, lines: list[list[int]], shift: int, name: str) -> bytes:
+    ne = len(lines)
+    lines, batches, slots = cluster_edges(lines)
+    print(f"{name}: edge order {batches} batches, {slots} vert slots")
+    body = bytearray(baked_batches(lines))
+    size = SKEL_PFX + len(body)
+    out = bytearray(size)
+    out[0] = size & 0xFF
+    out[1] = (size >> 8) & 0xFF
+    out[2] = nv & 0xFF
+    out[3] = ne & 0xFF
+    out[6] = shift
+    out[SKEL_PFX:] = body
+    return bytes(out)
+
+
+def export_type(enemy: dict) -> tuple[list[int], list[int], list[int], list[list[int]], list[dict], int, int]:
     lines = enemy["lines"]
     frames = enemy["frames"]
     clips = enemy.get("clips") or []
-    if len(lines) != NVERTS:
+    nv = enemy_nv(enemy)
+    custom = bool(enemy.get("customSkeleton"))
+    if custom:
+        if nv == 0:
+            lines = []
+        elif not 1 <= len(lines) <= SKEL_MAX_EDGES:
+            raise SystemExit(f"{enemy['name']}: custom skeleton line count {len(lines)} not in 1..{SKEL_MAX_EDGES}")
+        else:
+            for a, b in lines:
+                ai, bi = int(a), int(b)
+                if ai == bi or not 0 <= ai < nv or not 0 <= bi < nv:
+                    raise SystemExit(f"{enemy['name']}: bad custom line {a}-{b}")
+    elif len(lines) != NVERTS:
         raise SystemExit(f"{enemy['name']}: expected {NVERTS} lines, got {len(lines)}")
     if not frames:
         raise SystemExit(f"{enemy['name']}: no frames")
+    shift = pick_skel_shift(enemy, frames) if custom else 0
     gx: list[int] = []
     gy: list[int] = []
     gz: list[int] = []
     for fi, fr in enumerate(frames):
-        if len(fr) != NVERTS:
+        if len(fr) != nv:
             raise SystemExit(f"{enemy['name']} frame {fi}: bad vert count")
         for v in fr:
-            gx.append(s8(v["x"]))
-            gy.append(s8(v["y"]))
-            gz.append(s8(v["z"]))
-    return gx, gy, gz, lines, clips
+            gx.append(s8(shift_round(v["x"], shift)))
+            gy.append(s8(shift_round(v["y"], shift)))
+            gz.append(s8(shift_round(v["z"], shift)))
+    return gx, gy, gz, lines, clips, nv, shift
 
 
-def trim_to_budget(gx: list[int], gy: list[int], gz: list[int], enemy: dict) -> int:
+def trim_to_budget(gx: list[int], gy: list[int], gz: list[int], enemy: dict, nv: int) -> int:
     """Keep authored logical frames; packed .pose size is the real budget."""
-    del gy, gz, enemy
-    return len(gx) // NVERTS
+    del gy, gz
+    if nv <= 0:
+        return max(1, len(enemy.get("frames") or [None]))
+    return len(gx) // nv
 
 
 def s8_val(b: int) -> int:
     return b if b < 128 else b - 256
 
 
-def frames_xyz(gx: list[int], gy: list[int], gz: list[int], nframes: int) -> list[list[int]]:
+def frames_xyz(gx: list[int], gy: list[int], gz: list[int], nframes: int, nv: int) -> list[list[int]]:
     frs: list[list[int]] = []
     for i in range(nframes):
         xyz: list[int] = []
-        off = i * NVERTS
+        off = i * nv
         for arr in (gx, gy, gz):
-            for v in range(NVERTS):
+            for v in range(nv):
                 xyz.append(s8_val(arr[off + v]))
         frs.append(xyz)
     return frs
@@ -353,7 +517,7 @@ def frames_xyz(gx: list[int], gy: list[int], gz: list[int], nframes: int) -> lis
 def acc_at(frs: list[list[int]], i: int) -> int:
     if i <= 0 or i >= len(frs) - 1:
         return 0
-    return max(abs(frs[i + 1][k] - 2 * frs[i][k] + frs[i - 1][k]) for k in range(NVERTS * 3))
+    return max(abs(frs[i + 1][k] - 2 * frs[i][k] + frs[i - 1][k]) for k in range(len(frs[i])))
 
 
 def clip_ranges(enemy: dict, nframes: int) -> list[tuple[str, int, int]]:
@@ -452,11 +616,12 @@ def pack_poses(
     enemy: dict,
     nframes: int,
     type_i: int,
+    nv: int,
     skip_leftover: set[str] | None = None,
 ) -> tuple[list[int], list[int], list[int], list[int], int]:
     """Keep first/+2/keys/last per clip (roles and leftover JSON clips). pose_map: stored or $FF."""
     skip_leftover = skip_leftover or set()
-    frs = frames_xyz(gx, gy, gz, nframes)
+    frs = frames_xyz(gx, gy, gz, nframes, nv)
     covered = [False] * nframes
     keep: set[int] = set()
     fire_off = FIRE_FRAME[type_i]
@@ -494,6 +659,8 @@ def pack_poses(
             raise SystemExit(f"{enemy['name']}: lerp at endpoint {i}")
         if pose_map[i - 1] == 0xFF or pose_map[i + 1] == 0xFF:
             raise SystemExit(f"{enemy['name']}: lerp {i} missing stored neighbor")
+    if enemy.get("customSkeleton"):
+        pose_map = [pose_map[i - 1] if m == 0xFF else m for i, m in enumerate(pose_map)]
     n_stored = len(kept_sorted)
     if n_stored > 127:
         raise SystemExit(f"{enemy['name']}: {n_stored} stored poses > 127")
@@ -501,8 +668,8 @@ def pack_poses(
     def pack_axis(src: list[int]) -> list[int]:
         out: list[int] = []
         for fi in kept_sorted:
-            off = fi * NVERTS
-            out.extend(src[off : off + NVERTS])
+            off = fi * nv
+            out.extend(src[off : off + nv])
         return out
 
     return pack_axis(gx), pack_axis(gy), pack_axis(gz), pose_map, n_stored
@@ -555,18 +722,20 @@ def main() -> None:
             raise SystemExit(f"missing enemy {name}")
         enemy = deepcopy(by_name[name])
         apply_export_clips(enemy)
-        gx, gy, gz, lines, _clips = export_type(enemy)
-        nframes = trim_to_budget(gx, gy, gz, enemy)
+        gx, gy, gz, lines, _clips, nv, shift = export_type(enemy)
+        nframes = trim_to_budget(gx, gy, gz, enemy, nv)
         dos = DOS_NAME[ti]
         sfx_path = ENEMY_DIR / f"sfx_{dos}.bin"
         if not sfx_path.is_file():
             raise SystemExit(f"missing {sfx_path}; run gensounds.py first")
+        custom = bool(enemy.get("customSkeleton"))
+        prefix = skel_prefix(nv, lines, shift, name) if custom else b""
         skip_leftover: set[str] = set()
         while True:
             pgx, pgy, pgz, pose_map, n_stored = pack_poses(
-                gx, gy, gz, enemy, nframes, ti, skip_leftover
+                gx, gy, gz, enemy, nframes, ti, nv, skip_leftover
             )
-            payload = bytes([n_stored, nframes]) + bytes(pose_map) + bytes(pgx) + bytes(pgy) + bytes(pgz)
+            payload = prefix + bytes([n_stored, nframes]) + bytes(pose_map) + bytes(pgx) + bytes(pgy) + bytes(pgz)
             payload += sfx_path.read_bytes()
             payload += pack_clip_events(enemy, sound_ids)
             if len(payload) <= ENEMY_POSE_MAX:
@@ -578,6 +747,7 @@ def main() -> None:
                 continue
             raise SystemExit(f"{name} pose {len(payload)} exceeds {ENEMY_POSE_MAX}")
         (ENEMY_DIR / f"{dos}.pose").write_bytes(payload)
+        (ENEMY_DIR / f"{dos}.skel").write_bytes(bytes([1 if custom else 0]))
         (ENEMY_DIR / f"{dos}.prg").write_bytes(struct.pack("<H", 0) + payload)
         pose_sizes.append(len(payload))
         nframes_list.append(nframes)
@@ -589,7 +759,11 @@ def main() -> None:
             lod = DEFAULT_LOD_Z.get(name, 4)
         lod_z_list.append(max(0, min(255, lod)))
         n_lerp = sum(1 for v in pose_map if v == 0xFF)
-        print(f"{name}: logical={nframes} stored={n_stored} lerp={n_lerp} bytes={len(payload)} lodZ={lod_z_list[-1]}")
+        shift_note = f" shift={shift}" if custom else ""
+        print(
+            f"{name}: logical={nframes} stored={n_stored} lerp={n_lerp} bytes={len(payload)} "
+            f"lodZ={lod_z_list[-1]}{shift_note}"
+        )
         for role in ("stand", "alert", "run", "walk"):
             start, length = require_role(enemy, role)
             if start + length > nframes:
@@ -615,15 +789,17 @@ def main() -> None:
         death_n.append(n)
         death_start.extend(starts)
         death_len.extend(lens)
-        if all_edges is None:
-            all_edges = lines
-        elif lines != all_edges:
-            print(f"warning: {name} edges differ from Grunt; using Grunt edges")
+        if not custom:
+            if all_edges is None:
+                all_edges = lines
+            elif lines != all_edges:
+                print(f"warning: {name} edges differ from Grunt; using Grunt edges")
         if nframes > max_nframes:
             max_nframes = nframes
 
+    if all_edges is None:
+        all_edges = DEFAULT_EDGES
     edge_bytes: list[int] = []
-    assert all_edges is not None
     for a, b in all_edges:
         edge_bytes.append(int(a))
         edge_bytes.append(int(b))

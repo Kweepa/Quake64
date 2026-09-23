@@ -12,22 +12,22 @@ enemy_edge_vert
 	!byte 0,0,0,0,0,0,0,0,0,0,0,0,0
 
 ; Role clips
-enemy_stand_start	!byte 0, 0, 51, 0, 0, 0, 17, 0
-enemy_stand_len		!byte 8, 9, 9, 15, 9, 17, 8, 15
-enemy_alert_start	!byte 18, 0, 51, 0, 72, 0, 17, 0
-enemy_alert_len		!byte 11, 9, 2, 4, 11, 4, 4, 4
-enemy_run_start		!byte 43, 9, 39, 15, 25, 29, 17, 15
-enemy_run_len		!byte 8, 8, 12, 14, 8, 6, 31, 19
-enemy_walk_start		!byte 60, 42, 60, 15, 9, 17, 17, 15
-enemy_walk_len		!byte 24, 14, 8, 14, 16, 12, 31, 19
+enemy_stand_start	!byte 0, 0, 51, 0, 0, 0, 0, 0
+enemy_stand_len		!byte 8, 9, 9, 15, 9, 17, 17, 15
+enemy_alert_start	!byte 18, 0, 51, 0, 72, 0, 0, 0
+enemy_alert_len		!byte 11, 9, 2, 4, 11, 4, 17, 4
+enemy_run_start		!byte 43, 9, 39, 15, 25, 29, 0, 15
+enemy_run_len		!byte 8, 8, 12, 14, 8, 6, 17, 19
+enemy_walk_start		!byte 60, 42, 60, 15, 9, 17, 0, 15
+enemy_walk_len		!byte 24, 14, 8, 14, 16, 12, 17, 19
 enemy_attack_n		!byte 1, 2, 1, 1, 2, 1, 1, 3
-enemy_attack_start	!byte 51, 0, 0, 0, 17, 31, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 33, 47, 0, 0, 35, 0, 0, 0, 57, 0, 0, 0, 52, 65, 79, 0
+enemy_attack_start	!byte 51, 0, 0, 0, 17, 31, 0, 0, 0, 0, 0, 0, 29, 0, 0, 0, 33, 47, 0, 0, 35, 0, 0, 0, 26, 0, 0, 0, 52, 65, 79, 0
 enemy_attack_len	!byte 9, 0, 0, 0, 11, 11, 0, 0, 8, 0, 0, 0, 13, 0, 0, 0, 14, 6, 0, 0, 12, 0, 0, 0, 23, 0, 0, 0, 13, 14, 12, 0
 enemy_pain_n		!byte 1, 1, 2, 1, 1, 1, 1, 1
-enemy_pain_start	!byte 29, 0, 0, 0, 28, 0, 0, 0, 17, 23, 0, 0, 42, 0, 0, 0, 53, 0, 0, 0, 68, 0, 0, 0, 17, 0, 0, 0, 91, 0, 0, 0
-enemy_pain_len		!byte 14, 0, 0, 0, 3, 0, 0, 0, 6, 16, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 1, 0, 0, 0, 12, 0, 0, 0
+enemy_pain_start	!byte 29, 0, 0, 0, 28, 0, 0, 0, 17, 23, 0, 0, 42, 0, 0, 0, 53, 0, 0, 0, 68, 0, 0, 0, 49, 0, 0, 0, 91, 0, 0, 0
+enemy_pain_len		!byte 14, 0, 0, 0, 3, 0, 0, 0, 6, 16, 0, 0, 4, 0, 0, 0, 5, 0, 0, 0, 6, 0, 0, 0, 10, 0, 0, 0, 12, 0, 0, 0
 enemy_death_n		!byte 1, 1, 1, 1, 1, 1, 1, 1
-enemy_death_start	!byte 8, 0, 0, 0, 56, 0, 0, 0, 8, 0, 0, 0, 46, 0, 0, 0, 58, 0, 0, 0, 74, 0, 0, 0, 48, 0, 0, 0, 103, 0, 0, 0
+enemy_death_start	!byte 8, 0, 0, 0, 56, 0, 0, 0, 8, 0, 0, 0, 46, 0, 0, 0, 58, 0, 0, 0, 74, 0, 0, 0, 17, 0, 0, 0, 103, 0, 0, 0
 enemy_death_len		!byte 10, 0, 0, 0, 10, 0, 0, 0, 9, 0, 0, 0, 8, 0, 0, 0, 14, 0, 0, 0, 11, 0, 0, 0, 9, 0, 0, 0, 30, 0, 0, 0
 enemy_range		!byte 30, 6, 4, 24, 30, 16, 40, 30
 enemy_hp_init		!byte 6, 15, 5, 16, 40, 120, 80, 12
@@ -36,9 +36,9 @@ enemy_drop_type	!byte 7, $ff, $ff, $ff, 4, $ff, $ff, $ff
 enemy_fire_frame	!byte 2, 5, 4, 6, 2, 4, 8, 255
 enemy_class		!byte 0, 0, 1, 0, 0, 0, 0, 0
 ; LOD Z by type: Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon, Zombie
-enemy_lod_z		!byte 4, 4, 4, 4, 10, 4, 4, 4	; full project while CAM_ZH < this
+enemy_lod_z		!byte 4, 4, 4, 4, 10, 4, 40, 4	; full project while CAM_ZH < this
 ; Stored pose count (PRG header / gy stride). Clip tables stay logical.
-enemy_nframes	!byte 52, 43, 42, 32, 50, 53, 63, 77
+enemy_nframes	!byte 52, 43, 42, 32, 50, 53, 35, 77
 
 enemy_data_end = *
 !if enemy_data_end > ENEMY_DATA_LIMIT {

@@ -764,7 +764,7 @@ draw_grenades
 .dgr_rts
 	rts
 
-; View-space dart: tail ±GREN_HW in X, tip +GREN_HW in Z.
+; One projected centre, then a fixed screen triangle of half-extent GREN_R.
 gren_draw_one
 	stx obj_i
 	lda gr_xl,x
@@ -781,51 +781,86 @@ gren_draw_one
 	sta org_zh
 	ldx #0
 	jsr xform_world_vert88
-	ldy #0
-.dup
-	lda CAM_X,y
-	sta CAM_X+1,y
-	sta CAM_X+2,y
-	cpy #$20
-	beq .hi
-	tya
-	clc
-	adc #$10
-	tay
-	bne .dup
-.hi
-	ldy #$50
-.dup2
-	lda CAM_X,y
-	sta CAM_X+1,y
-	sta CAM_X+2,y
-	tya
-	clc
-	adc #$10
-	tay
-	cpy #$80
-	bcc .dup2
+	jsr project_cam0_screen
+	bcs .gdo_on
+	rts
+.gdo_on
+	sta ox0l				; centre sx
+	sty oy0l
+	lda #GREN_R
+	sta ylo
+	lda #0
+	sta yhi
+	jsr persp88				; z_eye still set; 8-bit radius
+	sta ox1l
+	lda ox0l
+	sta e0x
+	lda oy0l
+	ldx #128
 	sec
-	lda CAM_X
-	sbc #GREN_HW
-	sta CAM_X
-	lda CAM_XH
-	sbc #0
-	sta CAM_XH
+	jsr .gdo_pm
+	sta e0y
+	lda ox0l
+	ldx #192
+	sec
+	jsr .gdo_pm
+	sta e0z
+	lda oy0l
+	ldx #128
 	clc
-	lda CAM_X+1
-	adc #GREN_HW
-	sta CAM_X+1
-	lda CAM_XH+1
-	adc #0
-	sta CAM_XH+1
+	jsr .gdo_pm
+	sta e1x
+	sta e1z
+	lda ox0l
+	ldx #192
 	clc
-	lda CAM_Z+2
-	adc #GREN_HW
-	sta CAM_Z+2
-	lda CAM_ZH+2
-	adc #0
-	sta CAM_ZH+2
-	jmp stroke_tri
+	jsr .gdo_pm
+	sta e1y
+	ldx #0
+.gdo_ed
+	stx rot0
+	lda e0x,x
+	sta x0
+	lda e0y,x
+	sta y0
+	inx
+	inx
+	cpx #6
+	bne .gdo_e2
+	ldx #0
+.gdo_e2
+	lda e0x,x
+	sta x1
+	lda e0y,x
+	sta y1
+	jsr draw_line
+	ldx rot0
+	inx
+	inx
+	cpx #6
+	bcc .gdo_ed
+	rts
+
+; A = centre, X = limit. C=1 subtract radius, C=0 add. Result in A.
+.gdo_pm
+	stx rot2
+	bcc .gdo_add
+	sbc ox1l
+	bcc .gdo_z
+	bcs .gdo_chk
+.gdo_add
+	adc ox1l
+	bcs .gdo_hi
+.gdo_chk
+	cmp rot2
+	bcc .gdo_ok
+.gdo_hi
+	lda rot2
+	sbc #1
+	rts
+.gdo_z
+	lda #0
+.gdo_ok
+	rts
 
 grenade_end = *

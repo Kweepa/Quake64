@@ -9945,6 +9945,36 @@
           "enemy": "Chthon",
           "patrol": false,
           "roomId": "e95d6d7f-634f-4576-909e-d02657fd611a"
+        },
+        {
+          "id": "3919f2d1-ac9a-4666-a883-3a9232b78da4",
+          "kind": "pickup",
+          "x": 177,
+          "y": 65,
+          "z": 138,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "b4f6f040-14b1-43f8-a7e4-bfe1633a8d6c",
+          "pickup": "grenade launcher"
+        },
+        {
+          "id": "8af293fe-056b-48d5-9cbe-09be42843e33",
+          "kind": "pickup",
+          "x": 182,
+          "y": 65,
+          "z": 151,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "b4f6f040-14b1-43f8-a7e4-bfe1633a8d6c",
+          "pickup": "grenades"
         }
       ]
     },

@@ -569,7 +569,7 @@ GREN_DMG_MAX		= 24		; Quake 120 ÷ 5
 GREN_RAD		= 6
 GREN_HIT_R		= 1
 GREN_WRIST_L		= 5			; skeleton "Wrist L"
-GREN_HW			= $40			; tail half-width 0.25
+GREN_R			= $60			; screen-triangle half-extent 0.375
 GREN_VEL_ASR		= 5			; tip = view-vel >> 5
 ; Scrag spit — tracer + delayed hitscan
 SPIT_DMG		= 9			; Quake wizard spike (unscaled; player HP is 100)

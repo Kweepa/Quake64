@@ -906,7 +906,8 @@ ai_pose_lo	= $CFC8
 ai_pose_hi	= $CFC9
 ai_cmd		= $CFCA
 ai_field	= $CFCB
-; $CFCC+ free
+rune_taken	= $CFCC			; 1 = rune of earth magic picked up
+; $CFCD+ free
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4

@@ -41,14 +41,10 @@ ai_chthon_entry
 	rts
 
 ; en_pat_n = 0 until the rise has been started.
+; Rise waits on the rune of earth magic so the pickup and the boss are not drawn together.
 .ch_idle
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	sta rot0
-	+ldy_mx en_type
-	lda enemy_range,y
-	cmp rot0
-	bcc .ch_idle_out		; still farther than his range
+	jsr .ch_rune_taken
+	bcc .ch_idle_out
 	ldx enemy_idx
 	lda #1
 	sta en_pat_n,x
@@ -62,6 +58,15 @@ ai_chthon_entry
 	ldx enemy_idx
 	lda en_pat_n,x
 	bne .ch_risen
+	jsr .ch_rune_taken
+	bcs .ch_start
+	ldx enemy_idx
+	lda #EN_IDLE
+	sta en_state,x
+	lda #0
+	rts
+.ch_start
+	ldx enemy_idx
 	lda #1
 	sta en_pat_n,x
 	jsr enemy_face_player
@@ -70,6 +75,13 @@ ai_chthon_entry
 	lda #0
 	sta en_timer,x
 	sta en_timer_h,x
+	rts
+
+; C=1 once the rune of earth magic has been picked up.
+; bp_type's field id is $80; the AI map patch drops that high bit, so this is a fixed byte.
+.ch_rune_taken
+	lda rune_taken
+	cmp #1
 	rts
 
 ; Rise is over. Start the attack loop and skip the chase step.

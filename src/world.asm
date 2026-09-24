@@ -69,6 +69,8 @@ world_init
 
 ; Clear bp_taken[0..MAP_NBACKPACKS)
 init_backpacks
+	lda #0
+	sta rune_taken
 	ldx #0
 .ib_lp
 	cpx	map_nbackpacks
@@ -1672,6 +1674,11 @@ try_backpack_pickup
 	ldx obj_i
 	lda #1
 	sta bp_taken,x
+	+lda_mx bp_type
+	cmp #BP_RUNE
+	bne .tbp_n
+	lda #1
+	sta rune_taken
 .tbp_n
 	ldx obj_i
 	inx

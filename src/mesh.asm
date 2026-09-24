@@ -625,6 +625,30 @@ draw_plat_mesh
 	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
+; C=1 if room_idx holds a Chthon. X restored from obj_i.
+room_has_chthon
+	ldx #0
+.rhc_lp
+	cpx	map_nenemies
+	bcs .rhc_no
+	+lda_mx en_room
+	cmp room_idx
+	bne .rhc_n
+	+lda_mx en_type
+	cmp #ENT_CHTHON
+	beq .rhc_yes
+.rhc_n
+	inx
+	bne .rhc_lp
+.rhc_no
+	clc
+	ldx obj_i
+	rts
+.rhc_yes
+	sec
+	ldx obj_i
+	rts
+
 ; Pickup mesh: type in A (BP_*). nv=0 → backpack fallback slot BP_NTYPES.
 draw_backpack_mesh
 	ldx obj_i
@@ -1548,6 +1572,26 @@ draw_world
 	sta box_sy
 	+lda_mx plat_sz
 	sta box_sz
+	+lda_mx plat_solid
+	bne .dw_pl_low
+	lda box_sx
+	cmp #5
+	bcs .dw_pl_low
+	lda box_sz
+	cmp #5
+	bcs .dw_pl_low
+	lda cam_yh
+	cmp box_y
+	bcs .dw_pl_fr			; eye at or above the plane
+	jmp .dw_pln			; small non-solid, viewed from below
+.dw_pl_low
+	lda box_y
+	cmp floor_y
+	bcs .dw_pl_fr
+	jsr room_has_chthon
+	bcc .dw_pl_fr
+	jmp .dw_pln			; lava pit: platform under the floor we're on
+.dw_pl_fr
 	jsr frustum_hits
 	bcc .dw_plr
 	jsr draw_plat_mesh

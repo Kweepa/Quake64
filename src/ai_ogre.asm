@@ -12,26 +12,30 @@
 *= AI_LINK_BASE
 ai_ogre_entry
 	cmp #AI_CMD_FIRE
-	bne +
-	jmp .fire
-+
+	beq .fire
 	cmp #AI_CMD_ATTACK_END
-	bne +
-	jmp .attack_end
-+
+	beq .attack_end
 	cmp #AI_CMD_APPROACH_MOVE
-	bne +
-	jmp .approach_move
-+
+	beq .approach_move
 	cmp #AI_CMD_APPROACH_ATTACK
-	bne +
-	jmp .approach_attack
-+
+	beq .approach_attack
 	cmp #AI_CMD_APPROACH_ENTER
-	bne +
-	jmp .approach_enter
-+
+	beq .approach_enter
 	rts
+
+.attack_end
+	ldx enemy_idx
+	lda en_pain_i,x
+	bne .approach			; grenade always returns to chase
+	jsr enemy_same_floor
+	bcc .approach
+	jsr enemy_chebyshev
+	cmp #OGRE_MELEE_R + 1
+	bcs .approach
+	lda #0
+	jmp enemy_enter_ogre_attack
+.approach
+	jmp enemy_enter_approach
 
 .approach_move
 	ldx enemy_idx
@@ -90,17 +94,3 @@ ai_ogre_entry
 	jmp spawn_ogre_grenade
 .rts
 	rts
-
-.attack_end
-	ldx enemy_idx
-	lda en_pain_i,x
-	bne .approach			; grenade always returns to chase
-	jsr enemy_same_floor
-	bcc .approach
-	jsr enemy_chebyshev
-	cmp #OGRE_MELEE_R + 1
-	bcs .approach
-	lda #0
-	jmp enemy_enter_ogre_attack
-.approach
-	jmp enemy_enter_approach

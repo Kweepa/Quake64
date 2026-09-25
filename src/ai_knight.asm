@@ -12,9 +12,7 @@
 *= AI_LINK_BASE
 ai_knight_entry
 	cmp #AI_CMD_ATTACK_TICK
-	bne +
-	jmp .tick
-+
+	beq .tick
 	cmp #AI_CMD_FIRE
 	bne +
 	jmp .fire
@@ -24,17 +22,11 @@ ai_knight_entry
 	jmp .attack_end
 +
 	cmp #AI_CMD_APPROACH_MOVE
-	bne +
-	jmp .approach_move
-+
+	beq .approach_move
 	cmp #AI_CMD_APPROACH_ATTACK
-	bne +
-	jmp .approach_attack
-+
+	beq .approach_attack
 	cmp #AI_CMD_APPROACH_ENTER
-	bne +
-	jmp .approach_enter
-+
+	beq .approach_enter
 	rts
 
 .approach_move

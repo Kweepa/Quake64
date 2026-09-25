@@ -733,6 +733,22 @@ def pack_poses(
             raise SystemExit(f"{enemy['name']}: lerp {i} missing stored neighbor")
     if enemy.get("customSkeleton"):
         pose_map = [pose_map[i - 1] if m == 0xFF else m for i, m in enumerate(pose_map)]
+    # Identical XYZ shares one stored slot. pose_map still indexes a stored pose, so
+    # ent_set_pose stays on the frame-stride path.
+    seen: dict[tuple[int, ...], int] = {}
+    unique: list[int] = []
+    alias = [0] * len(kept_sorted)
+    for old_i, fi in enumerate(kept_sorted):
+        off = fi * nv
+        key = tuple(gx[off : off + nv] + gy[off : off + nv] + gz[off : off + nv])
+        slot = seen.get(key)
+        if slot is None:
+            slot = len(unique)
+            seen[key] = slot
+            unique.append(fi)
+        alias[old_i] = slot
+    kept_sorted = unique
+    pose_map = [0xFF if m == 0xFF else alias[m] for m in pose_map]
     n_stored = len(kept_sorted)
     if n_stored > 127:
         raise SystemExit(f"{enemy['name']}: {n_stored} stored poses > 127")

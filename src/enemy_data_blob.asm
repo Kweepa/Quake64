@@ -38,7 +38,7 @@ enemy_class		!byte 0, 0, 1, 0, 0, 0, 0, 0
 ; LOD Z by type: Grunt, Knight, Rottweiler, Scrag, Ogre, Shambler, Chthon, Zombie
 enemy_lod_z		!byte 4, 4, 4, 4, 10, 4, 40, 4	; full project while CAM_ZH < this
 ; Stored pose count (PRG header / gy stride). Clip tables stay logical.
-enemy_nframes	!byte 52, 43, 42, 32, 50, 53, 35, 77
+enemy_nframes	!byte 49, 42, 32, 32, 47, 49, 35, 71
 
 enemy_data_end = *
 !if enemy_data_end > ENEMY_DATA_LIMIT {

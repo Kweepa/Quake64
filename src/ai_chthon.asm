@@ -16,9 +16,7 @@ CHTHON_LAVA_VERT2 = 13		; other arm tip (edge 12-13) on fire frame 18
 *= AI_LINK_BASE
 ai_chthon_entry
 	cmp #AI_CMD_IDLE
-	bne +
-	jmp .ch_idle
-+
+	beq .ch_idle
 	cmp #AI_CMD_FIRE
 	bne +
 	jmp .ch_fire
@@ -32,13 +30,9 @@ ai_chthon_entry
 	jmp .ch_end
 +
 	cmp #AI_CMD_APPROACH_MOVE
-	bne +
-	jmp .ch_move
-+
+	beq .ch_move
 	cmp #AI_CMD_APPROACH_ENTER
-	bne +
-	jmp .ch_enter
-+
+	beq .ch_enter
 	cmp #AI_CMD_DRAW
 	bne +
 	jmp .ch_draw

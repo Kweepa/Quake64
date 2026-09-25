@@ -700,6 +700,8 @@ def pack_poses(
         if name.startswith("attack"):
             if TYPES[type_i] == "Zombie":
                 extra = (start + length - 1,)
+            elif TYPES[type_i] == "Chthon":
+                extra = (start + fire_off, start + 18)
             elif 0 <= fire_off < 255:
                 extra = (start + fire_off,)
             if type_i == 1:

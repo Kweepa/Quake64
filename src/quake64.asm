@@ -110,6 +110,7 @@ main
 	jsr update_spit
 	jsr update_status
 	jsr update_triggers
+	jsr update_chthon_elec
 	jsr enemies_update
 	jmp main
 

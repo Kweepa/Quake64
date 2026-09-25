@@ -2626,6 +2626,10 @@ finish_enemy_death
 	sta en_state,x
 	+lda_mx en_type
 	tay
+	cpy #ENT_CHTHON
+	bne +
+	jmp episode_done
++
 	lda enemy_drop_type,y
 	cmp #$ff
 	bne .fed_drop
@@ -2650,9 +2654,8 @@ finish_enemy_death
 	sta drop_room,x
 	lda rot2
 	sta drop_type,x
-	lda #0
-	sta drop_taken,x
-	jmp .fed_rts
+	dec drop_taken,x
+	beq .fed_rts
 .fed_n
 	inx
 	bne .fed_slot

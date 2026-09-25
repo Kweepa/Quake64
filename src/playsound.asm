@@ -339,11 +339,11 @@ elev_noise_restore
 	lda sfx_index+2
 	bpl .enr_rts				; world SFX still owns V3
 elev_noise_program
-	lda #$00
-	sta $d40e				; V3 Fn lo
 	lda #$02
 	sta $d40f				; V3 Fn hi — low rumble
+enp_rest
 	lda #$00
+	sta $d40e				; V3 Fn lo
 	sta $d413				; AD
 	lda #$f8
 	sta $d414				; SR sustain

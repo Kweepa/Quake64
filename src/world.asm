@@ -71,6 +71,15 @@ world_init
 init_backpacks
 	lda #0
 	sta rune_taken
+	sta ch_anim_phase
+	sta ch_req
+	sta ch_shock
+	sta ch_bolt_l
+	sta ch_bolt_h
+	sta ch_phase
+	sta ch_phase+1
+	lda #$ff
+	sta ch_enemy
 	ldx #0
 .ib_lp
 	cpx	map_nbackpacks
@@ -2052,7 +2061,192 @@ near_box_xz
 	rts
 
 ; ------------------------------------------------------------------
-; A = cooked enable-tag id (1..15). Clear tr_purpose bits 3–6 on matches.
+; Electrode crates. Chthon AI arms the phases; this steps them every frame.
+; ------------------------------------------------------------------
+update_chthon_elec
+	lda ch_enemy
+	cmp #$ff
+	bne +
+	rts
++
+	lda ch_bolt_l
+	ora ch_bolt_h
+	beq .uce_step
+	sec
+	lda ch_bolt_l
+	sbc dt_ms
+	sta ch_bolt_l
+	lda ch_bolt_h
+	sbc dt_msh
+	sta ch_bolt_h
+	bcs .uce_frozen
+	jmp .uce_bolt_end
+.uce_frozen
+	rts
+.uce_step
+	ldx #0
+	jsr .uce_crate
+	ldx #1
+	jsr .uce_crate
+	rts
+
+.uce_bolt_end
+	lda #0
+	sta ch_bolt_l
+	sta ch_bolt_h
+	ldx #0
+	jsr .uce_up
+	ldx #1
+	jsr .uce_up
+	jsr .uce_step
+	lda ch_shock
+	bne +
+	rts
++
+	lda #0
+	sta ch_shock
+	ldx ch_enemy
+	stx enemy_idx
+	lda en_state,x
+	cmp #EN_DYING
+	bcc +
+	rts
++
+	lda en_hp,x
+	cmp #CH_SHOCK_DMG
+	bcc .uce_kill
+	beq .uce_kill
+	sec
+	sbc #CH_SHOCK_DMG
+	sta en_hp,x
+	jmp enemy_enter_attack
+.uce_kill
+	jmp kill_enemy
+
+; Leave a crate that is already up or rising. Otherwise start the slow rise.
+.uce_up
+	lda ch_phase,x
+	beq .uce_up_rts
+	cmp #CH_PHASE_RISE
+	beq .uce_up_rts
+	cmp #CH_PHASE_HOLD
+	bne +
+	jsr elev_noise_on
++
+	lda #CH_PHASE_RISE
+	sta ch_phase,x
+	lda #0
+	sta ch_acc_l,x
+	sta ch_acc_h,x
+.uce_up_rts
+	rts
+
+.uce_crate
+	lda ch_phase,x
+	beq .ucc_rts
+	cmp #CH_PHASE_DOWN
+	beq .ucc_down
+	cmp #CH_PHASE_HOLD
+	bne +
+	jmp .ucc_hold
++
+	jmp .ucc_rise
+.ucc_rts
+	rts
+
+.ucc_add
+	clc
+	lda ch_acc_l,x
+	adc dt_ms
+	sta ch_acc_l,x
+	lda ch_acc_h,x
+	adc dt_msh
+	sta ch_acc_h,x
+	rts
+
+.ucc_down
+	jsr .ucc_add
+.ucc_dlp
+	lda ch_acc_h,x
+	bne +
+	rts
++
+	dec ch_acc_h,x
+	lda ch_home,x
+	sec
+	sbc #CH_DROP
+	sta ch_psy
+	ldy ch_crate,x
+	+lda_my crate_y
+	sec
+	sbc #1
+	sta ch_pok
+	cmp ch_psy
+	bcc .ucc_dhit
+	beq .ucc_dhit
+	+sta_my crate_y
+	jmp .ucc_dlp
+.ucc_dhit
+	lda ch_psy
+	+sta_my crate_y
+	lda #CH_PHASE_HOLD
+	sta ch_phase,x
+	jsr elev_noise_off
+	lda #<CH_HOLD_MS
+	sta ch_acc_l,x
+	lda #>CH_HOLD_MS
+	sta ch_acc_h,x
+	rts
+
+.ucc_hold
+	sec
+	lda ch_acc_l,x
+	sbc dt_ms
+	sta ch_acc_l,x
+	lda ch_acc_h,x
+	sbc dt_msh
+	sta ch_acc_h,x
+	bcc +
+	rts
++
+	jsr elev_noise_on
+	lda #CH_PHASE_RISE
+	sta ch_phase,x
+	lda #0
+	sta ch_acc_l,x
+	sta ch_acc_h,x
+	rts
+
+.ucc_rise
+	jsr .ucc_add
+.ucc_rlp
+	lda ch_acc_h,x
+	bne +
+	rts
++
+	dec ch_acc_h,x
+	ldy ch_crate,x
+	+lda_my crate_y
+	clc
+	adc #1
+	sta ch_pok
+	cmp ch_home,x
+	bcs .ucc_rtop
+	+sta_my crate_y
+	jmp .ucc_rlp
+.ucc_rtop
+	lda ch_home,x
+	+sta_my crate_y
+	lda #CH_PHASE_UP
+	sta ch_phase,x
+	jsr elev_noise_off
+	lda #0
+	sta ch_acc_l,x
+	sta ch_acc_h,x
+	rts
+
+; ------------------------------------------------------------------
+; A = cooked enable-tag id (1..15). Clear tr_purpose bits 4–7 on matches.
 ; ------------------------------------------------------------------
 trig_arm_tag
 	sta sw_match
@@ -2061,6 +2255,7 @@ trig_arm_tag
 	cpx	map_ntrigs
 	bcs .tat_done
 	+lda_mx tr_purpose
+	lsr
 	lsr
 	lsr
 	lsr
@@ -2080,7 +2275,7 @@ trig_arm_tag
 ; [box_y, box_y+sy) vs the player feet–eye line (player_overlaps_y).
 ; Bit N = Nth trigger in this room (SoA order). Enter fires per bit;
 ; stay = hold (msg HUD / hurt tick); leave clears the bit.
-; tr_purpose bits 3–6 = enable-tag id (0 = live). Nonzero = gated until
+; tr_purpose bits 4–7 = enable-tag id (0 = live). Nonzero = gated until
 ; a matching switch jsr trig_arm_tag (clears those bits).
 ; End / teleport: jmp (do not continue the scan).
 ; ------------------------------------------------------------------
@@ -2278,6 +2473,10 @@ trig_enter
 	beq .te_summon
 	cmp #TRIG_UNLOCK
 	beq .te_unlock
+	cmp #TRIG_LOWER
+	beq .te_lower
+	cmp #TRIG_FIRE
+	beq .te_fire
 	cmp #TRIG_END
 	bne .te_rts
 	jmp next_level
@@ -2307,6 +2506,20 @@ trig_enter
 .te_unlock
 	+lda_mx tr_arg
 	jmp door_unlock_tag
+.te_lower
+	lda #CH_REQ_LOWER
+	bne .te_elec
+.te_fire
+	lda #CH_REQ_FIRE
+.te_elec
+	stx obj_i
+	stx ch_trig
+	sta ch_req
+	jsr room_has_chthon
+	bcs .te_rts
+	lda #0
+	sta ch_req
+	rts
 .te_tele
 	lda map_ndests
 	beq .te_tele_rts

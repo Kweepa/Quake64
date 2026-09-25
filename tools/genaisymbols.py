@@ -61,6 +61,12 @@ REQUIRED = [
     "scale_nd",
     "lerp16",
     "ent_set_pose",
+    "load_view_trig",
+    "xform_world_vert88",
+    "project_cam0_screen",
+    "draw_line",
+    "elev_noise_on",
+    "elev_noise_off",
 ]
 
 

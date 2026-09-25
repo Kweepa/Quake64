@@ -325,13 +325,20 @@ skel_sink_calc
 	rts
 
 ; Full project of this type. Baked batches in the prefix drive the resident
-; mesh passes directly. No floor clip. Idle stays undrawn.
+; mesh passes directly. No floor clip. Idle mesh stays undrawn.
 draw_custom_enemy
 	ldx obj_i
 	lda en_state,x
-	bne +
+	beq .dce_idle
+	jmp .dce_body
+.dce_idle
+	lda ent_type
+	cmp #ENT_CHTHON
+	bne .dce_idle_rts
+	jmp .dce_bolt
+.dce_idle_rts
 	rts
-+
+.dce_body
 	jsr skel_sink_calc
 	jsr skel_rotate
 !if PROFILE = 1 {
@@ -441,6 +448,21 @@ draw_custom_enemy
 	sta edge_vert_ptr
 	lda #>enemy_edge_vert
 	sta edge_vert_ptr+1
+.dce_bolt
+	lda ent_type
+	cmp #ENT_CHTHON
+	bne .dce_nb
+	ldy #ENT_CHTHON
+	lda AI_ENTRY_HI,y
+	beq .dce_nb
+	sta .dce_ai+2
+	lda AI_ENTRY_LO,y
+	sta .dce_ai+1
+	lda #AI_CMD_DRAW
+	ldx obj_i
+.dce_ai
+	jsr $0000
+.dce_nb
 	rts
 
 

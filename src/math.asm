@@ -871,16 +871,14 @@ ATAN32
 	!byte 0,1,3,4,5,6,8,9,10,11,12,13,15,16,17
 	!byte 18,19,20,21,22,23,24,25,25,26,27,28,29,29,30,31,31,32
 
-; Deathchase / Wolf GetRandom8 — new = 9 * old + 193; A = next rnd
+; 8-bit Galois LFSR, x^8+x^4+x^3+x^2+1. Period 255. Seed must stay nonzero.
+; The old 9*x+193 LCG left bits 0–2 as a counter, so and #3 / and #7 were not random.
 GetRandom8
 rnd8
 	lda random8
 	asl
-	asl
-	asl
-	clc
-	adc random8
-	clc
-	adc #193
+	bcc +
+	eor #$1D
++
 	sta random8
 	rts

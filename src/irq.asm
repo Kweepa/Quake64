@@ -429,8 +429,20 @@ snapshot_input
 	sta in_use
 	rts
 
-; V3 rumble from elev_noise_n (main only touches the counter).
+; V3 rumble from elev_noise_n. Bolt crackle takes the voice while ch_bolt is live.
 irq_elev_noise
+	lda ch_bolt_l
+	ora ch_bolt_h
+	beq .iene_elev
+	lda sfx_index+2
+	bpl .iene_rts
+	jsr rnd8
+	and #$3f
+	clc
+	adc #$20
+	sta $d40f
+	jmp enp_rest
+.iene_elev
 	lda elev_noise_n
 	beq .iene_off
 	jmp elev_noise_restore

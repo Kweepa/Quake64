@@ -637,7 +637,7 @@ export function usesLinkTag(kind) {
 }
 
 /** Trigger purposes. Tag is used for teleport / elevator / summon / unlock. */
-export const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator", "summon", "unlock"];
+export const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator", "summon", "unlock", "lower_electrode", "fire_electrodes"];
 export const TRIGGER_PURPOSE_LABELS = {
   message: "Display message",
   end_level: "End of level",
@@ -646,6 +646,8 @@ export const TRIGGER_PURPOSE_LABELS = {
   elevator: "Activate elevator",
   summon: "Summon elevator",
   unlock: "Unlock door",
+  lower_electrode: "Lower electrode",
+  fire_electrodes: "Fire electrodes",
 };
 
 export function clampTriggerPurpose(s) {

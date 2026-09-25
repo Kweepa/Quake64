@@ -447,6 +447,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
     TRIG_ELEV = 4
     TRIG_SUMMON = 5
     TRIG_UNLOCK = 6
+    TRIG_LOWER = 7
+    TRIG_FIRE = 8
     TRIG_PURPOSE = {
         "message": TRIG_MSG,
         "end_level": TRIG_END,
@@ -455,11 +457,13 @@ def cook_one(level: dict, map_key: str) -> bytes:
         "elevator": TRIG_ELEV,
         "summon": TRIG_SUMMON,
         "unlock": TRIG_UNLOCK,
+        "lower_electrode": TRIG_LOWER,
+        "fire_electrodes": TRIG_FIRE,
     }
     SW_DEST_DOOR = 0
     SW_DEST_ELEV = 1
     SW_DEST_TRIG = 2
-    TRIG_ENABLE_SHIFT = 3
+    TRIG_ENABLE_SHIFT = 4
     TRIG_ENABLE_MAX = 15
 
     doors_by_tag: dict[str, list] = {}
@@ -1238,8 +1242,10 @@ TRIG_TELE	= 3
 TRIG_ELEV	= 4
 TRIG_SUMMON	= 5
 TRIG_UNLOCK	= 6
-TRIG_PURPOSE_MASK	= 7
-TRIG_GATED_MASK	= $78
+TRIG_LOWER	= 7
+TRIG_FIRE	= 8
+TRIG_PURPOSE_MASK	= $0F
+TRIG_GATED_MASK	= $F0
 SW_DEST_DOOR	= 0
 SW_DEST_ELEV	= 1
 SW_DEST_TRIG	= 2

@@ -354,6 +354,14 @@ enemy_anim_step
 	+lda_mx en_room
 	cmp room_idx
 	bne .eas_nx
+	+lda_mx en_type
+	cmp #ENT_CHTHON
+	bne .eas_step
+	lda ch_anim_phase
+	eor #1
+	sta ch_anim_phase
+	bne .eas_nx			; skip frame, fire, clip end, and clip sfx
+.eas_step
 	lda en_frame,x
 	sta en_sfx_old
 	lda #1
@@ -438,6 +446,15 @@ enemy_anim_step
 	bcs +
 	jmp .eas_n
 +
+	+lda_mx en_type
+	cmp #ENT_CHTHON
+	bne .eas_pain_leave
+	lda ch_shock
+	beq .eas_pain_leave
+	lda #0
+	sta en_frame,x
+	jmp .eas_n
+.eas_pain_leave
 	jsr enemy_enter_approach
 	jmp .eas_n
 .eas_alen
@@ -468,6 +485,19 @@ enemy_anim_step
 	bne .eas_ff
 .eas_ff_tbl
 	lda enemy_fire_frame,y
+	cpy #ENT_CHTHON
+	bne .eas_ff
+	cmp rot2
+	beq .eas_ch_ff2			; already were on frame 8
+	bcc .eas_ch_ff2			; frame 8 already past
+	sta rot1
+	pla
+	pha
+	cmp rot1
+	bcc .eas_ch_ff2			; not on frame 8 yet
+	bcs .eas_ff_go
+.eas_ch_ff2
+	lda #CHTHON_FIRE2
 .eas_ff
 	bmi .eas_atlen_go			; $ff = none
 	cmp rot2
@@ -478,6 +508,7 @@ enemy_anim_step
 	pha
 	cmp rot1
 	bcc .eas_atlen_go			; new < fire → not yet
+.eas_ff_go
 	+ldy_mx en_type
 	lda AI_ENTRY_HI,y
 	beq .eas_gun

@@ -19,6 +19,7 @@ trent reznor & nine inch nails.
 ^
 Loader by krill / plush.
 Loader integration by chris masiero.
+Title screen by paul docherty.
 
 Thanks all!
 

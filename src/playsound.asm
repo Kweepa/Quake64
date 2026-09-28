@@ -2,7 +2,7 @@
 ; Data: pcsounds.asm + pcsfreq.asm (tools/gensounds.py); sound_voices is a
 ; mixer (ch0=player V1, ch1=enemy V2, ch2=world V3). Enemy envelopes ride
 ; pose PRGs; sound_table hi=0 until rebind_streamed_sfx.
-; Layout: N, AD, freq[0..N-1], vol[0..N-1] (same Y). AD written on commit.
+; Layout: N, AD, freq[0..N-1]. AD written on commit. Sustain is full.
 ; Stepped once per mid-split raster (~50/60 Hz).
 ; SID Fn lo fixed at $80 (hi LUT only — saves 256 bytes).
 
@@ -24,10 +24,6 @@ sfx_max
 sfx_ptr_l
 	!byte 0, 0, 0
 sfx_ptr_h
-	!byte 0, 0, 0
-sfx_vol_l
-	!byte 0, 0, 0
-sfx_vol_h
 	!byte 0, 0, 0
 sfx_sr
 	!byte 0				; AD / SR nibble scratch (IRQ)
@@ -175,14 +171,6 @@ play_sound_commit
 	adc #0
 	sta sfx_ptr_h,x
 
-	clc
-	lda sfx_ptr_l,x
-	adc sfx_max,x
-	sta sfx_vol_l,x
-	lda sfx_ptr_h,x
-	adc #0
-	sta sfx_vol_h,x
-
 	lda #$ff
 	sta sfx_count,x
 	lda sfx_id
@@ -264,12 +252,6 @@ update_sfx
 	lda (sfx_zp_l),y
 	beq .us_silent
 	sta sfx_id
-	lda sfx_vol_l,x
-	sta sfx_zp_l
-	lda sfx_vol_h,x
-	sta sfx_zp_h
-	lda (sfx_zp_l),y
-	beq .us_silent
 	jsr sfx_write_tone
 	jmp .us_next
 
@@ -293,13 +275,10 @@ update_sfx
 	sta $d418
 	jmp .us_next
 
-; A = vol 1..15; sfx_id = inverse-freq byte; sfx_ch = channel.
-; AD was set on commit; rewrite SR + pulse+gate each tick (gate stays on).
+; sfx_id = inverse-freq byte; sfx_ch = channel.
+; AD was set on commit; rewrite SR (full sustain) + pulse+gate each tick.
 sfx_write_tone
-	asl
-	asl
-	asl
-	asl					; sustain nibble, release 0
+	lda #$f0				; sustain 15, release 0
 	sta sfx_sr
 	ldx sfx_ch
 	lda sfx_sid_base,x

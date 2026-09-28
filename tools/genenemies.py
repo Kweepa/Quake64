@@ -32,7 +32,8 @@ PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
 DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 # Clip-local fire frames (matches enemy_fire_frame). Pinned as an attack key.
-FIRE_FRAME = [2, 5, 4, 6, 2, 4, 8, 255]  # Zombie: last frame of atta/attb/attc via AI_CMD_ATTACK_TICK
+FIRE_FRAME = [2, 5, 4, 6, 2, 5, 5, 255]  # Shambler magic is special-cased; Zombie via AI_CMD_ATTACK_TICK
+CHTHON_FIRE2 = 17  # second lava throw; keep in sync with mem.asm CHTHON_FIRE2
 # Mid-distance stick LOD threshold (CAM_ZH); Ogre needs more for chainsaw tip.
 DEFAULT_LOD_Z = {
     "Grunt": 4,
@@ -40,7 +41,7 @@ DEFAULT_LOD_Z = {
     "Rottweiler": 4,
     "Scrag": 4,
     "Ogre": 10,
-    "Shambler": 4,
+    "Shambler": 64,
     "Chthon": 4,
     "Zombie": 4,
 }
@@ -96,10 +97,10 @@ ROLE_CLIPS = {
     },
     "Shambler": {
         "stand": ("stand", None),
-        "alert": ("stand", 4),
+        "alert": ("smash", None),
         "run": ("run", None),
         "walk": ("walk", None),
-        "attack": ["smash"],
+        "attack": ["magic", "smash", "swingr", "swingl"],
     },
     "Chthon": {
         "stand": ("rise", None),
@@ -701,7 +702,7 @@ def pack_poses(
             if TYPES[type_i] == "Zombie":
                 extra = (start + length - 1,)
             elif TYPES[type_i] == "Chthon":
-                extra = (start + fire_off, start + 18)
+                extra = (start + fire_off, start + CHTHON_FIRE2)
             elif 0 <= fire_off < 255:
                 extra = (start + fire_off,)
             if type_i == 1:
@@ -916,7 +917,7 @@ def main() -> None:
     parts.append("enemy_death_n		!byte " + ", ".join(str(n) for n in death_n))
     parts.append("enemy_death_start	!byte " + ", ".join(str(n) for n in death_start))
     parts.append("enemy_death_len		!byte " + ", ".join(str(n) for n in death_len))
-    parts.append("enemy_range		!byte 30, 6, 4, 24, 30, 16, 40, 30")
+    parts.append("enemy_range		!byte 30, 6, 4, 24, 30, 30, 40, 30")
     hp_bytes = ", ".join(str(min(255, HP_QUAKE[t] // 5)) for t in TYPES)
     parts.append(f"enemy_hp_init		!byte {hp_bytes}")
     parts.append("enemy_pain_chance	!byte $80, $80, $c0, $80, $80, $80, $80, $80")

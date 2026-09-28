@@ -14,6 +14,7 @@ cs_need_dx = en_dx
 cs_need_dz = en_dz
 
 enemies_update
+	jsr sham_pain_tick
 	; tick anim accumulator → advance frames / one-shot transitions
 	clc
 	lda anim_acc_l
@@ -120,8 +121,7 @@ eu_idle
 	bne .eu_id_retry_see
 	jmp enemy_idle_try_patrol
 .eu_id_retry_see
-	jsr enemy_chebyshev
-	cmp #ENEMY_DETECT + 1
+	jsr enemy_in_wake
 	bcc .eu_id_goap
 	jmp enemy_idle_try_patrol
 .eu_id_goap
@@ -135,8 +135,7 @@ eu_idle
 	bne .eu_id_sight2
 	jmp enemy_idle_try_patrol
 .eu_id_sight2
-	jsr enemy_chebyshev
-	cmp #ENEMY_DETECT + 1
+	jsr enemy_in_wake
 	bcc .eu_id_see
 	jmp enemy_idle_try_patrol
 .eu_id_see
@@ -156,8 +155,7 @@ eu_patrol
 	lda pu_kind
 	cmp #BP_RING
 	beq .eu_pt_acc
-	jsr enemy_chebyshev
-	cmp #ENEMY_DETECT + 1
+	jsr enemy_in_wake
 	bcc .eu_pt_see
 	jmp .eu_pt_acc
 .eu_pt_see
@@ -356,11 +354,22 @@ enemy_anim_step
 	bne .eas_nx
 	+lda_mx en_type
 	cmp #ENT_CHTHON
-	bne .eas_step
+	bne .eas_hold
 	lda ch_anim_phase
 	eor #1
 	sta ch_anim_phase
 	bne .eas_nx			; skip frame, fire, clip end, and clip sfx
+	beq .eas_step
+.eas_hold
+	cmp #ENT_SHAMBLER
+	bne .eas_step
+	lda en_state,x
+	cmp #EN_ALERT
+	bne .eas_step
+	lda sham_alert_ph
+	eor #1
+	sta sham_alert_ph
+	bne .eas_nx			; hold this smash frame another ANIM_MS
 .eas_step
 	lda en_frame,x
 	sta en_sfx_old
@@ -467,6 +476,37 @@ enemy_anim_step
 	jmp .eas_n
 .eas_atlen
 	; Latch hit if we landed on / skipped past fire frame: old < fire <= new
+	cpy #ENT_SHAMBLER
+	bne .eas_ff_ogre
+	lda en_pain_i,x
+	cmp #SHAM_VAR_MAGIC
+	bne .eas_sham_melee
+	pla
+	pha
+	cmp #SHAM_BOLT_LO
+	bcc .eas_sham_off
+	cmp #SHAM_BOLT_HI
+	bcs .eas_sham_off
+	cmp rot2
+	beq .eas_sham_skip
+	bcs .eas_sham_fire
+.eas_sham_skip
+	jmp .eas_atlen_go
+.eas_sham_fire
+	jmp .eas_ff_go
+.eas_sham_off
+	lda #0
+	sta sham_arc
+	jmp .eas_atlen_go
+.eas_sham_melee
+	lda en_pain_i,x
+	bne .eas_sham_claw
+	lda #SHAM_SMASH_FIRE
+	bne .eas_ff
+.eas_sham_claw
+	lda #SHAM_CLAW_FIRE
+	bne .eas_ff
+.eas_ff_ogre
 	cpy #ENT_OGRE
 	bne .eas_ff_k
 	lda en_pain_i,x
@@ -488,13 +528,13 @@ enemy_anim_step
 	cpy #ENT_CHTHON
 	bne .eas_ff
 	cmp rot2
-	beq .eas_ch_ff2			; already were on frame 8
-	bcc .eas_ch_ff2			; frame 8 already past
+	beq .eas_ch_ff2			; already were on frame 5
+	bcc .eas_ch_ff2			; frame 5 already past
 	sta rot1
 	pla
 	pha
 	cmp rot1
-	bcc .eas_ch_ff2			; not on frame 8 yet
+	bcc .eas_ch_ff2			; not on frame 5 yet
 	bcs .eas_ff_go
 .eas_ch_ff2
 	lda #CHTHON_FIRE2
@@ -591,6 +631,26 @@ enemy_anim_step
 	jmp .eas_n
 
 ; ------------------------------------------------------------------
+; C=0 if Chebyshev is inside this enemy's wake distance.
+; Shambler acquires at enemy_range (the bolt), not ENEMY_DETECT.
+enemy_in_wake
+	jsr enemy_chebyshev
+	ldx enemy_idx
+	+ldy_mx en_type
+	cpy #ENT_SHAMBLER
+	bne .eiw_det
+	cmp enemy_range,y
+	beq .eiw_yes
+	bcc .eiw_yes
+	sec
+	rts
+.eiw_yes
+	clc
+	rts
+.eiw_det
+	cmp #ENEMY_DETECT + 1
+	rts
+
 ; A = Chebyshev |dx|,|dz| max vs player (cam_xh/zh). X = enemy_idx
 enemy_chebyshev
 	ldx enemy_idx
@@ -880,6 +940,14 @@ enemy_enter_alert
 	sta en_state,x
 	lda #0
 	sta en_frame,x
+	sta sham_alert_ph
+	lda #DBG_ALERT
+	jsr dbg_probe
+	+lda_mx en_type
+	cmp #ENT_SHAMBLER
+	bne enemy_play_clip_sfx_enter
+	lda #SOUND_SOLDIER_SIGHT1
+	jsr play_sound
 	jmp enemy_play_clip_sfx_enter
 
 ; Fire clip events at this logical frame (enter).
@@ -972,6 +1040,19 @@ enemy_enter_ogre_attack
 	sta en_state,x
 	lda #0
 	sta en_frame,x
+	jsr enemy_play_clip_sfx_enter
+	ldx enemy_idx
+	jmp enemy_face_player
+
+; A = smash / swingr / swingl / magic. Face player.
+enemy_enter_shambler_attack
+	ldx enemy_idx
+	sta en_pain_i,x
+	lda #EN_ATTACK
+	sta en_state,x
+	lda #0
+	sta en_frame,x
+	sta sham_arc
 	jsr enemy_play_clip_sfx_enter
 	ldx enemy_idx
 	jmp enemy_face_player
@@ -1833,10 +1914,40 @@ damage_enemy
 	jsr enemy_enter_approach
 	ldx enemy_idx
 .de_roll
-	jsr rnd8
 	+ldy_mx en_type
+	cpy #ENT_SHAMBLER
+	beq .de_sham
+	jsr rnd8
 	cmp enemy_pain_chance,y
 	bcs .de_rts
+	jmp .de_pain
+.de_sham
+	cpx sham_pain_i
+	bne .de_sham_roll
+	lda sham_pain_l
+	ora sham_pain_h
+	bne .de_rts
+.de_sham_roll
+	lda rot2
+	cmp #SHAM_PAIN_ALWAYS
+	bcs .de_sham_yes
+	sta rot0
+	asl
+	clc
+	adc rot0			; damage * 3 ≈ 256 * damage / 80
+	sta rot0
+	jsr rnd8
+	cmp rot0
+	bcs .de_rts
+.de_sham_yes
+	lda #<SHAM_PAIN_MS
+	sta sham_pain_l
+	lda #>SHAM_PAIN_MS
+	sta sham_pain_h
+	stx sham_pain_i
+	lda #0
+	sta sham_arc
+.de_pain
 	lda #EN_PAIN
 	sta en_state,x
 	lda #0
@@ -1846,6 +1957,27 @@ damage_enemy
 .de_kill
 	jmp kill_enemy
 .de_rts
+	rts
+
+; Count down the shambler pain lock. $ff index means idle.
+sham_pain_tick
+	lda sham_pain_i
+	cmp #$ff
+	beq .spt_rts
+	sec
+	lda sham_pain_l
+	sbc dt_ms
+	sta sham_pain_l
+	lda sham_pain_h
+	sbc dt_msh
+	sta sham_pain_h
+	bcs .spt_rts
+	lda #$ff
+	sta sham_pain_i
+	lda #0
+	sta sham_pain_l
+	sta sham_pain_h
+.spt_rts
 	rts
 
 ; Axe: first hittable enemy in room within AXE_HIT_R. C=1 hit.

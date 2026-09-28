@@ -27,6 +27,7 @@ JS_ORDER = [
     "js/fft.js",
     "js/pcsfx.js",
     "js/soundView.js",
+    "js/pclib.js",
     "js/main.js",
 ]
 

@@ -4,8 +4,6 @@ import {
   SOUND_MAX_TICKS,
   SOUND_TICK_HZ,
   wolfByteToHz,
-  hzToWolfByte,
-  clampSoundVol,
   alignSoundArrays,
 } from "./model.js";
 import { decodeWav, mixMono, getAudioContext, pcmActiveLength } from "./pcsfx.js";
@@ -24,11 +22,6 @@ function clamp(v, lo, hi) {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
-function yToHz(y, top, h) {
-  const t = clamp(1 - (y - top) / h, 0, 1);
-  return SOUND_HZ_MIN * Math.pow(SOUND_HZ_MAX / SOUND_HZ_MIN, t);
-}
-
 function hzToY(hz, top, h) {
   const z = clamp(hz, SOUND_HZ_MIN, SOUND_HZ_MAX);
   const t = Math.log(z / SOUND_HZ_MIN) / Math.log(SOUND_HZ_MAX / SOUND_HZ_MIN);
@@ -44,7 +37,6 @@ export class SoundView {
     this.scroll = 0;
     this.playTick = -1;
     this.selectedTick = 0;
-    this.drag = null;
     this.cssW = 0;
     this.cssH = 0;
     this._pcm = null;
@@ -57,10 +49,6 @@ export class SoundView {
     this._ro.observe(opts.stage || canvas.parentElement);
     this.resize();
 
-    canvas.addEventListener("pointerdown", (e) => this.#onDown(e));
-    canvas.addEventListener("pointermove", (e) => this.#onMove(e));
-    canvas.addEventListener("pointerup", (e) => this.#onUp(e));
-    canvas.addEventListener("pointerleave", (e) => this.#onUp(e));
     canvas.addEventListener("wheel", (e) => this.#onWheel(e), { passive: false });
     canvas.addEventListener("contextmenu", (e) => e.preventDefault());
   }
@@ -100,16 +88,17 @@ export class SoundView {
       return;
     }
     alignSoundArrays(snd);
-    this.#ensurePcm();
+    const showWave = this.opts.showWave?.() !== false;
+    if (showWave) this.#ensurePcm();
     const layout = this.#layout(snd);
-    this.#drawOrig(ctx, snd, layout);
-    this.#drawTimeAxis(ctx, layout, layout.orig.top + layout.orig.h);
-    this.#drawVol(ctx, snd, layout);
-    this.#drawTimeAxis(ctx, layout, layout.vol.top + layout.vol.h);
+    if (showWave) {
+      this.#drawOrig(ctx, snd, layout);
+      this.#drawTimeAxis(ctx, layout, layout.orig.top + layout.orig.h);
+    }
     this.#drawFreq(ctx, snd, layout);
     this.#drawTimeAxis(ctx, layout, layout.freq.top + layout.freq.h);
     if (!snd.freq.length) {
-      this.#label(ctx, "Empty — Estimate from Quake or click to draw", 16, layout.freq.top + 22);
+      this.#label(ctx, "Empty", 16, layout.freq.top + 22);
     }
   }
 
@@ -122,26 +111,25 @@ export class SoundView {
   #layout(snd) {
     const w = this.cssW;
     const h = this.cssH;
+    const showWave = this.opts.showWave?.() !== false;
+    const origH = showWave ? ORIG_H : 0;
     const innerW = Math.max(40, w - PAD_L - PAD_R);
-    const rest = h - PAD_T - ORIG_H - AXIS_H * 3 - GAP * 2 - PAD_B;
-    const freqH = Math.max(48, Math.floor(rest * 0.68));
-    const volH = Math.max(28, rest - freqH);
-    const n = Math.max(1, snd.freq.length, this.#wavTicks());
+    const rest = h - PAD_T - origH - AXIS_H * (showWave ? 2 : 1) - GAP * (showWave ? 1 : 0) - PAD_B;
+    const freqH = Math.max(48, rest);
+    const n = Math.max(1, snd.freq.length, showWave ? this.#wavTicks() : 0);
     const tickW = Math.max(MIN_TICK_W, Math.min(14, innerW / n));
     const vis = Math.max(1, Math.floor(innerW / tickW));
     const maxScroll = Math.max(0, n - vis);
     this.scroll = clamp(this.scroll, 0, maxScroll);
     const cols = Math.min(vis, Math.max(0, n - this.scroll));
     const origTop = PAD_T;
-    const volTop = origTop + ORIG_H + AXIS_H + GAP;
-    const freqTop = volTop + volH + AXIS_H + GAP;
+    const freqTop = origTop + origH + (showWave ? AXIS_H + GAP : 0);
     return {
       innerW,
       tickW,
       vis,
       cols,
-      orig: { top: origTop, h: ORIG_H },
-      vol: { top: volTop, h: volH },
+      orig: { top: origTop, h: origH },
       freq: { top: freqTop, h: freqH },
       n,
     };
@@ -183,87 +171,6 @@ export class SoundView {
     };
     if (ctx.state === "suspended") ctx.resume().then(start, start);
     else start();
-  }
-
-  #tickAt(x, layout) {
-    const col = Math.floor((x - PAD_L) / layout.tickW);
-    if (col < 0) return -1;
-    return this.scroll + col;
-  }
-
-  #localXY(e) {
-    const r = this.canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
-  }
-
-  #growTo(snd, tick) {
-    if (tick < 0 || tick >= SOUND_MAX_TICKS) return false;
-    alignSoundArrays(snd);
-    while (snd.freq.length <= tick) {
-      snd.freq.push(0);
-      snd.vol.push(0);
-    }
-    return true;
-  }
-
-  #paint(e) {
-    const snd = this.opts.ensureSound?.();
-    if (!snd) return;
-    const layout = this.#layout(snd);
-    const { x, y } = this.#localXY(e);
-    const tick = this.#tickAt(x, layout);
-    if (tick < 0) return;
-    if (!this.#growTo(snd, tick)) return;
-    this.selectedTick = tick;
-    if (this.drag === "freq") {
-      const hz = yToHz(y, layout.freq.top, layout.freq.h);
-      snd.freq[tick] = hzToWolfByte(hz);
-      if (!snd.vol[tick]) snd.vol[tick] = 12;
-    } else if (this.drag === "vol") {
-      const t = clamp(1 - (y - layout.vol.top) / layout.vol.h, 0, 1);
-      snd.vol[tick] = clampSoundVol(Math.round(t * 15));
-      if (!snd.vol[tick]) snd.freq[tick] = 0;
-    }
-    snd.origin = "edit";
-    this.opts.onChange?.();
-    this.draw();
-  }
-
-  #onDown(e) {
-    if (!this.enabled || e.button !== 0) return;
-    const snd = this.opts.getSound?.();
-    if (!snd) return;
-    const layout = this.#layout(snd);
-    const { y } = this.#localXY(e);
-    if (y >= layout.orig.top && y <= layout.orig.top + layout.orig.h) {
-      const tick = this.#tickAt(this.#localXY(e).x, layout);
-      if (tick >= 0) {
-        this.selectedTick = tick;
-        this.draw();
-        this.opts.onSelect?.();
-      }
-      return;
-    }
-    if (y >= layout.freq.top && y <= layout.freq.top + layout.freq.h) this.drag = "freq";
-    else if (y >= layout.vol.top && y <= layout.vol.top + layout.vol.h) this.drag = "vol";
-    else return;
-    this.opts.beginUndo?.();
-    this.canvas.setPointerCapture(e.pointerId);
-    this.#paint(e);
-  }
-
-  #onMove(e) {
-    if (!this.enabled) return;
-    if (this.drag) this.#paint(e);
-  }
-
-  #onUp(e) {
-    if (!this.enabled) return;
-    if (this.drag) {
-      this.drag = null;
-      this.opts.endUndo?.();
-      this.opts.onSelect?.();
-    }
   }
 
   #onWheel(e) {
@@ -399,45 +306,10 @@ export class SoundView {
         ctx.fillStyle = "rgba(212,160,23,0.35)";
         ctx.fillRect(x, freq.top, tickW, freq.h);
       }
-      if (hz > 0 && snd.vol[i]) {
+      if (hz > 0) {
         const y = hzToY(hz, freq.top, freq.h);
         ctx.fillStyle = "#d4a017";
         ctx.fillRect(x + 1, y, Math.max(1, tickW - 2), freq.top + freq.h - y);
-      }
-    }
-  }
-
-  #drawVol(ctx, snd, layout) {
-    const { tickW, cols, vol } = layout;
-    ctx.fillStyle = "#12141a";
-    ctx.fillRect(PAD_L, vol.top, cols * tickW, vol.h);
-    ctx.strokeStyle = "#2e3340";
-    ctx.strokeRect(PAD_L, vol.top, cols * tickW, vol.h);
-    ctx.fillStyle = "#8b91a0";
-    ctx.font = "10px Segoe UI, sans-serif";
-    ctx.textAlign = "left";
-    ctx.fillText("VOL", 6, vol.top + 10);
-    ctx.textAlign = "right";
-    ctx.fillText("15", PAD_L - 4, vol.top + 8);
-    ctx.fillText("0", PAD_L - 4, vol.top + vol.h - 2);
-    ctx.textAlign = "left";
-    for (let c = 0; c < cols; c++) {
-      const i = this.scroll + c;
-      if (i >= snd.vol.length) break;
-      const x = PAD_L + c * tickW;
-      if (i === this.selectedTick) {
-        ctx.fillStyle = "rgba(212,160,23,0.15)";
-        ctx.fillRect(x, vol.top, tickW, vol.h);
-      }
-      if (this.playTick === i) {
-        ctx.fillStyle = "rgba(212,160,23,0.35)";
-        ctx.fillRect(x, vol.top, tickW, vol.h);
-      }
-      const v = snd.vol[i] | 0;
-      if (v > 0) {
-        const bh = (v / 15) * vol.h;
-        ctx.fillStyle = "#6a9";
-        ctx.fillRect(x + 1, vol.top + vol.h - bh, Math.max(1, tickW - 2), bh);
       }
     }
   }

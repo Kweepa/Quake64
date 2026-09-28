@@ -94,6 +94,12 @@ init_backpacks
 
 ; All enemies idle, HP from type, frame 0
 init_enemies
+	lda #0
+	sta sham_arc
+	sta sham_pain_l
+	sta sham_pain_h
+	lda #$ff
+	sta sham_pain_i
 	lda #$a5
 	sta random8
 	lda #0

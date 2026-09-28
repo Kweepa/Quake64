@@ -373,6 +373,15 @@ h2 {
   margin-top: 0.25rem;
 }
 
+.anim-frame-num {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-size: 0.85rem;
+  min-width: 2ch;
+  text-align: right;
+}
+
 .anim-mem {
   margin: 0.35rem 0 0.55rem;
 }
@@ -1001,6 +1010,33 @@ button:disabled {
   color: var(--muted);
   font-size: 0.68rem;
   flex: 0 0 auto;
+}
+
+.sound-lib {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.12rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.sound-lib button {
+  text-align: left;
+  font-size: 0.65rem;
+  line-height: 1.1;
+  padding: 0.12rem 0.22rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sound-lib button.dup {
+  color: var(--muted);
+}
+
+.sound-lib button.dup.active {
+  color: var(--muted);
+  border-color: var(--accent);
 }
 
 @media (max-width: 900px) {

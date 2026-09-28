@@ -10,7 +10,7 @@ from mkreloc import ABS_OPS, parse_mem_const
 
 ROOT = Path(__file__).resolve().parents[1]
 ENEMY_DIR = ROOT / "enemies"
-DOS_NAMES = ["rott", "knight", "ogre", "scrag", "zombie", "crush", "chthon"]
+DOS_NAMES = ["rott", "knight", "ogre", "scrag", "zombie", "crush", "chthon", "shambl"]
 
 ONE_BYTE = {
     0x00, 0x08, 0x0A, 0x18, 0x28, 0x2A, 0x38, 0x40, 0x48, 0x4A, 0x58,

@@ -433,6 +433,7 @@ snapshot_input
 irq_elev_noise
 	lda ch_bolt_l
 	ora ch_bolt_h
+	ora sham_arc
 	beq .iene_elev
 	lda sfx_index+2
 	bpl .iene_rts

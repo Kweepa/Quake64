@@ -65,6 +65,8 @@ start
 
 main
 	cld
+	lda #DBG_MAIN
+	jsr dbg_probe
 !if PROFILE = 1 {
 	jsr prof_reset_frame
 } else {
@@ -77,6 +79,8 @@ main
 	jsr prof_add_bucket
 }
 	jsr draw_world
+	lda #DBG_WORLD
+	jsr dbg_probe
 	jsr draw_enemies
 	jsr draw_grenades
 	jsr draw_spit

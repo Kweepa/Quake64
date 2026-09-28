@@ -2407,6 +2407,8 @@ draw_enemies
 
 .de_one
 	stx obj_i
+	lda #DBG_DE_IN
+	jsr dbg_probe
 	+lda_mx en_x
 	sta ent_wx
 	+lda_mx en_y
@@ -2421,7 +2423,9 @@ draw_enemies
 	jsr xform_world_vert
 	jsr try_bite_splat			; origin in CAM[0], even if off-screen
 	jsr enemy_in_view
-	bcc .de_one_rts
+	bcs .de_vis
+	jmp .de_one_rts
+.de_vis
 	ldx obj_i
 	+lda_mx en_type
 	sta ent_type
@@ -2451,6 +2455,9 @@ draw_enemies
 	lda #>ident_col
 	sta col_ptr+1
 	jsr ent_rotate
+	ldx obj_i
+	lda #DBG_DE_ROT
+	jsr dbg_probe
 !if PROFILE = 1 {
 	ldy #PROF_ROT
 	jsr prof_add_bucket
@@ -2478,13 +2485,29 @@ draw_enemies
 	jsr prof_add_bucket
 }
 .de_draw
+	ldx obj_i
+	lda #DBG_DE_PRE
+	jsr dbg_probe
 	jsr try_enemy_muzzle
 	jsr mesh_draw
 !if PROFILE = 1 {
 	ldy #PROF_DRAW
 	jsr prof_add_bucket
 }
+	ldx obj_i
+	lda #DBG_DE_MESH
+	jsr dbg_probe
+	lda ent_type
+	cmp #ENT_SHAMBLER
+	bne .de_one_rts
+	tay
+	lda #AI_CMD_DRAW
+	ldx obj_i
+	jsr ai_invoke
 .de_one_rts
+	ldx obj_i
+	lda #DBG_DE_RTS
+	jsr dbg_probe
 	ldx obj_i
 	rts
 
@@ -2607,6 +2630,12 @@ enemy_muzzle_want
 
 ; X = enemy index → EN_DYING, frame 0, clip death SFX
 kill_enemy
+	+lda_mx en_type
+	cmp #ENT_SHAMBLER
+	bne .ke_die
+	lda #0
+	sta sham_arc
+.ke_die
 	lda #EN_DYING
 	sta en_state,x
 	lda #0

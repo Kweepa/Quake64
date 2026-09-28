@@ -290,9 +290,8 @@ export class SfxPreview {
     const start = ctx.currentTime + 0.02;
     const applyTick = (i, at) => {
       const f = snd.freq[i] | 0;
-      const v = snd.vol[i] | 0;
       const hz = wolfByteToHz(f);
-      const amp = f && v ? v / 15 : 0;
+      const amp = f ? 1 : 0;
       gain.gain.setValueAtTime(amp, at);
       osc.frequency.setValueAtTime(Math.max(hz, 1), at);
     };
@@ -337,11 +336,15 @@ export class SfxPreview {
   }
 }
 
+function markSoundEdited(snd) {
+  snd.origin = "edit";
+  delete snd.library;
+}
+
 export function reverseSound(snd) {
   alignSoundArrays(snd);
   snd.freq.reverse();
-  snd.vol.reverse();
-  snd.origin = "edit";
+  markSoundEdited(snd);
 }
 
 export function transposeSound(snd, delta) {
@@ -351,18 +354,7 @@ export function transposeSound(snd, delta) {
     if (!snd.freq[i]) continue;
     snd.freq[i] = clampSoundFreqByte(Math.max(1, snd.freq[i] + d));
   }
-  snd.origin = "edit";
-}
-
-export function fadeSound(snd, mode) {
-  alignSoundArrays(snd);
-  const n = snd.vol.length;
-  if (n < 2) return;
-  for (let i = 0; i < n; i++) {
-    const t = mode === "out" ? 1 - i / (n - 1) : i / (n - 1);
-    snd.vol[i] = clampSoundVol(Math.round(snd.vol[i] * t));
-  }
-  snd.origin = "edit";
+  markSoundEdited(snd);
 }
 
 export function insertSoundTick(snd, at) {
@@ -370,10 +362,8 @@ export function insertSoundTick(snd, at) {
   if (snd.freq.length >= SOUND_MAX_TICKS) return false;
   const i = Math.max(0, Math.min(snd.freq.length, at | 0));
   const f = snd.freq[i] ?? snd.freq[i - 1] ?? 0;
-  const v = snd.vol[i] ?? snd.vol[i - 1] ?? 0;
   snd.freq.splice(i, 0, f);
-  snd.vol.splice(i, 0, v);
-  snd.origin = "edit";
+  markSoundEdited(snd);
   return true;
 }
 
@@ -382,7 +372,6 @@ export function deleteSoundTick(snd, at) {
   if (!snd.freq.length) return false;
   const i = Math.max(0, Math.min(snd.freq.length - 1, at | 0));
   snd.freq.splice(i, 1);
-  snd.vol.splice(i, 1);
-  snd.origin = "edit";
+  markSoundEdited(snd);
   return true;
 }

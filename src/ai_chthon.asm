@@ -10,8 +10,8 @@
 !source "enemy_data.asm"
 !source "ai_game_syms.asm"
 
-CHTHON_LAVA_VERT = 14		; arm tip (edge 4-14) on fire frame 8
-CHTHON_LAVA_VERT2 = 13		; other arm tip (edge 12-13) on fire frame 18
+CHTHON_LAVA_VERT = 14		; arm tip (edge 4-14) on fire frame 5
+CHTHON_LAVA_VERT2 = 13		; other arm tip (edge 12-13) on fire frame 17
 
 *= AI_LINK_BASE
 ai_chthon_entry

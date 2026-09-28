@@ -33,6 +33,7 @@ ENEMY_DIR = ROOT / "enemies"
 ENEMY_SIZES = ROOT / "src" / "enemy_sizes.asm"
 PREFIX_ASM = ROOT / "src" / "level_prefix.asm"
 FLAGS_ASM = ROOT / "src" / "build_flags.asm"
+DOC = ROOT / "editor" / "quake64.json"
 
 LEVEL_NAMES = [f"E1M{i}" for i in range(1, 9)]
 DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
@@ -121,6 +122,22 @@ def crush_rooms(payload: bytes) -> set[int]:
     return out
 
 
+def level_room_names() -> dict[str, list[str]]:
+    """Room names in packed-index order. Blank when the editor left the room unnamed."""
+    if not DOC.is_file():
+        return {}
+    doc = json.loads(DOC.read_text(encoding="utf-8"))
+    out: dict[str, list[str]] = {}
+    for key, level in (doc.get("maps") or {}).items():
+        names: list[str] = []
+        for obj in level.get("objects") or []:
+            if obj.get("kind") != "room":
+                continue
+            names.append(str(obj.get("name") or "").strip())
+        out[key] = names
+    return out
+
+
 def used_types(per_room: dict[int, set[int]]) -> list[int]:
     out: set[int] = set()
     for ts in per_room.values():
@@ -154,6 +171,7 @@ def main() -> None:
     avail = scr_a - end_game
     poses = enemy_sizes()
     crush_sz = crush_bank_size()
+    names_by_level = level_room_names()
 
     print(
         f"heap  GAME ${locode:04X}-${end_game:04X}  "
@@ -208,8 +226,6 @@ def main() -> None:
                 )
                 failed = True
 
-        level_sum = sum(poses[t] for t in types)
-
         worst_room, worst_sum, worst_names = -1, 0, []
         for room in sorted(set(per_room) | c_rooms):
             s = sum(poses[t] for t in per_room.get(room, ()))
@@ -225,8 +241,14 @@ def main() -> None:
         need = len(packed) + max(prefix, worst_sum)
         slack = avail - need
         pose_s = ",".join(worst_names) if worst_names else "-"
-        where = f"room {worst_room}" if worst_room >= 0 else "no enemies"
-        saved = level_sum - worst_sum
+        labels = names_by_level.get(key) or []
+        room_label = labels[worst_room] if 0 <= worst_room < len(labels) else ""
+        if room_label:
+            where = room_label
+        elif worst_room >= 0:
+            where = f"room {worst_room}"
+        else:
+            where = "no enemies"
         report["levels"][key] = {
             "map_bytes": len(packed),
             "load_peak": len(packed) + prefix,
@@ -243,9 +265,8 @@ def main() -> None:
             },
         }
         head = (
-            f"{key}  map {len(packed)}  prefix {prefix}  "
+            f"{key}  map {len(packed)}  "
             f"worst {worst_sum} ({where}: {pose_s})"
-            f"  level-wide {level_sum} (-{saved})  need {need}"
         )
         if slack <= 0:
             tag = "  (profile)" if profile else ""

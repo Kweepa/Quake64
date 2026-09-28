@@ -112,13 +112,8 @@ import {
   SOUND_LOCKED_BY_PATH,
   SOUND_VOICE_LABELS,
   SOUND_PAYLOAD_MAX,
-  SOUND_TICK_HZ,
-  wolfByteToHz,
-  hzToWolfByte,
   clampSoundVoice,
   clampSoundPriority,
-  clampSoundVol,
-  clampSoundAttack,
   soundFolder,
   soundShortName,
   soundIdent,
@@ -171,18 +166,8 @@ import { AnimView } from "./animView.js";
 import { WeaponView } from "./weaponView.js";
 import { ItemView } from "./itemView.js";
 import { SoundView } from "./soundView.js";
-import {
-  SfxPreview,
-  estimateFromPcm,
-  mixMono,
-  decodeWav,
-  getAudioContext,
-  reverseSound,
-  transposeSound,
-  fadeSound,
-  insertSoundTick,
-  deleteSoundTick,
-} from "./pcsfx.js";
+import { PC_LIBRARY } from "./pclib.js";
+import { SfxPreview } from "./pcsfx.js";
 
 const statusEl = document.getElementById("status");
 const titleEl = document.querySelector(".toolbar h1");
@@ -231,6 +216,8 @@ let weaponKey = "axe";
 let weaponFrame = 0;
 let itemMeshKey = "backpack";
 let soundPath = "sound/weapons/shotgn2.wav";
+let librarySource = "wolf";
+let libraryName = "HITWALL";
 let showAmbience = false;
 let sharewareSounds = new Map();
 const sfxPreview = new SfxPreview();
@@ -370,6 +357,12 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     if (!e?.clips?.length) return 0;
     return frameIndex;
   },
+  getLocalFrame: () => {
+    const clip = activeTimelineClip();
+    if (!clip) return null;
+    return Math.max(0, Math.min(frameLocal, (clip.len | 0) - 1));
+  },
+  getClipName: () => activeTimelineClip()?.name ?? null,
   hasStickFrame: () => !!stickClipFor(doc.enemies[enemyIndex], activeTimelineClip()),
   getSelectedVerts: () => selectedVerts,
   getSelectedLines: () => selectedLines,
@@ -495,18 +488,17 @@ const itemView = new ItemView(document.getElementById("view-canvas"), {
 
 const soundView = new SoundView(document.getElementById("view-canvas"), {
   stage: document.getElementById("map-stage"),
-  getSound: () => (soundPath ? getSound(doc, soundPath) : null),
-  getSoundPath: () => soundPath,
-  getWavBuffer: () => (soundPath ? sharewareSounds.get(soundPath) : null),
-  ensureSound: () => (soundPath ? ensureSound(doc, soundPath) : null),
-  beginUndo,
-  endUndo,
-  onChange: () => {
-    markDirty();
+  getSound: () => {
+    const entry = libraryEntry();
+    return entry ? envelopeFromLibrary(entry) : null;
   },
-  onSelect: () => renderInspector(),
+  showWave: () => false,
 });
-sfxPreview.onTick = (i) => soundView.setPlayTick(i);
+let sfxFollow = "";
+sfxPreview.onTick = (i) => {
+  if (sfxFollow !== "library") return;
+  soundView.setPlayTick(i);
+};
 
 function setStatus(msg, isError = false) {
   statusEl.textContent = msg || "";
@@ -1109,7 +1101,7 @@ function setMode(mode) {
         : mode === "items"
           ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
           : mode === "sounds"
-            ? "LMB drag paints volume (middle) or freq (bottom) · wheel scrolls ticks · Estimate from Quake is a one-shot first pass"
+            ? "Select a library sound to hear it · wheel scrolls · Apply copies it onto the cue"
             : animHintText();
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
@@ -1505,7 +1497,7 @@ function updateCenterChrome() {
           ? "Backpack"
           : itemMeshKey
         : editorMode === "sounds"
-          ? soundShortName(soundPath)
+          ? `${librarySource === "doom" ? "Doom" : "Wolf"} ${libraryName}`
           : "Enemy";
   if (statsEl) {
     if (editorMode === "sounds") {
@@ -1871,11 +1863,55 @@ function listedSoundPaths() {
 }
 
 function soundStatusLabel(snd) {
-  if (!snd?.freq?.length) return "empty";
+  if (!snd?.freq?.length || snd.origin === "empty") return "empty";
+  if (snd.library && (snd.origin === "wolf" || snd.origin === "doom")) return `${snd.origin} ${snd.library}`;
   if (snd.origin === "estimate") return "est";
   if (snd.origin === "edit") return "edit";
   if (snd.origin === "wolf") return "wolf";
+  if (snd.origin === "doom") return "doom";
   return `${snd.freq.length}t`;
+}
+
+function libraryRows() {
+  return librarySource === "doom" ? PC_LIBRARY.doom : PC_LIBRARY.wolf;
+}
+
+function libraryEntry() {
+  return libraryRows().find((row) => row.name === libraryName) || null;
+}
+
+function libraryDuplicates() {
+  const seen = new Map();
+  const dups = new Map();
+  for (const entry of libraryRows()) {
+    const key = entry.freq.join(",");
+    const first = seen.get(key);
+    if (first) dups.set(entry.name, first);
+    else seen.set(key, entry.name);
+  }
+  return dups;
+}
+
+function envelopeFromLibrary(entry) {
+  const freq = entry.freq.map((b) => b & 255);
+  return { freq, attack: 0 };
+}
+
+function playLibrarySelection(loop) {
+  const entry = libraryEntry();
+  soundView.selectedTick = 0;
+  soundView.scroll = 0;
+  soundView.draw();
+  if (!entry?.freq.length) {
+    sfxFollow = "";
+    sfxPreview.stop();
+    setStatus("Library sound is empty", true);
+    return;
+  }
+  sfxFollow = "library";
+  sfxPreview.playSpeaker(envelopeFromLibrary(entry), !!loop).catch((err) =>
+    setStatus(String(err.message || err), true)
+  );
 }
 
 function renderSoundList() {
@@ -1968,7 +2004,7 @@ function renderSoundInspector(root) {
   st.className = "muted";
   const ident = soundIdent(soundPath);
   st.textContent = hasWav
-    ? `${folder || "PAK"} · SOUND_${ident} · ${snd.freq.length} ticks · ${2 + snd.freq.length * 2} B`
+    ? `${folder || "PAK"} · SOUND_${ident} · ${snd.freq.length} ticks · ${2 + snd.freq.length} B`
     : folder
       ? `${soundPath} not in ${folder}`
       : "Open shareware to load the original WAV";
@@ -1987,6 +2023,8 @@ function renderSoundInspector(root) {
   playWav.addEventListener("click", () => {
     const buf = sharewareSounds.get(soundPath);
     if (!buf) return;
+    sfxFollow = "";
+    soundView.setPlayTick(-1);
     sfxPreview.playOriginal(buf, !!loopChk.checked).catch((err) => setStatus(String(err.message || err), true));
   });
   const playSpk = document.createElement("button");
@@ -1994,6 +2032,8 @@ function renderSoundInspector(root) {
   playSpk.textContent = "Play speaker";
   playSpk.disabled = !snd.freq.length;
   playSpk.addEventListener("click", () => {
+    sfxFollow = "";
+    soundView.setPlayTick(-1);
     sfxPreview.playSpeaker(ensureSound(doc, soundPath), !!loopChk.checked).catch((err) =>
       setStatus(String(err.message || err), true)
     );
@@ -2012,12 +2052,78 @@ function renderSoundInspector(root) {
   loopLab.append(loopSpan, loopChk);
   root.appendChild(loopLab);
 
-  const est = document.createElement("button");
-  est.type = "button";
-  est.textContent = "Estimate from Quake";
-  est.disabled = !hasWav;
-  est.addEventListener("click", () => void estimateSelectedSound());
-  root.appendChild(est);
+  const source = document.createElement("select");
+  for (const id of ["wolf", "doom"]) {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = id === "wolf" ? "Wolf" : "Doom";
+    if (librarySource === id) o.selected = true;
+    source.appendChild(o);
+  }
+  source.addEventListener("change", () => {
+    librarySource = source.value === "doom" ? "doom" : "wolf";
+    const rows = libraryRows();
+    if (!rows.some((row) => row.name === libraryName)) libraryName = rows[0]?.name || "";
+    const loop = !!loopChk.checked;
+    refreshAll();
+    playLibrarySelection(loop);
+  });
+  root.appendChild(field("Library", source));
+
+  const libList = document.createElement("div");
+  libList.className = "sound-lib";
+  const dups = libraryDuplicates();
+  for (const entry of libraryRows()) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = entry.name;
+    btn.dataset.name = entry.name;
+    const canon = dups.get(entry.name);
+    if (canon) {
+      btn.classList.add("dup");
+      btn.title = `Same as ${canon}`;
+    }
+    if (entry.name === libraryName) btn.classList.add("active");
+    btn.addEventListener("click", () => {
+      libraryName = entry.name;
+      for (const b of libList.querySelectorAll("button")) {
+        b.classList.toggle("active", b.dataset.name === libraryName);
+      }
+      updateCenterChrome();
+      playLibrarySelection(!!loopChk.checked);
+    });
+    libList.appendChild(btn);
+  }
+  root.appendChild(libList);
+
+  const libRow = document.createElement("div");
+  libRow.className = "btn-row";
+  const playLib = document.createElement("button");
+  playLib.type = "button";
+  playLib.textContent = "Play library";
+  playLib.addEventListener("click", () => playLibrarySelection(!!loopChk.checked));
+  const applyLib = document.createElement("button");
+  applyLib.type = "button";
+  applyLib.textContent = "Apply";
+  applyLib.addEventListener("click", () => {
+    const entry = libraryEntry();
+    if (!entry || !soundPath) return;
+    pushUndo();
+    const snd = ensureSound(doc, soundPath);
+    const env = envelopeFromLibrary(entry);
+    snd.freq = env.freq;
+    snd.attack = 0;
+    snd.origin = librarySource;
+    snd.library = entry.name;
+    alignSoundArrays(snd);
+    soundView.selectedTick = 0;
+    soundView.scroll = 0;
+    markDirty();
+    refreshAll();
+    setStatus(`Applied ${librarySource} ${entry.name}`);
+  });
+  libRow.append(playLib, applyLib);
+  root.appendChild(libRow);
 
   const voiceSel = document.createElement("select");
   for (let i = 0; i < SOUND_VOICE_LABELS.length; i++) {
@@ -2048,175 +2154,11 @@ function renderSoundInspector(root) {
   });
   root.appendChild(field("Priority", pri));
 
-  const atk = document.createElement("input");
-  atk.type = "number";
-  atk.min = "0";
-  atk.max = "15";
-  atk.value = String(snd.attack | 0);
-  atk.addEventListener("change", () => {
-    pushUndo();
-    ensureSound(doc, soundPath).attack = clampSoundAttack(atk.value);
-    markDirty();
-    refreshAll();
-  });
-  root.appendChild(field("Attack", atk));
-
-  const tick = Math.max(0, Math.min(Math.max(0, snd.freq.length - 1), soundView.selectedTick | 0));
-  soundView.selectedTick = tick;
-  const hzIn = document.createElement("input");
-  hzIn.type = "number";
-  hzIn.min = "0";
-  hzIn.max = "20000";
-  hzIn.step = "1";
-  hzIn.value = snd.freq.length ? String(Math.round(wolfByteToHz(snd.freq[tick]))) : "0";
-  hzIn.disabled = !snd.freq.length;
-  hzIn.addEventListener("change", () => {
-    if (!snd.freq.length) return;
-    pushUndo();
-    const cur = ensureSound(doc, soundPath);
-    cur.freq[tick] = hzToWolfByte(Number(hzIn.value));
-    cur.origin = "edit";
-    markDirty();
-    refreshAll();
-  });
-  root.appendChild(field("Tick Hz", hzIn));
-
-  const volIn = document.createElement("input");
-  volIn.type = "number";
-  volIn.min = "0";
-  volIn.max = "15";
-  volIn.value = snd.freq.length ? String(snd.vol[tick] | 0) : "0";
-  volIn.disabled = !snd.freq.length;
-  volIn.addEventListener("change", () => {
-    if (!snd.freq.length) return;
-    pushUndo();
-    const cur = ensureSound(doc, soundPath);
-    cur.vol[tick] = clampSoundVol(volIn.value);
-    cur.origin = "edit";
-    markDirty();
-    refreshAll();
-  });
-  root.appendChild(field("Tick vol", volIn));
-
-  const xf = document.createElement("div");
-  xf.className = "btn-row";
-  const mk = (label, fn) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = label;
-    b.disabled = !snd.freq.length;
-    b.addEventListener("click", fn);
-    xf.appendChild(b);
-  };
-  mk("Reverse", () => {
-    pushUndo();
-    reverseSound(ensureSound(doc, soundPath));
-    markDirty();
-    refreshAll();
-  });
-  mk("Pitch -", () => {
-    pushUndo();
-    transposeSound(ensureSound(doc, soundPath), 1);
-    markDirty();
-    refreshAll();
-  });
-  mk("Pitch +", () => {
-    pushUndo();
-    transposeSound(ensureSound(doc, soundPath), -1);
-    markDirty();
-    refreshAll();
-  });
-  root.appendChild(xf);
-  const xf2 = document.createElement("div");
-  xf2.className = "btn-row";
-  const mk2 = (label, fn, disabled) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.textContent = label;
-    b.disabled = disabled;
-    b.addEventListener("click", fn);
-    xf2.appendChild(b);
-  };
-  mk2(
-    "Fade in",
-    () => {
-      pushUndo();
-      fadeSound(ensureSound(doc, soundPath), "in");
-      markDirty();
-      refreshAll();
-    },
-    !snd.freq.length
-  );
-  mk2(
-    "Fade out",
-    () => {
-      pushUndo();
-      fadeSound(ensureSound(doc, soundPath), "out");
-      markDirty();
-      refreshAll();
-    },
-    !snd.freq.length
-  );
-  mk2(
-    "Insert tick",
-    () => {
-      pushUndo();
-      if (!insertSoundTick(ensureSound(doc, soundPath), soundView.selectedTick)) {
-        setStatus("Tick cap (255)", true);
-        return;
-      }
-      markDirty();
-      refreshAll();
-    },
-    snd.freq.length >= 255
-  );
-  mk2(
-    "Delete tick",
-    () => {
-      pushUndo();
-      deleteSoundTick(ensureSound(doc, soundPath), soundView.selectedTick);
-      if (soundView.selectedTick >= ensureSound(doc, soundPath).freq.length) {
-        soundView.selectedTick = Math.max(0, ensureSound(doc, soundPath).freq.length - 1);
-      }
-      markDirty();
-      refreshAll();
-    },
-    !snd.freq.length
-  );
-  root.appendChild(xf2);
   if (locked) {
     const note = document.createElement("p");
     note.className = "muted";
     note.textContent = `Locked export · SOUND_${soundIdent(soundPath)}`;
     root.appendChild(note);
-  }
-}
-
-async function estimateSelectedSound() {
-  const buf = sharewareSounds.get(soundPath);
-  if (!buf) {
-    setStatus("Original WAV not in the opened PAK", true);
-    return;
-  }
-  try {
-    const ctx = getAudioContext();
-    if (ctx.state === "suspended") await ctx.resume();
-    const decoded = await decodeWav(ctx, buf);
-    const pcm = mixMono(decoded);
-    const est = estimateFromPcm(pcm, decoded.sampleRate);
-    pushUndo();
-    const snd = ensureSound(doc, soundPath);
-    snd.freq = est.freq;
-    snd.vol = est.vol;
-    snd.attack = est.attack;
-    snd.origin = "estimate";
-    soundView.selectedTick = 0;
-    soundView.scroll = 0;
-    markDirty();
-    refreshAll();
-    setStatus(`Estimated ${est.freq.length} ticks @ ${SOUND_TICK_HZ} Hz`);
-  } catch (err) {
-    setStatus(String(err.message || err), true);
   }
 }
 
@@ -3213,7 +3155,7 @@ function renderInspector() {
       frameLocal = Number(slider.value) | 0;
       applyFrameLocal();
       markUi();
-      animView.draw();
+      syncPlayUi();
     });
     transport.appendChild(slider);
 
@@ -3234,7 +3176,11 @@ function renderInspector() {
       animLoop = !animLoop;
       updateLoopButton();
     });
-    playRow.append(playBtn, loopBtn);
+    const frameNum = document.createElement("span");
+    frameNum.id = "anim-frame-num";
+    frameNum.className = "anim-frame-num";
+    frameNum.textContent = String(frameLocal);
+    playRow.append(playBtn, loopBtn, frameNum);
     transport.appendChild(playRow);
     root.appendChild(transport);
     renderClipSoundFields(root, e, clip);
@@ -3838,6 +3784,8 @@ function advanceFrame(d) {
 function syncPlayUi() {
   const slider = document.getElementById("anim-frame-slider");
   if (slider) slider.value = String(frameLocal);
+  const num = document.getElementById("anim-frame-num");
+  if (num) num.textContent = String(frameLocal);
   if (editorMode === "anim") animView.draw();
 }
 

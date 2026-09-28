@@ -55,6 +55,7 @@ credits2_text
 credits3_text
 	!scr "Loader by krill / plush.",0
 	!scr "Loader integration by chris masiero.",0
+	!scr "Title screen by paul docherty.",0
 	!scr " ",0
 	!scr "Thanks all!",0
 	!scr " ",0

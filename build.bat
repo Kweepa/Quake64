@@ -141,6 +141,11 @@ if errorlevel 1 (
   popd
   exit /b 1
 )
+"%ACME%" ai_shambler.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 "%ACME%" skel_draw.asm
 if errorlevel 1 (
   popd

@@ -295,10 +295,6 @@ function parseSoundBytes(raw, clamp, fill) {
   return out;
 }
 
-function fullVol(n) {
-  return Array.from({ length: n }, () => 15);
-}
-
 export function defaultSoundEntry(locked) {
   const freq = locked.freq.map((b) => clampSoundFreqByte(b));
   return {
@@ -309,7 +305,6 @@ export function defaultSoundEntry(locked) {
     priority: clampSoundPriority(locked.priority),
     attack: 0,
     freq,
-    vol: fullVol(freq.length),
     origin: "wolf",
   };
 }
@@ -321,7 +316,7 @@ export function defaultSounds() {
 }
 
 export function emptySoundEntry() {
-  return { export: false, voice: 0, priority: 50, attack: 0, freq: [], vol: [], origin: "empty" };
+  return { export: false, voice: 0, priority: 50, attack: 0, freq: [], origin: "empty" };
 }
 
 export function isSoundLocked(path) {
@@ -348,18 +343,12 @@ export function soundIdent(path) {
 
 export function alignSoundArrays(snd) {
   let freq = Array.isArray(snd.freq) ? snd.freq.map(clampSoundFreqByte) : [];
-  let vol = Array.isArray(snd.vol) ? snd.vol.map(clampSoundVol) : [];
   if (freq.length > SOUND_MAX_TICKS) freq = freq.slice(0, SOUND_MAX_TICKS);
-  if (vol.length > SOUND_MAX_TICKS) vol = vol.slice(0, SOUND_MAX_TICKS);
-  let n = Math.max(freq.length, vol.length);
-  while (freq.length < n) freq.push(0);
-  while (vol.length < n) vol.push(0);
-  while (n > 0 && !(freq[n - 1] | 0) && !(vol[n - 1] | 0)) n--;
-  snd.freq = freq.slice(0, n);
-  snd.vol = vol.slice(0, n);
+  snd.freq = freq;
+  delete snd.vol;
   delete snd.wave;
   snd.attack = clampSoundAttack(snd.attack);
-  return n;
+  return freq.length;
 }
 
 export function soundIsStreamed(path) {
@@ -375,8 +364,8 @@ export function soundPayloadBytes(sounds) {
     if (seen.has(path)) continue;
     seen.add(path);
     if (soundIsStreamed(path)) continue;
-    const n = Math.min(SOUND_MAX_TICKS, Math.max(snd.freq?.length || 0, snd.vol?.length || 0));
-    total += 2 + n * 2;
+    const n = Math.min(SOUND_MAX_TICKS, snd.freq?.length || 0);
+    total += 2 + n;
   }
   return total;
 }
@@ -403,22 +392,30 @@ function parseSoundEntry(path, raw, fallback) {
   const base = fallback || (locked ? defaultSoundEntry(locked) : emptySoundEntry());
   const src = raw && typeof raw === "object" ? raw : {};
   const freq = parseSoundBytes(src.freq, clampSoundFreqByte, base.freq);
-  let vol = parseSoundBytes(src.vol, clampSoundVol, base.vol.length === freq.length ? base.vol : fullVol(freq.length));
-  if (!src.vol && freq.length && vol.length !== freq.length) vol = fullVol(freq.length);
   const snd = {
     export: locked ? true : !!src.export,
     voice: clampSoundVoice(src.voice != null ? src.voice : base.voice),
     priority: clampSoundPriority(src.priority != null ? src.priority : base.priority),
     attack: clampSoundAttack(src.attack != null ? src.attack : base.attack),
     freq,
-    vol,
     origin:
-      src.origin === "estimate" || src.origin === "edit" || src.origin === "wolf"
-        ? src.origin
-        : src.origin === "anneal"
-          ? "edit"
+      src.origin === "anneal"
+        ? "edit"
+        : src.origin === "estimate" ||
+            src.origin === "edit" ||
+            src.origin === "wolf" ||
+            src.origin === "doom" ||
+            src.origin === "empty"
+          ? src.origin
           : base.origin,
   };
+  if (
+    (snd.origin === "wolf" || snd.origin === "doom") &&
+    typeof src.library === "string" &&
+    src.library.trim()
+  ) {
+    snd.library = src.library.trim().toUpperCase();
+  }
   if (locked) {
     snd.alias = locked.alias;
     if (locked.extraAliases) snd.extraAliases = [...locked.extraAliases];
@@ -2160,7 +2157,8 @@ export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 export const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 8, 255];
+const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 5, 255];
+const CHTHON_FIRE2 = 17;
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {
   Grunt: { stand: ["stand"], alert: ["load"], run: ["run"], walk: ["prowl"], attack: ["shoot"] },
@@ -2438,6 +2436,7 @@ export function packedPoseBytes(enemy, clips, frames) {
     if (typeof role === "string" && role.startsWith("attack")) {
       if (typeI === 1) extra = [start + 5, start + 7];
       else if (name === "Zombie") extra = [start + length - 1];
+      else if (name === "Chthon") extra = [start + fireOff, start + CHTHON_FIRE2];
       else if (fireOff >= 0 && fireOff < 255) extra = [start + fireOff];
     }
     for (const i of poseCadenceKeep(start, length, posePickKeys(frs, start, length, extra))) {

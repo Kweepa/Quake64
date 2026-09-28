@@ -451,8 +451,11 @@ draw_custom_enemy
 .dce_bolt
 	lda ent_type
 	cmp #ENT_CHTHON
+	beq .dce_go
+	cmp #ENT_SHAMBLER
 	bne .dce_nb
-	ldy #ENT_CHTHON
+.dce_go
+	tay
 	lda AI_ENTRY_HI,y
 	beq .dce_nb
 	sta .dce_ai+2

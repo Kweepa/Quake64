@@ -267,6 +267,32 @@ SKEL_BSS_END	= skel_entry_hi + ENEMY_PTR_N
 !if SKEL_BSS_END > REBOOT_STUB {
 	!error "skeleton BSS overlaps reboot stub"
 }
+; Port latch in the hole between skeleton BSS and the reboot stub.
+; $0876 is AI_ENTRY_LO; a ring there sends the attic knights through garbage.
+DBG_MAGIC	= SKEL_BSS_END
+DBG_BAD_EVT	= DBG_MAGIC + 1
+DBG_BAD_00	= DBG_BAD_EVT + 1
+DBG_BAD_01	= DBG_BAD_00 + 1
+DBG_BAD_X	= DBG_BAD_01 + 1
+DBG_BAD_Y	= DBG_BAD_X + 1
+DBG_BAD_ROOM	= DBG_BAD_Y + 1
+DBG_BAD_SEQ	= DBG_BAD_ROOM + 1
+DBG_SEQ		= DBG_BAD_SEQ + 1
+DBG_END		= DBG_SEQ + 1
+DBG_MAIN	= 1
+DBG_WORLD	= 2
+DBG_DE_IN	= 3
+DBG_DE_ROT	= 4
+DBG_DE_PRE	= 5
+DBG_DE_MESH	= 6
+DBG_DE_RTS	= 7
+DBG_DEATH	= 8
+DBG_RESTART	= 9
+DBG_ALERT	= 10
+DBG_AI		= 11
+!if DBG_END > REBOOT_STUB {
+	!error "dbg latch overlaps reboot stub"
+}
 
 SKEL_MAX_VERTS	= 48
 SKEL_MAX_EDGES	= 64
@@ -411,7 +437,21 @@ SCRAG_HOLD_R	= 12		; Chebyshev ≤ this + LOS → stop closing, spit
 SCRAG_REFIRE_MS	= 2000		; Q1 wiz_fast14 SUB_AttackFinished(2)
 OGRE_MELEE_R	= 6		; chainsaw Chebyshev; grenade uses enemy_range
 OGRE_SWING_FIRE	= 4		; clip-local hit; shoot uses enemy_fire_frame
-CHTHON_FIRE2	= 18		; second throw in the attack clip (vert 13)
+SHAM_MELEE_R	= 6		; Q1 vlen 100, same face range as the ogre saw
+SHAM_VAR_SMASH	= 0
+SHAM_VAR_SWINGR	= 1
+SHAM_VAR_SWINGL	= 2
+SHAM_VAR_MAGIC	= 3
+SHAM_SMASH_FIRE	= 9		; smash10, 0-indexed
+SHAM_CLAW_FIRE	= 6		; swingr7 / swingl7
+SHAM_BOLT_LO	= 5		; magic6..magic8, three CastLightning ticks
+SHAM_BOLT_HI	= 8
+SHAM_BOLT_H	= 6		; chest above feet (Q1 origin+40)
+SHAM_BOLT_DROP	= EYE_HEIGHT - 2	; end Y = cam_yh − this (feet + 2)
+SHAM_BOLT_DMG	= 10		; Q1 LightningDamage 10; player HP is 100
+SHAM_PAIN_MS	= 2000		; Q1 pain_finished = time + 2
+SHAM_PAIN_ALWAYS	= 80		; damage/80 flinch; 400÷5 because HP is ÷5
+CHTHON_FIRE2	= 17		; second throw in the attack clip (vert 13)
 OGRE_SAW_DMG	= 6		; 6–9 with rnd&3
 KNIGHT_SLASH_DMG	= 4		; 4–7 with rnd&3 (Quake ai_melee *3 vs ogre *4)
 KNIGHT_RUNATK_FIRE	= 5		; runattack clip-local hit (0-indexed)
@@ -770,7 +810,8 @@ gr_fuse_l	= $CF11
 gr_fuse_h	= $CF15
 gr_life_l	= $CF19
 gr_life_h	= $CF1D
-; $CF21–$CF25 free (was gr_room, then gren_save_room)
+; $CF22–$CF25 free (was gr_room, then gren_save_room)
+sham_alert_ph	= $CF21			; flips each anim tick; 1 = hold Shambler alert frame
 ; Hitscan params (live during gun_hitscan / splat_aim_jitter)
 scan_hit_x	= $CF26			; |sx−CX| max (inclusive)
 scan_hit_y	= $CF27			; |sy−64| max, $ff = no Y gate (both guns)
@@ -934,7 +975,28 @@ ch_dist		= $CFE7
 ch_i		= $CFE8
 ch_prod		= $CFE9
 ch_prod_h	= $CFEA
-; $CFEB+ free
+; Shambler pain lock + bolt scratch. Ends at $CFFF (charset A is $D000).
+sham_arc	= $CFEB			; 1 = magic frames 5..7, V3 crackle
+sham_pain_i	= $CFEC			; locked enemy, $ff = none
+sham_pain_l	= $CFED
+sham_pain_h	= $CFEE
+sham_ax		= $CFEF			; segment start (chest)
+sham_ay		= $CFF0
+sham_az		= $CFF1
+sham_bx		= $CFF2			; segment end (player or blocker)
+sham_by		= $CFF3
+sham_bz		= $CFF4
+sham_hx		= $CFF5			; nearest blocker
+sham_hy		= $CFF6
+sham_hz		= $CFF7
+sham_best	= $CFF8			; nearest t, $ff = clear
+sham_i		= $CFF9
+sham_px		= $CFFA
+sham_py		= $CFFB
+sham_pz		= $CFFC
+sham_pok	= $CFFD
+sham_psx	= $CFFE
+sham_psy	= $CFFF
 CH_PHASE_UP	= 0
 CH_PHASE_DOWN	= 1
 CH_PHASE_HOLD	= 2

@@ -730,13 +730,13 @@ export class AnimView {
     ctx.fillStyle = "#8b91a0";
     ctx.font = "11px Segoe UI, sans-serif";
     const clip = clipForFrame(enemy.clips, frame);
-    let label;
-    if (overlay?.frameName) {
-      label = overlay.frameName;
+    const previewLocal = this.opts.getLocalFrame?.();
+    const previewClip = this.opts.getClipName?.();
+    let label = "rest";
+    if (previewClip && previewLocal != null) {
+      label = `${previewClip} ${previewLocal}`;
     } else if (stickOn && enemy.clips?.length && clip) {
       label = `${clip.name} ${frame - clip.start}`;
-    } else {
-      label = "rest";
     }
     const frameTotal = stickOn && enemy.clips?.length ? enemy.frames.length : overlay ? "MDL" : enemy.frames.length;
     const nv = (stickOn ? enemy.frames[frame] || enemy.frames[0] : null)?.length || enemy.verts || 0;

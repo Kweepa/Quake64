@@ -54,12 +54,13 @@ credits2_text
 
 credits3_text
 	!scr "Loader by krill / plush.",0
-	!scr "Loader integration by chris masiero.",0
-	!scr "Title screen by paul docherty.",0
+	!scr "loader integration by chris masiero.",0
+	!scr "title screen by paul docherty.",0
+	!scr "line draw routine by michael kircher.",0
 	!scr " ",0
 	!scr "Thanks all!",0
 	!scr " ",0
-	!scr "quake64 v0.40.0",0
+	!scr "quake64 v0.50.0",0
 	!byte 0
 
 credits_lo

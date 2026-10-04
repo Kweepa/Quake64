@@ -1,6 +1,6 @@
 {
   "version": 10,
-  "activeLevel": "E1M5",
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -232,7 +232,7 @@
           "axis": "z",
           "dir": 1,
           "purpose": "message",
-          "text": "Welcome to Quake64!",
+          "text": "Get moving!",
           "tag": "",
           "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434"
         },
@@ -607,10 +607,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Secret",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 12,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 15,
           "shape": "box",
           "rx": 0,
           "ry": 0,
@@ -1200,7 +1200,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Entry",
-          "bgColor": 9,
+          "bgColor": 5,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -1340,7 +1340,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 0,
-          "enabled": true,
+          "enabled": false,
           "roomId": "0e15ffe3-9bc5-4237-8af7-48366c877a92"
         },
         {
@@ -1476,7 +1476,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Bridge",
-          "bgColor": 9,
+          "bgColor": 5,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -1519,7 +1519,7 @@
           "id": "8a5e8065-e95f-42f6-962d-63019b7c5ff2",
           "kind": "platform",
           "x": 62,
-          "y": 91,
+          "y": 90,
           "z": 74,
           "sx": 4,
           "sy": 1,
@@ -1634,7 +1634,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Hall",
-          "bgColor": 9,
+          "bgColor": 12,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -1806,7 +1806,7 @@
           "cuts": [
             {
               "su": 14,
-              "sv": 23
+              "sv": 22
             }
           ]
         },
@@ -1857,7 +1857,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Armoury",
-          "bgColor": 9,
+          "bgColor": 4,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -1900,7 +1900,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Key Room",
-          "bgColor": 9,
+          "bgColor": 5,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -1924,11 +1924,11 @@
           "kind": "doorway",
           "x": 73,
           "y": 96,
-          "z": 154,
+          "z": 153,
           "sx": 4,
           "sy": 5,
           "sz": 1,
-          "face": "-z",
+          "face": "+z",
           "axis": "z",
           "dir": 1,
           "roomId": "bca3293b-77d8-485a-bd79-37df6d5a2208",
@@ -2005,8 +2005,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Back Stair",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 15,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -2063,7 +2063,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Backroom",
-          "bgColor": 9,
+          "bgColor": 5,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -2095,7 +2095,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Backhall",
-          "bgColor": 9,
+          "bgColor": 5,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -2195,7 +2195,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Yard",
-          "bgColor": 9,
+          "bgColor": 4,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -2218,7 +2218,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Exit Stair",
-          "bgColor": 9,
+          "bgColor": 2,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -2246,24 +2246,15 @@
           "axis": "z",
           "dir": 1,
           "name": "Gate",
-          "bgColor": 9,
+          "bgColor": 4,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
-          "shape": "T",
+          "shape": "box",
           "rx": 0,
           "ry": 3,
           "rz": 0,
-          "cuts": [
-            {
-              "su": 7,
-              "sv": 12
-            },
-            {
-              "su": 7,
-              "sv": 12
-            }
-          ]
+          "cuts": []
         },
         {
           "id": "375a7b75-e6be-425a-a715-ae43c3308727",
@@ -2304,23 +2295,6 @@
           "tag": "",
           "otherRoomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5",
           "locked": false
-        },
-        {
-          "id": "d3791800-d527-46bf-9745-5c1839ecec06",
-          "kind": "enemy",
-          "x": 122,
-          "y": 92,
-          "z": 93,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 0,
-          "enemy": "Ogre",
-          "patrol": true,
-          "roomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5"
         },
         {
           "id": "27df1347-6fbb-4782-84a9-78c046a2cab0",
@@ -2376,12 +2350,12 @@
         {
           "id": "883faa14-0646-45c4-b1ca-1850cc2573c3",
           "kind": "trigger",
-          "x": 160,
+          "x": 164,
           "y": 99,
-          "z": 124,
-          "sx": 8,
+          "z": 122,
+          "sx": 4,
           "sy": 4,
-          "sz": 4,
+          "sz": 8,
           "face": "+z",
           "axis": "z",
           "dir": 1,
@@ -2490,6 +2464,76 @@
           "rot": 2,
           "enabled": false,
           "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c"
+        },
+        {
+          "id": "02d886be-93f5-4689-acab-5df9d8ce269f",
+          "kind": "enemy",
+          "x": 124,
+          "y": 91,
+          "z": 81,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 0,
+          "enemy": "Demon",
+          "patrol": false,
+          "roomId": "8a01a665-f76f-410a-b450-5e8c86ec10d5"
+        },
+        {
+          "id": "1b2b290a-cc4d-4286-a3f0-18115d64da06",
+          "kind": "spawn",
+          "x": 90,
+          "y": 91,
+          "z": 112,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 2,
+          "enabled": true,
+          "roomId": "e6cc845a-217b-4b06-ac20-184b6669bfcf"
+        },
+        {
+          "id": "f5356aa6-d9c1-4985-9a33-adf69570db14",
+          "kind": "doorway",
+          "x": 166,
+          "y": 99,
+          "z": 122,
+          "sx": 1,
+          "sy": 10,
+          "sz": 8,
+          "face": "+x",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "87b9a1be-0500-45bd-a0a3-38a481a30200",
+          "lockKey": "unlocked",
+          "doorType": "Arch",
+          "doorScale": 2,
+          "tag": "",
+          "locked": false,
+          "otherRoomId": null
+        },
+        {
+          "id": "655d8b0e-a68b-4abb-9170-840dc32309d4",
+          "kind": "trigger",
+          "x": 156,
+          "y": 99,
+          "z": 121,
+          "sx": 8,
+          "sy": 4,
+          "sz": 10,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "message",
+          "text": "Pass through the arch to exit...",
+          "tag": "",
+          "roomId": "87b9a1be-0500-45bd-a0a3-38a481a30200"
         }
       ]
     },
@@ -2509,10 +2553,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Entry",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 0,
+          "lineColor": 12,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 7,
           "shape": "L",
           "rx": 1,
           "ry": 2,
@@ -2760,8 +2804,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Crusher",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 5,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -2898,8 +2942,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Sheugh",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 6,
+          "lineColor": 14,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "S",
@@ -2950,7 +2994,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Mezzanine",
-          "bgColor": 9,
+          "bgColor": 5,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -3095,8 +3139,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Underhall",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 15,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -3197,8 +3241,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Oubliette",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 4,
+          "lineColor": 10,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -3237,8 +3281,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Slog",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 12,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "S",
@@ -3289,8 +3333,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Chonk",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 13,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -3577,8 +3621,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Post gold",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 4,
+          "lineColor": 6,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -3655,7 +3699,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Double Decker",
-          "bgColor": 9,
+          "bgColor": 5,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -3731,8 +3775,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Sludge",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 5,
+          "lineColor": 3,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -4001,8 +4045,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Pre Exit",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 2,
+          "lineColor": 10,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -4029,8 +4073,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Exit",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 4,
+          "lineColor": 1,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -4182,40 +4226,6 @@
           "roomId": "93272be8-ca62-4b8b-b183-5af142e877b9"
         },
         {
-          "id": "ad705113-632d-4798-8ae6-04691fda76f0",
-          "kind": "enemy",
-          "x": 168,
-          "y": 111,
-          "z": 83,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 0,
-          "enemy": "Rottweiler",
-          "patrol": false,
-          "roomId": "93272be8-ca62-4b8b-b183-5af142e877b9"
-        },
-        {
-          "id": "127fb532-aac3-4bf0-b577-4871c7fecbce",
-          "kind": "enemy",
-          "x": 168,
-          "y": 111,
-          "z": 73,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 0,
-          "enemy": "Rottweiler",
-          "patrol": true,
-          "roomId": "93272be8-ca62-4b8b-b183-5af142e877b9"
-        },
-        {
           "id": "ac4a959c-4064-438d-bf5b-a168115df67c",
           "kind": "platform",
           "x": 119,
@@ -4229,6 +4239,40 @@
           "dir": 1,
           "roomId": "3aee6079-dbc3-461a-944b-e317fa32e416",
           "collide": true
+        },
+        {
+          "id": "24747621-c816-436e-af33-18fa190b7b5e",
+          "kind": "enemy",
+          "x": 171,
+          "y": 111,
+          "z": 74,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 0,
+          "enemy": "Demon",
+          "patrol": false,
+          "roomId": "93272be8-ca62-4b8b-b183-5af142e877b9"
+        },
+        {
+          "id": "ed95ae84-c95c-4318-86ac-5d27d54de9f3",
+          "kind": "enemy",
+          "x": 171,
+          "y": 111,
+          "z": 84,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 4,
+          "enemy": "Demon",
+          "patrol": false,
+          "roomId": "93272be8-ca62-4b8b-b183-5af142e877b9"
         }
       ]
     },
@@ -5801,7 +5845,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Entry",
-          "bgColor": 9,
+          "bgColor": 2,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -5824,8 +5868,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Entranceway",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 2,
+          "lineColor": 5,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -5915,8 +5959,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Side",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 2,
+          "lineColor": 10,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -5943,8 +5987,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Down",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 12,
+          "lineColor": 13,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -6026,8 +6070,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Basement",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 3,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -6216,40 +6260,6 @@
           "roomId": "a6b5711e-686b-4e63-a190-c84995af006c"
         },
         {
-          "id": "74b7078a-ae5d-44a0-bb1a-6639e24dc4ce",
-          "kind": "enemy",
-          "x": 115,
-          "y": 111,
-          "z": 98,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 2,
-          "enemy": "Rottweiler",
-          "patrol": true,
-          "roomId": "8c558ed0-a32a-4209-a5f6-9e28a8f7ca3f"
-        },
-        {
-          "id": "ded32077-d39f-4757-af9b-6ef1c60a93e2",
-          "kind": "enemy",
-          "x": 118,
-          "y": 111,
-          "z": 84,
-          "sx": 2,
-          "sy": 4,
-          "sz": 2,
-          "face": "+z",
-          "axis": "z",
-          "dir": 1,
-          "rot": 3,
-          "enemy": "Rottweiler",
-          "patrol": true,
-          "roomId": "8c558ed0-a32a-4209-a5f6-9e28a8f7ca3f"
-        },
-        {
           "id": "6630f0ea-8abd-4c03-8f72-073c736c3f2a",
           "kind": "room",
           "x": 91,
@@ -6394,8 +6404,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Elevated",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 6,
+          "lineColor": 14,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -6587,8 +6597,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Cache",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 12,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -6625,7 +6635,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Back Stair",
-          "bgColor": 9,
+          "bgColor": 2,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -6718,8 +6728,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Key Room",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 4,
+          "lineColor": 10,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
@@ -7061,7 +7071,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Attic Climb",
-          "bgColor": 9,
+          "bgColor": 4,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -7268,7 +7278,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Recharge",
-          "bgColor": 9,
+          "bgColor": 4,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -7470,10 +7480,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Behind Silver",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 0,
+          "lineColor": 12,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 15,
           "shape": "box",
           "rx": 0,
           "ry": 0,
@@ -7525,8 +7535,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Exit",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 2,
+          "lineColor": 12,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "S",
@@ -8124,6 +8134,40 @@
           "rot": 1,
           "enabled": true,
           "roomId": "6ea37ef6-9498-4caa-bedd-1605f29b391f"
+        },
+        {
+          "id": "55ca8bbd-18d1-4db0-ae01-81320aaf1341",
+          "kind": "enemy",
+          "x": 113,
+          "y": 111,
+          "z": 97,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 2,
+          "enemy": "Demon",
+          "patrol": true,
+          "roomId": "8c558ed0-a32a-4209-a5f6-9e28a8f7ca3f"
+        },
+        {
+          "id": "28114edc-6178-4f7e-91a2-e1bac0da3387",
+          "kind": "enemy",
+          "x": 119,
+          "y": 111,
+          "z": 83,
+          "sx": 2,
+          "sy": 4,
+          "sz": 2,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "rot": 3,
+          "enemy": "Demon",
+          "patrol": false,
+          "roomId": "8c558ed0-a32a-4209-a5f6-9e28a8f7ca3f"
         }
       ]
     },
@@ -8299,8 +8343,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Pit",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 2,
+          "lineColor": 10,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
@@ -8444,8 +8488,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Stacks",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 12,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
@@ -8538,8 +8582,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Upper Stacks",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 12,
+          "lineColor": 15,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -8685,10 +8729,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Crusher",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 0,
+          "lineColor": 2,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 12,
           "shape": "T",
           "rx": 0,
           "ry": 0,
@@ -8737,10 +8781,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Elevator",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 0,
+          "lineColor": 11,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 12,
           "shape": "box",
           "rx": 0,
           "ry": 0,
@@ -8898,10 +8942,10 @@
         {
           "id": "7cf51580-2aae-484b-97d4-ab114605f7d9",
           "kind": "room",
-          "x": 122,
+          "x": 121,
           "y": 106,
           "z": 62,
-          "sx": 7,
+          "sx": 8,
           "sy": 12,
           "sz": 25,
           "face": "+z",
@@ -8911,7 +8955,7 @@
           "bgColor": 0,
           "lineColor": 4,
           "fxColor": 1,
-          "weaponColor": 15,
+          "weaponColor": 12,
           "shape": "L",
           "rx": 0,
           "ry": 3,
@@ -8956,8 +9000,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Lava Pit",
-          "bgColor": 2,
-          "lineColor": 5,
+          "bgColor": 4,
+          "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -9127,8 +9171,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Teleport",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 12,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -9198,8 +9242,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Boss",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 6,
+          "lineColor": 1,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "L",
@@ -9429,9 +9473,9 @@
           "dir": 1,
           "name": "Lava Pit",
           "bgColor": 9,
-          "lineColor": 7,
+          "lineColor": 10,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 15,
           "shape": "T",
           "rx": 0,
           "ry": 1,
@@ -9480,8 +9524,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Entry",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 2,
+          "lineColor": 10,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "box",
@@ -9640,10 +9684,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Left",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 0,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 12,
           "shape": "box",
           "rx": 0,
           "ry": 0,
@@ -9663,10 +9707,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Right",
-          "bgColor": 9,
-          "lineColor": 7,
+          "bgColor": 11,
+          "lineColor": 0,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 12,
           "shape": "box",
           "rx": 0,
           "ry": 0,
@@ -9686,10 +9730,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Back",
-          "bgColor": 9,
+          "bgColor": 0,
           "lineColor": 7,
           "fxColor": 1,
-          "weaponColor": 0,
+          "weaponColor": 12,
           "shape": "box",
           "rx": 0,
           "ry": 0,
@@ -10061,32 +10105,32 @@
           "name": "stand"
         },
         {
-          "name": "death",
-          "sound": "SOLDIER_DEATH1",
-          "soundFrame": 0
+          "name": "death"
         },
         {
-          "name": "load",
-          "sound": "SOLDIER_SIGHT1",
-          "soundFrame": 0
+          "name": "load"
         },
         {
-          "name": "painb",
-          "sound": "SOLDIER_PAIN1",
-          "soundFrame": 0
+          "name": "painb"
         },
         {
           "name": "run"
         },
         {
           "name": "shoot",
-          "sound": "SOLDIER_SATTCK1",
+          "sound": "shoot",
           "soundFrame": 3
         },
         {
           "name": "prowl_"
         }
       ],
+      "cues": {
+        "sight": "sound/soldier/sight1.wav",
+        "wince": "sound/soldier/pain1.wav",
+        "shoot": "sound/soldier/sattck1.wav",
+        "death": "sound/soldier/death1.wav"
+      },
       "mdlRig": {
         "jointVerts": [
           [
@@ -10240,25 +10284,31 @@
           "name": "runb"
         },
         {
-          "name": "runattack"
-        },
-        {
-          "name": "pain",
-          "sound": "SOLDIER_PAIN1",
+          "name": "runattack",
+          "sound": "melee",
           "soundFrame": 0
         },
         {
-          "name": "attackb"
+          "name": "pain"
+        },
+        {
+          "name": "attackb",
+          "sound": "melee",
+          "soundFrame": 0
         },
         {
           "name": "walk"
         },
         {
-          "name": "death",
-          "sound": "SOLDIER_DEATH1",
-          "soundFrame": 0
+          "name": "death"
         }
       ],
+      "cues": {
+        "sight": "sound/knight/ksight.wav",
+        "wince": "sound/knight/khurt.wav",
+        "melee": "sound/knight/sword1.wav",
+        "death": "sound/knight/kdeath.wav"
+      },
       "mdlRig": {
         "jointVerts": [
           [
@@ -10407,35 +10457,35 @@
       ],
       "clips": [
         {
-          "name": "attack"
-        },
-        {
-          "name": "deathb",
-          "sound": "DOG_DDEATH",
+          "name": "attack",
+          "sound": "melee",
           "soundFrame": 0
         },
         {
-          "name": "pain",
-          "sound": "DOG_DPAIN1",
-          "soundFrame": 0
+          "name": "deathb"
         },
         {
-          "name": "painb",
-          "sound": "DOG_DPAIN1",
-          "soundFrame": 0
+          "name": "pain"
+        },
+        {
+          "name": "painb"
         },
         {
           "name": "run"
         },
         {
-          "name": "stand",
-          "sound": "DOG_DSIGHT",
-          "soundFrame": 0
+          "name": "stand"
         },
         {
           "name": "walk"
         }
       ],
+      "cues": {
+        "sight": "sound/dog/dsight.wav",
+        "wince": "sound/dog/dpain1.wav",
+        "melee": "sound/dog/dattack1.wav",
+        "death": "sound/dog/ddeath.wav"
+      },
       "mdlRig": {
         "jointVerts": [
           [
@@ -10576,29 +10626,29 @@
       ],
       "clips": [
         {
-          "name": "hover",
-          "sound": "WIZARD_WSIGHT",
-          "soundFrame": 0
+          "name": "hover"
         },
         {
           "name": "fly"
         },
         {
           "name": "magatt",
-          "sound": "WIZARD_WATTACK",
+          "sound": "shoot",
           "soundFrame": 0
         },
         {
-          "name": "pain",
-          "sound": "WIZARD_WPAIN",
-          "soundFrame": 0
+          "name": "pain"
         },
         {
-          "name": "death",
-          "sound": "WIZARD_WDEATH",
-          "soundFrame": 0
+          "name": "death"
         }
       ],
+      "cues": {
+        "sight": "sound/wizard/wsight.wav",
+        "wince": "sound/wizard/wpain.wav",
+        "shoot": "sound/wizard/wattack.wav",
+        "death": "sound/wizard/wdeath.wav"
+      },
       "mdlRig": {
         "jointVerts": [
           [
@@ -10731,28 +10781,31 @@
         },
         {
           "name": "swing",
-          "sound": "OGRE_OGSAWATK",
+          "sound": "melee",
           "soundFrame": 0
         },
         {
-          "name": "shoot"
+          "name": "shoot",
+          "sound": "shoot",
+          "soundFrame": 2
         },
         {
-          "name": "pain",
-          "sound": "SOLDIER_PAIN1",
-          "soundFrame": 0
+          "name": "pain"
         },
         {
-          "name": "death",
-          "sound": "SOLDIER_DEATH1",
-          "soundFrame": 0
+          "name": "death"
         },
         {
-          "name": "pull",
-          "sound": "SOLDIER_SIGHT1",
-          "soundFrame": 0
+          "name": "pull"
         }
       ],
+      "cues": {
+        "sight": "sound/ogre/ogwake.wav",
+        "wince": "sound/soldier/pain1.wav",
+        "melee": "sound/ogre/ogsawatk.wav",
+        "shoot": "sound/weapons/grenade.wav",
+        "death": "sound/ogre/ogdth.wav"
+      },
       "mdlRig": {
         "jointVerts": [
           [
@@ -10907,39 +10960,45 @@
       ],
       "clips": [
         {
-          "name": "stand",
-          "sound": "SOLDIER_SIGHT1",
-          "soundFrame": 0
+          "name": "stand"
         },
         {
           "name": "walk"
         },
         {
-          "name": "run"
+          "name": "smash",
+          "sound": "melee",
+          "soundFrame": 8
         },
         {
-          "name": "smash"
+          "name": "swingr",
+          "sound": "melee",
+          "soundFrame": 5
         },
         {
-          "name": "swingr"
+          "name": "swingl",
+          "sound": "melee",
+          "soundFrame": 4
         },
         {
-          "name": "swingl"
+          "name": "magic",
+          "sound": "shoot",
+          "soundFrame": 5
         },
         {
-          "name": "magic"
+          "name": "pain"
         },
         {
-          "name": "pain",
-          "sound": "SOLDIER_PAIN1",
-          "soundFrame": 0
-        },
-        {
-          "name": "death",
-          "sound": "SOLDIER_DEATH1",
-          "soundFrame": 0
+          "name": "death"
         }
       ],
+      "cues": {
+        "sight": "sound/shambler/ssight.wav",
+        "wince": "sound/soldier/pain1.wav",
+        "melee": "sound/shambler/melee1.wav",
+        "shoot": "sound/weapons/lhit.wav",
+        "death": "sound/shambler/sdeath.wav"
+      },
       "mdlRig": {
         "jointVerts": [
           [
@@ -11013,14 +11072,13 @@
           ]
         ]
       },
-      "lodZ": 64,
+      "lodZ": 20,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
       "exportClips": [
         "stand",
         "walk",
-        "run",
         "smash",
         "swingr",
         "swingl",
@@ -11124,17 +11182,23 @@
           "name": "rise"
         },
         {
-          "name": "death",
-          "sound": "SOLDIER_DEATH1",
-          "soundFrame": 0
+          "name": "death"
         },
         {
-          "name": "attack"
+          "name": "attack",
+          "sound": "shoot",
+          "soundFrame": 5
         },
         {
           "name": "shockc"
         }
       ],
+      "cues": {
+        "sight": "sound/soldier/sight1.wav",
+        "wince": "sound/soldier/pain1.wav",
+        "shoot": "sound/weapons/grenade.wav",
+        "death": "sound/boss1/death.wav"
+      },
       "mdlRig": {
         "jointVerts": [
           [
@@ -11386,9 +11450,7 @@
             "name": "rise"
           },
           {
-            "name": "death",
-            "sound": "SOLDIER_DEATH1",
-            "soundFrame": 0
+            "name": "death"
           },
           {
             "name": "attack"
@@ -11472,9 +11534,7 @@
       ],
       "clips": [
         {
-          "name": "stand",
-          "sound": "SOLDIER_SIGHT1",
-          "soundFrame": 0
+          "name": "stand"
         },
         {
           "name": "walk"
@@ -11483,25 +11543,33 @@
           "name": "run"
         },
         {
-          "name": "atta"
-        },
-        {
-          "name": "attb"
-        },
-        {
-          "name": "attc"
-        },
-        {
-          "name": "paina",
-          "sound": "SOLDIER_PAIN1",
+          "name": "atta",
+          "sound": "melee",
           "soundFrame": 0
         },
         {
-          "name": "paine",
-          "sound": "SOLDIER_PAIN1",
+          "name": "attb",
+          "sound": "melee",
           "soundFrame": 0
+        },
+        {
+          "name": "attc",
+          "sound": "melee",
+          "soundFrame": 0
+        },
+        {
+          "name": "paina"
+        },
+        {
+          "name": "paine"
         }
       ],
+      "cues": {
+        "sight": "sound/soldier/sight1.wav",
+        "wince": "sound/soldier/pain1.wav",
+        "melee": "sound/shambler/melee1.wav",
+        "death": "sound/soldier/death1.wav"
+      },
       "mdlRig": {
         "jointVerts": [
           [
@@ -11605,6 +11673,259 @@
         "attc",
         "paina",
         "paine"
+      ]
+    },
+    {
+      "id": "5ac6ae69-2aae-4292-913a-722083c36570",
+      "name": "Demon",
+      "verts": 15,
+      "lines": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          2
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          5,
+          6
+        ],
+        [
+          2,
+          5
+        ],
+        [
+          2,
+          7
+        ],
+        [
+          7,
+          8
+        ],
+        [
+          8,
+          10
+        ],
+        [
+          9,
+          11
+        ],
+        [
+          7,
+          12
+        ],
+        [
+          2,
+          13
+        ],
+        [
+          7,
+          13
+        ],
+        [
+          9,
+          13
+        ],
+        [
+          13,
+          14
+        ]
+      ],
+      "clips": [
+        {
+          "name": "stand"
+        },
+        {
+          "name": "run"
+        },
+        {
+          "name": "leap",
+          "sound": "melee",
+          "soundFrame": 9
+        },
+        {
+          "name": "pain"
+        },
+        {
+          "name": "death"
+        },
+        {
+          "name": "attacka",
+          "sound": "melee",
+          "soundFrame": 5
+        }
+      ],
+      "cues": {
+        "sight": "sound/demon/sight2.wav",
+        "wince": "sound/demon/dpain1.wav",
+        "melee": "sound/demon/dhit2.wav",
+        "shoot": "sound/demon/djump.wav",
+        "death": "sound/demon/ddeath.wav"
+      },
+      "mdlRig": {
+        "jointVerts": [
+          [
+            96
+          ],
+          [
+            39,
+            105,
+            120,
+            122
+          ],
+          [
+            29,
+            51
+          ],
+          [
+            84
+          ],
+          [
+            10,
+            94
+          ],
+          [
+            25
+          ],
+          [
+            55,
+            85
+          ],
+          [
+            73,
+            124
+          ],
+          [
+            44,
+            45,
+            118,
+            130
+          ],
+          [
+            126,
+            127,
+            132,
+            135
+          ],
+          [
+            13,
+            15,
+            137,
+            138
+          ],
+          [
+            87,
+            89,
+            141,
+            142
+          ],
+          [
+            7
+          ],
+          [
+            33,
+            125
+          ],
+          [
+            2
+          ]
+        ]
+      },
+      "lodZ": 8,
+      "customSkeleton": true,
+      "stockGraph": {
+        "verts": 13,
+        "lines": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ],
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            3
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            4,
+            5
+          ],
+          [
+            2,
+            6
+          ],
+          [
+            6,
+            7
+          ],
+          [
+            0,
+            8
+          ],
+          [
+            8,
+            9
+          ],
+          [
+            1,
+            10
+          ],
+          [
+            10,
+            11
+          ],
+          [
+            7,
+            12
+          ]
+        ],
+        "mdlRig": {
+          "jointVerts": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ]
+        },
+        "clips": []
+      },
+      "customGraph": null,
+      "exportClips": [
+        "stand",
+        "run",
+        "leap",
+        "pain",
+        "death",
+        "attacka"
       ]
     }
   ],
@@ -12712,12 +13033,8 @@
       "voice": 0,
       "priority": 1,
       "attack": 0,
-      "freq": [
-        131,
-        142,
-        134
-      ],
       "origin": "wolf",
+      "library": "HITWALL",
       "alias": "HITWALL"
     },
     "sound/player/death1.wav": {
@@ -12725,79 +13042,17 @@
       "voice": 0,
       "priority": 99,
       "attack": 0,
-      "freq": [
-        21,
-        30,
-        39,
-        45,
-        52,
-        15,
-        77,
-        98,
-        17,
-        0,
-        30,
-        0,
-        36,
-        0,
-        79,
-        79
-      ],
       "origin": "wolf",
+      "library": "PLAYERDEATH",
       "alias": "PLAYERDEATH"
-    },
-    "sound/dog/ddeath.wav": {
-      "export": true,
-      "voice": 1,
-      "priority": 50,
-      "attack": 0,
-      "freq": [
-        19,
-        16,
-        15,
-        27,
-        40,
-        43,
-        57,
-        69,
-        83,
-        103,
-        111,
-        157,
-        145,
-        152,
-        159
-      ],
-      "origin": "wolf",
-      "alias": "DOGDEATH"
     },
     "sound/player/pain1.wav": {
       "export": true,
       "voice": 0,
       "priority": 90,
       "attack": 0,
-      "freq": [
-        62,
-        59,
-        55,
-        52,
-        49,
-        63,
-        75,
-        80,
-        69,
-        78,
-        65,
-        77,
-        68,
-        62,
-        56,
-        74,
-        67,
-        61,
-        55
-      ],
       "origin": "wolf",
+      "library": "TAKEDAMAGE",
       "alias": "TAKEDAMAGE"
     },
     "sound/doors/hydro1.wav": {
@@ -12805,206 +13060,44 @@
       "voice": 2,
       "priority": 20,
       "attack": 0,
-      "freq": [
-        119,
-        118,
-        118,
-        116,
-        114,
-        111,
-        107,
-        101,
-        95,
-        89,
-        83,
-        77
-      ],
-      "origin": "wolf",
+      "origin": "doom",
+      "library": "DPDOROPN",
       "alias": "OPENDOOR"
-    },
-    "sound/soldier/sight1.wav": {
-      "export": true,
-      "voice": 1,
-      "priority": 50,
-      "attack": 0,
-      "freq": [
-        42,
-        38,
-        35,
-        31,
-        31,
-        31,
-        32,
-        46,
-        60,
-        77,
-        85,
-        105,
-        132,
-        140,
-        145,
-        148,
-        151,
-        153,
-        157,
-        0,
-        0,
-        0,
-        138,
-        138,
-        138
-      ],
-      "origin": "wolf",
-      "alias": "HALT"
     },
     "sound/weapons/spike2.wav": {
       "export": true,
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        104,
-        107,
-        101,
-        123
-      ],
       "origin": "wolf",
+      "library": "ATKMACHINEGUN",
       "alias": "ATKMACHINEGUN"
     },
     "sound/weapons/lhit.wav": {
       "export": true,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [
-        130,
-        25,
-        33,
-        78,
-        26,
-        18,
-        18,
-        25,
-        0,
-        32
-      ],
-      "origin": "wolf",
-      "alias": "HITENEMY"
-    },
-    "sound/soldier/death1.wav": {
-      "export": true,
       "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        60,
-        55,
-        51,
-        26,
-        37,
-        31,
-        15,
-        16,
-        23,
-        29,
-        74,
-        28,
-        31,
-        27,
-        34,
-        42,
-        38,
-        34,
-        36,
-        41
-      ],
       "origin": "wolf",
-      "alias": "DEATHSCREAM1"
+      "library": "HITENEMY",
+      "alias": "HITENEMY"
     },
     "sound/weapons/grenade.wav": {
       "export": true,
       "voice": 1,
       "priority": 20,
       "attack": 0,
-      "freq": [
-        16,
-        110,
-        40,
-        40,
-        33,
-        103,
-        41,
-        115,
-        137
-      ],
       "origin": "wolf",
+      "library": "SHOOT",
       "alias": "SHOOT"
-    },
-    "sound/dog/dsight.wav": {
-      "export": true,
-      "voice": 1,
-      "priority": 50,
-      "attack": 0,
-      "freq": [
-        64,
-        56,
-        47,
-        41,
-        142,
-        144,
-        37,
-        48,
-        144,
-        57,
-        67,
-        82,
-        93,
-        104,
-        123,
-        151,
-        151
-      ],
-      "origin": "wolf",
-      "alias": "DOGBARK"
     },
     "sound/items/itembk2.wav": {
       "export": true,
       "voice": 0,
       "priority": 90,
       "attack": 0,
-      "freq": [
-        36,
-        36,
-        36,
-        36,
-        36,
-        36,
-        36,
-        36,
-        0,
-        0,
-        55,
-        55,
-        55,
-        55,
-        55,
-        55,
-        55,
-        55,
-        0,
-        55,
-        55,
-        55,
-        55,
-        0,
-        25,
-        25,
-        25,
-        25,
-        25,
-        25
-      ],
       "origin": "wolf",
+      "library": "GETKEY",
       "alias": "GETKEY"
     },
     "sound/weapons/pkup.wav": {
@@ -13012,30 +13105,8 @@
       "voice": 0,
       "priority": 80,
       "attack": 0,
-      "freq": [
-        34,
-        34,
-        34,
-        34,
-        34,
-        34,
-        0,
-        0,
-        0,
-        20,
-        20,
-        20,
-        0,
-        20,
-        20,
-        20,
-        20,
-        20,
-        20,
-        20,
-        20
-      ],
       "origin": "wolf",
+      "library": "GETAMMO",
       "alias": "GETAMMO"
     },
     "sound/items/health1.wav": {
@@ -13043,32 +13114,8 @@
       "voice": 0,
       "priority": 85,
       "attack": 0,
-      "freq": [
-        58,
-        0,
-        0,
-        51,
-        51,
-        0,
-        0,
-        38,
-        38,
-        0,
-        0,
-        22,
-        22,
-        0,
-        0,
-        22,
-        22,
-        22,
-        0,
-        0,
-        21,
-        21,
-        21
-      ],
       "origin": "wolf",
+      "library": "HEALTH1",
       "alias": "HEALTH1",
       "extraAliases": [
         "HEALTH2"
@@ -13079,12 +13126,8 @@
       "voice": 0,
       "priority": 1,
       "attack": 0,
-      "freq": [
-        114,
-        60,
-        114
-      ],
       "origin": "wolf",
+      "library": "MOVEGUN1",
       "alias": "SWITCH"
     },
     "sound/items/damage.wav": {
@@ -13092,49 +13135,8 @@
       "voice": 0,
       "priority": 70,
       "attack": 0,
-      "freq": [
-        61,
-        53,
-        49,
-        46,
-        45,
-        51,
-        57,
-        64,
-        71,
-        74,
-        73,
-        69,
-        58,
-        41,
-        33,
-        30,
-        29,
-        28,
-        31,
-        35,
-        41,
-        46,
-        49,
-        47,
-        41,
-        30,
-        20,
-        0,
-        0,
-        0,
-        18,
-        18,
-        18,
-        0,
-        18,
-        18,
-        18,
-        18,
-        18,
-        18
-      ],
       "origin": "wolf",
+      "library": "BONUS1",
       "alias": "BONUS1"
     },
     "sound/weapons/shotgn2.wav": {
@@ -13142,25 +13144,8 @@
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        40,
-        57,
-        49,
-        60,
-        48,
-        52,
-        64,
-        68,
-        57,
-        74,
-        78,
-        81,
-        72,
-        70,
-        83,
-        107
-      ],
-      "origin": "wolf",
+      "origin": "doom",
+      "library": "DPSHOTGN",
       "alias": "SHOTGN"
     },
     "sound/weapons/r_exp3.wav": {
@@ -13168,159 +13153,87 @@
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        81,
-        78,
-        60,
-        107,
-        83,
-        64,
-        32,
-        83,
-        107,
-        33,
-        36,
-        60,
-        44,
-        47,
-        64,
-        114,
-        107,
-        105,
-        26,
-        47,
-        47,
-        78,
-        101,
-        32,
-        83,
-        47,
-        43
-      ],
-      "origin": "wolf",
+      "origin": "empty",
       "alias": "BAREXP"
-    },
-    "sound/ogre/ogsawatk.wav": {
-      "export": true,
-      "voice": 0,
-      "priority": 20,
-      "attack": 0,
-      "freq": [
-        59,
-        47,
-        59,
-        37,
-        59,
-        47,
-        59
-      ],
-      "origin": "wolf",
-      "alias": "SAWFUL"
-    },
-    "sound/ogre/ogdrag.wav": {
-      "export": true,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [
-        48,
-        55,
-        44,
-        54,
-        36,
-        49,
-        30,
-        47,
-        26
-      ],
-      "origin": "wolf",
-      "alias": "SAWHIT"
     },
     "sound/player/land.wav": {
       "export": true,
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        83,
-        78,
-        78,
-        85
-      ],
-      "origin": "wolf",
+      "origin": "doom",
+      "library": "DPOOF",
       "alias": "OOF"
+    },
+    "sound/dog/ddeath.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "wolf",
+      "library": "DOGDEATH"
+    },
+    "sound/soldier/sight1.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPPOSACT"
+    },
+    "sound/soldier/death1.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPPODTH1"
+    },
+    "sound/dog/dsight.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "wolf",
+      "library": "DOGBARK"
+    },
+    "sound/ogre/ogsawatk.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 20,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPSAWFUL"
     },
     "sound/dog/dpain1.wav": {
       "export": true,
       "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        15,
-        28,
-        31,
-        23,
-        31,
-        29,
-        38,
-        45,
-        45,
-        52,
-        64,
-        96
-      ],
-      "origin": "wolf",
-      "alias": "DMPAIN"
+      "origin": "doom",
+      "library": "DPDMPAIN"
     },
     "sound/soldier/pain1.wav": {
       "export": true,
       "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        88,
-        62,
-        57,
-        39,
-        28,
-        35,
-        28,
-        28,
-        31,
-        44,
-        57,
-        81,
-        83
-      ],
-      "origin": "wolf",
-      "alias": "POPAIN"
+      "origin": "doom",
+      "library": "DPPOPAIN"
     },
     "sound/dog/dattack1.wav": {
       "export": true,
       "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        0
-      ],
-      "origin": "empty"
-    },
-    "sound/dog/idle.wav": {
-      "export": true,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [
-        0
-      ],
-      "origin": "empty"
+      "origin": "wolf",
+      "library": "DOGATTACK"
     },
     "sound/items/armor1.wav": {
       "export": false,
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [],
       "origin": "empty"
     },
     "sound/items/protect.wav": {
@@ -13328,7 +13241,6 @@
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [],
       "origin": "empty"
     },
     "sound/items/r_item1.wav": {
@@ -13336,7 +13248,6 @@
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [],
       "origin": "empty"
     },
     "sound/items/r_item2.wav": {
@@ -13344,7 +13255,6 @@
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [],
       "origin": "empty"
     },
     "sound/items/suit.wav": {
@@ -13352,149 +13262,44 @@
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [],
       "origin": "empty"
     },
     "sound/ogre/ogdth.wav": {
-      "export": false,
-      "voice": 0,
+      "export": true,
+      "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [],
-      "origin": "empty"
-    },
-    "sound/ogre/ogidle.wav": {
-      "export": false,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [],
-      "origin": "empty"
-    },
-    "sound/ogre/ogidle2.wav": {
-      "export": false,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [],
-      "origin": "empty"
+      "origin": "wolf",
+      "library": "DEATHSCREAM3"
     },
     "sound/wizard/wattack.wav": {
       "export": true,
-      "voice": 0,
+      "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        0
-      ],
-      "origin": "empty"
+      "origin": "doom",
+      "library": "DPPLASMA"
     },
     "sound/wizard/wdeath.wav": {
       "export": true,
-      "voice": 0,
+      "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        0
-      ],
       "origin": "empty"
     },
     "sound/boss1/death.wav": {
-      "export": false,
-      "voice": 0,
+      "export": true,
+      "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        50,
-        50,
-        50,
-        50,
-        50,
-        50,
-        50,
-        51,
-        51,
-        51,
-        51,
-        52,
-        52,
-        53,
-        53,
-        53,
-        53,
-        53,
-        54,
-        54,
-        55,
-        55,
-        55,
-        56,
-        56,
-        57,
-        58,
-        59,
-        61,
-        63,
-        65,
-        68,
-        71,
-        73,
-        76,
-        78,
-        79,
-        81,
-        83,
-        86,
-        89,
-        92,
-        93,
-        96,
-        99,
-        102,
-        105,
-        107,
-        109,
-        112,
-        114,
-        116,
-        118,
-        120,
-        121,
-        123,
-        126,
-        129,
-        131,
-        134,
-        136,
-        138,
-        140,
-        142,
-        144,
-        146,
-        148,
-        149,
-        150,
-        152,
-        156,
-        158
-      ],
       "origin": "wolf",
       "library": "TOT_HUND"
-    },
-    "sound/boss1/out1.wav": {
-      "export": false,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [],
-      "origin": "empty"
     },
     "sound/boss1/pain.wav": {
       "export": false,
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [],
       "origin": "empty"
     },
     "sound/boss1/sight1.wav": {
@@ -13502,78 +13307,127 @@
       "voice": 0,
       "priority": 50,
       "attack": 0,
-      "freq": [],
-      "origin": "empty"
-    },
-    "sound/boss1/throw.wav": {
-      "export": false,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [],
       "origin": "empty"
     },
     "sound/soldier/sattck1.wav": {
       "export": true,
-      "voice": 0,
+      "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        0
-      ],
-      "origin": "empty"
-    },
-    "sound/weapons/ax1.wav": {
-      "export": false,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [],
-      "origin": "empty"
-    },
-    "sound/wizard/hit.wav": {
-      "export": false,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [],
-      "origin": "empty"
-    },
-    "sound/wizard/widle1.wav": {
-      "export": false,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [],
-      "origin": "empty"
-    },
-    "sound/wizard/widle2.wav": {
-      "export": false,
-      "voice": 0,
-      "priority": 50,
-      "attack": 0,
-      "freq": [],
-      "origin": "empty"
+      "origin": "wolf",
+      "library": "ATKPISTOL"
     },
     "sound/wizard/wpain.wav": {
       "export": true,
-      "voice": 0,
+      "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        0
-      ],
-      "origin": "empty"
+      "origin": "wolf",
+      "library": "HITENEMY"
     },
     "sound/wizard/wsight.wav": {
       "export": true,
-      "voice": 0,
+      "voice": 1,
       "priority": 50,
       "attack": 0,
-      "freq": [
-        0
-      ],
-      "origin": "empty"
+      "origin": "doom",
+      "library": "DPBGSIT1"
+    },
+    "sound/knight/kdeath.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPBGDTH1"
+    },
+    "sound/shambler/sdeath.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPBGDTH1"
+    },
+    "sound/ogre/ogwake.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPBRSSIT"
+    },
+    "sound/knight/ksight.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "wolf",
+      "library": "SCHUTZAD"
+    },
+    "sound/knight/sword1.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "wolf",
+      "library": "ATKKNIFE"
+    },
+    "sound/shambler/melee1.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPCLAW"
+    },
+    "sound/shambler/ssight.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPBRSSIT"
+    },
+    "sound/knight/khurt.wav": {
+      "export": true,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "wolf",
+      "library": "HITENEMY"
+    },
+    "sound/demon/sight2.wav": {
+      "export": false,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPBGACT"
+    },
+    "sound/demon/dpain1.wav": {
+      "export": false,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPPLPAIN"
+    },
+    "sound/demon/dhit2.wav": {
+      "export": false,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPCLAW"
+    },
+    "sound/demon/ddeath.wav": {
+      "export": false,
+      "voice": 1,
+      "priority": 50,
+      "attack": 0,
+      "origin": "doom",
+      "library": "DPBGDTH1"
     }
   }
 }

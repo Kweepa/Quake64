@@ -153,8 +153,6 @@ ai_shambler_entry
 	bne .bolt_dmg
 	lda #1
 	sta sham_arc
-	lda #<SOUND_WEAPONS_LHIT
-	jsr play_sound
 .bolt_dmg
 	jsr .trace
 	bcs .bolt_miss

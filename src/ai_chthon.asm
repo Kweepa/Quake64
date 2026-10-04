@@ -157,9 +157,7 @@ ai_chthon_entry
 	ldx obj_i
 	lda #GREN_F_LAVA
 	sta gr_flags,x
-	jsr .ch_aim
-	lda #<SOUND_WEAPONS_GRENADE
-	jmp play_sound
+	jmp .ch_aim
 .ch_fire_rts
 	rts
 
@@ -456,6 +454,8 @@ ai_chthon_entry
 	sta en_state,x
 	lda #1
 	sta ch_shock
+	lda #CUE_WINCE
+	jsr enemy_play_cue
 	jmp .chs_eat
 
 ; 10 segments, same X, spaced along Z, Y jittered off the straight line.

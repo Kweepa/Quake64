@@ -45,13 +45,40 @@ ent_set_ptrs
 	sta gz_ptr+1
 	rts
 
-; X = enemy. A preserved. Y = type * PAIN_MAX + en_pain_i (pain/death/attack variant)
+; X = enemy. Y = meta slot 0 or 1. A and X preserved. Does not use rot*.
+ldy_slot
+	pha
+	+lda_mx en_type
+	cmp meta_slot_type
+	beq .ls0
+	ldy #1
+	pla
+	rts
+.ls0	ldy #0
+	pla
+	rts
+
+; Y = type id. Y := slot. A and X preserved.
+slot_of_y
+	pha
+	tya
+	cmp meta_slot_type
+	beq .sofy0
+	ldy #1
+	pla
+	rts
+.sofy0	ldy #0
+	pla
+	rts
+
+; X = enemy. A preserved. Y = slot * PAIN_MAX + en_pain_i (pain/death/attack variant)
 !if PAIN_MAX != 4 {
 	!error "pain_var_off assumes PAIN_MAX=4"
 }
 pain_var_off
 	sta rot0
-	+lda_mx en_type
+	jsr ldy_slot
+	tya
 	asl
 	asl
 	clc
@@ -60,10 +87,17 @@ pain_var_off
 	lda rot0
 	rts
 
-; X = enemy. A = enemy_class[type]. Y = type. X preserved.
+; X = enemy. A = enemy_class[slot]. Y = type. X preserved.
 enemy_get_class
 	+ldy_mx en_type
+	tya
+	pha
+	jsr ldy_slot
 	lda enemy_class,y
+	sta meta_scratch
+	pla
+	tay
+	lda meta_scratch
 	rts
 
 ; X = enemy. Y = logical timeline frame (clip start + en_frame).
@@ -85,28 +119,28 @@ enemy_logical_frame
 	cmp #EN_PATROL
 	beq .elf_walk
 	lda en_frame,x
-	+ldy_mx en_type
+	jsr ldy_slot
 	clc
 	adc enemy_stand_start,y
 	tay
 	rts
 .elf_run
 	lda en_frame,x
-	+ldy_mx en_type
+	jsr ldy_slot
 	clc
 	adc enemy_run_start,y
 	tay
 	rts
 .elf_walk
 	lda en_frame,x
-	+ldy_mx en_type
+	jsr ldy_slot
 	clc
 	adc enemy_walk_start,y
 	tay
 	rts
 .elf_alert
 	lda en_frame,x
-	+ldy_mx en_type
+	jsr ldy_slot
 	clc
 	adc enemy_alert_start,y
 	tay
@@ -2464,7 +2498,8 @@ draw_enemies
 }
 	lda CAM_ZH+11
 	bmi .de_full
-	ldy ent_type
+	ldx obj_i
+	jsr ldy_slot
 	cmp enemy_lod_z,y
 	bcc .de_full
 	jsr ent_far_project
@@ -2608,11 +2643,14 @@ enemy_muzzle_want
 	bne .emw_no			; Rottweiler — leap bite, no muzzle
 	cpy #ENT_KNIGHT
 	beq .emw_no			; knight slash — no muzzle
+	cpy #ENT_DEMON
+	beq .emw_no			; claw / leap — no muzzle
 	cpy #ENT_OGRE
 	bne .emw_ff
 	lda en_pain_i,x
 	beq .emw_no			; swing — no muzzle
 .emw_ff
+	jsr ldy_slot
 	lda enemy_fire_frame,y
 	bmi .emw_no			; $ff = none
 	lda emuz_pending
@@ -2628,7 +2666,7 @@ enemy_muzzle_want
 	clc
 	rts
 
-; X = enemy index → EN_DYING, frame 0, clip death SFX
+; X = enemy index → EN_DYING, frame 0, death cue
 kill_enemy
 	+lda_mx en_type
 	cmp #ENT_SHAMBLER
@@ -2645,8 +2683,8 @@ kill_enemy
 	jsr pick_death_var
 	stx enemy_idx
 	jsr clear_spit_if_owner
-	ldx enemy_idx
-	jmp enemy_play_clip_sfx_enter
+	lda #CUE_DEATH
+	jmp enemy_play_cue
 
 ; X = enemy finishing death → EN_GONE + optional drop (preserves X)
 finish_enemy_death
@@ -2659,6 +2697,7 @@ finish_enemy_death
 	bne +
 	jmp episode_done
 +
+	jsr ldy_slot
 	lda enemy_drop_type,y
 	cmp #$ff
 	bne .fed_drop

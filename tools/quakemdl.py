@@ -22,6 +22,7 @@ ENEMY_MDL_PATHS = {
     "Shambler": "progs/shambler.mdl",
     "Chthon": "progs/boss.mdl",
     "Zombie": "progs/zombie.mdl",
+    "Demon": "progs/demon.mdl",
 }
 
 _EXTRA_PAIN_DEATH = re.compile(r"^pain[b-z]|^death[b-z]|^deathc$|^bdeath$")

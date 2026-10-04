@@ -26,6 +26,7 @@ ENEMY_TYPE = {
     "Shambler": 5,
     "Chthon": 6,
     "Zombie": 7,
+    "Demon": 8,
 }
 MAP_MAX_BYTES = 4096
 ROOM_MAX_TYPES = 2
@@ -1285,7 +1286,8 @@ ENT_OGRE	= 4
 ENT_SHAMBLER	= 5
 ENT_CHTHON	= 6
 ENT_ZOMBIE	= 7
-ENEMY_NTYPES	= 8
+ENT_DEMON	= 8
+ENEMY_NTYPES	= 9
 ENEMY_CLASS_HUM	= 0
 ENEMY_CLASS_DOG	= 1
 """

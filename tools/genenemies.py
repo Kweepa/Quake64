@@ -24,15 +24,17 @@ SKEL_MAX_VERTS = 48
 SKEL_MAX_EDGES = 64
 MESH_BATCH_VERTS = 16  # mesh.asm MESH_MAX_VERTS
 MESH_BATCH_EDGES = 32
-TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon", "Zombie"]
-DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
+TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon", "Zombie", "Demon"]
+DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie", "demon"]
 ENEMY_POSE_MAX = 7680
-ENEMY_DATA_BASE = 0x06F7
+ENEMY_DATA_BASE = 0x0701  # mem.asm asserts en_sfx_armed+1 == $0701
+META_ROW = 42  # mem.asm META_ROW; prepended to every .pose
 PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
 DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
-# Clip-local fire frames (matches enemy_fire_frame). Pinned as an attack key.
-FIRE_FRAME = [2, 5, 4, 6, 2, 5, 5, 255]  # Shambler magic is special-cased; Zombie via AI_CMD_ATTACK_TICK
+# Clip-local fire frames (matches the pose-row fire byte). Pinned as an attack key.
+# Shambler magic and Demon leap are special-cased in enemy.asm; Zombie via AI_CMD_ATTACK_TICK.
+FIRE_FRAME = [2, 5, 4, 6, 2, 5, 5, 255, 5]
 CHTHON_FIRE2 = 17  # second lava throw; keep in sync with mem.asm CHTHON_FIRE2
 # Mid-distance stick LOD threshold (CAM_ZH); Ogre needs more for chainsaw tip.
 DEFAULT_LOD_Z = {
@@ -44,6 +46,7 @@ DEFAULT_LOD_Z = {
     "Shambler": 64,
     "Chthon": 4,
     "Zombie": 4,
+    "Demon": 8,
 }
 
 HP_QUAKE = {
@@ -55,7 +58,24 @@ HP_QUAKE = {
     "Shambler": 600,
     "Chthon": 400,
     "Zombie": 60,
+    "Demon": 300,
 }
+
+# Resident only while the type's bank is loaded. Two slots, not N columns.
+RANGE = {
+    "Grunt": 30,
+    "Knight": 6,
+    "Rottweiler": 4,
+    "Scrag": 24,
+    "Ogre": 30,
+    "Shambler": 30,
+    "Chthon": 40,
+    "Zombie": 30,
+    "Demon": 10,
+}
+PAIN_CHANCE = {"Rottweiler": 0xC0}
+DROP_TYPE = {"Grunt": 7, "Ogre": 4}
+ENEMY_CLASS = {"Rottweiler": 1}
 
 # Single roles: (clip_name, len_override|None). Attack: list of candidate names
 # present after exportClips — all matching clips become variants (like pain/death).
@@ -98,9 +118,9 @@ ROLE_CLIPS = {
     "Shambler": {
         "stand": ("stand", None),
         "alert": ("smash", None),
-        "run": ("run", None),
+        "run": ("walk", None),
         "walk": ("walk", None),
-        "attack": ["magic", "smash", "swingr", "swingl"],
+        "attack": ["smash", "swingr", "swingl", "magic"],
     },
     "Chthon": {
         "stand": ("rise", None),
@@ -115,6 +135,13 @@ ROLE_CLIPS = {
         "run": ("walk", None),
         "walk": ("walk", None),
         "attack": ["atta", "attb", "attc"],
+    },
+    "Demon": {
+        "stand": ("stand", None),
+        "alert": ("stand", 4),
+        "run": ("run", None),
+        "walk": ("run", None),
+        "attack": ["attacka", "leap"],
     },
 }
 
@@ -145,13 +172,80 @@ def clip_with_sound(dst: dict, src: dict) -> dict:
     return dst
 
 
+CUE_ORDER = ["sight", "wince", "melee", "shoot", "death"]  # fixed: CUE_* indices in enemy.asm
+CUE_REQUIRED = ("sight", "wince", "death")
+CUE_NONE = 0xFF
+
+
+def cue_ident(path) -> str:
+    """sound/dog/ddeath.wav -> DOG_DDEATH (same ident gensounds.py exports)."""
+    rest = str(path or "").strip().replace("\\", "/")
+    if rest.lower().startswith("sound/"):
+        rest = rest[6:]
+    if rest.lower().endswith(".wav"):
+        rest = rest[:-4]
+    return re.sub(r"[^A-Za-z0-9]+", "_", rest).strip("_").upper()
+
+
+def pack_cues(enemy: dict, ids: dict[str, int]) -> bytes:
+    """Five sound ids [sight, wince, melee, shoot, death]; $FF = none ($00 is a real sound)."""
+    name = enemy.get("name", "?")
+    cues = enemy.get("cues") or {}
+    for k in cues:
+        if k not in CUE_ORDER:
+            raise SystemExit(f"{name}: unknown cue {k!r}")
+    out = bytearray()
+    for cue in CUE_ORDER:
+        path = cues.get(cue)
+        if not path:
+            if cue in CUE_REQUIRED:
+                raise SystemExit(f"{name}: required cue '{cue}' is not set")
+            out.append(CUE_NONE)
+            continue
+        ident = cue_ident(path)
+        if ident not in ids:
+            if cue in CUE_REQUIRED:
+                raise SystemExit(f"{name} cue {cue}: SOUND_{ident} not in bank (run gensounds.py first)")
+            out.append(CUE_NONE)
+            continue
+        sid = ids[ident]
+        if sid >= CUE_NONE:
+            raise SystemExit(f"{name} cue {cue}: sound id {sid} overflow")
+        out.append(sid)
+    return bytes(out)
+
+
+def resolve_clip_sound(enemy: dict, clip: dict) -> str | None:
+    """Bank ident for a clip sound. melee/shoot names the cue. A legacy stem must match one."""
+    stem = clip_sound_stem(clip.get("sound"))
+    if not stem:
+        return None
+    name = enemy.get("name", "?")
+    clip_name = clip.get("name", "?")
+    cues = enemy.get("cues") or {}
+    key = stem.lower()
+    if key in ("melee", "shoot"):
+        path = cues.get(key)
+        if not path:
+            raise SystemExit(f"{name} clip {clip_name}: {key} cue has no sound")
+        return cue_ident(path)
+    for cue in ("melee", "shoot"):
+        path = cues.get(cue)
+        if path and cue_ident(path) == stem:
+            return stem
+    raise SystemExit(
+        f"{name} clip {clip_name}: {stem} is not this enemy's melee or shoot cue "
+        f"(sight/wince/death play generically)"
+    )
+
+
 def pack_clip_events(enemy: dict, ids: dict[str, int]) -> bytes:
-    """One {logical_frame, id} per authored clip sound. logical = clip.start + soundFrame."""
+    """One {logical_frame, id} per clip carrying a melee/shoot sound. logical = clip.start + soundFrame."""
     name = enemy.get("name", "?")
     out: list[int] = []
     seen: set[tuple[int, int]] = set()
     for c in enemy.get("clips") or []:
-        stem = clip_sound_stem(c.get("sound"))
+        stem = resolve_clip_sound(enemy, c)
         if not stem:
             continue
         if stem not in ids:
@@ -163,15 +257,24 @@ def pack_clip_events(enemy: dict, ids: dict[str, int]) -> bytes:
             frame = 0
         if frame >= length:
             frame = length - 1
-        logical = start + frame
+        frames = [start + frame]
+        # Chthon throws lava twice per attack; a shoot sound on the first throw covers the second.
+        if (
+            name == "Chthon"
+            and clip_key(c.get("name", "")) == "attack"
+            and frame == FIRE_FRAME[TYPES.index("Chthon")]
+            and CHTHON_FIRE2 < length
+        ):
+            frames.append(start + CHTHON_FIRE2)
         sid = ids[stem]
-        if logical > 255 or sid > 255:
-            raise SystemExit(f"{name} clip {c.get('name')}: event byte overflow")
-        key = (logical, sid)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.extend([logical, sid])
+        for logical in frames:
+            if logical > 255 or sid > 255:
+                raise SystemExit(f"{name} clip {c.get('name')}: event byte overflow")
+            key = (logical, sid)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.extend([logical, sid])
     n = len(out) // 2
     if n > 255:
         raise SystemExit(f"{name}: {n} clip events > 255")
@@ -215,6 +318,32 @@ def require_role(enemy: dict, role: str) -> tuple[int, int]:
     if clips:
         return int(clips[0]["start"]), max(1, int(clips[0]["len"]))
     raise SystemExit(f"{enemy['name']}: no {role} clip (and no fallback)")
+
+
+SHAMBLER_ATTACKS = ("smash", "swingr", "swingl", "magic")
+
+
+def check_shambler_roles(enemy: dict) -> None:
+    """Slot 0..3 are smash, swingr, swingl, magic. Chase plays the walk clip."""
+    if enemy.get("name") != "Shambler":
+        return
+    want = list(SHAMBLER_ATTACKS)
+    got = [
+        clip_key(c.get("name", ""))
+        for c in enemy.get("clips") or []
+        if clip_key(c.get("name", "")) in set(want)
+    ]
+    if got != want:
+        raise SystemExit(
+            "Shambler attacks must be "
+            + ", ".join(want)
+            + " in export order, got "
+            + (", ".join(got) if got else "none")
+        )
+    run = find_role(enemy, "run")
+    walk = find_role(enemy, "walk")
+    if run is None or run != walk:
+        raise SystemExit("Shambler run role must resolve to the walk clip")
 
 
 def find_attack_clips(enemy: dict) -> list[tuple[int, int]]:
@@ -378,6 +507,76 @@ def pad_variants(clips: list[tuple[int, int]]) -> tuple[int, list[int], list[int
             starts.append(0)
             lens.append(0)
     return len(clips), starts, lens
+
+
+def build_meta_row(name: str, enemy: dict, nframes: int, n_stored: int, lod: int) -> bytes:
+    """42-byte pose prefix. Offsets match copy_meta_row in loader.asm."""
+    row = bytearray(META_ROW)
+    o = 0
+    for role in ("stand", "alert", "run", "walk"):
+        start, length = require_role(enemy, role)
+        if start + length > nframes:
+            length = max(1, nframes - start)
+        row[o] = start & 0xFF
+        row[o + 1] = length & 0xFF
+        o += 2
+    atk: list[tuple[int, int]] = []
+    for s, ln in find_attack_clips(enemy):
+        if s >= nframes or ln <= 0:
+            continue
+        atk.append((s, min(ln, nframes - s)))
+    if not atk:
+        atk = [(0, 1)]
+    n, starts, lens = pad_variants(atk)
+    row[o] = n
+    o += 1
+    for b in starts + lens:
+        row[o] = b & 0xFF
+        o += 1
+    for what in ("pain", "death"):
+        n, starts, lens = pad_variants(find_variant_clips(enemy, variant_key(enemy, what), what))
+        row[o] = n
+        o += 1
+        for b in starts + lens:
+            row[o] = b & 0xFF
+            o += 1
+    row[o] = RANGE[name]
+    o += 1
+    row[o] = PAIN_CHANCE.get(name, 0x80)
+    o += 1
+    row[o] = DROP_TYPE.get(name, 0xFF)
+    o += 1
+    row[o] = FIRE_FRAME[TYPES.index(name)] & 0xFF
+    o += 1
+    row[o] = ENEMY_CLASS.get(name, 0)
+    o += 1
+    row[o] = lod & 0xFF
+    o += 1
+    row[o] = n_stored & 0xFF
+    o += 1
+    if o != META_ROW:
+        raise SystemExit(f"{name}: meta row wrote {o} bytes, expected {META_ROW}")
+    if name == "Demon":
+        # MDL order is leap then attacka, so variant 0 is the leap.
+        leap = next(
+            (
+                c
+                for c in enemy.get("clips") or []
+                if clip_key(c.get("name", "")) == "leap"
+            ),
+            None,
+        )
+        leap_len = int(leap["len"]) if leap else 0
+        print(
+            f"Demon attack_n={row[8]} starts={list(row[9:13])} lens={list(row[13:17])} "
+            f"leap_len={leap_len} fire_byte={row[38]}"
+        )
+        if leap_len < 10:
+            raise SystemExit(
+                f"Demon leap is {leap_len} frames; DEMON_LEAP_FIRE is 9 "
+                "(use the clamped sound frame instead)"
+            )
+    return bytes(row)
 
 
 def s8(n: int) -> int:
@@ -699,14 +898,16 @@ def pack_poses(
     for name, start, length in clip_ranges(enemy, nframes):
         extra: tuple[int, ...] = ()
         if name.startswith("attack"):
-            if TYPES[type_i] == "Zombie":
+            if TYPES[type_i] == "Knight":
+                extra = (start + 5, start + 7)
+            elif TYPES[type_i] == "Demon":
+                extra = (start + 5, start + 9)
+            elif TYPES[type_i] == "Zombie":
                 extra = (start + length - 1,)
             elif TYPES[type_i] == "Chthon":
                 extra = (start + fire_off, start + CHTHON_FIRE2)
             elif 0 <= fire_off < 255:
                 extra = (start + fire_off,)
-            if type_i == 1:
-                extra = (start + 5, start + 7)
         elif name.startswith("death") and TYPES[type_i] == "Zombie":
             extra = (start + 10,)
         keep |= cadence_keep(start, length, pick_keys(frs, start, length, extra))
@@ -782,30 +983,10 @@ def main() -> None:
         "",
     ]
     all_edges = None
-    roles: dict[str, list[int]] = {
-        "stand_start": [],
-        "stand_len": [],
-        "alert_start": [],
-        "alert_len": [],
-        "run_start": [],
-        "run_len": [],
-        "walk_start": [],
-        "walk_len": [],
-    }
-    attack_n: list[int] = []
-    attack_start: list[int] = []
-    attack_len: list[int] = []
-    pain_n: list[int] = []
-    pain_start: list[int] = []
-    pain_len: list[int] = []
-    death_n: list[int] = []
-    death_start: list[int] = []
-    death_len: list[int] = []
     pose_sizes: list[int] = []
     max_nframes = 0
     nframes_list: list[int] = []
     stored_list: list[int] = []
-    lod_z_list: list[int] = []
 
     for ti, name in enumerate(TYPES):
         if name not in by_name:
@@ -813,6 +994,7 @@ def main() -> None:
         enemy = deepcopy(by_name[name])
         bake_poses_from_id1(enemy, mdls[name])
         apply_export_clips(enemy)
+        check_shambler_roles(enemy)
         gx, gy, gz, lines, _clips, nv, shift = export_type(enemy)
         nframes = trim_to_budget(gx, gy, gz, enemy, nv)
         dos = DOS_NAME[ti]
@@ -821,13 +1003,29 @@ def main() -> None:
             raise SystemExit(f"missing {sfx_path}; run gensounds.py first")
         custom = bool(enemy.get("customSkeleton"))
         prefix = skel_prefix(nv, lines, shift, name) if custom else b""
+        raw_lod = enemy.get("lodZ", DEFAULT_LOD_Z.get(name, 4))
+        try:
+            lod = int(raw_lod)
+        except (TypeError, ValueError):
+            lod = DEFAULT_LOD_Z.get(name, 4)
+        lod = max(0, min(255, lod))
         skip_leftover: set[str] = set()
         while True:
             pgx, pgy, pgz, pose_map, n_stored = pack_poses(
                 gx, gy, gz, enemy, nframes, ti, nv, skip_leftover
             )
-            payload = prefix + bytes([n_stored, nframes]) + bytes(pose_map) + bytes(pgx) + bytes(pgy) + bytes(pgz)
+            row = build_meta_row(name, enemy, nframes, n_stored, lod)
+            payload = (
+                prefix
+                + row
+                + bytes([n_stored, nframes])
+                + bytes(pose_map)
+                + bytes(pgx)
+                + bytes(pgy)
+                + bytes(pgz)
+            )
             payload += sfx_path.read_bytes()
+            payload += pack_cues(enemy, sound_ids)
             payload += pack_clip_events(enemy, sound_ids)
             if len(payload) <= ENEMY_POSE_MAX:
                 gx, gy, gz = pgx, pgy, pgz
@@ -843,43 +1041,12 @@ def main() -> None:
         pose_sizes.append(len(payload))
         nframes_list.append(nframes)
         stored_list.append(n_stored)
-        raw_lod = enemy.get("lodZ", DEFAULT_LOD_Z.get(name, 4))
-        try:
-            lod = int(raw_lod)
-        except (TypeError, ValueError):
-            lod = DEFAULT_LOD_Z.get(name, 4)
-        lod_z_list.append(max(0, min(255, lod)))
         n_lerp = sum(1 for v in pose_map if v == 0xFF)
         shift_note = f" shift={shift}" if custom else ""
         print(
             f"{name}: logical={nframes} stored={n_stored} lerp={n_lerp} bytes={len(payload)} "
-            f"lodZ={lod_z_list[-1]}{shift_note}"
+            f"lodZ={lod}{shift_note}"
         )
-        for role in ("stand", "alert", "run", "walk"):
-            start, length = require_role(enemy, role)
-            if start + length > nframes:
-                length = max(1, nframes - start)
-            roles[f"{role}_start"].append(start)
-            roles[f"{role}_len"].append(length)
-        atk = []
-        for s, ln in find_attack_clips(enemy):
-            if s >= nframes or ln <= 0:
-                continue
-            atk.append((s, min(ln, nframes - s)))
-        if not atk:
-            atk = [(0, 1)]
-        n, starts, lens = pad_variants(atk)
-        attack_n.append(n)
-        attack_start.extend(starts)
-        attack_len.extend(lens)
-        n, starts, lens = pad_variants(find_variant_clips(enemy, variant_key(enemy, "pain"), "pain"))
-        pain_n.append(n)
-        pain_start.extend(starts)
-        pain_len.extend(lens)
-        n, starts, lens = pad_variants(find_variant_clips(enemy, variant_key(enemy, "death"), "death"))
-        death_n.append(n)
-        death_start.extend(starts)
-        death_len.extend(lens)
         if not custom:
             if all_edges is None:
                 all_edges = lines
@@ -898,39 +1065,45 @@ def main() -> None:
     parts.append("\t!byte " + ",".join(str(b) for b in edge_bytes))
     parts.append("enemy_edge_vert")
     parts.append("\t!byte " + ",".join("0" for _ in all_edges))
-    parts.append("")
-    parts.append("; Role clips")
-    parts.append("enemy_stand_start	!byte " + ", ".join(str(n) for n in roles["stand_start"]))
-    parts.append("enemy_stand_len		!byte " + ", ".join(str(n) for n in roles["stand_len"]))
-    parts.append("enemy_alert_start	!byte " + ", ".join(str(n) for n in roles["alert_start"]))
-    parts.append("enemy_alert_len		!byte " + ", ".join(str(n) for n in roles["alert_len"]))
-    parts.append("enemy_run_start		!byte " + ", ".join(str(n) for n in roles["run_start"]))
-    parts.append("enemy_run_len		!byte " + ", ".join(str(n) for n in roles["run_len"]))
-    parts.append("enemy_walk_start		!byte " + ", ".join(str(n) for n in roles["walk_start"]))
-    parts.append("enemy_walk_len		!byte " + ", ".join(str(n) for n in roles["walk_len"]))
-    parts.append("enemy_attack_n		!byte " + ", ".join(str(n) for n in attack_n))
-    parts.append("enemy_attack_start	!byte " + ", ".join(str(n) for n in attack_start))
-    parts.append("enemy_attack_len	!byte " + ", ".join(str(n) for n in attack_len))
-    parts.append("enemy_pain_n		!byte " + ", ".join(str(n) for n in pain_n))
-    parts.append("enemy_pain_start	!byte " + ", ".join(str(n) for n in pain_start))
-    parts.append("enemy_pain_len		!byte " + ", ".join(str(n) for n in pain_len))
-    parts.append("enemy_death_n		!byte " + ", ".join(str(n) for n in death_n))
-    parts.append("enemy_death_start	!byte " + ", ".join(str(n) for n in death_start))
-    parts.append("enemy_death_len		!byte " + ", ".join(str(n) for n in death_len))
-    parts.append("enemy_range		!byte 30, 6, 4, 24, 30, 30, 40, 30")
     hp_bytes = ", ".join(str(min(255, HP_QUAKE[t] // 5)) for t in TYPES)
-    parts.append(f"enemy_hp_init		!byte {hp_bytes}")
-    parts.append("enemy_pain_chance	!byte $80, $80, $c0, $80, $80, $80, $80, $80")
-    parts.append("enemy_drop_type	!byte 7, $ff, $ff, $ff, 4, $ff, $ff, $ff")
-    parts.append("enemy_fire_frame	!byte " + ", ".join(str(n) for n in FIRE_FRAME))
-    parts.append("enemy_class		!byte 0, 0, 1, 0, 0, 0, 0, 0")
-    parts.append("; LOD Z by type: " + ", ".join(TYPES))
-    parts.append(
-        "enemy_lod_z		!byte " + ", ".join(str(n) for n in lod_z_list)
-        + "	; full project while CAM_ZH < this"
-    )
-    parts.append("; Stored pose count (PRG header / gy stride). Clip tables stay logical.")
-    parts.append("enemy_nframes	!byte " + ", ".join(str(n) for n in stored_list))
+    parts.append(f"enemy_hp_init\t!byte {hp_bytes}")
+    parts.append("")
+    parts.append("; Two resident rows, copied from the loaded bank. Width 2; variants are slot*4.")
+    parts.append("; Zeros until patch_enemy_bank. meta_slot_type $ff = empty.")
+    slot2 = "0, 0"
+    slot8 = "0, 0, 0, 0, 0, 0, 0, 0"
+    for label in (
+        "enemy_stand_start",
+        "enemy_stand_len",
+        "enemy_alert_start",
+        "enemy_alert_len",
+        "enemy_run_start",
+        "enemy_run_len",
+        "enemy_walk_start",
+        "enemy_walk_len",
+        "enemy_attack_n",
+    ):
+        parts.append(f"{label}\t!byte {slot2}")
+    parts.append(f"enemy_attack_start\t!byte {slot8}")
+    parts.append(f"enemy_attack_len\t!byte {slot8}")
+    parts.append(f"enemy_pain_n\t!byte {slot2}")
+    parts.append(f"enemy_pain_start\t!byte {slot8}")
+    parts.append(f"enemy_pain_len\t!byte {slot8}")
+    parts.append(f"enemy_death_n\t!byte {slot2}")
+    parts.append(f"enemy_death_start\t!byte {slot8}")
+    parts.append(f"enemy_death_len\t!byte {slot8}")
+    for label in (
+        "enemy_range",
+        "enemy_pain_chance",
+        "enemy_drop_type",
+        "enemy_fire_frame",
+        "enemy_class",
+        "enemy_lod_z",
+        "enemy_nframes",
+    ):
+        parts.append(f"{label}\t!byte {slot2}")
+    parts.append("meta_slot_type\t!byte $ff, $ff")
+    parts.append("meta_scratch\t!byte 0")
     parts.append("")
 
     data_text = "\n".join(parts) + "\n"
@@ -994,7 +1167,7 @@ def main() -> None:
     size_lo = ",".join(str(s & 0xFF) for s in pose_sizes)
     size_hi = ",".join(str((s >> 8) & 0xFF) for s in pose_sizes)
     SIZES_OUT.write_text(
-        "; Generated by tools/genenemies.py — pose payload bytes per type 0..7 (sfx blob + clip events)\n"
+        "; Generated by tools/genenemies.py — pose payload bytes per type (sfx blob + cue ids + clip events)\n"
         f"enemy_size_lo	!byte {size_lo}\n"
         f"enemy_size_hi	!byte {size_hi}\n",
         encoding="utf-8",

@@ -259,8 +259,7 @@ eu_approach
 	jmp .eu_ap_slp
 .eu_ap_rng
 	jsr enemy_chebyshev
-	+ldy_mx en_type
-	cmp enemy_range,y
+	jsr enemy_cmp_range
 	beq .eu_ap_atk
 	bcc .eu_ap_atk
 	jmp eu_next
@@ -407,7 +406,7 @@ enemy_anim_step
 	jmp .eas_lp
 
 .eas_loop
-	+ldy_mx en_type
+	jsr ldy_slot
 	inc en_frame,x
 	lda en_frame,x
 	cmp enemy_stand_len,y
@@ -418,7 +417,7 @@ enemy_anim_step
 	sta en_frame,x
 	jmp .eas_n
 .eas_run
-	+ldy_mx en_type
+	jsr ldy_slot
 	inc en_frame,x
 	lda en_frame,x
 	cmp enemy_run_len,y
@@ -428,7 +427,7 @@ enemy_anim_step
 +
 	jmp .eas_n
 .eas_walk
-	+ldy_mx en_type
+	jsr ldy_slot
 	inc en_frame,x
 	lda en_frame,x
 	cmp enemy_walk_len,y
@@ -468,6 +467,8 @@ enemy_anim_step
 	jmp .eas_n
 .eas_alen
 	pla
+	ldx enemy_idx
+	jsr ldy_slot
 	cmp enemy_alert_len,y
 	bcs +
 	jmp .eas_n
@@ -515,7 +516,7 @@ enemy_anim_step
 	bne .eas_ff
 .eas_ff_k
 	cpy #ENT_KNIGHT
-	bne .eas_ff_tbl
+	bne .eas_ff_dem
 	lda en_pain_i,x
 	bne .eas_ff_katkb
 	lda #KNIGHT_RUNATK_FIRE
@@ -523,8 +524,25 @@ enemy_anim_step
 .eas_ff_katkb
 	lda #KNIGHT_ATKB_FIRE
 	bne .eas_ff
+.eas_ff_dem
+	cpy #ENT_DEMON
+	bne .eas_ff_tbl
+	lda en_pain_i,x
+	bne .eas_ff_dclaw
+	lda #DEMON_LEAP_FIRE
+	bne .eas_ff
+.eas_ff_dclaw
+	lda #DEMON_MELEE_FIRE
+	bne .eas_ff
 .eas_ff_tbl
+	tya
+	pha
+	jsr ldy_slot
 	lda enemy_fire_frame,y
+	sta rot1
+	pla
+	tay
+	lda rot1
 	cpy #ENT_CHTHON
 	bne .eas_ff
 	cmp rot2
@@ -582,8 +600,7 @@ enemy_anim_step
 	bmi .eas_to_ap
 	ldx enemy_idx
 	jsr enemy_chebyshev
-	+ldy_mx en_type
-	cmp enemy_range,y
+	jsr enemy_cmp_range
 	beq .eas_again
 	bcc .eas_again
 .eas_to_ap
@@ -639,7 +656,7 @@ enemy_in_wake
 	+ldy_mx en_type
 	cpy #ENT_SHAMBLER
 	bne .eiw_det
-	cmp enemy_range,y
+	jsr enemy_cmp_range
 	beq .eiw_yes
 	bcc .eiw_yes
 	sec
@@ -675,6 +692,15 @@ enemy_chebyshev
 	bcs +
 	lda rot0
 +
+	rts
+
+; A = distance, X = enemy. Flags as cmp distance, enemy_range[slot].
+; A is the distance again. X preserved. Clobbers meta_scratch, not rot*.
+enemy_cmp_range
+	sta meta_scratch
+	jsr ldy_slot
+	lda meta_scratch
+	cmp enemy_range,y
 	rts
 
 ; C=1 player in facing half-plane (or very close)
@@ -831,6 +857,8 @@ select_dodge_dir
 	beq .sdd_zig			; scrag closes, doesn't back off
 	cpy #ENT_KNIGHT
 	beq .sdd_zig			; knight closes, doesn't back off
+	cpy #ENT_DEMON
+	beq .sdd_zig			; demon closes, doesn't back off
 	jsr enemy_chebyshev
 	cmp #GRUNT_BACKOFF + 1
 	bcs .sdd_zig
@@ -943,12 +971,33 @@ enemy_enter_alert
 	sta sham_alert_ph
 	lda #DBG_ALERT
 	jsr dbg_probe
-	+lda_mx en_type
-	cmp #ENT_SHAMBLER
-	bne enemy_play_clip_sfx_enter
-	lda #SOUND_SOLDIER_SIGHT1
+	lda #CUE_SIGHT
+	; fall through
+
+; A = CUE_* of enemy_idx's type. Plays it unless the type has none ($FF).
+; The cue block heads the type's event table on the pose heap.
+; Returns X = enemy_idx. Clobbers A, Y, src_ptr.
+enemy_play_cue
+	pha
+	ldx enemy_idx
+	+ldy_mx en_type
+	lda enemy_sfx_evt_hi,y
+	beq .epq_unbound
+	sta src_ptr+1
+	lda enemy_sfx_evt_lo,y
+	sta src_ptr
+	pla
+	tay
+	lda (src_ptr),y
+	cmp #CUE_NONE
+	beq .epq_rts
 	jsr play_sound
-	jmp enemy_play_clip_sfx_enter
+.epq_rts
+	ldx enemy_idx
+	rts
+.epq_unbound
+	pla
+	rts
 
 ; Fire clip events at this logical frame (enter).
 enemy_play_clip_sfx_enter
@@ -991,12 +1040,15 @@ enemy_play_clip_sfx
 	lda en_sfx_new
 	sta en_sfx_old
 .epc_scan
-	ldy #0
+	ldy #CUE_N			; event count follows the cue block
 	lda (src_ptr),y
 	beq .epc_rts
 	sta en_sfx_n
-	inc src_ptr
-	bne .epc_lp
+	clc
+	lda src_ptr
+	adc #CUE_N + 1
+	sta src_ptr
+	bcc .epc_lp
 	inc src_ptr+1
 .epc_lp
 	ldy #0
@@ -1053,6 +1105,20 @@ enemy_enter_shambler_attack
 	lda #0
 	sta en_frame,x
 	sta sham_arc
+	jsr enemy_play_clip_sfx_enter
+	ldx enemy_idx
+	jmp enemy_face_player
+
+; A = attack variant (0=leap, 1=claw). MDL order. Zero step so the leap doesn't inherit chase cadence.
+enemy_enter_demon_attack
+	ldx enemy_idx
+	sta en_pain_i,x
+	lda #EN_ATTACK
+	sta en_state,x
+	lda #0
+	sta en_frame,x
+	sta en_step,x
+	sta en_step_h,x
 	jsr enemy_play_clip_sfx_enter
 	ldx enemy_idx
 	jmp enemy_face_player
@@ -1871,19 +1937,19 @@ pick_var_n
 
 ; X = enemy. Pick en_pain_i = rnd8 % enemy_pain_n[type].
 pick_pain_var
-	+ldy_mx en_type
+	jsr ldy_slot
 	lda enemy_pain_n,y
 	jmp pick_var_n
 
-; X = enemy. Pick en_pain_i = rnd8 % enemy_death_n[type].
+; X = enemy. Pick en_pain_i = rnd8 % enemy_death_n[slot].
 pick_death_var
-	+ldy_mx en_type
+	jsr ldy_slot
 	lda enemy_death_n,y
 	jmp pick_var_n
 
-; X = enemy. Pick en_pain_i = rnd8 % enemy_attack_n[type].
+; X = enemy. Pick en_pain_i = rnd8 % enemy_attack_n[slot].
 pick_attack_var
-	+ldy_mx en_type
+	jsr ldy_slot
 	lda enemy_attack_n,y
 	jmp pick_var_n
 
@@ -1918,6 +1984,7 @@ damage_enemy
 	cpy #ENT_SHAMBLER
 	beq .de_sham
 	jsr rnd8
+	jsr ldy_slot
 	cmp enemy_pain_chance,y
 	bcs .de_rts
 	jmp .de_pain
@@ -1953,7 +2020,8 @@ damage_enemy
 	lda #0
 	sta en_frame,x
 	jsr pick_pain_var
-	jmp enemy_play_clip_sfx_enter
+	lda #CUE_WINCE
+	jmp enemy_play_cue
 .de_kill
 	jmp kill_enemy
 .de_rts

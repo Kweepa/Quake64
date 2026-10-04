@@ -107,6 +107,7 @@ export const ENEMY_LOD_Z_BY_NAME = {
   Shambler: 4,
   Chthon: 4,
   Zombie: 4,
+  Demon: 8,
 };
 export const DEFAULT_WEAPON_SCALE = 0.4;
 export const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
@@ -124,80 +125,65 @@ export const PC_TIMER = 1193181;
 export const SOUND_HZ_MIN = 80;
 export const SOUND_HZ_MAX = 4000;
 export const SOUND_VOICE_LABELS = ["Player", "Enemy", "World"];
-export const SOUND_HUM_TYPES = ["grunt", "knight", "scrag", "ogre", "shambl", "chthon", "zombie"];
 
-/** Locked in-game aliases. Always exported. extraAliases share the same ID. */
+/** Fixed enemy cue set. sight/wince/death play generically; melee/shoot bind to clips. */
+export const ENEMY_CUES = ["sight", "wince", "melee", "shoot", "death"];
+export const ENEMY_CUE_LABELS = {
+  sight: "Sight",
+  wince: "Wince",
+  melee: "Melee",
+  shoot: "Shoot",
+  death: "Death",
+};
+export const ENEMY_CUES_REQUIRED = ["sight", "wince", "death"];
+/** Cues that a clip may carry (timed to an animation frame). */
+export const ENEMY_ATTACK_CUES = ["melee", "shoot"];
+
+/** Locked in-game aliases (resident, always exported). extraAliases share the same ID. */
 export const SOUND_LOCKED = [
-  { alias: "HITWALL", path: "sound/weapons/tink1.wav", voice: 0, priority: 1, freq: [131, 142, 134] },
+  { alias: "HITWALL", path: "sound/weapons/tink1.wav", voice: 0, priority: 1, origin: "wolf", library: "HITWALL" },
   {
     alias: "PLAYERDEATH",
     path: "sound/player/death1.wav",
     voice: 0,
     priority: 99,
-    freq: [21, 30, 39, 45, 52, 15, 77, 98, 17, 0, 30, 0, 36, 0, 79, 79],
-  },
-  {
-    alias: "DOGDEATH",
-    path: "sound/dog/ddeath.wav",
-    voice: 1,
-    priority: 50,
-    streamTypes: ["rott"],
-    freq: [19, 16, 15, 27, 40, 43, 57, 69, 83, 103, 111, 157, 145, 152, 159],
+    origin: "wolf",
+    library: "PLAYERDEATH",
   },
   {
     alias: "TAKEDAMAGE",
     path: "sound/player/pain1.wav",
     voice: 0,
     priority: 90,
-    freq: [62, 59, 55, 52, 49, 63, 75, 80, 69, 78, 65, 77, 68, 62, 56, 74, 67, 61, 55],
+    origin: "wolf",
+    library: "TAKEDAMAGE",
   },
   {
     alias: "OPENDOOR",
     path: "sound/doors/hydro1.wav",
     voice: 2,
     priority: 20,
-    freq: [119, 118, 118, 116, 114, 111, 107, 101, 95, 89, 83, 77],
+    origin: "wolf",
+    library: "OPENDOOR",
   },
-  {
-    alias: "HALT",
-    path: "sound/soldier/sight1.wav",
-    voice: 1,
-    priority: 50,
-    streamTypes: SOUND_HUM_TYPES,
-    freq: [42, 38, 35, 31, 31, 31, 32, 46, 60, 77, 85, 105, 132, 140, 145, 148, 151, 153, 157, 0, 0, 0, 138, 138, 138],
-  },
-  { alias: "ATKMACHINEGUN", path: "sound/weapons/spike2.wav", voice: 0, priority: 50, freq: [104, 107, 101, 123] },
-  { alias: "HITENEMY", path: "sound/weapons/lhit.wav", voice: 0, priority: 50, freq: [130, 25, 33, 78, 26, 18, 18, 25, 0, 32] },
-  {
-    alias: "DEATHSCREAM1",
-    path: "sound/soldier/death1.wav",
-    voice: 1,
-    priority: 50,
-    streamTypes: SOUND_HUM_TYPES,
-    freq: [60, 55, 51, 26, 37, 31, 15, 16, 23, 29, 74, 28, 31, 27, 34, 42, 38, 34, 36, 41],
-  },
-  { alias: "SHOOT", path: "sound/weapons/grenade.wav", voice: 1, priority: 20, freq: [16, 110, 40, 40, 33, 103, 41, 115, 137] },
-  {
-    alias: "DOGBARK",
-    path: "sound/dog/dsight.wav",
-    voice: 1,
-    priority: 50,
-    streamTypes: ["rott"],
-    freq: [64, 56, 47, 41, 142, 144, 37, 48, 144, 57, 67, 82, 93, 104, 123, 151, 151],
-  },
+  { alias: "ATKMACHINEGUN", path: "sound/weapons/spike2.wav", voice: 0, priority: 50, origin: "wolf", library: "ATKMACHINEGUN" },
+  { alias: "HITENEMY", path: "sound/weapons/lhit.wav", voice: 0, priority: 50, origin: "wolf", library: "HITENEMY" },
+  { alias: "SHOOT", path: "sound/weapons/grenade.wav", voice: 1, priority: 20, origin: "wolf", library: "SHOOT" },
   {
     alias: "GETKEY",
     path: "sound/items/itembk2.wav",
     voice: 0,
     priority: 90,
-    freq: [36, 36, 36, 36, 36, 36, 36, 36, 0, 0, 55, 55, 55, 55, 55, 55, 55, 55, 0, 55, 55, 55, 55, 0, 25, 25, 25, 25, 25, 25],
+    origin: "wolf",
+    library: "GETKEY",
   },
   {
     alias: "GETAMMO",
     path: "sound/weapons/pkup.wav",
     voice: 0,
     priority: 80,
-    freq: [34, 34, 34, 34, 34, 34, 0, 0, 0, 20, 20, 20, 0, 20, 20, 20, 20, 20, 20, 20, 20],
+    origin: "wolf",
+    library: "GETAMMO",
   },
   {
     alias: "HEALTH1",
@@ -205,35 +191,34 @@ export const SOUND_LOCKED = [
     path: "sound/items/health1.wav",
     voice: 0,
     priority: 85,
-    freq: [58, 0, 0, 51, 51, 0, 0, 38, 38, 0, 0, 22, 22, 0, 0, 22, 22, 22, 0, 0, 21, 21, 21],
+    origin: "wolf",
+    library: "HEALTH1",
   },
-  { alias: "SWITCH", path: "sound/misc/menu2.wav", voice: 0, priority: 1, freq: [114, 60, 114] },
+  { alias: "SWITCH", path: "sound/misc/menu2.wav", voice: 0, priority: 1, origin: "wolf", library: "MOVEGUN1" },
   {
     alias: "BONUS1",
     path: "sound/items/damage.wav",
     voice: 0,
     priority: 70,
-    freq: [61, 53, 49, 46, 45, 51, 57, 64, 71, 74, 73, 69, 58, 41, 33, 30, 29, 28, 31, 35, 41, 46, 49, 47, 41, 30, 20, 0, 0, 0, 18, 18, 18, 0, 18, 18, 18, 18, 18, 18],
+    origin: "wolf",
+    library: "BONUS1",
   },
   {
     alias: "SHOTGN",
     path: "sound/weapons/shotgn2.wav",
     voice: 0,
     priority: 50,
-    freq: [40, 57, 49, 60, 48, 52, 64, 68, 57, 74, 78, 81, 72, 70, 83, 107],
+    origin: "doom",
+    library: "DPSHOTGN",
   },
   {
     alias: "BAREXP",
     path: "sound/weapons/r_exp3.wav",
     voice: 0,
     priority: 50,
-    freq: [81, 78, 60, 107, 83, 64, 32, 83, 107, 33, 36, 60, 44, 47, 64, 114, 107, 105, 26, 47, 47, 78, 101, 32, 83, 47, 43],
+    origin: "empty",
   },
-  { alias: "SAWFUL", path: "sound/ogre/ogsawatk.wav", voice: 0, priority: 20, freq: [59, 47, 59, 37, 59, 47, 59], streamTypes: ["ogre"] },
-  { alias: "SAWHIT", path: "sound/ogre/ogdrag.wav", voice: 0, priority: 50, freq: [48, 55, 44, 54, 36, 49, 30, 47, 26], streamTypes: ["ogre"] },
-  { alias: "OOF", path: "sound/player/land.wav", voice: 0, priority: 50, freq: [83, 78, 78, 85] },
-  { alias: "DMPAIN", path: "sound/dog/dpain1.wav", voice: 1, priority: 50, freq: [15, 28, 31, 23, 31, 29, 38, 45, 45, 52, 64, 96], streamTypes: ["rott"] },
-  { alias: "POPAIN", path: "sound/soldier/pain1.wav", voice: 1, priority: 50, freq: [88, 62, 57, 39, 28, 35, 28, 28, 31, 44, 57, 81, 83], streamTypes: SOUND_HUM_TYPES },
+  { alias: "OOF", path: "sound/player/land.wav", voice: 0, priority: 50, origin: "doom", library: "DPOOF" },
 ];
 
 export const SOUND_LOCKED_BY_PATH = Object.fromEntries(SOUND_LOCKED.map((s) => [s.path, s]));
@@ -288,25 +273,23 @@ export function clampSoundFreqByte(n) {
   return v;
 }
 
-function parseSoundBytes(raw, clamp, fill) {
-  if (!Array.isArray(raw)) return fill.slice();
-  const out = [];
-  for (let i = 0; i < raw.length && out.length < SOUND_MAX_TICKS; i++) out.push(clamp(raw[i]));
-  return out;
-}
+const LIBRARY_ORIGINS = new Set(["wolf", "doom", "dave", "keen"]);
 
 export function defaultSoundEntry(locked) {
-  const freq = locked.freq.map((b) => clampSoundFreqByte(b));
-  return {
+  const origin = LIBRARY_ORIGINS.has(locked.origin) || locked.origin === "empty" ? locked.origin : "empty";
+  const entry = {
     export: true,
     alias: locked.alias,
     extraAliases: locked.extraAliases ? [...locked.extraAliases] : undefined,
     voice: clampSoundVoice(locked.voice),
     priority: clampSoundPriority(locked.priority),
     attack: 0,
-    freq,
-    origin: "wolf",
+    origin,
   };
+  if (typeof locked.library === "string" && locked.library.trim()) {
+    entry.library = locked.library.trim().toUpperCase();
+  }
+  return entry;
 }
 
 export function defaultSounds() {
@@ -316,7 +299,7 @@ export function defaultSounds() {
 }
 
 export function emptySoundEntry() {
-  return { export: false, voice: 0, priority: 50, attack: 0, freq: [], origin: "empty" };
+  return { export: false, voice: 0, priority: 50, attack: 0, origin: "empty" };
 }
 
 export function isSoundLocked(path) {
@@ -341,30 +324,89 @@ export function soundIdent(path) {
     .toUpperCase() || "SFX";
 }
 
+/** Suffix of SOUND_FOLDER_STEM. The list already groups by folder. */
+export function soundLeafIdent(path) {
+  const ident = soundIdent(path);
+  const folder = soundFolder(path)
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+  const prefix = folder ? `${folder}_` : "";
+  return prefix && ident.startsWith(prefix) ? ident.slice(prefix.length) : ident;
+}
+
 export function alignSoundArrays(snd) {
-  let freq = Array.isArray(snd.freq) ? snd.freq.map(clampSoundFreqByte) : [];
-  if (freq.length > SOUND_MAX_TICKS) freq = freq.slice(0, SOUND_MAX_TICKS);
-  snd.freq = freq;
+  if (Array.isArray(snd.freq)) {
+    let freq = snd.freq.map(clampSoundFreqByte);
+    if (freq.length > SOUND_MAX_TICKS) freq = freq.slice(0, SOUND_MAX_TICKS);
+    snd.freq = freq;
+  }
   delete snd.vol;
   delete snd.wave;
   snd.attack = clampSoundAttack(snd.attack);
-  return freq.length;
+  return snd.freq?.length || 0;
 }
 
-export function soundIsStreamed(path) {
-  const locked = SOUND_LOCKED_BY_PATH[path];
-  return Array.isArray(locked?.streamTypes) && locked.streamTypes.length > 0;
+/** Normalize a cue value to a sound path, or "" when it is not one. */
+export function normalizeCuePath(raw) {
+  const p = String(raw ?? "")
+    .trim()
+    .replace(/\\/g, "/")
+    .toLowerCase();
+  return p.startsWith("sound/") && p.endsWith(".wav") ? p : "";
 }
 
-export function soundPayloadBytes(sounds) {
+/** { sight, wince, melee, shoot, death } -> sound path. Unset cues are omitted. */
+export function parseEnemyCues(raw) {
+  const out = {};
+  for (const cue of ENEMY_CUES) {
+    const p = normalizeCuePath(raw?.[cue]);
+    if (p) out[cue] = p;
+  }
+  return out;
+}
+
+/** Paths referenced by any enemy cue. Those are exported; locked paths are resident. */
+export function cueReferencedPaths(doc) {
+  const out = new Set();
+  for (const e of doc?.enemies || []) {
+    for (const cue of ENEMY_CUES) {
+      const p = e.cues?.[cue];
+      if (p) out.add(p);
+    }
+  }
+  return out;
+}
+
+/** True when the path rides on enemy pose banks (cue-referenced, not a resident alias). */
+export function soundIsStreamed(doc, path) {
+  return !SOUND_LOCKED_BY_PATH[path] && cueReferencedPaths(doc).has(path);
+}
+
+/** Exported = resident alias or referenced by an enemy cue. */
+export function soundIsExported(doc, path) {
+  return !!SOUND_LOCKED_BY_PATH[path] || cueReferencedPaths(doc).has(path);
+}
+
+/** Resident payload only (locked aliases). Enemy cues stream with the poses. */
+export function soundPayloadBytes(sounds, resolveFreq) {
   let total = 0;
   const seen = new Set();
   for (const [path, snd] of Object.entries(sounds || {})) {
-    if (!snd?.export) continue;
+    if (!SOUND_LOCKED_BY_PATH[path]) continue;
     if (seen.has(path)) continue;
     seen.add(path);
-    if (soundIsStreamed(path)) continue;
-    const n = Math.min(SOUND_MAX_TICKS, snd.freq?.length || 0);
+    let freq = null;
+    if (typeof resolveFreq === "function") {
+      const got = resolveFreq(snd);
+      if (!got) continue;
+      freq = got;
+    } else if (Array.isArray(snd.freq)) {
+      freq = snd.freq;
+    } else {
+      continue;
+    }
+    const n = Math.min(SOUND_MAX_TICKS, freq.length || 0);
     total += 2 + n;
   }
   return total;
@@ -391,30 +433,18 @@ function parseSoundEntry(path, raw, fallback) {
   const locked = SOUND_LOCKED_BY_PATH[path];
   const base = fallback || (locked ? defaultSoundEntry(locked) : emptySoundEntry());
   const src = raw && typeof raw === "object" ? raw : {};
-  const freq = parseSoundBytes(src.freq, clampSoundFreqByte, base.freq);
+  const origin = LIBRARY_ORIGINS.has(src.origin) || src.origin === "empty" ? src.origin : base.origin;
   const snd = {
     export: locked ? true : !!src.export,
     voice: clampSoundVoice(src.voice != null ? src.voice : base.voice),
     priority: clampSoundPriority(src.priority != null ? src.priority : base.priority),
     attack: clampSoundAttack(src.attack != null ? src.attack : base.attack),
-    freq,
-    origin:
-      src.origin === "anneal"
-        ? "edit"
-        : src.origin === "estimate" ||
-            src.origin === "edit" ||
-            src.origin === "wolf" ||
-            src.origin === "doom" ||
-            src.origin === "empty"
-          ? src.origin
-          : base.origin,
+    origin,
   };
-  if (
-    (snd.origin === "wolf" || snd.origin === "doom") &&
-    typeof src.library === "string" &&
-    src.library.trim()
-  ) {
-    snd.library = src.library.trim().toUpperCase();
+  if (LIBRARY_ORIGINS.has(snd.origin)) {
+    const fromSrc = LIBRARY_ORIGINS.has(src.origin) && typeof src.library === "string" && src.library.trim();
+    const lib = fromSrc ? src.library : base.library;
+    if (typeof lib === "string" && lib.trim()) snd.library = lib.trim().toUpperCase();
   }
   if (locked) {
     snd.alias = locked.alias;
@@ -1419,15 +1449,12 @@ export function normalizeExportClips(raw) {
   return out;
 }
 
-/** Optional one SOUND_* stem + clip-local frame. Empty sound is omitted. */
+/** Optional melee/shoot cue + clip-local frame. Anything else is omitted. */
 export function normalizeClipSound(raw, len) {
   const n = Math.max(1, len | 0);
-  const ident = String(raw?.sound || "")
-    .trim()
-    .toUpperCase()
-    .replace(/^SOUND_/, "");
-  if (!ident) return {};
-  return { sound: ident, soundFrame: Math.max(0, Math.min(raw.soundFrame | 0, n - 1)) };
+  const cue = String(raw?.sound || "").trim().toLowerCase();
+  if (!ENEMY_ATTACK_CUES.includes(cue)) return {};
+  return { sound: cue, soundFrame: Math.max(0, Math.min(raw.soundFrame | 0, n - 1)) };
 }
 
 export function withClipSound(clip, src) {
@@ -1451,16 +1478,21 @@ export function normalizeClips(raw, frameCount) {
   return out;
 }
 
-/** Shared 13-vert skeleton: L/R hip, neck, head, L/R elbow, L/R wrist, L/R knee, L/R ankle, weapon tip on right wrist. */
+/**
+ * Placeable types. Index is the game type id (FIRE_FRAME / ENT_*).
+ * In-game HP is Quake health / 5 (Demon 300 → 60). Lists use enemyTypesByHp().
+ */
 export const ENEMY_TYPES = [
-  { name: "Grunt", scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
+  { name: "Grunt", hp: 6, scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
   {
     name: "Knight",
+    hp: 15,
     scale: [1.15, 1.3, 1],
     rest: { 3: [0, 2, 0], 4: [-1, 1, 0], 6: [1, 1, 0], 12: [0, 10, -6] },
   },
   {
     name: "Rottweiler",
+    hp: 5,
     scale: [1, 0.55, 1.35],
     rest: {
       0: [0, 1, -5],
@@ -1476,6 +1508,7 @@ export const ENEMY_TYPES = [
   },
   {
     name: "Scrag",
+    hp: 16,
     scale: [0.85, 1.15, 0.9],
     rest: {
       0: [0, 8, 0],
@@ -1493,11 +1526,13 @@ export const ENEMY_TYPES = [
   },
   {
     name: "Ogre",
+    hp: 40,
     scale: [1.35, 1.05, 1.1],
     rest: { 5: [0, -1, 0], 7: [0, -1, 0], 12: [6, -4, 6] },
   },
   {
     name: "Shambler",
+    hp: 120,
     scale: [1.5, 1.45, 1.2],
     rest: {
       4: [-2, -2, 0],
@@ -1509,6 +1544,7 @@ export const ENEMY_TYPES = [
   },
   {
     name: "Chthon",
+    hp: 80,
     scale: [1.8, 0.75, 1.6],
     rest: {
       2: [0, 2, 0],
@@ -1522,10 +1558,34 @@ export const ENEMY_TYPES = [
   },
   {
     name: "Zombie",
+    hp: 12,
     scale: [1, 1.05, 1],
     rest: { 12: [0, 8, 6] },
   },
+  {
+    name: "Demon",
+    hp: 60,
+    scale: [1.35, 1.15, 1.25],
+    rest: { 3: [0, 2, 2], 12: [4, -2, 8] },
+  },
 ];
+
+export function enemyHp(name) {
+  const t = ENEMY_TYPES.find((e) => e.name === name);
+  return t ? t.hp : 999;
+}
+
+/** Placeable types, lowest HP first. */
+export function enemyTypesByHp() {
+  return [...ENEMY_TYPES].sort((a, b) => a.hp - b.hp);
+}
+
+/** Enemy records, lowest HP first. */
+export function enemiesByHp(enemies) {
+  return [...(enemies || [])].sort(
+    (a, b) => enemyHp(a.name) - enemyHp(b.name) || String(a.name).localeCompare(String(b.name))
+  );
+}
 
 export const FACES = [
   { id: "+z", axis: "z", sign: 1, label: "+Z" },
@@ -2157,7 +2217,7 @@ export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 export const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 5, 255];
+const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 5, 255, 5];
 const CHTHON_FIRE2 = 17;
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {
@@ -2211,6 +2271,13 @@ const ROLE_CLIPS = {
     run: ["walk"],
     walk: ["walk"],
     attack: ["atta", "attb", "attc"],
+  },
+  Demon: {
+    stand: ["stand"],
+    alert: ["stand", 4],
+    run: ["run"],
+    walk: ["run"],
+    attack: ["attacka", "leap"],
   },
 };
 
@@ -2435,6 +2502,7 @@ export function packedPoseBytes(enemy, clips, frames) {
     let extra = [];
     if (typeof role === "string" && role.startsWith("attack")) {
       if (typeI === 1) extra = [start + 5, start + 7];
+      else if (name === "Demon") extra = [start + 5, start + 9];
       else if (name === "Zombie") extra = [start + length - 1];
       else if (name === "Chthon") extra = [start + fireOff, start + CHTHON_FIRE2];
       else if (fireOff >= 0 && fireOff < 255) extra = [start + fireOff];
@@ -3026,13 +3094,49 @@ function parseSkelLines(raw, nv) {
 function inferSkelNv(raw) {
   let n;
   const joints = raw?.mdlRig?.jointVerts;
-  if (Array.isArray(joints) && joints.length) n = joints.length;
+  if (Array.isArray(joints)) n = joints.length;
   else if ((raw?.verts | 0) > 0) n = raw.verts | 0;
   else if (Array.isArray(raw?.frames?.[0])) n = raw.frames[0].length;
   else n = 13;
   if (n < 0) n = 0;
   if (n > SKEL_MAX_VERTS) n = SKEL_MAX_VERTS;
   return n;
+}
+
+/** melee/shoot stays a cue name. A legacy SOUND_ stem stays uppercased for migrateClipSounds. */
+function parseClipSound(raw) {
+  const stem = String(raw || "").trim();
+  if (!stem) return "";
+  const cue = stem.toLowerCase();
+  if (ENEMY_ATTACK_CUES.includes(cue)) return cue;
+  return stem.toUpperCase().replace(/^SOUND_/, "");
+}
+
+/** Map a legacy stem onto the attack cue whose path ident matches. Drop anything else. */
+function migrateClipSounds(clips, cues) {
+  if (!Array.isArray(clips)) return;
+  const byIdent = new Map();
+  for (const cue of ENEMY_ATTACK_CUES) {
+    const path = cues?.[cue];
+    if (!path || byIdent.has(soundIdent(path))) continue;
+    byIdent.set(soundIdent(path), cue);
+  }
+  for (const c of clips) {
+    if (!c?.sound) continue;
+    if (ENEMY_ATTACK_CUES.includes(c.sound)) continue;
+    const cue = byIdent.get(String(c.sound).trim().toUpperCase().replace(/^SOUND_/, ""));
+    if (cue) c.sound = cue;
+    else {
+      delete c.sound;
+      delete c.soundFrame;
+    }
+  }
+}
+
+function migrateEnemyClipSounds(enemy) {
+  migrateClipSounds(enemy.clips, enemy.cues);
+  migrateClipSounds(enemy.stockGraph?.clips, enemy.cues);
+  migrateClipSounds(enemy.customGraph?.clips, enemy.cues);
 }
 
 /** Clip name + optional sound. start/len are filled when poses are derived. */
@@ -3045,12 +3149,9 @@ function parseClipMeta(raw) {
     if (!name || name === "legacy" || seen.has(name)) continue;
     seen.add(name);
     const clip = { name, start: 0, len: 1 };
-    const ident = String(c?.sound || "")
-      .trim()
-      .toUpperCase()
-      .replace(/^SOUND_/, "");
-    if (ident) {
-      clip.sound = ident;
+    const sound = parseClipSound(c?.sound);
+    if (sound) {
+      clip.sound = sound;
       clip.soundFrame = Math.max(0, c.soundFrame | 0);
     }
     out.push(clip);
@@ -3082,10 +3183,26 @@ function persistGraph(g) {
 function persistEnemy(e) {
   const out = { ...e };
   delete out.frames;
+  out.cues = parseEnemyCues(e.cues);
   if (Array.isArray(out.clips)) out.clips = out.clips.map(persistClip);
   if (out.stockGraph) out.stockGraph = persistGraph(out.stockGraph);
   if (out.customGraph) out.customGraph = persistGraph(out.customGraph);
   return out;
+}
+
+/** Drop unbound stock joints 0–12 copied in when custom mode kept the humanoid. */
+function stripInheritedStockJoints(enemy) {
+  const joints = enemy.mdlRig?.jointVerts;
+  if (!Array.isArray(joints) || joints.length < 13) return;
+  for (let i = 0; i < 13; i++) {
+    if (joints[i]?.length) return;
+  }
+  if (enemy.lines.some(([a, b]) => (a | 0) >= 13 || (b | 0) >= 13)) return;
+  const extra = joints.slice(13).map((list) => [...list]);
+  enemy.mdlRig = { jointVerts: extra };
+  enemy.verts = extra.length;
+  enemy.lines = [];
+  enemy.frames = [restPoseFrame(enemy.name, extra.length)];
 }
 
 function parseSkelGraph(raw, name, fixedNv) {
@@ -3111,9 +3228,10 @@ export function dummyFrameFor(name) {
   }));
 }
 
-/** One rest pose. Poses are derived from the binding once ID1 is open. */
+/** One rest pose. Poses are derived from the binding once ID1 is open. nv 0 is an empty custom rig. */
 export function restPoseFrame(name, nv) {
-  const n = Math.max(1, nv | 0);
+  const n = Math.max(0, nv | 0);
+  if (!n) return [];
   const base = dummyFrameFor(name);
   const frame = [];
   for (let i = 0; i < n; i++) {
@@ -3131,6 +3249,7 @@ export function createEnemy(name = "Grunt") {
     lines: TEMPLATE_LINES.map((p) => [p[0], p[1]]),
     frames: [dummyFrameFor(name)],
     clips: [],
+    cues: {},
     mdlRig: emptyMdlRig(),
     lodZ: defaultEnemyLodZ(name),
   };
@@ -3332,7 +3451,8 @@ export function defaultEditorState() {
     item: "backpack",
     itemOrbit: { yaw: 0.6, pitch: 0.35, dist: 16, target: { x: 0, y: 0, z: 0 } },
     sound: SOUND_LOCKED[0].path,
-    showAmbience: false,
+    hideUnused: true,
+    collapsedSoundFolders: [],
   };
 }
 
@@ -3459,7 +3579,11 @@ export function parseEditorState(raw) {
   }
   if (typeof raw.item === "string" && ALL_MESH_KEYS.includes(raw.item)) d.item = raw.item;
   if (typeof raw.sound === "string" && raw.sound) d.sound = raw.sound.replace(/\\/g, "/").toLowerCase();
-  if (raw.showAmbience != null) d.showAmbience = !!raw.showAmbience;
+  if (raw.hideUnused != null) d.hideUnused = !!raw.hideUnused;
+  else if (raw.showAmbience != null) d.hideUnused = !raw.showAmbience;
+  if (Array.isArray(raw.collapsedSoundFolders)) {
+    d.collapsedSoundFolders = raw.collapsedSoundFolders.map((name) => String(name).toLowerCase());
+  }
   const io = raw.itemOrbit || {};
   const tgt = io.target || {};
   d.itemOrbit = {
@@ -3475,6 +3599,16 @@ export function parseEditorState(raw) {
   return d;
 }
 
+function persistSounds(sounds) {
+  const out = {};
+  for (const [path, snd] of Object.entries(sounds || {})) {
+    if (!snd || typeof snd !== "object") continue;
+    const { freq, vol, wave, ...rest } = snd;
+    out[path] = rest;
+  }
+  return out;
+}
+
 /** Game JSON only — no editor camera/tab/selection. */
 export function gameDocument(doc) {
   return {
@@ -3484,7 +3618,7 @@ export function gameDocument(doc) {
     enemies: (doc.enemies || []).map(persistEnemy),
     weapons: doc.weapons,
     items: doc.items,
-    sounds: doc.sounds,
+    sounds: persistSounds(doc.sounds),
   };
 }
 
@@ -3585,6 +3719,7 @@ export function normalizeDocument(raw) {
         enemy.frames = [restPoseFrame(enemy.name, nv)];
         enemy.mdlRig = normalizeMdlRig(e.mdlRig, nv);
         enemy.customGraph = null;
+        stripInheritedStockJoints(enemy);
       } else {
         enemy.verts = 13;
         enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
@@ -3593,6 +3728,8 @@ export function normalizeDocument(raw) {
         enemy.customGraph = parseSkelGraph(e.customGraph, enemy.name, 0);
       }
       enemy.clips = parseClipMeta(e.clips);
+      enemy.cues = parseEnemyCues(e.cues);
+      migrateEnemyClipSounds(enemy);
       enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;

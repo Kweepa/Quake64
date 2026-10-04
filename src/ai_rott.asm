@@ -47,7 +47,7 @@ ai_rott_entry
 .approach_same
 	ldx enemy_idx
 	jsr enemy_chebyshev
-	cmp enemy_range + ENT_ROTT
+	jsr enemy_cmp_range
 	beq .approach_stand
 	bcc .approach_stand
 	ldx enemy_idx
@@ -92,7 +92,7 @@ ai_rott_entry
 	jsr enemy_same_floor
 	bcc .rts
 	jsr enemy_chebyshev
-	cmp enemy_range + ENT_ROTT
+	jsr enemy_cmp_range
 	beq .roll
 	bcc .roll
 .rts
@@ -116,7 +116,7 @@ ai_rott_entry
 .attack_end
 	ldx enemy_idx
 	jsr enemy_chebyshev
-	cmp enemy_range + ENT_ROTT
+	jsr enemy_cmp_range
 	beq .same
 	bcc .same
 	jmp enemy_enter_approach

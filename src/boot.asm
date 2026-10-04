@@ -146,7 +146,7 @@ name_tab
 name_splashc
 	!text "SPLASHC"
 
-; EDAT overwrites $06F7-$0875, including boot_start's file-table loop.
+; EDAT overwrites ENEMY_DATA_BASE through ENEMY_DATA_LIMIT-1, including boot_start's file-table loop.
 ; GAME must already be resident, and this final loader/return path must stay
 ; above the overwritten range.
 finish_boot

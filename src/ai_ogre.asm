@@ -86,8 +86,7 @@ ai_ogre_entry
 	jsr take_damage
 	lda enemy_idx
 	sta bite_splat_i
-	lda #<SOUND_OGRE_OGDRAG
-	jmp play_sound
+	rts
 .grenade
 	lda enemy_idx
 	sta emuz_pending

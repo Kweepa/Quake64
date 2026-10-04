@@ -97,8 +97,8 @@ export class SoundView {
     }
     this.#drawFreq(ctx, snd, layout);
     this.#drawTimeAxis(ctx, layout, layout.freq.top + layout.freq.h);
-    if (!snd.freq.length) {
-      this.#label(ctx, "Empty", 16, layout.freq.top + 22);
+    if (!snd.freq?.length) {
+      this.#label(ctx, snd.pending ? "Open sound banks" : "Empty", 16, layout.freq.top + 22);
     }
   }
 

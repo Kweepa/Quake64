@@ -390,6 +390,11 @@ h2 {
   color: #f88;
 }
 
+select.error {
+  border-color: #f88;
+  color: #f88;
+}
+
 .preview-panel .muted {
   margin: 0.35rem 0 0;
   font-size: 0.7rem;
@@ -540,6 +545,17 @@ button:disabled {
 .palette-item:hover {
   border-color: var(--accent);
   color: var(--text);
+}
+
+.palette-enemy-icon {
+  width: 100%;
+  height: 36px;
+  display: block;
+  pointer-events: none;
+}
+
+.palette-enemy-name {
+  line-height: 1.1;
 }
 
 .object-list {
@@ -707,6 +723,7 @@ button:disabled {
 
 .field input[type="number"],
 .field input[type="text"],
+.field input[type="search"],
 .field select,
 .field textarea {
   background: var(--bg);
@@ -951,17 +968,17 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-.sound-ambience-toggle {
+.sound-unused-toggle {
   gap: 0.4rem;
   margin-bottom: 0.5rem;
 }
 
-.sound-ambience-toggle span {
+.sound-unused-toggle span {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.sound-ambience-toggle input {
+.sound-unused-toggle input {
   flex: 0 0 auto;
   width: auto;
 }
@@ -974,12 +991,24 @@ button:disabled {
 }
 
 .sound-folder h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
   margin: 0.45rem 0 0.2rem;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
   font-weight: 600;
+}
+
+.sound-folder .sound-twist {
+  flex: 0 0 1rem;
+  width: 1rem;
+  padding: 0;
+  font-size: 0.65rem;
+  line-height: 1;
+  color: inherit;
 }
 
 .sound-row {

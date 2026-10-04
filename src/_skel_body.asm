@@ -262,12 +262,15 @@ SKEL_RISE = 16
 	!error "skel_sink_calc builds n * SKEL_RISE * 256 with a fixed <<4"
 }
 
-; X = obj_i. skel_sink:skel_sinkh = n/(len−1) * SKEL_RISE, 8.8.
-; Clobbers rot0..rot2, dlo, nlo, Y.
+; X = obj_i. Chthon only: skel_sink:skel_sinkh = n/(len−1) * SKEL_RISE, 8.8.
+; Other custom skeletons stay on the placed Y. Clobbers rot0..rot2, dlo, nlo, Y.
 skel_sink_calc
 	lda #0
 	sta skel_sink
 	sta skel_sinkh
+	ldy ent_type
+	cpy #ENT_CHTHON
+	bne .ss_rts
 	lda en_state,x
 	cmp #EN_ALERT
 	beq .ss_alert
@@ -281,6 +284,7 @@ skel_sink_calc
 	rts
 .ss_alert
 	ldy ent_type
+	jsr slot_of_y
 	lda enemy_alert_len,y
 	sec
 	sbc #1
@@ -325,7 +329,8 @@ skel_sink_calc
 	rts
 
 ; Full project of this type. Baked batches in the prefix drive the resident
-; mesh passes directly. No floor clip. Idle mesh stays undrawn.
+; mesh passes directly. No floor clip. Chthon's idle mesh stays undrawn
+; (the lava bolt is the only idle draw); other custom types draw while idle.
 draw_custom_enemy
 	ldx obj_i
 	lda en_state,x
@@ -334,10 +339,8 @@ draw_custom_enemy
 .dce_idle
 	lda ent_type
 	cmp #ENT_CHTHON
-	bne .dce_idle_rts
+	bne .dce_body
 	jmp .dce_bolt
-.dce_idle_rts
-	rts
 .dce_body
 	jsr skel_sink_calc
 	jsr skel_rotate

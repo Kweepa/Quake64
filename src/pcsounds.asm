@@ -8,35 +8,47 @@
 
 SOUND_WEAPONS_TINK1	= 0
 SOUND_PLAYER_DEATH1	= 1
-SOUND_DOG_DDEATH	= 2
-SOUND_PLAYER_PAIN1	= 3
-SOUND_DOORS_HYDRO1	= 4
-SOUND_SOLDIER_SIGHT1	= 5
-SOUND_WEAPONS_SPIKE2	= 6
-SOUND_WEAPONS_LHIT	= 7
-SOUND_SOLDIER_DEATH1	= 8
-SOUND_WEAPONS_GRENADE	= 9
-SOUND_DOG_DSIGHT	= 10
-SOUND_ITEMS_ITEMBK2	= 11
-SOUND_WEAPONS_PKUP	= 12
-SOUND_ITEMS_HEALTH1	= 13
-SOUND_MISC_MENU2	= 14
-SOUND_ITEMS_DAMAGE	= 15
-SOUND_WEAPONS_SHOTGN2	= 16
-SOUND_WEAPONS_R_EXP3	= 17
-SOUND_OGRE_OGSAWATK	= 18
-SOUND_OGRE_OGDRAG	= 19
-SOUND_PLAYER_LAND	= 20
-SOUND_DOG_DPAIN1	= 21
-SOUND_SOLDIER_PAIN1	= 22
-SOUND_DOG_DATTACK1	= 23
-SOUND_DOG_IDLE	= 24
-SOUND_SOLDIER_SATTCK1	= 25
-SOUND_WIZARD_WATTACK	= 26
-SOUND_WIZARD_WDEATH	= 27
-SOUND_WIZARD_WPAIN	= 28
-SOUND_WIZARD_WSIGHT	= 29
-SOUND_COUNT	= 30
+SOUND_PLAYER_PAIN1	= 2
+SOUND_DOORS_HYDRO1	= 3
+SOUND_WEAPONS_SPIKE2	= 4
+SOUND_WEAPONS_LHIT	= 5
+SOUND_WEAPONS_GRENADE	= 6
+SOUND_ITEMS_ITEMBK2	= 7
+SOUND_WEAPONS_PKUP	= 8
+SOUND_ITEMS_HEALTH1	= 9
+SOUND_MISC_MENU2	= 10
+SOUND_ITEMS_DAMAGE	= 11
+SOUND_WEAPONS_SHOTGN2	= 12
+SOUND_WEAPONS_R_EXP3	= 13
+SOUND_PLAYER_LAND	= 14
+SOUND_BOSS1_DEATH	= 15
+SOUND_DEMON_DDEATH	= 16
+SOUND_DEMON_DHIT2	= 17
+SOUND_DEMON_DPAIN1	= 18
+SOUND_DEMON_SIGHT2	= 19
+SOUND_DOG_DATTACK1	= 20
+SOUND_DOG_DDEATH	= 21
+SOUND_DOG_DPAIN1	= 22
+SOUND_DOG_DSIGHT	= 23
+SOUND_KNIGHT_KDEATH	= 24
+SOUND_KNIGHT_KHURT	= 25
+SOUND_KNIGHT_KSIGHT	= 26
+SOUND_KNIGHT_SWORD1	= 27
+SOUND_OGRE_OGDTH	= 28
+SOUND_OGRE_OGSAWATK	= 29
+SOUND_OGRE_OGWAKE	= 30
+SOUND_SHAMBLER_MELEE1	= 31
+SOUND_SHAMBLER_SDEATH	= 32
+SOUND_SHAMBLER_SSIGHT	= 33
+SOUND_SOLDIER_DEATH1	= 34
+SOUND_SOLDIER_PAIN1	= 35
+SOUND_SOLDIER_SATTCK1	= 36
+SOUND_SOLDIER_SIGHT1	= 37
+SOUND_WIZARD_WATTACK	= 38
+SOUND_WIZARD_WDEATH	= 39
+SOUND_WIZARD_WPAIN	= 40
+SOUND_WIZARD_WSIGHT	= 41
+SOUND_COUNT	= 42
 
 pc_weapons_tink1
 	!byte 3, 0, 131, 142, 134
@@ -47,7 +59,8 @@ pc_player_pain1
 	!byte 19, 0, 62, 59, 55, 52, 49, 63, 75, 80, 69, 78, 65, 77, 68, 62
 	!byte 56, 74, 67, 61, 55
 pc_doors_hydro1
-	!byte 12, 0, 119, 118, 118, 116, 114, 111, 107, 101, 95, 89, 83, 77
+	!byte 17, 0, 85, 101, 83, 88, 72, 70, 62, 58, 48, 68, 40, 78, 34, 88
+	!byte 30, 101, 28
 pc_weapons_spike2
 	!byte 4, 0, 104, 107, 101, 123
 pc_weapons_lhit
@@ -70,41 +83,39 @@ pc_items_damage
 	!byte 33, 30, 29, 28, 31, 35, 41, 46, 49, 47, 41, 30, 20, 0, 0, 0
 	!byte 18, 18, 18, 0, 18, 18, 18, 18, 18, 18
 pc_weapons_shotgn2
-	!byte 16, 0, 40, 57, 49, 60, 48, 52, 64, 68, 57, 74, 78, 81, 72, 70
+	!byte 16, 0, 40, 57, 49, 60, 48, 52, 64, 68, 57, 74, 78, 80, 72, 70
 	!byte 83, 107
 pc_weapons_r_exp3
-	!byte 27, 0, 81, 78, 60, 107, 83, 64, 32, 83, 107, 33, 36, 60, 44, 47
-	!byte 64, 114, 107, 105, 26, 47, 47, 78, 101, 32, 83, 47, 43
+	!byte 0, 0
 pc_player_land
 	!byte 4, 0, 83, 78, 78, 85
 
-; resident sound payload 267 bytes
+; resident sound payload 245 bytes
 sound_priorities
-	!byte 1, 99, 50, 90, 20, 50, 50, 50, 50, 20, 50, 90, 80, 85, 1, 70
-	!byte 50, 50, 20, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50
+	!byte 1, 99, 90, 20, 50, 50, 20, 90, 80, 85, 1, 70, 50, 50, 50, 50
+	!byte 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 50, 20, 50, 50
+	!byte 50, 50, 50, 50, 50, 50, 50, 50, 50, 50
 
 ; 0 = player V1, 1 = enemy V2, 2 = world V3 (mixer; all pulse)
 sound_voices
-	!byte 0, 0, 1, 0, 2, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0
-	!byte 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0
+	!byte 0, 0, 0, 2, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1
+	!byte 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+	!byte 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 
 ; 1 = payload on pose heap (sound_table patched at room stream)
 sound_streamed
-	!byte 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0
-	!byte 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1
+	!byte 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+	!byte 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+	!byte 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 
 sound_table
 	!word pc_weapons_tink1
 	!word pc_player_death1
-	!word 0
 	!word pc_player_pain1
 	!word pc_doors_hydro1
-	!word 0
 	!word pc_weapons_spike2
 	!word pc_weapons_lhit
-	!word 0
 	!word pc_weapons_grenade
-	!word 0
 	!word pc_items_itembk2
 	!word pc_weapons_pkup
 	!word pc_items_health1
@@ -112,9 +123,25 @@ sound_table
 	!word pc_items_damage
 	!word pc_weapons_shotgn2
 	!word pc_weapons_r_exp3
-	!word 0
-	!word 0
 	!word pc_player_land
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
+	!word 0
 	!word 0
 	!word 0
 	!word 0

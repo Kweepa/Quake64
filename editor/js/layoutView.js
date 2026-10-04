@@ -1,6 +1,9 @@
 import {
   KINDS,
+  ROOM_BG_DEFAULT,
+  ROOM_LINE_DEFAULT,
   aabbCenter,
+  colorHex,
   clampObject,
   objectVisible,
   activeMap,
@@ -31,6 +34,7 @@ import {
   distPointToSegment2d,
   faceCorners,
   intersectPlane,
+  NEAR,
   lookVectors,
   projectLine,
   projectPoint,
@@ -46,6 +50,14 @@ import {
   gizmoMetrics,
   hitTranslateGizmo,
 } from "./gizmo.js";
+
+function hexAlpha(hex, alpha) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
 
 /** Ramp AABB wireframe without the y=max face (open top). */
 const SLOPE_TOP = new Set([2, 3, 6, 7]);
@@ -1292,6 +1304,52 @@ export class LayoutView {
     this.#line3(ctx, { x: 0, y: 0, z: 0 }, { x: 0, y: WORLD_SIZE, z: 0 }, cam, w, h);
   }
 
+  /** Interior hull faces (floor and walls seen from inside), tinted with the room background. */
+  #drawRoomWalls(ctx, obj, geom, cam, w, h) {
+    const faces = [];
+    for (const f of geom.hullFaces || []) {
+      if (!f.corners || f.corners.length < 4) continue;
+      // Outward normal is `sign` along `axis`. Shade only when the camera is on the inside.
+      if ((cam[f.axis] - f.plane) * f.sign >= 0) continue;
+      const center = f.center || {
+        x: (f.corners[0].x + f.corners[2].x) / 2,
+        y: (f.corners[0].y + f.corners[2].y) / 2,
+        z: (f.corners[0].z + f.corners[2].z) / 2,
+      };
+      const cc = worldToCamera(center, cam);
+      if (cc.z < NEAR) continue;
+      const pts = [];
+      let ok = true;
+      for (let i = 0; i < 4; i++) {
+        const pr = projectPoint(f.corners[i], cam, w, h);
+        if (!pr.ok) {
+          ok = false;
+          break;
+        }
+        pts.push(pr);
+      }
+      if (!ok) continue;
+      let area = 0;
+      for (let i = 0; i < 4; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % 4];
+        area += a.sx * b.sy - b.sx * a.sy;
+      }
+      if (Math.abs(area) < 24) continue;
+      faces.push({ pts, z: cc.z });
+    }
+    if (!faces.length) return;
+    faces.sort((a, b) => b.z - a.z);
+    ctx.fillStyle = hexAlpha(colorHex(obj.bgColor ?? ROOM_BG_DEFAULT), 0.4);
+    for (const face of faces) {
+      ctx.beginPath();
+      ctx.moveTo(face.pts[0].sx, face.pts[0].sy);
+      for (let i = 1; i < 4; i++) ctx.lineTo(face.pts[i].sx, face.pts[i].sy);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
   #line3(ctx, a, b, cam, w, h, color) {
     const seg = projectLine(a, b, cam, w, h);
     if (!seg) return;
@@ -1306,7 +1364,7 @@ export class LayoutView {
     const color = highlight
       ? "#f2d36b"
       : obj.kind === "room"
-        ? "#f0f0f0"
+        ? colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT)
         : obj.kind === "spawn" && !obj.enabled
           ? "#1a7a3c"
           : KINDS[obj.kind].color;
@@ -1334,6 +1392,7 @@ export class LayoutView {
       }
     } else if (obj.kind === "room") {
       const g = roomGeometry(obj);
+      this.#drawRoomWalls(ctx, obj, g, cam, w, h);
       for (const e of g.edges) {
         this.#line3(ctx, g.verts[e.a], g.verts[e.b], cam, w, h);
       }

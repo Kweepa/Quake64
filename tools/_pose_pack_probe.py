@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 doc = json.loads((ROOT / "editor" / "quake64.json").read_text(encoding="utf-8"))
 NIB = (-8, 7)
-TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon", "Zombie"]
+TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon", "Zombie", "Demon"]
 
 
 def s_frame(fr):
@@ -17,7 +17,7 @@ def s_frame(fr):
 
 
 def fits(fr, P):
-    return all(NIB[0] <= fr[k] - P[k] <= NIB[1] for k in range(39))
+    return all(NIB[0] <= fr[k] - P[k] <= NIB[1] for k in range(len(fr)))
 
 
 def pack_gop(frs):
@@ -53,8 +53,8 @@ def pack_any(frs):
     return len(plist), nI, nPfr
 
 
-def size(nf, n_p, nI):
-    return 2 + nf + n_p * 39 + nI * 20
+def size(nf, n_p, nI, n):
+    return 2 + nf + n_p * n + nI * 20
 
 
 print(f"{'type':12} {'unpk':>5}  GOP nP/I/bytes  ANY nP/I/bytes")
@@ -63,11 +63,12 @@ for e in doc["enemies"]:
         continue
     frs = [s_frame(fr) for fr in e["frames"]]
     nf = len(frs)
-    unpk = 1 + nf * 39
+    n = len(frs[0]) if frs else 0
+    unpk = 1 + nf * n
     n_p, nI, _ = pack_gop(frs)
-    g = size(nf, n_p, nI)
+    g = size(nf, n_p, nI, n)
     n_pa, nIa, _ = pack_any(frs)
-    a = size(nf, n_pa, nIa)
+    a = size(nf, n_pa, nIa, n)
     print(
         f"{e['name']:12} {unpk:5}  "
         f"{n_p:3}/{nI:3}/{g:5}  "

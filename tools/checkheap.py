@@ -36,7 +36,7 @@ FLAGS_ASM = ROOT / "src" / "build_flags.asm"
 DOC = ROOT / "editor" / "quake64.json"
 
 LEVEL_NAMES = [f"E1M{i}" for i in range(1, 9)]
-DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
+DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie", "demon"]
 ENEMY_NTYPES = len(DOS_NAME)
 
 

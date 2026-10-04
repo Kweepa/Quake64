@@ -398,6 +398,11 @@ h2 {
   color: #f88;
 }
 
+select.error {
+  border-color: #f88;
+  color: #f88;
+}
+
 .preview-panel .muted {
   margin: 0.35rem 0 0;
   font-size: 0.7rem;
@@ -548,6 +553,17 @@ button:disabled {
 .palette-item:hover {
   border-color: var(--accent);
   color: var(--text);
+}
+
+.palette-enemy-icon {
+  width: 100%;
+  height: 36px;
+  display: block;
+  pointer-events: none;
+}
+
+.palette-enemy-name {
+  line-height: 1.1;
 }
 
 .object-list {
@@ -715,6 +731,7 @@ button:disabled {
 
 .field input[type="number"],
 .field input[type="text"],
+.field input[type="search"],
 .field select,
 .field textarea {
   background: var(--bg);
@@ -959,17 +976,17 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-.sound-ambience-toggle {
+.sound-unused-toggle {
   gap: 0.4rem;
   margin-bottom: 0.5rem;
 }
 
-.sound-ambience-toggle span {
+.sound-unused-toggle span {
   flex: 1 1 auto;
   min-width: 0;
 }
 
-.sound-ambience-toggle input {
+.sound-unused-toggle input {
   flex: 0 0 auto;
   width: auto;
 }
@@ -982,12 +999,24 @@ button:disabled {
 }
 
 .sound-folder h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
   margin: 0.45rem 0 0.2rem;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
   font-weight: 600;
+}
+
+.sound-folder .sound-twist {
+  flex: 0 0 1rem;
+  width: 1rem;
+  padding: 0;
+  font-size: 0.65rem;
+  line-height: 1;
+  color: inherit;
 }
 
 .sound-row {
@@ -1138,9 +1167,9 @@ button:disabled {
       </section>
       <section id="sounds-left" hidden>
         <h2>Sounds</h2>
-        <label class="field sound-ambience-toggle">
-          <input type="checkbox" id="chk-show-ambience" />
-          <span>Show ambience</span>
+        <label class="field sound-unused-toggle">
+          <input type="checkbox" id="chk-hide-unused" checked title="Hide ambience, plats, hknight, and buttons" />
+          <span>Hide unused</span>
         </label>
         <div id="sound-list" class="sound-list"></div>
         <div class="btn-row">
@@ -2599,6 +2628,7 @@ const ENEMY_LOD_Z_BY_NAME = {
   Shambler: 4,
   Chthon: 4,
   Zombie: 4,
+  Demon: 8,
 };
 const DEFAULT_WEAPON_SCALE = 0.4;
 const WEAPON_KEYS = ["axe", "shot2", "nail", "rock"];
@@ -2616,80 +2646,65 @@ const PC_TIMER = 1193181;
 const SOUND_HZ_MIN = 80;
 const SOUND_HZ_MAX = 4000;
 const SOUND_VOICE_LABELS = ["Player", "Enemy", "World"];
-const SOUND_HUM_TYPES = ["grunt", "knight", "scrag", "ogre", "shambl", "chthon", "zombie"];
 
-/** Locked in-game aliases. Always exported. extraAliases share the same ID. */
+/** Fixed enemy cue set. sight/wince/death play generically; melee/shoot bind to clips. */
+const ENEMY_CUES = ["sight", "wince", "melee", "shoot", "death"];
+const ENEMY_CUE_LABELS = {
+  sight: "Sight",
+  wince: "Wince",
+  melee: "Melee",
+  shoot: "Shoot",
+  death: "Death",
+};
+const ENEMY_CUES_REQUIRED = ["sight", "wince", "death"];
+/** Cues that a clip may carry (timed to an animation frame). */
+const ENEMY_ATTACK_CUES = ["melee", "shoot"];
+
+/** Locked in-game aliases (resident, always exported). extraAliases share the same ID. */
 const SOUND_LOCKED = [
-  { alias: "HITWALL", path: "sound/weapons/tink1.wav", voice: 0, priority: 1, freq: [131, 142, 134] },
+  { alias: "HITWALL", path: "sound/weapons/tink1.wav", voice: 0, priority: 1, origin: "wolf", library: "HITWALL" },
   {
     alias: "PLAYERDEATH",
     path: "sound/player/death1.wav",
     voice: 0,
     priority: 99,
-    freq: [21, 30, 39, 45, 52, 15, 77, 98, 17, 0, 30, 0, 36, 0, 79, 79],
-  },
-  {
-    alias: "DOGDEATH",
-    path: "sound/dog/ddeath.wav",
-    voice: 1,
-    priority: 50,
-    streamTypes: ["rott"],
-    freq: [19, 16, 15, 27, 40, 43, 57, 69, 83, 103, 111, 157, 145, 152, 159],
+    origin: "wolf",
+    library: "PLAYERDEATH",
   },
   {
     alias: "TAKEDAMAGE",
     path: "sound/player/pain1.wav",
     voice: 0,
     priority: 90,
-    freq: [62, 59, 55, 52, 49, 63, 75, 80, 69, 78, 65, 77, 68, 62, 56, 74, 67, 61, 55],
+    origin: "wolf",
+    library: "TAKEDAMAGE",
   },
   {
     alias: "OPENDOOR",
     path: "sound/doors/hydro1.wav",
     voice: 2,
     priority: 20,
-    freq: [119, 118, 118, 116, 114, 111, 107, 101, 95, 89, 83, 77],
+    origin: "wolf",
+    library: "OPENDOOR",
   },
-  {
-    alias: "HALT",
-    path: "sound/soldier/sight1.wav",
-    voice: 1,
-    priority: 50,
-    streamTypes: SOUND_HUM_TYPES,
-    freq: [42, 38, 35, 31, 31, 31, 32, 46, 60, 77, 85, 105, 132, 140, 145, 148, 151, 153, 157, 0, 0, 0, 138, 138, 138],
-  },
-  { alias: "ATKMACHINEGUN", path: "sound/weapons/spike2.wav", voice: 0, priority: 50, freq: [104, 107, 101, 123] },
-  { alias: "HITENEMY", path: "sound/weapons/lhit.wav", voice: 0, priority: 50, freq: [130, 25, 33, 78, 26, 18, 18, 25, 0, 32] },
-  {
-    alias: "DEATHSCREAM1",
-    path: "sound/soldier/death1.wav",
-    voice: 1,
-    priority: 50,
-    streamTypes: SOUND_HUM_TYPES,
-    freq: [60, 55, 51, 26, 37, 31, 15, 16, 23, 29, 74, 28, 31, 27, 34, 42, 38, 34, 36, 41],
-  },
-  { alias: "SHOOT", path: "sound/weapons/grenade.wav", voice: 1, priority: 20, freq: [16, 110, 40, 40, 33, 103, 41, 115, 137] },
-  {
-    alias: "DOGBARK",
-    path: "sound/dog/dsight.wav",
-    voice: 1,
-    priority: 50,
-    streamTypes: ["rott"],
-    freq: [64, 56, 47, 41, 142, 144, 37, 48, 144, 57, 67, 82, 93, 104, 123, 151, 151],
-  },
+  { alias: "ATKMACHINEGUN", path: "sound/weapons/spike2.wav", voice: 0, priority: 50, origin: "wolf", library: "ATKMACHINEGUN" },
+  { alias: "HITENEMY", path: "sound/weapons/lhit.wav", voice: 0, priority: 50, origin: "wolf", library: "HITENEMY" },
+  { alias: "SHOOT", path: "sound/weapons/grenade.wav", voice: 1, priority: 20, origin: "wolf", library: "SHOOT" },
   {
     alias: "GETKEY",
     path: "sound/items/itembk2.wav",
     voice: 0,
     priority: 90,
-    freq: [36, 36, 36, 36, 36, 36, 36, 36, 0, 0, 55, 55, 55, 55, 55, 55, 55, 55, 0, 55, 55, 55, 55, 0, 25, 25, 25, 25, 25, 25],
+    origin: "wolf",
+    library: "GETKEY",
   },
   {
     alias: "GETAMMO",
     path: "sound/weapons/pkup.wav",
     voice: 0,
     priority: 80,
-    freq: [34, 34, 34, 34, 34, 34, 0, 0, 0, 20, 20, 20, 0, 20, 20, 20, 20, 20, 20, 20, 20],
+    origin: "wolf",
+    library: "GETAMMO",
   },
   {
     alias: "HEALTH1",
@@ -2697,35 +2712,34 @@ const SOUND_LOCKED = [
     path: "sound/items/health1.wav",
     voice: 0,
     priority: 85,
-    freq: [58, 0, 0, 51, 51, 0, 0, 38, 38, 0, 0, 22, 22, 0, 0, 22, 22, 22, 0, 0, 21, 21, 21],
+    origin: "wolf",
+    library: "HEALTH1",
   },
-  { alias: "SWITCH", path: "sound/misc/menu2.wav", voice: 0, priority: 1, freq: [114, 60, 114] },
+  { alias: "SWITCH", path: "sound/misc/menu2.wav", voice: 0, priority: 1, origin: "wolf", library: "MOVEGUN1" },
   {
     alias: "BONUS1",
     path: "sound/items/damage.wav",
     voice: 0,
     priority: 70,
-    freq: [61, 53, 49, 46, 45, 51, 57, 64, 71, 74, 73, 69, 58, 41, 33, 30, 29, 28, 31, 35, 41, 46, 49, 47, 41, 30, 20, 0, 0, 0, 18, 18, 18, 0, 18, 18, 18, 18, 18, 18],
+    origin: "wolf",
+    library: "BONUS1",
   },
   {
     alias: "SHOTGN",
     path: "sound/weapons/shotgn2.wav",
     voice: 0,
     priority: 50,
-    freq: [40, 57, 49, 60, 48, 52, 64, 68, 57, 74, 78, 81, 72, 70, 83, 107],
+    origin: "doom",
+    library: "DPSHOTGN",
   },
   {
     alias: "BAREXP",
     path: "sound/weapons/r_exp3.wav",
     voice: 0,
     priority: 50,
-    freq: [81, 78, 60, 107, 83, 64, 32, 83, 107, 33, 36, 60, 44, 47, 64, 114, 107, 105, 26, 47, 47, 78, 101, 32, 83, 47, 43],
+    origin: "empty",
   },
-  { alias: "SAWFUL", path: "sound/ogre/ogsawatk.wav", voice: 0, priority: 20, freq: [59, 47, 59, 37, 59, 47, 59], streamTypes: ["ogre"] },
-  { alias: "SAWHIT", path: "sound/ogre/ogdrag.wav", voice: 0, priority: 50, freq: [48, 55, 44, 54, 36, 49, 30, 47, 26], streamTypes: ["ogre"] },
-  { alias: "OOF", path: "sound/player/land.wav", voice: 0, priority: 50, freq: [83, 78, 78, 85] },
-  { alias: "DMPAIN", path: "sound/dog/dpain1.wav", voice: 1, priority: 50, freq: [15, 28, 31, 23, 31, 29, 38, 45, 45, 52, 64, 96], streamTypes: ["rott"] },
-  { alias: "POPAIN", path: "sound/soldier/pain1.wav", voice: 1, priority: 50, freq: [88, 62, 57, 39, 28, 35, 28, 28, 31, 44, 57, 81, 83], streamTypes: SOUND_HUM_TYPES },
+  { alias: "OOF", path: "sound/player/land.wav", voice: 0, priority: 50, origin: "doom", library: "DPOOF" },
 ];
 
 const SOUND_LOCKED_BY_PATH = Object.fromEntries(SOUND_LOCKED.map((s) => [s.path, s]));
@@ -2780,25 +2794,23 @@ function clampSoundFreqByte(n) {
   return v;
 }
 
-function parseSoundBytes(raw, clamp, fill) {
-  if (!Array.isArray(raw)) return fill.slice();
-  const out = [];
-  for (let i = 0; i < raw.length && out.length < SOUND_MAX_TICKS; i++) out.push(clamp(raw[i]));
-  return out;
-}
+const LIBRARY_ORIGINS = new Set(["wolf", "doom", "dave", "keen"]);
 
 function defaultSoundEntry(locked) {
-  const freq = locked.freq.map((b) => clampSoundFreqByte(b));
-  return {
+  const origin = LIBRARY_ORIGINS.has(locked.origin) || locked.origin === "empty" ? locked.origin : "empty";
+  const entry = {
     export: true,
     alias: locked.alias,
     extraAliases: locked.extraAliases ? [...locked.extraAliases] : undefined,
     voice: clampSoundVoice(locked.voice),
     priority: clampSoundPriority(locked.priority),
     attack: 0,
-    freq,
-    origin: "wolf",
+    origin,
   };
+  if (typeof locked.library === "string" && locked.library.trim()) {
+    entry.library = locked.library.trim().toUpperCase();
+  }
+  return entry;
 }
 
 function defaultSounds() {
@@ -2808,7 +2820,7 @@ function defaultSounds() {
 }
 
 function emptySoundEntry() {
-  return { export: false, voice: 0, priority: 50, attack: 0, freq: [], origin: "empty" };
+  return { export: false, voice: 0, priority: 50, attack: 0, origin: "empty" };
 }
 
 function isSoundLocked(path) {
@@ -2833,30 +2845,89 @@ function soundIdent(path) {
     .toUpperCase() || "SFX";
 }
 
+/** Suffix of SOUND_FOLDER_STEM. The list already groups by folder. */
+function soundLeafIdent(path) {
+  const ident = soundIdent(path);
+  const folder = soundFolder(path)
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+  const prefix = folder ? `${folder}_` : "";
+  return prefix && ident.startsWith(prefix) ? ident.slice(prefix.length) : ident;
+}
+
 function alignSoundArrays(snd) {
-  let freq = Array.isArray(snd.freq) ? snd.freq.map(clampSoundFreqByte) : [];
-  if (freq.length > SOUND_MAX_TICKS) freq = freq.slice(0, SOUND_MAX_TICKS);
-  snd.freq = freq;
+  if (Array.isArray(snd.freq)) {
+    let freq = snd.freq.map(clampSoundFreqByte);
+    if (freq.length > SOUND_MAX_TICKS) freq = freq.slice(0, SOUND_MAX_TICKS);
+    snd.freq = freq;
+  }
   delete snd.vol;
   delete snd.wave;
   snd.attack = clampSoundAttack(snd.attack);
-  return freq.length;
+  return snd.freq?.length || 0;
 }
 
-function soundIsStreamed(path) {
-  const locked = SOUND_LOCKED_BY_PATH[path];
-  return Array.isArray(locked?.streamTypes) && locked.streamTypes.length > 0;
+/** Normalize a cue value to a sound path, or "" when it is not one. */
+function normalizeCuePath(raw) {
+  const p = String(raw ?? "")
+    .trim()
+    .replace(/\\/g, "/")
+    .toLowerCase();
+  return p.startsWith("sound/") && p.endsWith(".wav") ? p : "";
 }
 
-function soundPayloadBytes(sounds) {
+/** { sight, wince, melee, shoot, death } -> sound path. Unset cues are omitted. */
+function parseEnemyCues(raw) {
+  const out = {};
+  for (const cue of ENEMY_CUES) {
+    const p = normalizeCuePath(raw?.[cue]);
+    if (p) out[cue] = p;
+  }
+  return out;
+}
+
+/** Paths referenced by any enemy cue. Those are exported; locked paths are resident. */
+function cueReferencedPaths(doc) {
+  const out = new Set();
+  for (const e of doc?.enemies || []) {
+    for (const cue of ENEMY_CUES) {
+      const p = e.cues?.[cue];
+      if (p) out.add(p);
+    }
+  }
+  return out;
+}
+
+/** True when the path rides on enemy pose banks (cue-referenced, not a resident alias). */
+function soundIsStreamed(doc, path) {
+  return !SOUND_LOCKED_BY_PATH[path] && cueReferencedPaths(doc).has(path);
+}
+
+/** Exported = resident alias or referenced by an enemy cue. */
+function soundIsExported(doc, path) {
+  return !!SOUND_LOCKED_BY_PATH[path] || cueReferencedPaths(doc).has(path);
+}
+
+/** Resident payload only (locked aliases). Enemy cues stream with the poses. */
+function soundPayloadBytes(sounds, resolveFreq) {
   let total = 0;
   const seen = new Set();
   for (const [path, snd] of Object.entries(sounds || {})) {
-    if (!snd?.export) continue;
+    if (!SOUND_LOCKED_BY_PATH[path]) continue;
     if (seen.has(path)) continue;
     seen.add(path);
-    if (soundIsStreamed(path)) continue;
-    const n = Math.min(SOUND_MAX_TICKS, snd.freq?.length || 0);
+    let freq = null;
+    if (typeof resolveFreq === "function") {
+      const got = resolveFreq(snd);
+      if (!got) continue;
+      freq = got;
+    } else if (Array.isArray(snd.freq)) {
+      freq = snd.freq;
+    } else {
+      continue;
+    }
+    const n = Math.min(SOUND_MAX_TICKS, freq.length || 0);
     total += 2 + n;
   }
   return total;
@@ -2883,30 +2954,18 @@ function parseSoundEntry(path, raw, fallback) {
   const locked = SOUND_LOCKED_BY_PATH[path];
   const base = fallback || (locked ? defaultSoundEntry(locked) : emptySoundEntry());
   const src = raw && typeof raw === "object" ? raw : {};
-  const freq = parseSoundBytes(src.freq, clampSoundFreqByte, base.freq);
+  const origin = LIBRARY_ORIGINS.has(src.origin) || src.origin === "empty" ? src.origin : base.origin;
   const snd = {
     export: locked ? true : !!src.export,
     voice: clampSoundVoice(src.voice != null ? src.voice : base.voice),
     priority: clampSoundPriority(src.priority != null ? src.priority : base.priority),
     attack: clampSoundAttack(src.attack != null ? src.attack : base.attack),
-    freq,
-    origin:
-      src.origin === "anneal"
-        ? "edit"
-        : src.origin === "estimate" ||
-            src.origin === "edit" ||
-            src.origin === "wolf" ||
-            src.origin === "doom" ||
-            src.origin === "empty"
-          ? src.origin
-          : base.origin,
+    origin,
   };
-  if (
-    (snd.origin === "wolf" || snd.origin === "doom") &&
-    typeof src.library === "string" &&
-    src.library.trim()
-  ) {
-    snd.library = src.library.trim().toUpperCase();
+  if (LIBRARY_ORIGINS.has(snd.origin)) {
+    const fromSrc = LIBRARY_ORIGINS.has(src.origin) && typeof src.library === "string" && src.library.trim();
+    const lib = fromSrc ? src.library : base.library;
+    if (typeof lib === "string" && lib.trim()) snd.library = lib.trim().toUpperCase();
   }
   if (locked) {
     snd.alias = locked.alias;
@@ -3911,15 +3970,12 @@ function normalizeExportClips(raw) {
   return out;
 }
 
-/** Optional one SOUND_* stem + clip-local frame. Empty sound is omitted. */
+/** Optional melee/shoot cue + clip-local frame. Anything else is omitted. */
 function normalizeClipSound(raw, len) {
   const n = Math.max(1, len | 0);
-  const ident = String(raw?.sound || "")
-    .trim()
-    .toUpperCase()
-    .replace(/^SOUND_/, "");
-  if (!ident) return {};
-  return { sound: ident, soundFrame: Math.max(0, Math.min(raw.soundFrame | 0, n - 1)) };
+  const cue = String(raw?.sound || "").trim().toLowerCase();
+  if (!ENEMY_ATTACK_CUES.includes(cue)) return {};
+  return { sound: cue, soundFrame: Math.max(0, Math.min(raw.soundFrame | 0, n - 1)) };
 }
 
 function withClipSound(clip, src) {
@@ -3943,16 +3999,21 @@ function normalizeClips(raw, frameCount) {
   return out;
 }
 
-/** Shared 13-vert skeleton: L/R hip, neck, head, L/R elbow, L/R wrist, L/R knee, L/R ankle, weapon tip on right wrist. */
+/**
+ * Placeable types. Index is the game type id (FIRE_FRAME / ENT_*).
+ * In-game HP is Quake health / 5 (Demon 300 → 60). Lists use enemyTypesByHp().
+ */
 const ENEMY_TYPES = [
-  { name: "Grunt", scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
+  { name: "Grunt", hp: 6, scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
   {
     name: "Knight",
+    hp: 15,
     scale: [1.15, 1.3, 1],
     rest: { 3: [0, 2, 0], 4: [-1, 1, 0], 6: [1, 1, 0], 12: [0, 10, -6] },
   },
   {
     name: "Rottweiler",
+    hp: 5,
     scale: [1, 0.55, 1.35],
     rest: {
       0: [0, 1, -5],
@@ -3968,6 +4029,7 @@ const ENEMY_TYPES = [
   },
   {
     name: "Scrag",
+    hp: 16,
     scale: [0.85, 1.15, 0.9],
     rest: {
       0: [0, 8, 0],
@@ -3985,11 +4047,13 @@ const ENEMY_TYPES = [
   },
   {
     name: "Ogre",
+    hp: 40,
     scale: [1.35, 1.05, 1.1],
     rest: { 5: [0, -1, 0], 7: [0, -1, 0], 12: [6, -4, 6] },
   },
   {
     name: "Shambler",
+    hp: 120,
     scale: [1.5, 1.45, 1.2],
     rest: {
       4: [-2, -2, 0],
@@ -4001,6 +4065,7 @@ const ENEMY_TYPES = [
   },
   {
     name: "Chthon",
+    hp: 80,
     scale: [1.8, 0.75, 1.6],
     rest: {
       2: [0, 2, 0],
@@ -4014,10 +4079,34 @@ const ENEMY_TYPES = [
   },
   {
     name: "Zombie",
+    hp: 12,
     scale: [1, 1.05, 1],
     rest: { 12: [0, 8, 6] },
   },
+  {
+    name: "Demon",
+    hp: 60,
+    scale: [1.35, 1.15, 1.25],
+    rest: { 3: [0, 2, 2], 12: [4, -2, 8] },
+  },
 ];
+
+function enemyHp(name) {
+  const t = ENEMY_TYPES.find((e) => e.name === name);
+  return t ? t.hp : 999;
+}
+
+/** Placeable types, lowest HP first. */
+function enemyTypesByHp() {
+  return [...ENEMY_TYPES].sort((a, b) => a.hp - b.hp);
+}
+
+/** Enemy records, lowest HP first. */
+function enemiesByHp(enemies) {
+  return [...(enemies || [])].sort(
+    (a, b) => enemyHp(a.name) - enemyHp(b.name) || String(a.name).localeCompare(String(b.name))
+  );
+}
 
 const FACES = [
   { id: "+z", axis: "z", sign: 1, label: "+Z" },
@@ -4649,7 +4738,7 @@ const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 5, 255];
+const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 5, 255, 5];
 const CHTHON_FIRE2 = 17;
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {
@@ -4703,6 +4792,13 @@ const ROLE_CLIPS = {
     run: ["walk"],
     walk: ["walk"],
     attack: ["atta", "attb", "attc"],
+  },
+  Demon: {
+    stand: ["stand"],
+    alert: ["stand", 4],
+    run: ["run"],
+    walk: ["run"],
+    attack: ["attacka", "leap"],
   },
 };
 
@@ -4927,6 +5023,7 @@ function packedPoseBytes(enemy, clips, frames) {
     let extra = [];
     if (typeof role === "string" && role.startsWith("attack")) {
       if (typeI === 1) extra = [start + 5, start + 7];
+      else if (name === "Demon") extra = [start + 5, start + 9];
       else if (name === "Zombie") extra = [start + length - 1];
       else if (name === "Chthon") extra = [start + fireOff, start + CHTHON_FIRE2];
       else if (fireOff >= 0 && fireOff < 255) extra = [start + fireOff];
@@ -5518,13 +5615,49 @@ function parseSkelLines(raw, nv) {
 function inferSkelNv(raw) {
   let n;
   const joints = raw?.mdlRig?.jointVerts;
-  if (Array.isArray(joints) && joints.length) n = joints.length;
+  if (Array.isArray(joints)) n = joints.length;
   else if ((raw?.verts | 0) > 0) n = raw.verts | 0;
   else if (Array.isArray(raw?.frames?.[0])) n = raw.frames[0].length;
   else n = 13;
   if (n < 0) n = 0;
   if (n > SKEL_MAX_VERTS) n = SKEL_MAX_VERTS;
   return n;
+}
+
+/** melee/shoot stays a cue name. A legacy SOUND_ stem stays uppercased for migrateClipSounds. */
+function parseClipSound(raw) {
+  const stem = String(raw || "").trim();
+  if (!stem) return "";
+  const cue = stem.toLowerCase();
+  if (ENEMY_ATTACK_CUES.includes(cue)) return cue;
+  return stem.toUpperCase().replace(/^SOUND_/, "");
+}
+
+/** Map a legacy stem onto the attack cue whose path ident matches. Drop anything else. */
+function migrateClipSounds(clips, cues) {
+  if (!Array.isArray(clips)) return;
+  const byIdent = new Map();
+  for (const cue of ENEMY_ATTACK_CUES) {
+    const path = cues?.[cue];
+    if (!path || byIdent.has(soundIdent(path))) continue;
+    byIdent.set(soundIdent(path), cue);
+  }
+  for (const c of clips) {
+    if (!c?.sound) continue;
+    if (ENEMY_ATTACK_CUES.includes(c.sound)) continue;
+    const cue = byIdent.get(String(c.sound).trim().toUpperCase().replace(/^SOUND_/, ""));
+    if (cue) c.sound = cue;
+    else {
+      delete c.sound;
+      delete c.soundFrame;
+    }
+  }
+}
+
+function migrateEnemyClipSounds(enemy) {
+  migrateClipSounds(enemy.clips, enemy.cues);
+  migrateClipSounds(enemy.stockGraph?.clips, enemy.cues);
+  migrateClipSounds(enemy.customGraph?.clips, enemy.cues);
 }
 
 /** Clip name + optional sound. start/len are filled when poses are derived. */
@@ -5537,12 +5670,9 @@ function parseClipMeta(raw) {
     if (!name || name === "legacy" || seen.has(name)) continue;
     seen.add(name);
     const clip = { name, start: 0, len: 1 };
-    const ident = String(c?.sound || "")
-      .trim()
-      .toUpperCase()
-      .replace(/^SOUND_/, "");
-    if (ident) {
-      clip.sound = ident;
+    const sound = parseClipSound(c?.sound);
+    if (sound) {
+      clip.sound = sound;
       clip.soundFrame = Math.max(0, c.soundFrame | 0);
     }
     out.push(clip);
@@ -5574,10 +5704,26 @@ function persistGraph(g) {
 function persistEnemy(e) {
   const out = { ...e };
   delete out.frames;
+  out.cues = parseEnemyCues(e.cues);
   if (Array.isArray(out.clips)) out.clips = out.clips.map(persistClip);
   if (out.stockGraph) out.stockGraph = persistGraph(out.stockGraph);
   if (out.customGraph) out.customGraph = persistGraph(out.customGraph);
   return out;
+}
+
+/** Drop unbound stock joints 0–12 copied in when custom mode kept the humanoid. */
+function stripInheritedStockJoints(enemy) {
+  const joints = enemy.mdlRig?.jointVerts;
+  if (!Array.isArray(joints) || joints.length < 13) return;
+  for (let i = 0; i < 13; i++) {
+    if (joints[i]?.length) return;
+  }
+  if (enemy.lines.some(([a, b]) => (a | 0) >= 13 || (b | 0) >= 13)) return;
+  const extra = joints.slice(13).map((list) => [...list]);
+  enemy.mdlRig = { jointVerts: extra };
+  enemy.verts = extra.length;
+  enemy.lines = [];
+  enemy.frames = [restPoseFrame(enemy.name, extra.length)];
 }
 
 function parseSkelGraph(raw, name, fixedNv) {
@@ -5603,9 +5749,10 @@ function dummyFrameFor(name) {
   }));
 }
 
-/** One rest pose. Poses are derived from the binding once ID1 is open. */
+/** One rest pose. Poses are derived from the binding once ID1 is open. nv 0 is an empty custom rig. */
 function restPoseFrame(name, nv) {
-  const n = Math.max(1, nv | 0);
+  const n = Math.max(0, nv | 0);
+  if (!n) return [];
   const base = dummyFrameFor(name);
   const frame = [];
   for (let i = 0; i < n; i++) {
@@ -5623,6 +5770,7 @@ function createEnemy(name = "Grunt") {
     lines: TEMPLATE_LINES.map((p) => [p[0], p[1]]),
     frames: [dummyFrameFor(name)],
     clips: [],
+    cues: {},
     mdlRig: emptyMdlRig(),
     lodZ: defaultEnemyLodZ(name),
   };
@@ -5824,7 +5972,8 @@ function defaultEditorState() {
     item: "backpack",
     itemOrbit: { yaw: 0.6, pitch: 0.35, dist: 16, target: { x: 0, y: 0, z: 0 } },
     sound: SOUND_LOCKED[0].path,
-    showAmbience: false,
+    hideUnused: true,
+    collapsedSoundFolders: [],
   };
 }
 
@@ -5951,7 +6100,11 @@ function parseEditorState(raw) {
   }
   if (typeof raw.item === "string" && ALL_MESH_KEYS.includes(raw.item)) d.item = raw.item;
   if (typeof raw.sound === "string" && raw.sound) d.sound = raw.sound.replace(/\\/g, "/").toLowerCase();
-  if (raw.showAmbience != null) d.showAmbience = !!raw.showAmbience;
+  if (raw.hideUnused != null) d.hideUnused = !!raw.hideUnused;
+  else if (raw.showAmbience != null) d.hideUnused = !raw.showAmbience;
+  if (Array.isArray(raw.collapsedSoundFolders)) {
+    d.collapsedSoundFolders = raw.collapsedSoundFolders.map((name) => String(name).toLowerCase());
+  }
   const io = raw.itemOrbit || {};
   const tgt = io.target || {};
   d.itemOrbit = {
@@ -5967,6 +6120,16 @@ function parseEditorState(raw) {
   return d;
 }
 
+function persistSounds(sounds) {
+  const out = {};
+  for (const [path, snd] of Object.entries(sounds || {})) {
+    if (!snd || typeof snd !== "object") continue;
+    const { freq, vol, wave, ...rest } = snd;
+    out[path] = rest;
+  }
+  return out;
+}
+
 /** Game JSON only — no editor camera/tab/selection. */
 function gameDocument(doc) {
   return {
@@ -5976,7 +6139,7 @@ function gameDocument(doc) {
     enemies: (doc.enemies || []).map(persistEnemy),
     weapons: doc.weapons,
     items: doc.items,
-    sounds: doc.sounds,
+    sounds: persistSounds(doc.sounds),
   };
 }
 
@@ -6077,6 +6240,7 @@ function normalizeDocument(raw) {
         enemy.frames = [restPoseFrame(enemy.name, nv)];
         enemy.mdlRig = normalizeMdlRig(e.mdlRig, nv);
         enemy.customGraph = null;
+        stripInheritedStockJoints(enemy);
       } else {
         enemy.verts = 13;
         enemy.lines = TEMPLATE_LINES.map((p) => [p[0], p[1]]);
@@ -6085,6 +6249,8 @@ function normalizeDocument(raw) {
         enemy.customGraph = parseSkelGraph(e.customGraph, enemy.name, 0);
       }
       enemy.clips = parseClipMeta(e.clips);
+      enemy.cues = parseEnemyCues(e.cues);
+      migrateEnemyClipSounds(enemy);
       enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;
@@ -6586,6 +6752,7 @@ const HANDLE_DB = "quake64-editor";
 const HANDLE_STORE = "handles";
 const HANDLE_KEY = "doc";
 const SHAREWARE_KEY = "shareware";
+const SOUND_BANK_KEY = "sound-banks";
 const WEAPONS_PNG_KEY = "weapons-png";
 
 const DEFAULT_DOC_PATH = "quake64.json";
@@ -6918,6 +7085,53 @@ async function getFileInDir(dir, relPath) {
   }
 }
 
+async function tryRestoreSoundBankDir() {
+  const handle = await loadStoredHandle(SOUND_BANK_KEY);
+  if (!handle) return null;
+  const state = await queryPermission(handle, "read");
+  if (state !== "granted") return null;
+  return handle;
+}
+
+async function pickSoundBankDirectory() {
+  if (!window.showDirectoryPicker) {
+    throw new Error("This browser cannot open a folder (needs Chromium file access)");
+  }
+  try {
+    const handle = await window.showDirectoryPicker({
+      id: "quake-sound-banks",
+      mode: "read",
+    });
+    await storeHandle(SOUND_BANK_KEY, handle);
+    return handle;
+  } catch (e) {
+    if (e.name === "AbortError") return null;
+    throw e;
+  }
+}
+
+const SOUND_BANK_FILES = ["AUDIOHED.WL1", "AUDIOT.WL1", "DOOM.WAD", "DAVE.EXE", "SOUNDS.CK1"];
+
+/** Read the five ref/ banks from the picked folder or its ref/ child. */
+async function loadSoundBankBuffers(dirHandle) {
+  const roots = [dirHandle];
+  try {
+    roots.push(await dirHandle.getDirectoryHandle("ref"));
+  } catch {
+    /* the folder may already be ref/ */
+  }
+  const out = {};
+  for (const name of SOUND_BANK_FILES) {
+    for (const root of roots) {
+      const fh = await getFileInDir(root, name);
+      if (!fh) continue;
+      out[name] = await (await fh.getFile()).arrayBuffer();
+      break;
+    }
+  }
+  return out;
+}
+
 /** Load pak0 then pak1 from the folder or an id1/ child. */
 async function loadSharewarePakBuffers(dirHandle) {
   const buffers = [];
@@ -7050,6 +7264,7 @@ const ENEMY_MDL_PATHS = {
   Shambler: "progs/shambler.mdl",
   Chthon: "progs/boss.mdl",
   Zombie: "progs/zombie.mdl",
+  Demon: "progs/demon.mdl",
 };
 
 function cstr(view, offset, len) {
@@ -8113,6 +8328,14 @@ function rasterWeaponFrame(mdl, frameIndex, scale, pan) {
 
 
 // ---- js/layoutView.js ----
+function hexAlpha(hex, alpha) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
 /** Ramp AABB wireframe without the y=max face (open top). */
 const SLOPE_TOP = new Set([2, 3, 6, 7]);
 const SLOPE_BOX_EDGES = BOX_EDGES.filter(([i, j]) => !(SLOPE_TOP.has(i) && SLOPE_TOP.has(j)));
@@ -9358,6 +9581,52 @@ class LayoutView {
     this.#line3(ctx, { x: 0, y: 0, z: 0 }, { x: 0, y: WORLD_SIZE, z: 0 }, cam, w, h);
   }
 
+  /** Interior hull faces (floor and walls seen from inside), tinted with the room background. */
+  #drawRoomWalls(ctx, obj, geom, cam, w, h) {
+    const faces = [];
+    for (const f of geom.hullFaces || []) {
+      if (!f.corners || f.corners.length < 4) continue;
+      // Outward normal is `sign` along `axis`. Shade only when the camera is on the inside.
+      if ((cam[f.axis] - f.plane) * f.sign >= 0) continue;
+      const center = f.center || {
+        x: (f.corners[0].x + f.corners[2].x) / 2,
+        y: (f.corners[0].y + f.corners[2].y) / 2,
+        z: (f.corners[0].z + f.corners[2].z) / 2,
+      };
+      const cc = worldToCamera(center, cam);
+      if (cc.z < NEAR) continue;
+      const pts = [];
+      let ok = true;
+      for (let i = 0; i < 4; i++) {
+        const pr = projectPoint(f.corners[i], cam, w, h);
+        if (!pr.ok) {
+          ok = false;
+          break;
+        }
+        pts.push(pr);
+      }
+      if (!ok) continue;
+      let area = 0;
+      for (let i = 0; i < 4; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % 4];
+        area += a.sx * b.sy - b.sx * a.sy;
+      }
+      if (Math.abs(area) < 24) continue;
+      faces.push({ pts, z: cc.z });
+    }
+    if (!faces.length) return;
+    faces.sort((a, b) => b.z - a.z);
+    ctx.fillStyle = hexAlpha(colorHex(obj.bgColor ?? ROOM_BG_DEFAULT), 0.4);
+    for (const face of faces) {
+      ctx.beginPath();
+      ctx.moveTo(face.pts[0].sx, face.pts[0].sy);
+      for (let i = 1; i < 4; i++) ctx.lineTo(face.pts[i].sx, face.pts[i].sy);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
   #line3(ctx, a, b, cam, w, h, color) {
     const seg = projectLine(a, b, cam, w, h);
     if (!seg) return;
@@ -9372,7 +9641,7 @@ class LayoutView {
     const color = highlight
       ? "#f2d36b"
       : obj.kind === "room"
-        ? "#f0f0f0"
+        ? colorHex(obj.lineColor ?? ROOM_LINE_DEFAULT)
         : obj.kind === "spawn" && !obj.enabled
           ? "#1a7a3c"
           : KINDS[obj.kind].color;
@@ -9400,6 +9669,7 @@ class LayoutView {
       }
     } else if (obj.kind === "room") {
       const g = roomGeometry(obj);
+      this.#drawRoomWalls(ctx, obj, g, cam, w, h);
       for (const e of g.edges) {
         this.#line3(ctx, g.verts[e.a], g.verts[e.b], cam, w, h);
       }
@@ -12122,58 +12392,7 @@ class ItemView {
 }
 
 
-// ---- js/fft.js ----
-/** In-place radix-2 FFT. `re` / `im` length must be a power of two. */
-function fft(re, im) {
-  const n = re.length;
-  let j = 0;
-  for (let i = 1; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) {
-      const tr = re[i];
-      re[i] = re[j];
-      re[j] = tr;
-      const ti = im[i];
-      im[i] = im[j];
-      im[j] = ti;
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const ang = (-2 * Math.PI) / len;
-    const wr0 = Math.cos(ang);
-    const wi0 = Math.sin(ang);
-    for (let i = 0; i < n; i += len) {
-      let wr = 1;
-      let wi = 0;
-      const half = len >> 1;
-      for (let k = 0; k < half; k++) {
-        const ur = re[i + k];
-        const ui = im[i + k];
-        const vr = re[i + k + half] * wr - im[i + k + half] * wi;
-        const vi = re[i + k + half] * wi + im[i + k + half] * wr;
-        re[i + k] = ur + vr;
-        im[i + k] = ui + vi;
-        re[i + k + half] = ur - vr;
-        im[i + k + half] = ui - vi;
-        const nwr = wr * wr0 - wi * wi0;
-        wi = wr * wi0 + wi * wr0;
-        wr = nwr;
-      }
-    }
-  }
-}
-
-
 // ---- js/pcsfx.js ----
-const FFT_SIZE = 512;
-const FLATNESS_NOISE = 0.42;
-const RMS_SILENCE = 0.04;
-const ESTIMATE_HZ_MAX = 2000;
-const NOISE_CENTROID_HZ_MAX = 800;
-const PEAK_REL_DB = 12;
-
 /** Last sample index + 1 with |s| above 8-bit LSB. Trailing digital silence dropped. */
 function pcmActiveLength(pcm) {
   if (!pcm || !pcm.length) return 0;
@@ -12195,169 +12414,6 @@ function mixMono(buffer) {
   const inv = 1 / chs;
   for (let i = 0; i < n; i++) out[i] *= inv;
   return out;
-}
-
-function hann(i, n) {
-  return 0.5 * (1 - Math.cos((2 * Math.PI * i) / (n - 1)));
-}
-
-function spectralFlatness(mag, lo, hi) {
-  let logSum = 0;
-  let sum = 0;
-  let n = 0;
-  for (let i = lo; i < hi; i++) {
-    const m = mag[i];
-    if (m <= 1e-12) continue;
-    logSum += Math.log(m);
-    sum += m;
-    n++;
-  }
-  if (n < 4 || sum <= 0) return 1;
-  const geo = Math.exp(logSum / n);
-  return geo / (sum / n);
-}
-
-function binRange(sr, fftSize, hzLo, hzHi) {
-  const nyq = (fftSize >> 1) - 1;
-  const lo = Math.max(1, Math.round((hzLo * fftSize) / sr));
-  const hi = Math.min(nyq, Math.round((hzHi * fftSize) / sr));
-  if (hi <= lo) return [1, Math.min(nyq, lo + 1)];
-  return [lo, hi];
-}
-
-function interpPeakHz(mag, bin, sr, fftSize) {
-  const prev = mag[bin - 1] || 0;
-  const next = mag[bin + 1] || 0;
-  const mid = mag[bin];
-  const denom = prev - 2 * mid + next;
-  const delta = denom !== 0 ? (0.5 * (prev - next)) / denom : 0;
-  return ((bin + delta) * sr) / fftSize;
-}
-
-function peakHz(mag, sr, fftSize, lo, hi) {
-  let maxM = 0;
-  for (let i = lo; i < hi; i++) {
-    if (mag[i] > maxM) maxM = mag[i];
-  }
-  if (maxM <= 0) return 0;
-  const thresh = maxM * Math.pow(10, -PEAK_REL_DB / 20);
-  let best = -1;
-  for (let i = lo; i < hi; i++) {
-    if (mag[i] < thresh) continue;
-    const prev = i > lo ? mag[i - 1] : 0;
-    const next = i + 1 < hi ? mag[i + 1] : 0;
-    if (mag[i] >= prev && mag[i] >= next) {
-      best = i;
-      break;
-    }
-  }
-  if (best < 0) {
-    for (let i = lo; i < hi; i++) {
-      if (mag[i] >= maxM) {
-        best = i;
-        break;
-      }
-    }
-  }
-  return interpPeakHz(mag, best, sr, fftSize);
-}
-
-function centroidHz(mag, sr, fftSize, lo, hi) {
-  let num = 0;
-  let den = 0;
-  for (let i = lo; i < hi; i++) {
-    num += i * mag[i];
-    den += mag[i];
-  }
-  if (den <= 0) return 0;
-  return ((num / den) * sr) / fftSize;
-}
-
-const SID_ATTACK_MS = [2, 8, 16, 24, 38, 56, 68, 80, 100];
-
-function estimateAttack(frames, maxRms) {
-  if (maxRms <= 0) return 0;
-  let t10 = -1;
-  let t90 = -1;
-  for (let i = 0; i < frames.length; i++) {
-    if (t10 < 0 && frames[i].rms >= maxRms * 0.1) t10 = i;
-    if (t90 < 0 && frames[i].rms >= maxRms * 0.9) t90 = i;
-  }
-  if (t10 < 0 || t90 < 0 || t90 <= t10) return 0;
-  const ms = (t90 - t10) * (1000 / SOUND_TICK_HZ);
-  let best = 0;
-  for (let i = 0; i < SID_ATTACK_MS.length; i++) {
-    if (SID_ATTACK_MS[i] <= ms) best = i;
-  }
-  return best;
-}
-
-function clampEstimateHz(hz) {
-  if (!(hz > 0)) return 0;
-  if (hz < SOUND_HZ_MIN) return SOUND_HZ_MIN;
-  if (hz > ESTIMATE_HZ_MAX) return ESTIMATE_HZ_MAX;
-  return hz;
-}
-
-/** 50 Hz STFT frames for Estimate. `pcm` is Float32 mono. */
-function analyzePcmTicks(pcm, sampleRate) {
-  const sr = sampleRate || 11025;
-  const hop = sr / SOUND_TICK_HZ;
-  const live = pcmActiveLength(pcm);
-  if (live <= 0) {
-    const [lo0, hi0] = binRange(sr, FFT_SIZE, SOUND_HZ_MIN, ESTIMATE_HZ_MAX);
-    return { frames: [], maxRms: 0, sr, lo: lo0, hi: hi0 };
-  }
-  const nTicks = Math.min(SOUND_MAX_TICKS, Math.max(1, Math.ceil(live / hop)));
-  const frames = [];
-  let maxRms = 0;
-  for (let t = 0; t < nTicks; t++) {
-    const start = Math.floor(t * hop);
-    const re = new Float64Array(FFT_SIZE);
-    const im = new Float64Array(FFT_SIZE);
-    let sumSq = 0;
-    const win = Math.min(FFT_SIZE, Math.max(8, Math.round(hop)));
-    for (let i = 0; i < win; i++) {
-      const src = start + i;
-      const s = src < live ? pcm[src] * hann(i, win) : 0;
-      re[i] = s;
-      sumSq += s * s;
-    }
-    fft(re, im);
-    const mag = new Float64Array(FFT_SIZE >> 1);
-    for (let i = 0; i < mag.length; i++) mag[i] = Math.hypot(re[i], im[i]);
-    const rms = Math.sqrt(sumSq / win);
-    if (rms > maxRms) maxRms = rms;
-    frames.push({ mag, rms });
-  }
-  const [lo, hi] = binRange(sr, FFT_SIZE, SOUND_HZ_MIN, ESTIMATE_HZ_MAX);
-  return { frames, maxRms, sr, lo, hi };
-}
-
-/** 50 Hz FFT first pass. `pcm` is Float32 mono. */
-function estimateFromPcm(pcm, sampleRate) {
-  const { frames, maxRms, sr, lo, hi } = analyzePcmTicks(pcm, sampleRate);
-  const [nLo, nHi] = binRange(sr, FFT_SIZE, SOUND_HZ_MIN, NOISE_CENTROID_HZ_MAX);
-  const freq = [];
-  const vol = [];
-  const floor = maxRms * RMS_SILENCE;
-  for (const fr of frames) {
-    if (fr.rms <= floor || maxRms <= 0) {
-      freq.push(0);
-      vol.push(0);
-      continue;
-    }
-    const v = clampSoundVol(Math.max(1, Math.round((fr.rms / maxRms) * 15)));
-    const flat = spectralFlatness(fr.mag, lo, hi);
-    const rawHz =
-      flat >= FLATNESS_NOISE
-        ? centroidHz(fr.mag, sr, FFT_SIZE, nLo, nHi)
-        : peakHz(fr.mag, sr, FFT_SIZE, lo, hi);
-    const hz = clampEstimateHz(rawHz);
-    freq.push(hzToWolfByte(hz));
-    vol.push(v);
-  }
-  return { freq, vol, attack: estimateAttack(frames, maxRms), origin: "estimate" };
 }
 
 async function decodeWav(ctx, buffer) {
@@ -12427,7 +12483,7 @@ class SfxPreview {
     const ctx = getAudioContext();
     if (ctx.state === "suspended") await ctx.resume();
     alignSoundArrays(snd);
-    const n = snd.freq.length;
+    const n = snd.freq?.length || 0;
     if (!n) return;
     const tick = 1 / SOUND_TICK_HZ;
     const master = ctx.createGain();
@@ -12493,45 +12549,6 @@ class SfxPreview {
   }
 }
 
-function markSoundEdited(snd) {
-  snd.origin = "edit";
-  delete snd.library;
-}
-
-function reverseSound(snd) {
-  alignSoundArrays(snd);
-  snd.freq.reverse();
-  markSoundEdited(snd);
-}
-
-function transposeSound(snd, delta) {
-  alignSoundArrays(snd);
-  const d = delta | 0;
-  for (let i = 0; i < snd.freq.length; i++) {
-    if (!snd.freq[i]) continue;
-    snd.freq[i] = clampSoundFreqByte(Math.max(1, snd.freq[i] + d));
-  }
-  markSoundEdited(snd);
-}
-
-function insertSoundTick(snd, at) {
-  alignSoundArrays(snd);
-  if (snd.freq.length >= SOUND_MAX_TICKS) return false;
-  const i = Math.max(0, Math.min(snd.freq.length, at | 0));
-  const f = snd.freq[i] ?? snd.freq[i - 1] ?? 0;
-  snd.freq.splice(i, 0, f);
-  markSoundEdited(snd);
-  return true;
-}
-
-function deleteSoundTick(snd, at) {
-  alignSoundArrays(snd);
-  if (!snd.freq.length) return false;
-  const i = Math.max(0, Math.min(snd.freq.length - 1, at | 0));
-  snd.freq.splice(i, 1);
-  markSoundEdited(snd);
-  return true;
-}
 
 
 // ---- js/soundView.js ----
@@ -12624,8 +12641,8 @@ class SoundView {
     }
     this.#drawFreq(ctx, snd, layout);
     this.#drawTimeAxis(ctx, layout, layout.freq.top + layout.freq.h);
-    if (!snd.freq.length) {
-      this.#label(ctx, "Empty", 16, layout.freq.top + 22);
+    if (!snd.freq?.length) {
+      this.#label(ctx, snd.pending ? "Open sound banks" : "Empty", 16, layout.freq.top + 22);
     }
   }
 
@@ -12843,168 +12860,313 @@ class SoundView {
 }
 
 
+// ---- js/pcsrc.js ----
+// Decode Wolf, Doom, Dave, and Keen PC sounds to Wolf inverse-freq bytes.
+// Audition only. Cues do not store these bytes; the build reads ref/ via tools/pcsrc.py.
+
+const DECIMATE = 3;
+const TICK_HZ = 50;
+const MAX_TICKS = 255;
+const KEEN_PIT = 0x2000;
+
+function decimate(data) {
+  const samples = [];
+  for (let i = 0; i < data.length; i += DECIMATE) {
+    const group = data.slice(i, i + DECIMATE);
+    samples.push(group.find((x) => x) || 0);
+    if (samples.length > MAX_TICKS) throw new Error("decimated sound is longer than 255 ticks");
+  }
+  return samples;
+}
+
+function pitchHz(pitch) {
+  if (pitch <= 0) return 0;
+  return 175 * 2 ** ((pitch - 1) / 24);
+}
+
+function hzToWolf(hz) {
+  if (hz <= 0) return 0;
+  return Math.max(1, Math.min(255, Math.round(PC_TIMER / (hz * 60))));
+}
+
+function divisorToWolf(divisor) {
+  if (divisor <= 0) return 0;
+  return Math.max(1, Math.min(255, Math.round(divisor / 60)));
+}
+
+function resample(samples, pitDiv) {
+  if (!samples.length) return [];
+  const div = pitDiv > 0 ? pitDiv : 65536;
+  const step = TICK_HZ * div;
+  const out = [];
+  let acc = 0;
+  let bucket = [];
+  let hold = 0;
+  for (const sample of samples) {
+    bucket.push(sample);
+    acc += step;
+    while (acc >= PC_TIMER && out.length < MAX_TICKS) {
+      acc -= PC_TIMER;
+      if (bucket.length) {
+        hold = bucket.find((x) => x) || 0;
+        bucket = [];
+      }
+      out.push(hold);
+    }
+    if (out.length >= MAX_TICKS) return out;
+  }
+  if (bucket.length && out.length < MAX_TICKS) out.push(bucket.find((x) => x) || 0);
+  return out;
+}
+
+function u16(bytes, offset) {
+  return bytes[offset] | (bytes[offset + 1] << 8);
+}
+
+function u32(bytes, offset) {
+  return (
+    bytes[offset] |
+    (bytes[offset + 1] << 8) |
+    (bytes[offset + 2] << 16) |
+    (bytes[offset + 3] << 24)
+  ) >>> 0;
+}
+
+function loadWolf(hedBuffer, audBuffer, names) {
+  const hed = new Uint8Array(hedBuffer);
+  const aud = new Uint8Array(audBuffer);
+  const offs = [];
+  for (let i = 0; i + 4 <= hed.length; i += 4) offs.push(u32(hed, i));
+  if (offs.length < names.length + 1) throw new Error("AUDIOHED is too short");
+  const out = new Map();
+  for (let i = 0; i < names.length; i++) {
+    const start = offs[i];
+    const length = u32(aud, start);
+    const data = [];
+    for (let j = 0; j < length; j++) data.push(aud[start + 6 + j]);
+    out.set(names[i], decimate(data));
+  }
+  return out;
+}
+
+function loadDoom(wadBuffer) {
+  const blob = new Uint8Array(wadBuffer);
+  const ident = String.fromCharCode(blob[0], blob[1], blob[2], blob[3]);
+  if (ident !== "IWAD" && ident !== "PWAD") throw new Error("DOOM.WAD is not a WAD");
+  const numlumps = u32(blob, 4);
+  const dirofs = u32(blob, 8);
+  const order = [];
+  const lumps = new Map();
+  for (let i = 0; i < numlumps; i++) {
+    const o = dirofs + i * 16;
+    const filepos = u32(blob, o);
+    const size = u32(blob, o + 4);
+    let name = "";
+    for (let c = 0; c < 8; c++) {
+      const ch = blob[o + 8 + c];
+      if (!ch) break;
+      name += String.fromCharCode(ch);
+    }
+    name = name.toUpperCase();
+    if (!name.startsWith("DP") || lumps.has(name)) continue;
+    order.push(name);
+    lumps.set(name, blob.subarray(filepos, filepos + size));
+  }
+  const out = new Map();
+  for (const name of order) {
+    const buf = lumps.get(name);
+    const length = buf[2] | (buf[3] << 8);
+    const data = [];
+    for (let j = 0; j < length; j++) data.push(buf[4 + j]);
+    out.set(name, decimate(data).map((p) => hzToWolf(pitchHz(p))));
+  }
+  return out;
+}
+
+function unpackLz91(buffer) {
+  const data = new Uint8Array(buffer);
+  if (data[0x1c] !== 0x4c || data[0x1d] !== 0x5a || data[0x1e] !== 0x39 || data[0x1f] !== 0x31) {
+    throw new Error("not an LZ91 executable");
+  }
+  const hdrsize = u16(data, 8);
+  const initcs = u16(data, 0x16);
+  const loader = initcs * 0x10 + hdrsize * 0x10;
+  const indata = data.subarray(0x20, loader);
+  const out = [];
+  let si = 0;
+  let dx = 0x10;
+  let bp = u16(indata, si);
+  si += 2;
+  const getbit = () => {
+    const bit = bp & 1;
+    bp >>= 1;
+    dx -= 1;
+    if (dx === 0) {
+      bp = u16(indata, si);
+      si += 2;
+      dx = 0x10;
+    }
+    return bit;
+  };
+  const copyFrom = (bx, count) => {
+    for (let n = 0; n < count; n++) {
+      const i = bx < 0 ? out.length + bx : bx;
+      out.push(out[i]);
+    }
+  };
+  while (true) {
+    if (getbit()) {
+      out.push(indata[si]);
+      si += 1;
+      continue;
+    }
+    if (getbit() === 0) {
+      const cx = (getbit() << 1) + getbit() + 2;
+      const bx = indata[si] - 0x100;
+      si += 1;
+      copyFrom(bx, cx);
+      continue;
+    }
+    const ax = u16(indata, si);
+    si += 2;
+    const bx = (((ax >> 11) & 0xff) << 8) + (ax & 0xff) - 0x2000;
+    const ah = (ax >> 8) & 7;
+    if (ah) {
+      copyFrom(bx, ah + 2);
+      continue;
+    }
+    const al = indata[si];
+    si += 1;
+    if (al === 0) break;
+    if (al !== 1) copyFrom(bx, al + 1);
+  }
+  return new Uint8Array(out);
+}
+
+function readWords(blob, offset) {
+  const words = [];
+  let p = offset;
+  while (p + 1 < blob.length) {
+    const word = u16(blob, p);
+    p += 2;
+    if (word === 0xffff) return words;
+    words.push(word);
+  }
+  throw new Error("sound has no terminator");
+}
+
+function identOf(name) {
+  return name.replace(/[^A-Za-z0-9]+/g, "").toUpperCase();
+}
+
+function parseBank(blob, base, mode, blankPrefix) {
+  const sig = String.fromCharCode(blob[base], blob[base + 1], blob[base + 2], blob[base + 3]);
+  if (sig !== "SPK\0" && sig !== "SND\0") throw new Error("sound bank is not SPK or SND");
+  let count = u16(blob, base + 8);
+  if (count === 0) count = (u16(blob, base + 16) >> 4) - 1;
+  const used = new Set();
+  let invented = 0;
+  const out = new Map();
+  for (let i = 0; i < count; i++) {
+    const off = base + 16 * (i + 1);
+    const doff = u16(blob, off);
+    const rate = blob[off + 3];
+    let raw = "";
+    for (let c = 0; c < 12; c++) {
+      const ch = blob[off + 4 + c];
+      if (!ch) break;
+      raw += String.fromCharCode(ch);
+    }
+    const ident0 = identOf(raw);
+    if (ident0.includes("UNUSED") || ident0 === "UNNAMED") continue;
+    let ident = ident0;
+    if (!ident) {
+      invented += 1;
+      ident = `${blankPrefix}${String(invented).padStart(2, "0")}`;
+    }
+    const baseName = ident;
+    let n = 2;
+    while (used.has(ident)) {
+      ident = `${baseName}${n}`;
+      n += 1;
+    }
+    used.add(ident);
+    const words = readWords(blob, base + doff);
+    const pit = mode === "dave" ? (rate <= 1 ? 65536 : Math.floor(65536 / rate)) : KEEN_PIT;
+    out.set(ident, resample(words.map(divisorToWolf), pit));
+  }
+  return out;
+}
+
+function loadDave(exeBuffer) {
+  const image = unpackLz91(exeBuffer);
+  const sig = [0x53, 0x50, 0x4b, 0x00];
+  let base = -1;
+  for (let i = 0; i + 4 <= image.length; i++) {
+    if (sig.every((b, k) => image[i + k] === b)) {
+      base = i;
+      break;
+    }
+  }
+  if (base < 0) throw new Error("DAVE.EXE has no SPK sound bank");
+  return parseBank(image, base, "dave", "DAVE");
+}
+
+function loadKeen(buffer) {
+  const blob = new Uint8Array(buffer);
+  if (blob[0] !== 0x53 || blob[1] !== 0x4e || blob[2] !== 0x44) throw new Error("SOUNDS.CK1 is not an SND bank");
+  return parseBank(blob, 0, "keen", "KEEN");
+}
+
+
 // ---- js/pclib.js ----
-// Autogenerated by tools/genpclib.py. Wolf inverse-freq and Doom pitch
-// decimated 3x from 140 Hz. Doom pitch is already converted to Wolf bytes.
+// Sound library names. Sample bytes are not stored here.
+// tools/pcsrc.py reads ref/ at build time. The editor decodes a picked folder to audition.
 
 const PC_LIBRARY = {
   wolf: [
-    { name: "HITWALL", freq: [131, 142, 134] },
-    { name: "SELECTWPN", freq: [47, 47] },
-    { name: "SELECTITEM", freq: [84, 85, 79] },
-    { name: "HEARTBEAT", freq: [152, 150, 150, 151, 155, 159, 0, 0, 0, 0, 160, 160, 159, 157, 157, 157, 158] },
-    { name: "MOVEGUN2", freq: [142, 148] },
-    { name: "MOVEGUN1", freq: [114, 60, 114] },
-    { name: "NOWAY", freq: [50, 47, 43, 0, 0, 0, 0, 34, 40, 44, 49, 51] },
-    { name: "NAZIHITPLAYER", freq: [78, 74, 151, 151, 65, 68, 74, 154, 88, 0, 0, 71, 69, 138, 152, 154, 59, 0, 0, 0, 49, 47, 44, 42] },
-    { name: "SCHABBSTHROW", freq: [19, 53, 0, 61, 0, 0, 0, 86, 0, 125, 0, 0, 0, 0, 0, 0, 146] },
-    { name: "PLAYERDEATH", freq: [21, 30, 39, 45, 52, 15, 77, 98, 17, 0, 30, 0, 36, 0, 79, 79] },
-    { name: "DOGDEATH", freq: [19, 16, 15, 27, 40, 43, 57, 69, 83, 103, 111, 157, 145, 152, 159] },
-    { name: "ATKGATLING", freq: [61, 57, 59, 93, 66] },
-    { name: "GETKEY", freq: [36, 36, 36, 36, 36, 36, 36, 36, 0, 0, 55, 55, 55, 55, 55, 55, 55, 55, 0, 55, 55, 55, 55, 0, 25, 25, 25, 25, 25, 25] },
-    { name: "NOITEM", freq: [47, 44, 40, 0, 0, 41, 44, 47, 51, 54, 58] },
-    { name: "WALK1", freq: [143] },
-    { name: "WALK2", freq: [132] },
-    { name: "TAKEDAMAGE", freq: [62, 59, 55, 52, 49, 63, 75, 80, 69, 78, 65, 77, 68, 62, 56, 74, 67, 61, 55] },
-    { name: "GAMEOVER", freq: [42, 42, 0, 42, 42, 0, 42, 42, 42, 0, 30, 30, 30, 30, 30, 30, 30, 0, 30, 30, 30, 0, 0, 0, 0, 105, 105, 0, 105, 105, 105, 105, 105, 105, 0, 0, 0, 0, 0, 81, 81, 81, 81, 81, 81, 0, 81, 81, 0, 0, 0, 0, 0, 0, 0, 122, 122, 122, 122, 122, 122, 122, 122, 0, 0, 0, 0, 0, 122, 122, 122, 122, 0, 122, 122, 122, 122, 0, 0, 0, 0, 122, 122, 122, 122, 122, 122, 122, 122, 0, 0, 150, 150, 150, 150, 0, 150, 150, 150, 150] },
-    { name: "OPENDOOR", freq: [119, 118, 118, 116, 114, 111, 107, 101, 95, 89, 83, 77] },
-    { name: "CLOSEDOOR", freq: [79, 83, 85, 87, 90, 93, 96, 101, 104, 106, 109, 112] },
-    { name: "DONOTHING", freq: [150, 149, 147, 147, 147, 147, 149] },
-    { name: "HALT", freq: [42, 38, 35, 31, 31, 31, 32, 46, 60, 77, 85, 105, 132, 140, 145, 148, 151, 153, 157, 0, 0, 0, 138, 138, 138] },
-    { name: "DEATHSCREAM2", freq: [81, 78, 80, 87, 95, 107, 119, 120, 119, 113, 109, 120, 123, 139, 140, 136, 148, 152, 152, 157] },
-    { name: "ATKKNIFE", freq: [84, 17, 62, 71, 75, 90, 104, 121, 106, 149, 130, 138, 156, 154] },
-    { name: "ATKPISTOL", freq: [24, 33, 33, 157, 36, 158, 69, 159, 135, 147, 154, 159, 141, 0, 147, 149, 0, 142, 154, 0, 0, 151] },
-    { name: "DEATHSCREAM3", freq: [35, 31, 28, 26, 27, 38, 67, 75, 80, 82, 82, 82, 82, 80, 79, 77, 77, 76, 77, 79, 84, 92, 95, 96, 95, 93, 93, 95, 101, 112, 116, 121] },
-    { name: "ATKMACHINEGUN", freq: [104, 107, 101, 123] },
-    { name: "HITENEMY", freq: [130, 25, 33, 78, 26, 18, 18, 25, 0, 32] },
-    { name: "SHOOTDOOR", freq: [86, 91, 0, 0, 0, 18, 19, 160] },
-    { name: "DEATHSCREAM1", freq: [60, 55, 51, 26, 37, 31, 15, 16, 23, 29, 74, 28, 31, 27, 34, 42, 38, 34, 36, 41] },
-    { name: "GETMACHINE", freq: [58, 55, 53, 52, 52, 53, 59, 70, 83, 111, 0, 0, 56, 53, 53, 53, 53, 54, 0, 0, 54, 54, 54, 54, 0, 29, 28, 28, 28, 28, 28] },
-    { name: "GETAMMO", freq: [34, 34, 34, 34, 34, 34, 0, 0, 0, 20, 20, 20, 0, 20, 20, 20, 20, 20, 20, 20, 20] },
-    { name: "SHOOT", freq: [16, 110, 40, 40, 33, 103, 41, 115, 137] },
-    { name: "HEALTH1", freq: [58, 0, 0, 51, 51, 0, 0, 38, 38, 0, 0, 22, 22, 0, 0, 22, 22, 22, 0, 0, 21, 21, 21] },
-    { name: "HEALTH2", freq: [92, 92, 81, 81, 81, 72, 72, 0, 0, 59, 0, 0, 47, 47, 47, 0, 29, 29, 29, 0, 0, 25, 25, 25, 25, 0, 0, 19, 19, 19] },
-    { name: "BONUS1", freq: [61, 53, 49, 46, 45, 51, 57, 64, 71, 74, 73, 69, 58, 41, 33, 30, 29, 28, 31, 35, 41, 46, 49, 47, 41, 30, 20, 0, 0, 0, 18, 18, 18, 0, 18, 18, 18, 18, 18, 18] },
-    { name: "BONUS2", freq: [69, 63, 60, 56, 51, 47, 44, 47, 52, 59, 57, 50, 40, 37, 35, 38, 43, 43, 34, 30, 26, 25, 24, 24, 24, 0, 0, 0, 0, 0, 0, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 0, 16, 16, 16, 16, 16, 16, 16, 16] },
-    { name: "BONUS3", freq: [80, 75, 68, 62, 57, 54, 54, 59, 63, 65, 64, 60, 57, 54, 50, 46, 44, 43, 43, 48, 51, 51, 48, 42, 36, 31, 29, 28, 30, 34, 36, 32, 27, 21, 0, 0, 0, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 0, 0, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 17, 0, 15, 15, 15, 15, 15, 15, 15, 15] },
-    { name: "GETGATLING", freq: [120, 87, 66, 59, 56, 65, 83, 99, 109, 116, 130, 135, 137, 138, 139, 140, 141, 143, 144, 145, 146, 147, 148, 150, 150, 151, 153, 155, 156, 157, 159, 160] },
-    { name: "ESCPRESSED", freq: [153, 130, 113, 95, 78, 55, 45, 32] },
-    { name: "LEVELDONE", freq: [146, 146, 146, 145, 144, 141, 138, 135, 131, 0, 0, 0, 0, 23] },
-    { name: "DOGBARK", freq: [64, 56, 47, 41, 142, 144, 37, 48, 144, 57, 67, 82, 93, 104, 123, 151, 151] },
-    { name: "ENDBONUS1", freq: [23] },
-    { name: "ENDBONUS2", freq: [16, 16, 16, 16, 17, 17, 21, 25, 31, 38, 49, 66, 76, 88, 98, 104, 113, 122, 128, 132, 136, 145, 149, 152, 155, 159] },
-    { name: "BONUS1UP", freq: [38, 38, 38, 0, 32, 32, 32, 0, 0, 27, 27, 27, 27, 19, 19, 19, 19, 19, 19, 20, 22, 24, 25, 26, 29, 32, 38, 43, 52, 67, 89, 104, 108, 115, 122, 129, 136, 141, 144, 146, 149, 152, 154, 157] },
-    { name: "BONUS4", freq: [78, 74, 69, 62, 53, 49, 48, 51, 57, 60, 56, 31, 28, 48, 43, 37, 30, 30, 39, 38, 33, 30, 0, 0, 0, 19, 19, 19, 19, 19, 19, 19, 0, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 0, 19, 19, 19, 0, 0, 0, 17, 17, 17, 17, 0, 17, 17, 17, 17, 17, 17, 17, 17, 17] },
-    { name: "PUSHWALL", freq: [155, 0, 0, 156, 0, 147, 0, 153, 0, 0, 0, 157, 0, 0, 150, 0, 0, 0, 0, 147, 0, 0, 0, 151, 0, 0, 0, 155] },
-    { name: "NOBONUS", freq: [21, 27, 33, 39, 50, 58, 64, 69, 74, 79, 85, 92, 97, 102, 107, 112, 117, 122, 127, 132, 137, 142, 146, 150, 154, 157, 159, 0, 0, 151, 151, 151, 151, 151, 150, 150, 0, 0, 0, 0, 0, 0, 150, 147, 151, 151, 152, 152, 152, 151, 152] },
-    { name: "PERCENT100", freq: [0, 98, 97, 96, 94, 91, 87, 80, 71, 68, 79, 84, 87, 86, 82, 79, 76, 72, 69, 65, 62, 58, 54, 55, 62, 62, 59, 57, 54, 50, 45, 41, 35, 43, 51, 54, 55, 53, 50, 46, 42, 39, 34, 32, 38, 41, 44, 46, 45, 43, 35, 26, 22, 15] },
-    { name: "BOSSACTIVE", freq: [15, 15, 16, 16, 17, 17, 17, 19, 22, 23, 25, 26, 29, 30, 32, 35, 37, 39, 41, 43, 45, 48, 51, 53, 56, 59, 62, 64, 67, 69, 72, 75, 78, 80, 82, 84, 87, 89, 92, 95, 100, 102, 105, 109, 113, 116, 120, 123, 128, 133, 137, 141, 145, 148, 153, 157] },
-    { name: "MUTTI", freq: [26, 26, 26, 26, 26, 26, 26, 26, 26, 0, 26, 26, 26, 26, 26, 0, 0, 26, 26, 26, 26, 26, 0, 0, 26, 26, 26, 26, 26, 0, 0, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 0, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19] },
-    { name: "SCHUTZAD", freq: [43, 35, 30, 26, 18, 18, 18, 21, 28, 101, 37, 60, 0, 0, 63, 72, 92, 114, 105, 87, 106, 117, 124, 128] },
-    { name: "AHHHG", freq: [72, 72, 73, 73, 73, 73, 73, 72, 72, 72, 71, 71, 70, 70, 70, 69, 68, 67, 66, 65, 64, 62, 60, 58, 56, 55, 51, 48, 45, 42, 39, 36, 34] },
-    { name: "DIE", freq: [17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 18, 18, 18, 18, 18, 18, 18, 19, 19, 19, 20, 20, 20, 21, 21, 21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 25, 25, 25, 26, 27, 27, 28, 28, 29, 30, 31, 31, 31, 32, 34, 36, 38, 40, 43, 44, 46, 48, 50, 53, 56, 58, 60, 63, 66, 69, 70, 70, 71, 74, 77, 79, 82, 85, 91, 99, 104, 105, 109, 111, 114, 115, 118, 121, 129, 133, 136, 138, 140, 141, 144, 144, 145, 147, 149, 151, 154, 157, 158] },
-    { name: "EVA", freq: [43, 31, 25, 22, 22, 30, 33, 45, 42, 41, 36, 61, 64, 146, 145, 107, 73, 53, 64, 72, 79, 84, 85, 102, 113, 60, 110, 109, 108, 110, 116, 124, 0, 0, 159, 158, 156, 156, 155, 154, 153, 153, 153, 152, 152, 151, 148, 147, 145, 144, 142, 141, 139, 137, 135, 132, 129, 126, 122, 119, 115, 111, 107, 103, 99, 93, 89, 86, 82, 78, 75, 71, 68, 64, 58, 52, 47, 34, 28, 26, 26, 26, 26, 26, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 26, 26, 26, 26, 26, 27, 153] },
-    { name: "GUTENTAG", freq: [17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 19, 19, 19, 20, 21, 21, 22, 22, 22, 22, 24, 25, 25, 25, 26, 26, 26, 27, 28, 28, 28, 29, 29, 29, 29, 30, 31, 31, 32, 32, 32, 33, 35, 36, 37, 39, 41, 43, 47, 49, 51, 56, 65, 70, 77, 81, 82, 84, 87, 91, 93, 96, 98, 107, 112, 115, 117, 119, 120, 121, 122, 124, 126, 126, 127, 127, 127, 128, 129, 130, 132, 133, 135, 137, 140, 141, 141, 142, 142, 148, 152, 157] },
-    { name: "LEBEN", freq: [24, 25, 28, 30, 31, 33, 35, 35, 35, 34, 34, 34, 33, 0, 0, 0, 58, 64, 69, 73, 76, 78, 81, 85] },
-    { name: "SCHEIST", freq: [15, 36, 23, 29, 0, 25, 32, 0, 0, 70, 68, 53, 52, 75, 74, 85, 83, 59, 86, 69, 83, 92, 109, 110, 0, 114, 111, 110, 0, 124, 123, 0, 117, 110, 119, 117, 141, 149, 0, 145, 143, 132, 97, 79, 137, 98, 139, 149, 127, 147, 110, 144, 123, 130, 117, 146, 122, 0, 149, 144, 150, 144, 147, 143, 0, 133, 139, 120, 128, 133, 136, 0, 147, 0, 154, 151, 146, 0, 142, 138, 135, 130, 133, 140, 145, 151, 153, 153, 152, 0, 151, 0, 0, 155, 154, 157] },
-    { name: "NAZIFIRE", freq: [24, 24, 21, 21, 20, 76, 0, 104, 0, 102, 102, 132, 126, 115, 133, 0, 136, 137, 136, 139] },
-    { name: "BOSSFIRE", freq: [120, 29, 121, 0, 121, 121, 121, 0, 117, 106, 106, 119, 121, 33, 156] },
-    { name: "SSFIRE", freq: [63, 48, 51, 41, 32, 0, 52, 42, 47, 59, 54, 45, 52, 31, 42, 32, 35, 0, 49, 49, 38, 72] },
-    { name: "SLURPIE", freq: [158, 130, 159, 153, 153, 150, 149, 153, 156, 149, 61, 99, 142, 155, 149, 149, 155, 155, 156, 157, 157, 158, 159] },
-    { name: "TOT_HUND", freq: [50, 50, 50, 50, 50, 50, 50, 51, 51, 51, 51, 52, 52, 53, 53, 53, 53, 53, 54, 54, 55, 55, 55, 56, 56, 57, 58, 59, 61, 63, 65, 68, 71, 73, 76, 78, 79, 81, 83, 86, 89, 92, 93, 96, 99, 102, 105, 107, 109, 112, 114, 116, 118, 120, 121, 123, 126, 129, 131, 134, 136, 138, 140, 142, 144, 146, 148, 149, 150, 152, 156, 158] },
-    { name: "MEINGOTT", freq: [158, 158, 158, 157, 157, 156, 155, 155, 155, 154, 154, 153, 153, 152, 152, 152, 152, 151, 151, 150, 150, 149, 148, 148, 146, 144, 143, 141, 140, 138, 136, 134, 133, 131, 130, 129, 127, 126, 125, 123, 122, 121, 120, 119, 118, 116, 115, 113, 111, 110, 109, 108, 106, 104, 103, 101, 99, 97, 96, 94, 92, 89, 88, 86, 84, 82, 78, 75, 72, 67, 65, 62, 61, 60, 58, 58, 57, 56, 55, 55, 54, 52, 48, 47, 45, 44, 44, 43, 43, 43, 43, 43, 43, 43, 43, 43, 43] },
-    { name: "SCHABBSHA", freq: [18, 18, 18, 18, 18, 18, 18, 18, 19, 19, 19, 20, 20, 20, 20, 20, 20, 20, 20, 21, 21, 21, 22, 22, 23, 23, 24, 24, 24, 24, 25, 25, 26, 26, 26, 26, 27, 27, 28, 29, 31, 33, 35, 36, 39, 39, 40, 41, 43, 46, 49, 51, 54, 56, 60, 63, 67, 72, 76, 79, 81, 84, 87, 90, 95, 102, 108, 111, 115, 117, 118, 120, 122, 124, 126, 129, 130, 131, 133, 134, 136, 137, 139, 140, 141, 143, 144, 145, 145, 146, 148, 149, 151, 153, 155, 156, 157, 160] },
-    { name: "HITLERHA", freq: [36, 47, 52, 40, 37, 38, 53, 87, 127, 127, 127, 125, 120, 132, 136, 136, 124, 136, 119, 126, 141, 137, 143, 144, 132, 147, 152, 156, 159] },
-    { name: "SPION", freq: [22, 24, 24, 19, 18, 44, 20, 27, 50, 57, 63, 66, 147, 148, 144, 80, 81, 99, 117, 111, 107, 120, 109, 127, 129, 124, 140, 144, 145, 145, 143, 141, 138, 148, 148, 153] },
-    { name: "NEINSOVAS", freq: [24, 153, 30, 26, 26, 29, 55, 0, 153, 51, 54, 54, 61, 79, 88, 0, 0, 109, 137, 119, 128, 130, 138, 154, 156, 153] },
-    { name: "DOGATTACK", freq: [133, 132, 128, 118, 91, 138, 134, 137] },
-    { name: "FLAMETHROWER", freq: [140, 124, 134, 138, 140, 0, 144, 130, 0, 143, 0, 0, 147, 143, 0, 135, 0, 131, 155, 0, 0, 154, 0, 155] },
-    { name: "MECHSTEP", freq: [50, 56, 58, 137, 138, 67, 95, 129, 0, 0, 0, 0, 0, 0, 122, 130, 131, 132, 132, 137, 136, 135] },
-    { name: "GOOBS", freq: [73, 73, 73, 73, 73, 0, 0, 0, 50, 50, 50, 50, 50, 50, 0, 0, 50, 50, 50, 50, 50, 0, 0, 0, 50, 50, 50, 50, 50, 50, 0, 0, 0, 0, 0, 77, 77, 77, 77, 77, 77, 77, 77, 0, 0, 62, 62, 62, 62, 62, 62, 62, 62, 62, 62, 0, 0, 0, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72, 72] },
-    { name: "YEAH", freq: [105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 0, 0, 0, 0, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 98, 98, 98, 98, 98, 98, 98, 98, 98, 98, 98, 98, 98, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 98, 98, 98, 98, 98, 98, 98, 98, 98, 98, 98, 0, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90] },
-    { name: "DEATHSCREAM4", freq: [27, 152, 89, 154, 23, 86, 144, 145, 156, 157, 147, 97, 152, 120, 125] },
-    { name: "DEATHSCREAM5", freq: [31, 21, 29, 44, 34, 116, 49, 56, 15, 0, 0, 77, 79, 24, 17, 64] },
-    { name: "DEATHSCREAM6", freq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 111, 111, 112, 113, 114] },
-    { name: "DEATHSCREAM7", freq: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 121] },
-    { name: "DEATHSCREAM8", freq: [0, 0, 96, 96, 96] },
-    { name: "DEATHSCREAM9", freq: [0, 0, 0, 0, 0, 0, 0, 0, 95, 94] },
-    { name: "DONNER", freq: [0, 67, 65, 65, 65, 65, 65, 65, 65, 66, 67, 68, 69, 71, 73, 75, 79, 86, 97, 126] },
-    { name: "EINE", freq: [75, 76, 77, 79, 81, 83, 84, 85, 87, 88, 89, 91, 92, 93, 94, 95, 97, 97, 98, 98, 99, 100] },
-    { name: "ERLAUBEN", freq: [92, 92, 94, 96, 98, 100, 102, 104, 106, 108, 110, 112, 114, 115, 116, 118, 119, 119, 120, 121] },
-    { name: "KEIN", freq: [0, 0, 0, 88, 89, 92, 94, 96, 98, 100, 102, 103, 105, 106, 108, 108, 108] },
-    { name: "MEIN", freq: [81, 81, 82, 84, 85, 87, 89, 91, 93, 95, 98, 99, 101, 103, 104] },
-    { name: "ROSE", freq: [0, 0, 0, 107, 108, 110, 112, 113, 114, 115, 116, 118, 118, 119, 120, 121, 121] },
-    { name: "MISSILEFIRE", freq: [89, 45, 108, 105, 159, 159, 59, 99, 22, 111] },
-    { name: "MISSILEHIT", freq: [125, 125, 126, 116, 129, 117, 126, 122, 132, 122, 114, 0, 139, 135, 143, 143, 144, 0, 129, 126, 132, 152, 119, 131, 0, 130, 138, 0, 141, 140, 147, 148, 149, 0, 153, 0, 0, 0, 154, 155, 0, 0, 0, 0, 156] },
+    "HITWALL", "SELECTWPN", "SELECTITEM", "HEARTBEAT", "MOVEGUN2", "MOVEGUN1",
+    "NOWAY", "NAZIHITPLAYER", "SCHABBSTHROW", "PLAYERDEATH", "DOGDEATH", "ATKGATLING",
+    "GETKEY", "NOITEM", "WALK1", "WALK2", "TAKEDAMAGE", "GAMEOVER",
+    "OPENDOOR", "CLOSEDOOR", "DONOTHING", "HALT", "DEATHSCREAM2", "ATKKNIFE",
+    "ATKPISTOL", "DEATHSCREAM3", "ATKMACHINEGUN", "HITENEMY", "SHOOTDOOR", "DEATHSCREAM1",
+    "GETMACHINE", "GETAMMO", "SHOOT", "HEALTH1", "HEALTH2", "BONUS1",
+    "BONUS2", "BONUS3", "GETGATLING", "ESCPRESSED", "LEVELDONE", "DOGBARK",
+    "ENDBONUS1", "ENDBONUS2", "BONUS1UP", "BONUS4", "PUSHWALL", "NOBONUS",
+    "PERCENT100", "BOSSACTIVE", "MUTTI", "SCHUTZAD", "AHHHG", "DIE",
+    "EVA", "GUTENTAG", "LEBEN", "SCHEIST", "NAZIFIRE", "BOSSFIRE",
+    "SSFIRE", "SLURPIE", "TOT_HUND", "MEINGOTT", "SCHABBSHA", "HITLERHA",
+    "SPION", "NEINSOVAS", "DOGATTACK", "FLAMETHROWER", "MECHSTEP", "GOOBS",
+    "YEAH", "DEATHSCREAM4", "DEATHSCREAM5", "DEATHSCREAM6", "DEATHSCREAM7", "DEATHSCREAM8",
+    "DEATHSCREAM9", "DONNER", "EINE", "ERLAUBEN", "KEIN", "MEIN",
+    "ROSE", "MISSILEFIRE", "MISSILEHIT",
   ],
   doom: [
-    { name: "DPPISTOL", freq: [51, 52, 49, 59, 49, 66, 85, 96, 90] },
-    { name: "DPSHOTGN", freq: [40, 57, 49, 60, 48, 52, 64, 68, 57, 74, 78, 81, 72, 70, 83, 107] },
-    { name: "DPSGCOCK", freq: [59, 40, 0, 0, 0, 0, 0, 0, 0, 38, 38, 51] },
-    { name: "DPSAWUP", freq: [43, 48, 39, 48, 35, 47, 32, 45, 29, 43, 27, 40, 25, 37, 23, 32, 22, 29, 20, 29, 20, 29, 21, 30, 25, 32, 28, 38, 33, 47, 37, 52, 40, 55, 44, 68, 47, 68, 47, 68, 47, 66, 47, 64, 44, 62, 41, 59, 39] },
-    { name: "DPSAWIDL", freq: [26, 19, 26, 20, 26, 19, 26] },
-    { name: "DPSAWFUL", freq: [59, 47, 59, 37, 59, 47, 59] },
-    { name: "DPSAWHIT", freq: [48, 55, 44, 54, 36, 49, 30, 47, 26] },
-    { name: "DPRLAUNC", freq: [49, 34, 43, 37, 38, 37, 28, 35, 28, 24, 23, 28, 19, 25, 16, 17, 14] },
-    { name: "DPRXPLOD", freq: [98, 68, 52, 51, 59, 55, 74, 76, 49, 41, 76, 59, 72] },
-    { name: "DPFIRSHT", freq: [60, 64, 66, 68, 70, 74, 76, 78, 81, 83, 85, 85, 88, 90, 93, 93] },
-    { name: "DPFIRXPL", freq: [62, 83, 70, 81, 62, 62, 74, 76, 60, 76] },
-    { name: "DPPSTART", freq: [25, 29, 34] },
-    { name: "DPPSTOP", freq: [31, 28, 27] },
-    { name: "DPDOROPN", freq: [85, 101, 83, 88, 72, 70, 62, 59, 48, 68, 40, 78, 34, 88, 30, 101, 28] },
-    { name: "DPDORCLS", freq: [44, 101, 51, 88, 59, 70, 70, 59, 74, 68, 74, 78, 85, 88, 93, 101] },
-    { name: "DPSTNMOV", freq: [31, 28, 27] },
-    { name: "DPSWTCHN", freq: [49, 49, 49] },
-    { name: "DPSWTCHX", freq: [18, 18, 18] },
-    { name: "DPPLPAIN", freq: [17, 17, 17, 17, 18, 24, 26, 35, 47, 64, 70, 76] },
-    { name: "DPDMPAIN", freq: [15, 28, 31, 23, 31, 29, 38, 45, 45, 52, 64, 96] },
-    { name: "DPPOPAIN", freq: [88, 62, 57, 39, 28, 35, 28, 28, 31, 44, 57, 81, 83] },
-    { name: "DPSLOP", freq: [70, 62, 57, 55, 62, 0, 83, 88, 0, 96, 0, 0, 105] },
-    { name: "DPITEMUP", freq: [37, 37, 37, 28, 28, 44, 44, 44, 44, 28, 28, 33, 33, 33, 33, 44, 44, 44] },
-    { name: "DPWPNUP", freq: [78, 66, 49, 39, 30] },
-    { name: "DPOOF", freq: [83, 78, 78, 85] },
-    { name: "DPTELEPT", freq: [12, 12, 15, 18, 0, 0, 0, 0, 12, 12, 15, 19, 24, 28, 0, 0, 0, 0, 14, 17, 19, 21, 24, 28, 32, 36] },
-    { name: "DPPOSIT1", freq: [25, 33, 38, 43, 48, 52, 60, 31, 35, 33, 34, 36, 41, 38, 37, 40, 43, 54, 57, 76] },
-    { name: "DPPOSIT2", freq: [25, 33, 38, 43, 48, 52, 60, 31, 35, 33, 34, 36, 41, 38, 37, 40, 43, 54, 57, 76] },
-    { name: "DPPOSIT3", freq: [25, 33, 38, 43, 48, 52, 60, 31, 35, 33, 34, 36, 41, 38, 37, 40, 43, 54, 57, 76] },
-    { name: "DPBGSIT1", freq: [25, 33, 38, 43, 48, 52, 60, 31, 35, 33, 34, 36, 41, 38, 37, 40, 43, 54, 57, 76] },
-    { name: "DPBGSIT2", freq: [25, 33, 38, 43, 48, 52, 60, 31, 35, 33, 34, 36, 41, 38, 37, 40, 43, 54, 57, 76] },
-    { name: "DPSGTSIT", freq: [25, 33, 38, 43, 48, 52, 60, 31, 35, 33, 34, 36, 41, 38, 37, 40, 43, 54, 57, 76] },
-    { name: "DPBRSSIT", freq: [68, 48, 30, 45, 28, 41, 28, 40, 27, 39, 27, 38, 27, 40, 28, 43, 32, 55, 40, 64, 52, 83, 62, 85, 76, 96, 81, 96, 83, 96, 85, 101, 85, 101, 85, 105, 88, 107, 88, 114, 90, 90, 90] },
-    { name: "DPSGTATK", freq: [41, 26, 39, 26, 38, 25, 43, 25, 45, 62, 49, 55, 57, 70, 74, 88, 93, 98, 101, 101] },
-    { name: "DPCLAW", freq: [41, 26, 39, 26, 38, 25, 43, 25, 45, 62, 49, 55, 57, 70, 74, 88, 93, 98, 101, 101] },
-    { name: "DPPLDETH", freq: [8, 11, 23, 12, 35, 13, 47, 14, 54, 15, 64, 16, 78, 17, 83, 18, 96, 20, 105, 21, 105, 22, 105, 23, 107, 24, 110] },
-    { name: "DPPDIEHI", freq: [83, 78, 78, 85] },
-    { name: "DPPODTH1", freq: [26, 27, 38, 25, 37, 32, 32, 31, 32, 36, 39, 52, 54, 48, 41, 41, 43, 44, 43, 47, 57, 66, 72, 76, 83, 88, 90, 107] },
-    { name: "DPPODTH2", freq: [26, 27, 38, 25, 37, 32, 32, 31, 32, 36, 39, 52, 54, 48, 41, 41, 43, 44, 43, 47, 57, 66, 72, 76, 83, 88, 90, 107] },
-    { name: "DPPODTH3", freq: [26, 27, 38, 25, 37, 32, 32, 31, 32, 36, 39, 52, 54, 48, 41, 41, 43, 44, 43, 47, 57, 66, 72, 76, 83, 88, 90, 107] },
-    { name: "DPBGDTH1", freq: [26, 27, 38, 25, 37, 32, 32, 31, 32, 36, 39, 52, 54, 48, 41, 41, 43, 44, 43, 47, 57, 66, 72, 76, 83, 88, 90, 107] },
-    { name: "DPBGDTH2", freq: [26, 27, 38, 25, 37, 32, 32, 31, 32, 36, 39, 52, 54, 48, 41, 41, 43, 44, 43, 47, 57, 66, 72, 76, 83, 88, 90, 107] },
-    { name: "DPSGTDTH", freq: [26, 27, 38, 25, 37, 32, 32, 31, 32, 36, 39, 52, 54, 48, 41, 41, 43, 44, 43, 47, 57, 66, 72, 76, 83, 88, 90, 107] },
-    { name: "DPBRSDTH", freq: [107, 107, 0, 105, 0, 105, 0, 0, 105, 0, 0, 96, 0, 81, 0, 0, 0, 70, 0, 0, 0, 70] },
-    { name: "DPPOSACT", freq: [44, 51, 52, 57, 57, 57, 54, 47, 44, 40, 37, 33, 33, 32, 32, 33, 34, 36, 37, 40, 43, 49, 55, 64, 66, 70, 76, 78, 83, 90, 90, 105, 107, 110, 114] },
-    { name: "DPBGACT", freq: [44, 51, 52, 57, 57, 57, 54, 47, 44, 40, 37, 33, 33, 32, 32, 33, 34, 36, 37, 40, 43, 49, 55, 64, 66, 70, 76, 78, 83, 90, 90, 105, 107, 110, 114] },
-    { name: "DPDMACT", freq: [44, 51, 52, 57, 57, 57, 54, 47, 44, 40, 37, 33, 33, 32, 32, 33, 34, 36, 37, 40, 43, 49, 55, 64, 66, 70, 76, 78, 83, 90, 90, 105, 107, 110, 114] },
-    { name: "DPNOWAY", freq: [60, 54, 52, 52, 52, 52, 57, 74, 70, 68, 70, 74] },
-    { name: "DPBAREXP", freq: [54, 62, 59, 68, 55, 66, 57, 47, 39, 34, 32, 27, 27, 24, 23, 22, 23, 24, 23, 22, 25, 25, 25, 25, 27, 33, 30, 37, 35, 40, 39, 37, 37, 47, 47, 57, 72, 76, 85, 114] },
-    { name: "DPPUNCH", freq: [41, 26, 39, 26, 38, 25, 43, 25, 45, 62, 49, 55, 57, 70, 74, 88, 93, 98, 101, 101] },
-    { name: "DPTINK", freq: [78, 66, 49, 39, 30] },
-    { name: "DPBDOPN", freq: [85, 101, 83, 88, 72, 70, 62, 59, 48, 68, 40, 78, 34, 88, 30, 101, 28] },
-    { name: "DPBDCLS", freq: [44, 101, 51, 88, 59, 70, 70, 59, 74, 68, 74, 78, 85, 88, 93, 101] },
-    { name: "DPITMBK", freq: [78, 66, 49, 39, 30] },
-    { name: "DPGETPOW", freq: [83, 78, 78, 85] },
-    { name: "DPPLASMA", freq: [17, 23, 19, 21, 16, 15, 16, 16, 11, 13, 11, 10, 10] },
-    { name: "DPBFG", freq: [8, 32, 38, 21, 83, 44, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 85, 85, 114, 90, 76, 70, 88, 66, 85, 72, 66, 90, 60, 60, 78, 78, 62, 76, 74, 54, 55, 57, 68, 51, 49, 45, 43, 43, 45, 57, 47, 33, 35, 37, 37, 26, 23, 30, 19, 20, 20, 17, 15, 15] },
-    { name: "DPCACSIT", freq: [25, 33, 38, 43, 48, 52, 60, 31, 35, 33, 34, 36, 41, 38, 37, 40, 43, 54, 57, 76] },
-    { name: "DPCYBSIT", freq: [68, 48, 30, 45, 28, 41, 28, 40, 27, 39, 27, 38, 27, 40, 28, 43, 32, 55, 40, 64, 52, 83, 62, 85, 76, 96, 81, 96, 83, 96, 85, 101, 85, 101, 85, 105, 88, 107, 88, 114, 90, 90, 90] },
-    { name: "DPSPISIT", freq: [68, 48, 30, 45, 28, 41, 28, 40, 27, 39, 27, 38, 27, 40, 28, 43, 32, 55, 40, 64, 52, 83, 62, 85, 76, 96, 81, 96, 83, 96, 85, 101, 85, 101, 85, 105, 88, 107, 88, 114, 90, 90, 90] },
-    { name: "DPSKLATK", freq: [49, 52, 54, 52, 52, 54, 54, 57, 57, 51, 51, 68, 68, 70, 76, 78, 78, 83, 85, 90, 98] },
-    { name: "DPCACDTH", freq: [26, 27, 38, 25, 37, 32, 32, 31, 32, 36, 39, 52, 54, 48, 41, 41, 43, 44, 43, 47, 57, 66, 72, 76, 83, 88, 90, 107] },
-    { name: "DPSKLDTH", freq: [26, 27, 38, 25, 37, 32, 32, 31, 32, 36, 39, 52, 54, 48, 41, 41, 43, 44, 43, 47, 57, 66, 72, 76, 83, 88, 90, 107] },
-    { name: "DPCYBDTH", freq: [107, 107, 0, 105, 0, 105, 0, 0, 105, 0, 0, 96, 0, 81, 0, 0, 0, 70, 0, 0, 0, 70] },
-    { name: "DPSPIDTH", freq: [107, 107, 0, 105, 0, 105, 0, 0, 105, 0, 0, 96, 0, 81, 0, 0, 0, 70, 0, 0, 0, 70] },
-    { name: "DPHOOF", freq: [41, 26, 39, 26, 38, 25, 43, 25, 45, 62, 49, 55, 57, 70, 74, 88, 93, 98, 101, 101] },
-    { name: "DPMETAL", freq: [41, 26, 39, 26, 38, 25, 43, 25, 45, 62, 49, 55, 57, 70, 74, 88, 93, 98, 101, 101] },
+    "DPPISTOL", "DPSHOTGN", "DPSGCOCK", "DPSAWUP", "DPSAWIDL", "DPSAWFUL",
+    "DPSAWHIT", "DPRLAUNC", "DPRXPLOD", "DPFIRSHT", "DPFIRXPL", "DPPSTART",
+    "DPPSTOP", "DPDOROPN", "DPDORCLS", "DPSTNMOV", "DPSWTCHN", "DPSWTCHX",
+    "DPPLPAIN", "DPDMPAIN", "DPPOPAIN", "DPSLOP", "DPITEMUP", "DPWPNUP",
+    "DPOOF", "DPTELEPT", "DPPOSIT1", "DPPOSIT2", "DPPOSIT3", "DPBGSIT1",
+    "DPBGSIT2", "DPSGTSIT", "DPBRSSIT", "DPSGTATK", "DPCLAW", "DPPLDETH",
+    "DPPDIEHI", "DPPODTH1", "DPPODTH2", "DPPODTH3", "DPBGDTH1", "DPBGDTH2",
+    "DPSGTDTH", "DPBRSDTH", "DPPOSACT", "DPBGACT", "DPDMACT", "DPNOWAY",
+    "DPBAREXP", "DPPUNCH", "DPTINK", "DPBDOPN", "DPBDCLS", "DPITMBK",
+    "DPGETPOW", "DPPLASMA", "DPBFG", "DPCACSIT", "DPCYBSIT", "DPSPISIT",
+    "DPSKLATK", "DPCACDTH", "DPSKLDTH", "DPCYBDTH", "DPSPIDTH", "DPHOOF",
+    "DPMETAL",
+  ],
+  dave: [
+    "HITWALL", "FALLING", "OUCH", "WALKING", "JUMPING", "TREASURE",
+    "GOTTROPHY", "EXPLOSION", "FLYING", "NEXTLEVEL", "TOJETPACK", "GOTSOMETHNG",
+  ],
+  keen: [
+    "WLDWALKSND", "WLDBLOCKSND", "WLDENTERSND", "KEENWALKSND", "KEENBLOKSND", "KEENJUMPSND",
+    "KEENLANDSND", "KEENDIESND", "GOTBONUSSND", "GOTITEMSND", "GOTPARTSND", "KEENFIRESND",
+    "KEENPOGOSND", "POGOJUMPSND", "LVLDONESND", "GAMEOVERSND", "HISCORESND", "TELEPORTSND",
+    "CHUNKSMASH", "GOINDOORSND", "BUMPHEADSND", "USEKEYSND", "CANNONFIRE", "SLAMSND",
+    "CLICKSND", "CRYSTALSND", "PLUMMETSND", "EXTRAMANSND", "YORPBUMPSND", "KEENWLK2SND",
+    "YORPBOPSND", "GETCARDSND", "DOOROPENSND", "YORPSCREAM", "GARGSCREAM", "GUNCLICK",
+    "SHOTHIT", "TANKFIRE", "VORTSCREAM", "KEENCICLE", "KEENSLEFT",
   ],
 };
 
@@ -13057,9 +13219,21 @@ let weaponKey = "axe";
 let weaponFrame = 0;
 let itemMeshKey = "backpack";
 let soundPath = "sound/weapons/shotgn2.wav";
+/** Enemy cue row selected in the sound list. Null when a resident alias is selected. */
+let soundCue = null;
 let librarySource = "wolf";
+const LIBRARY_SOURCES = [
+  ["wolf", "Wolf"],
+  ["doom", "Doom"],
+  ["dave", "Dave"],
+  ["keen", "Keen"],
+];
 let libraryName = "HITWALL";
-let showAmbience = false;
+let libraryFilter = "";
+const bankFreq = { wolf: null, doom: null, dave: null, keen: null };
+let hideUnused = true;
+const UNUSED_SOUND_FOLDERS = new Set(["ambience", "plats", "hknight", "buttons"]);
+const collapsedSoundFolders = new Set();
 let sharewareSounds = new Map();
 const sfxPreview = new SfxPreview();
 /** Collapsed room ids in the Objects tree. */
@@ -13194,8 +13368,11 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
   getFrame: () => {
     const e = doc.enemies[enemyIndex];
     const stick = stickClipFor(e, activeTimelineClip());
-    if (stick) return stick.start + frameLocal;
-    if (!e?.clips?.length) return 0;
+    if (stick) {
+      const fi = (stick.start | 0) + frameLocal;
+      if (e.frames?.[fi]) return fi;
+    }
+    if (e?.customSkeleton || !e?.clips?.length) return 0;
     return frameIndex;
   },
   getLocalFrame: () => {
@@ -13204,7 +13381,11 @@ const animView = new AnimView(document.getElementById("view-canvas"), {
     return Math.max(0, Math.min(frameLocal, (clip.len | 0) - 1));
   },
   getClipName: () => activeTimelineClip()?.name ?? null,
-  hasStickFrame: () => !!stickClipFor(doc.enemies[enemyIndex], activeTimelineClip()),
+  hasStickFrame: () => {
+    const e = doc.enemies[enemyIndex];
+    if (stickClipFor(e, activeTimelineClip())) return true;
+    return !!e?.customSkeleton && Array.isArray(e.frames?.[0]);
+  },
   getSelectedVerts: () => selectedVerts,
   getSelectedLines: () => selectedLines,
   onSelectVert: (i, additive) => {
@@ -13403,7 +13584,7 @@ function restoreMdlRigBackup() {
     if (Array.isArray(jv) && jv.some((list) => list.length)) continue;
     const saved = raw[e.name];
     if (!Array.isArray(saved)) continue;
-    e.mdlRig = normalizeMdlRig({ jointVerts: saved });
+    e.mdlRig = normalizeMdlRig({ jointVerts: saved }, saved.length);
     changed = true;
   }
   return changed;
@@ -13534,7 +13715,8 @@ function collectEditorState() {
       target: { x: iorb.target.x, y: iorb.target.y, z: iorb.target.z },
     },
     sound: soundPath,
-    showAmbience,
+    hideUnused,
+    collapsedSoundFolders: [...collapsedSoundFolders],
   });
 }
 
@@ -13592,9 +13774,11 @@ function applyEditorState(ed) {
     iorb.target.y = ed.itemOrbit.target.y;
     iorb.target.z = ed.itemOrbit.target.z;
     soundPath = ed.sound || soundPath;
-    showAmbience = !!ed.showAmbience;
-    const amb = document.getElementById("chk-show-ambience");
-    if (amb) amb.checked = showAmbience;
+    hideUnused = !!ed.hideUnused;
+    const hideUnusedChk = document.getElementById("chk-hide-unused");
+    if (hideUnusedChk) hideUnusedChk.checked = hideUnused;
+    collapsedSoundFolders.clear();
+    for (const name of ed.collapsedSoundFolders) collapsedSoundFolders.add(name);
     setNeighbourDraw(ed.neighbourDraw, false);
     setRoomsOnlyDraw(ed.roomsOnlyDraw, false);
     setDrawMode(ed.localDraw);
@@ -13705,70 +13889,53 @@ function activeEnemy() {
 }
 
 function stickClipFor(e, clip) {
-  if (!clip || !e?.clips?.length) return null;
-  return e.clips.find((c) => c.name === clip.name) || null;
+  if (!clip || !e?.clips?.length || !e.frames?.length) return null;
+  const stick = e.clips.find((c) => c.name === clip.name);
+  if (!stick) return null;
+  const start = stick.start | 0;
+  const len = stick.len | 0;
+  if (start < 0 || len < 1 || start + len > e.frames.length) return null;
+  if (!e.frames[start]?.length) return null;
+  return stick;
 }
 
-function exportedSoundIdents() {
-  const out = [];
-  const seen = new Set();
-  for (const path of listedSoundPaths()) {
-    const snd = getSound(doc, path);
-    if (!snd.export && !isSoundLocked(path)) continue;
-    if (!snd.freq?.length) continue;
-    const ident = soundIdent(path);
-    if (seen.has(ident)) continue;
-    seen.add(ident);
-    out.push(ident);
-  }
-  out.sort();
-  return out;
-}
-
-function pathForSoundIdent(ident) {
-  const want = String(ident || "")
-    .trim()
-    .toUpperCase()
-    .replace(/^SOUND_/, "");
-  if (!want) return null;
-  for (const path of listedSoundPaths()) {
-    if (soundIdent(path) === want) return path;
-  }
-  return null;
+function attackCueLabel(e, cue) {
+  const name = ENEMY_CUE_LABELS[cue];
+  const path = e.cues?.[cue] || "";
+  if (!path) return name;
+  const meta = soundStatusLabel(getSound(doc, path));
+  return meta === "empty" ? name : `${name} · ${meta}`;
 }
 
 function previewClipSound(clip, local) {
-  const stick = stickClipFor(activeEnemy(), clip);
-  if (!stick?.sound || (stick.soundFrame | 0) !== (local | 0)) return;
-  const path = pathForSoundIdent(stick.sound);
+  const e = activeEnemy();
+  const stick = stickClipFor(e, clip);
+  if (!stick) return;
+  const cue = String(stick.sound || "").toLowerCase();
+  if ((cue !== "melee" && cue !== "shoot") || (stick.soundFrame | 0) !== (local | 0)) return;
+  const path = e?.cues?.[cue] || "";
   if (!path) return;
   const snd = getSound(doc, path);
-  if (!snd?.freq?.length) return;
-  sfxPreview.playSpeaker(snd, false).catch((err) => setStatus(String(err.message || err), true));
+  const freq = cueFreq(snd);
+  if (!freq?.length) return;
+  sfxPreview.playSpeaker({ freq, attack: 0 }, false).catch((err) => setStatus(String(err.message || err), true));
 }
 
 function renderClipSoundFields(root, e, clip) {
   const stick = stickClipFor(e, clip);
   if (!stick) return;
-  const idents = exportedSoundIdents();
   const sel = document.createElement("select");
   const none = document.createElement("option");
   none.value = "";
   none.textContent = "(none)";
   sel.appendChild(none);
-  for (const ident of idents) {
+  for (const cue of ENEMY_ATTACK_CUES) {
     const o = document.createElement("option");
-    o.value = ident;
-    o.textContent = `SOUND_${ident}`;
+    o.value = cue;
+    o.textContent = attackCueLabel(e, cue);
     sel.appendChild(o);
   }
-  if (stick.sound && !idents.includes(stick.sound)) {
-    const o = document.createElement("option");
-    o.value = stick.sound;
-    o.textContent = `SOUND_${stick.sound}`;
-    sel.appendChild(o);
-  }
-  sel.value = stick.sound || "";
+  sel.value = ENEMY_ATTACK_CUES.includes(stick.sound) ? stick.sound : "";
   sel.addEventListener("change", () => {
     pushUndo();
     const next = withClipSound({ name: stick.name, start: stick.start, len: stick.len }, {
@@ -13784,7 +13951,7 @@ function renderClipSoundFields(root, e, clip) {
     markDirty();
     refreshAll();
   });
-  root.appendChild(field("Clip sound", sel));
+  root.appendChild(field("Attack cue", sel));
   const fr = document.createElement("input");
   fr.type = "number";
   fr.min = "0";
@@ -14083,17 +14250,132 @@ function buildPalette() {
   sep.className = "palette-sep";
   sep.textContent = "Enemies";
   root.appendChild(sep);
-  for (const t of ENEMY_TYPES) {
+  for (const t of enemyTypesByHp()) {
     root.appendChild(paletteButton(t.name, KINDS.enemy.color, { kind: "enemy", enemy: t.name }));
   }
+  bindPaletteIconResize(root);
+  paintEnemyPaletteIcons();
+}
+
+/** Front-3/4 of editor +Z, a little above — same stick pose the layout view places. */
+const ENEMY_ICON_YAW = Math.PI - 0.45;
+const ENEMY_ICON_PITCH = -0.3;
+
+let paletteIconRo = null;
+
+function bindPaletteIconResize(root) {
+  paletteIconRo?.disconnect();
+  paletteIconRo = new ResizeObserver(() => paintEnemyPaletteIcons());
+  paletteIconRo.observe(root);
+}
+
+function paintEnemyPaletteIcons() {
+  for (const canvas of document.querySelectorAll(".palette-enemy-icon")) {
+    paintEnemyIcon(canvas, findEnemyTemplate(doc, canvas.dataset.enemy));
+  }
+}
+
+function paintEnemyIcon(canvas, template) {
+  const cssW = canvas.clientWidth >= 8 ? canvas.clientWidth : 96;
+  const cssH = canvas.clientHeight >= 8 ? canvas.clientHeight : 36;
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(cssW * dpr));
+  const h = Math.max(1, Math.round(cssH * dpr));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, w, h);
+  const frame = enemyPreviewFrame(template);
+  const lines = template?.lines;
+  if (!frame?.length || !lines?.length) return;
+
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  for (const v of frame) {
+    if (v.x < minX) minX = v.x;
+    if (v.y < minY) minY = v.y;
+    if (v.z < minZ) minZ = v.z;
+    if (v.x > maxX) maxX = v.x;
+    if (v.y > maxY) maxY = v.y;
+    if (v.z > maxZ) maxZ = v.z;
+  }
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const cz = (minZ + maxZ) / 2;
+  const radius = Math.max(1, Math.hypot(maxX - minX, maxY - minY, maxZ - minZ) * 0.5);
+  const { forward } = lookVectors(ENEMY_ICON_YAW, ENEMY_ICON_PITCH);
+  const dist = radius * 3.2;
+  const cam = {
+    x: cx - forward.x * dist,
+    y: cy - forward.y * dist,
+    z: cz - forward.z * dist,
+    yaw: ENEMY_ICON_YAW,
+    pitch: ENEMY_ICON_PITCH,
+  };
+  const focal = Math.min(w, h) * 0.9;
+  const segs = [];
+  for (const [i, j] of lines) {
+    const a = frame[i];
+    const b = frame[j];
+    if (!a || !b) continue;
+    const seg = projectLine(a, b, cam, w, h, focal);
+    if (seg) segs.push(seg);
+  }
+  if (!segs.length) return;
+
+  let sx0 = Infinity;
+  let sy0 = Infinity;
+  let sx1 = -Infinity;
+  let sy1 = -Infinity;
+  for (const s of segs) {
+    sx0 = Math.min(sx0, s.ax, s.bx);
+    sy0 = Math.min(sy0, s.ay, s.by);
+    sx1 = Math.max(sx1, s.ax, s.bx);
+    sy1 = Math.max(sy1, s.ay, s.by);
+  }
+  const bw = Math.max(1, sx1 - sx0);
+  const bh = Math.max(1, sy1 - sy0);
+  const pad = Math.max(2 * dpr, Math.round(Math.min(w, h) * 0.08));
+  const scale = Math.min((w - pad * 2) / bw, (h - pad * 2) / bh);
+  const ox = (w - bw * scale) / 2 - sx0 * scale;
+  const oy = (h - bh * scale) / 2 - sy0 * scale;
+
+  ctx.strokeStyle = KINDS.enemy.color;
+  ctx.lineWidth = Math.max(1, dpr);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  for (const s of segs) {
+    ctx.moveTo(s.ax * scale + ox, s.ay * scale + oy);
+    ctx.lineTo(s.bx * scale + ox, s.by * scale + oy);
+  }
+  ctx.stroke();
 }
 
 function paletteButton(label, color, payload) {
   const el = document.createElement("button");
   el.type = "button";
   el.className = "palette-item";
-  el.textContent = label;
   el.style.borderColor = color;
+  if (payload.enemy) {
+    el.classList.add("palette-enemy");
+    const icon = document.createElement("canvas");
+    icon.className = "palette-enemy-icon";
+    icon.dataset.enemy = payload.enemy;
+    icon.setAttribute("aria-hidden", "true");
+    const name = document.createElement("span");
+    name.className = "palette-enemy-name";
+    name.textContent = label;
+    el.append(icon, name);
+  } else {
+    el.textContent = label;
+  }
   el.title = "Drag onto the map to place";
   el.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
@@ -14338,11 +14620,11 @@ function updateCenterChrome() {
           ? "Backpack"
           : itemMeshKey
         : editorMode === "sounds"
-          ? `${librarySource === "doom" ? "Doom" : "Wolf"} ${libraryName}`
+          ? libraryName || "Sounds"
           : "Enemy";
   if (statsEl) {
     if (editorMode === "sounds") {
-      const bytes = soundPayloadBytes(doc.sounds);
+      const bytes = soundPayloadBytes(doc.sounds, cueFreq);
       statsEl.hidden = false;
       statsEl.textContent = `${bytes} / ${SOUND_PAYLOAD_MAX} B exported`;
       statsEl.title = "Resident pcsounds.asm payload (enemy SFX stream with poses)";
@@ -14515,7 +14797,8 @@ function renderObjectList() {
 function renderEnemyList() {
   const ul = document.getElementById("enemy-list");
   ul.innerHTML = "";
-  doc.enemies.forEach((e, i) => {
+  enemiesByHp(doc.enemies).forEach((e) => {
+    const i = doc.enemies.indexOf(e);
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
@@ -14692,29 +14975,86 @@ function renderWeaponList() {
   }
 }
 
-function listedSoundPaths() {
+function catalogSoundPaths() {
   const set = new Set(Object.keys(doc.sounds || {}));
   for (const key of sharewareSounds.keys()) set.add(key);
-  const paths = [...set].sort();
-  return paths.filter((p) => {
-    if (!p.startsWith("sound/") || !p.endsWith(".wav")) return false;
-    if (!showAmbience && soundFolder(p) === "ambience") return false;
-    return true;
-  });
+  return [...set]
+    .filter((p) => p.startsWith("sound/") && p.endsWith(".wav"))
+    .sort();
+}
+
+function syncSoundCuePath() {
+  if (!soundCue) return;
+  const e = (doc.enemies || []).find((en) => en.name === soundCue.enemy);
+  soundPath = e?.cues?.[soundCue.cue] || "";
+}
+
+function resolvedFreq(origin, name) {
+  const side = bankFreq[origin];
+  if (!side || !name) return null;
+  const freq = side.get(String(name).toUpperCase());
+  return freq ? freq.slice() : [];
+}
+
+function cueFreq(snd) {
+  if (!snd) return null;
+  const origin = snd.origin || "";
+  if (origin === "empty" || origin === "") return [];
+  if (origin === "wolf" || origin === "doom" || origin === "dave" || origin === "keen") {
+    return resolvedFreq(origin, snd.library);
+  }
+  return null;
+}
+
+async function openSoundBanks(dir, quiet) {
+  const files = await loadSoundBankBuffers(dir);
+  const next = { wolf: null, doom: null, dave: null, keen: null };
+  const missing = [];
+  if (files["AUDIOHED.WL1"] && files["AUDIOT.WL1"]) {
+    next.wolf = loadWolf(files["AUDIOHED.WL1"], files["AUDIOT.WL1"], PC_LIBRARY.wolf);
+  } else missing.push("AUDIOHED.WL1 / AUDIOT.WL1");
+  if (files["DOOM.WAD"]) next.doom = loadDoom(files["DOOM.WAD"]);
+  else missing.push("DOOM.WAD");
+  if (files["DAVE.EXE"]) next.dave = loadDave(files["DAVE.EXE"]);
+  else missing.push("DAVE.EXE");
+  if (files["SOUNDS.CK1"]) next.keen = loadKeen(files["SOUNDS.CK1"]);
+  else missing.push("SOUNDS.CK1");
+  if (!next.wolf && !next.doom && !next.dave && !next.keen) {
+    throw new Error("Folder has none of the sound banks");
+  }
+  bankFreq.wolf = next.wolf;
+  bankFreq.doom = next.doom;
+  bankFreq.dave = next.dave;
+  bankFreq.keen = next.keen;
+  if (!quiet) {
+    if (missing.length) setStatus(`Sound banks open, missing ${missing.join(", ")}`, true);
+    else setStatus("Sound banks open");
+  }
+  refreshAll();
 }
 
 function soundStatusLabel(snd) {
-  if (!snd?.freq?.length || snd.origin === "empty") return "empty";
-  if (snd.library && (snd.origin === "wolf" || snd.origin === "doom")) return `${snd.origin} ${snd.library}`;
-  if (snd.origin === "estimate") return "est";
-  if (snd.origin === "edit") return "edit";
-  if (snd.origin === "wolf") return "wolf";
-  if (snd.origin === "doom") return "doom";
-  return `${snd.freq.length}t`;
+  if (
+    snd?.library &&
+    (snd.origin === "wolf" || snd.origin === "doom" || snd.origin === "dave" || snd.origin === "keen")
+  ) {
+    return snd.library;
+  }
+  return "empty";
 }
 
 function libraryRows() {
-  return librarySource === "doom" ? PC_LIBRARY.doom : PC_LIBRARY.wolf;
+  const names = PC_LIBRARY[librarySource] || [];
+  return names
+    .map((name) => ({ name, freq: resolvedFreq(librarySource, name) || [] }))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
+function libraryNameVisible(name) {
+  const terms = libraryFilter.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return true;
+  const hay = String(name).toLowerCase();
+  return terms.some((term) => hay.includes(term));
 }
 
 function libraryEntry() {
@@ -14725,6 +15065,7 @@ function libraryDuplicates() {
   const seen = new Map();
   const dups = new Map();
   for (const entry of libraryRows()) {
+    if (!entry.freq.length) continue;
     const key = entry.freq.join(",");
     const first = seen.get(key);
     if (first) dups.set(entry.name, first);
@@ -14733,9 +15074,17 @@ function libraryDuplicates() {
   return dups;
 }
 
+function libraryCanonical(entry) {
+  if (!entry) return null;
+  const canon = libraryDuplicates().get(entry.name);
+  if (!canon) return entry;
+  return libraryRows().find((row) => row.name === canon) || entry;
+}
+
 function envelopeFromLibrary(entry) {
-  const freq = entry.freq.map((b) => b & 255);
-  return { freq, attack: 0 };
+  const freq = resolvedFreq(librarySource, entry.name);
+  if (!freq) return { freq: [], attack: 0, pending: true };
+  return { freq: freq.map((b) => b & 255), attack: 0 };
 }
 
 function playLibrarySelection(loop) {
@@ -14743,93 +15092,152 @@ function playLibrarySelection(loop) {
   soundView.selectedTick = 0;
   soundView.scroll = 0;
   soundView.draw();
-  if (!entry?.freq.length) {
+  const freq = entry ? resolvedFreq(librarySource, entry.name) : null;
+  if (!freq) {
+    sfxFollow = "";
+    sfxPreview.stop();
+    setStatus("Open the sound-bank folder to play", true);
+    return;
+  }
+  if (!freq.length) {
     sfxFollow = "";
     sfxPreview.stop();
     setStatus("Library sound is empty", true);
     return;
   }
   sfxFollow = "library";
-  sfxPreview.playSpeaker(envelopeFromLibrary(entry), !!loop).catch((err) =>
+  sfxPreview.playSpeaker({ freq, attack: 0 }, !!loop).catch((err) =>
     setStatus(String(err.message || err), true)
   );
+}
+
+function appendSoundFolder(root, title) {
+  const key = title.toLowerCase();
+  const collapsed = collapsedSoundFolders.has(key);
+  const wrap = document.createElement("div");
+  wrap.className = "sound-folder";
+  const h = document.createElement("h3");
+  const twist = document.createElement("button");
+  twist.type = "button";
+  twist.className = "sound-twist";
+  twist.textContent = collapsed ? "▸" : "▾";
+  twist.title = collapsed ? "Expand" : "Collapse";
+  twist.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    if (collapsedSoundFolders.has(key)) collapsedSoundFolders.delete(key);
+    else collapsedSoundFolders.add(key);
+    markUi();
+    renderSoundList();
+  });
+  const label = document.createElement("span");
+  label.textContent = title;
+  h.append(twist, label);
+  wrap.appendChild(h);
+  root.appendChild(wrap);
+  return collapsed ? null : wrap;
+}
+
+function appendSoundRow(host, { label, title, meta, active, path, onPick }) {
+  const row = document.createElement("div");
+  row.className = "sound-row";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  if (active) btn.className = "active";
+  const name = document.createElement("span");
+  name.className = "sound-name";
+  name.textContent = label;
+  if (title) name.title = title;
+  const metaEl = document.createElement("span");
+  metaEl.className = "sound-meta";
+  metaEl.textContent = meta;
+  btn.append(name, metaEl);
+  btn.addEventListener("click", () => {
+    onPick?.();
+    sfxPreview.stop();
+    soundPath = path || "";
+    soundView.selectedTick = 0;
+    soundView.scroll = 0;
+    markUi();
+    refreshAll();
+    const freq = path ? cueFreq(getSound(doc, path)) : null;
+    if (!freq?.length) return;
+    sfxFollow = "";
+    soundView.setPlayTick(-1);
+    sfxPreview.playSpeaker({ freq, attack: 0 }, false).catch((err) =>
+      setStatus(String(err.message || err), true)
+    );
+  });
+  row.appendChild(btn);
+  host.appendChild(row);
 }
 
 function renderSoundList() {
   const root = document.getElementById("sound-list");
   if (!root) return;
   root.innerHTML = "";
-  const paths = listedSoundPaths();
-  if (!paths.length) {
-    const p = document.createElement("p");
-    p.className = "muted";
-    p.textContent = sharewareSounds.size
-      ? "No sounds (ambience hidden)."
-      : "Open shareware to list Quake WAVs.";
-    root.appendChild(p);
-    return;
-  }
-  let lastFolder = null;
-  for (const path of paths) {
-    const folder = soundFolder(path) || "root";
-    if (folder !== lastFolder) {
-      lastFolder = folder;
-      const wrap = document.createElement("div");
-      wrap.className = "sound-folder";
-      const h = document.createElement("h3");
-      h.textContent = folder;
-      wrap.appendChild(h);
-      root.appendChild(wrap);
+  syncSoundCuePath();
+  for (const e of enemiesByHp(doc.enemies)) {
+    const host = appendSoundFolder(root, e.name);
+    for (const cue of ["sight", "wince", "shoot", "melee", "death"]) {
+      const path = e.cues?.[cue] || "";
+      if (!host) continue;
+      const snd = path ? getSound(doc, path) : null;
+      appendSoundRow(host, {
+        label: ENEMY_CUE_LABELS[cue],
+        title: path ? `SOUND_${soundIdent(path)}` : "No sound",
+        meta: path ? soundStatusLabel(snd) : "(none)",
+        active: soundCue?.enemy === e.name && soundCue?.cue === cue,
+        path,
+        onPick: () => {
+          soundCue = { enemy: e.name, cue };
+        },
+      });
     }
-    const host = root.lastElementChild;
-    const snd = getSound(doc, path);
-    const row = document.createElement("div");
-    row.className = "sound-row";
-    const chk = document.createElement("input");
-    chk.type = "checkbox";
-    chk.checked = !!snd.export;
-    chk.disabled = isSoundLocked(path);
-    chk.title = isSoundLocked(path) ? "Required in-game alias" : "Export to C64 bank";
-    chk.addEventListener("click", (e) => e.stopPropagation());
-    chk.addEventListener("change", () => {
-      if (isSoundLocked(path)) {
-        chk.checked = true;
-        return;
-      }
-      pushUndo();
-      ensureSound(doc, path).export = chk.checked;
-      markDirty();
-      refreshAll();
-    });
-    const btn = document.createElement("button");
-    btn.type = "button";
-    if (path === soundPath) btn.className = "active";
-    const name = document.createElement("span");
-    name.className = "sound-name";
-    const ident = soundIdent(path);
-    name.textContent = `SOUND_${ident}`;
-    const meta = document.createElement("span");
-    meta.className = "sound-meta";
-    meta.textContent = soundStatusLabel(snd);
-    btn.append(name, meta);
-    btn.addEventListener("click", () => {
-      sfxPreview.stop();
-      soundPath = path;
-      soundView.selectedTick = 0;
-      soundView.scroll = 0;
-      markUi();
-      refreshAll();
-    });
-    row.append(chk, btn);
-    host.appendChild(row);
+  }
+  // Monster folders are the five cues above. Everything else (weapons, player,
+  // items, doors, …) stays a real row so its speaker sample can be assigned.
+  const enemyFolders = new Set(["soldier", "knight", "dog", "wizard", "ogre", "shambler", "boss1", "zombie", "demon"]);
+  const byFolder = new Map();
+  for (const path of catalogSoundPaths()) {
+    const folder = (soundFolder(path) || "root").toLowerCase();
+    if (enemyFolders.has(folder)) continue;
+    if (hideUnused && UNUSED_SOUND_FOLDERS.has(folder)) continue;
+    if (!byFolder.has(folder)) byFolder.set(folder, []);
+    byFolder.get(folder).push(path);
+  }
+  for (const [folder, paths] of byFolder) {
+    const host = appendSoundFolder(root, folder);
+    if (!host) continue;
+    for (const path of paths) {
+      appendSoundRow(host, {
+        label: soundLeafIdent(path),
+        title: `SOUND_${soundIdent(path)}`,
+        meta: soundStatusLabel(getSound(doc, path)),
+        active: !soundCue && path === soundPath,
+        path,
+        onPick: () => {
+          soundCue = null;
+        },
+      });
+    }
   }
 }
 
 function renderSoundInspector(root) {
+  syncSoundCuePath();
   const h = document.createElement("h2");
-  h.textContent = soundShortName(soundPath);
+  h.textContent = soundCue
+    ? `${soundCue.enemy} ${ENEMY_CUE_LABELS[soundCue.cue]}`
+    : soundShortName(soundPath);
   root.appendChild(h);
   const snd = soundPath ? getSound(doc, soundPath) : null;
+  if (soundCue && !soundPath) {
+    const p = document.createElement("p");
+    p.className = "muted";
+    p.textContent = "No sound on this cue.";
+    root.appendChild(p);
+    return;
+  }
   if (!snd) {
     const p = document.createElement("p");
     p.className = "muted";
@@ -14844,11 +15252,11 @@ function renderSoundInspector(root) {
   const st = document.createElement("p");
   st.className = "muted";
   const ident = soundIdent(soundPath);
+  const freq = cueFreq(snd);
+  const sized = freq ? `${freq.length} ticks · ${2 + freq.length} B` : "open sound banks to play";
   st.textContent = hasWav
-    ? `${folder || "PAK"} · SOUND_${ident} · ${snd.freq.length} ticks · ${2 + snd.freq.length} B`
-    : folder
-      ? `${soundPath} not in ${folder}`
-      : "Open shareware to load the original WAV";
+    ? `${folder || "PAK"} · SOUND_${ident} · ${soundStatusLabel(snd)} · ${sized}`
+    : `${soundStatusLabel(snd)} · ${sized}`;
   root.appendChild(st);
 
   const loopChk = document.createElement("input");
@@ -14871,11 +15279,13 @@ function renderSoundInspector(root) {
   const playSpk = document.createElement("button");
   playSpk.type = "button";
   playSpk.textContent = "Play speaker";
-  playSpk.disabled = !snd.freq.length;
+  playSpk.disabled = !cueFreq(snd)?.length;
   playSpk.addEventListener("click", () => {
+    const play = cueFreq(ensureSound(doc, soundPath));
+    if (!play?.length) return;
     sfxFollow = "";
     soundView.setPlayTick(-1);
-    sfxPreview.playSpeaker(ensureSound(doc, soundPath), !!loopChk.checked).catch((err) =>
+    sfxPreview.playSpeaker({ freq: play, attack: 0 }, !!loopChk.checked).catch((err) =>
       setStatus(String(err.message || err), true)
     );
   });
@@ -14894,47 +15304,76 @@ function renderSoundInspector(root) {
   root.appendChild(loopLab);
 
   const source = document.createElement("select");
-  for (const id of ["wolf", "doom"]) {
+  for (const [id, label] of LIBRARY_SOURCES) {
     const o = document.createElement("option");
     o.value = id;
-    o.textContent = id === "wolf" ? "Wolf" : "Doom";
+    o.textContent = label;
     if (librarySource === id) o.selected = true;
     source.appendChild(o);
   }
   source.addEventListener("change", () => {
-    librarySource = source.value === "doom" ? "doom" : "wolf";
+    librarySource = LIBRARY_SOURCES.some(([id]) => id === source.value) ? source.value : "wolf";
     const rows = libraryRows();
     if (!rows.some((row) => row.name === libraryName)) libraryName = rows[0]?.name || "";
     const loop = !!loopChk.checked;
     refreshAll();
     playLibrarySelection(loop);
   });
+  const bankBtn = document.createElement("button");
+  bankBtn.type = "button";
+  bankBtn.textContent = bankFreq[librarySource] ? "Sound banks open" : "Open sound banks";
+  bankBtn.addEventListener("click", async () => {
+    try {
+      const dir = await pickSoundBankDirectory();
+      if (!dir) return;
+      await openSoundBanks(dir);
+    } catch (err) {
+      setStatus(String(err.message || err), true);
+    }
+  });
+  root.appendChild(bankBtn);
   root.appendChild(field("Library", source));
+
+  const filter = document.createElement("input");
+  filter.type = "search";
+  filter.placeholder = "door open";
+  filter.spellcheck = false;
+  filter.value = libraryFilter;
+  filter.addEventListener("input", () => {
+    libraryFilter = filter.value;
+    fillLibraryList();
+  });
+  root.appendChild(field("Filter", filter));
 
   const libList = document.createElement("div");
   libList.className = "sound-lib";
-  const dups = libraryDuplicates();
-  for (const entry of libraryRows()) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = entry.name;
-    btn.dataset.name = entry.name;
-    const canon = dups.get(entry.name);
-    if (canon) {
-      btn.classList.add("dup");
-      btn.title = `Same as ${canon}`;
-    }
-    if (entry.name === libraryName) btn.classList.add("active");
-    btn.addEventListener("click", () => {
-      libraryName = entry.name;
-      for (const b of libList.querySelectorAll("button")) {
-        b.classList.toggle("active", b.dataset.name === libraryName);
+  function fillLibraryList() {
+    libList.innerHTML = "";
+    const dups = libraryDuplicates();
+    for (const entry of libraryRows()) {
+      if (!libraryNameVisible(entry.name)) continue;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = entry.name;
+      btn.dataset.name = entry.name;
+      const canon = dups.get(entry.name);
+      if (canon) {
+        btn.classList.add("dup");
+        btn.title = `Same as ${canon}`;
       }
-      updateCenterChrome();
-      playLibrarySelection(!!loopChk.checked);
-    });
-    libList.appendChild(btn);
+      if (entry.name === libraryName) btn.classList.add("active");
+      btn.addEventListener("click", () => {
+        libraryName = entry.name;
+        for (const b of libList.querySelectorAll("button")) {
+          b.classList.toggle("active", b.dataset.name === libraryName);
+        }
+        updateCenterChrome();
+        playLibrarySelection(!!loopChk.checked);
+      });
+      libList.appendChild(btn);
+    }
   }
+  fillLibraryList();
   root.appendChild(libList);
 
   const libRow = document.createElement("div");
@@ -14942,21 +15381,21 @@ function renderSoundInspector(root) {
   const playLib = document.createElement("button");
   playLib.type = "button";
   playLib.textContent = "Play library";
+  playLib.disabled = !bankFreq[librarySource];
   playLib.addEventListener("click", () => playLibrarySelection(!!loopChk.checked));
   const applyLib = document.createElement("button");
   applyLib.type = "button";
   applyLib.textContent = "Apply";
   applyLib.addEventListener("click", () => {
-    const entry = libraryEntry();
+    const entry = libraryCanonical(libraryEntry());
     if (!entry || !soundPath) return;
+    libraryName = entry.name;
     pushUndo();
     const snd = ensureSound(doc, soundPath);
-    const env = envelopeFromLibrary(entry);
-    snd.freq = env.freq;
+    delete snd.freq;
     snd.attack = 0;
     snd.origin = librarySource;
     snd.library = entry.name;
-    alignSoundArrays(snd);
     soundView.selectedTick = 0;
     soundView.scroll = 0;
     markDirty();
@@ -16061,10 +16500,21 @@ function renderInspector() {
   renderQuakeSource(root, e);
 }
 
+function poseVertCount(e) {
+  let n = 0;
+  const frames = e?.frames;
+  if (!Array.isArray(frames)) return 0;
+  for (const fr of frames) {
+    if (Array.isArray(fr) && fr.length > n) n = fr.length;
+  }
+  return n;
+}
+
 function stickCount(e) {
   if (!e?.customSkeleton) return 13;
-  if (Array.isArray(e.frames?.[0])) return e.frames[0].length;
-  return e.verts | 0;
+  const joints = e.mdlRig?.jointVerts;
+  if (Array.isArray(joints)) return joints.length;
+  return poseVertCount(e);
 }
 
 function jointLabel(e, i) {
@@ -16102,6 +16552,12 @@ function setCustomSkeleton(e, on) {
   if (on) {
     e.stockGraph = cloneGraph(e);
     if (e.customGraph) applyGraph(e, e.customGraph);
+    else {
+      e.verts = 0;
+      e.lines = [];
+      e.frames = [[]];
+      e.mdlRig = { jointVerts: [] };
+    }
     e.customSkeleton = true;
     e.customGraph = null;
   } else {
@@ -16179,6 +16635,7 @@ function commitCustomVert(e) {
     animView.draw();
     return;
   }
+  ensureEnemyRig(e);
   const nv = stickCount(e);
   if (nv >= SKEL_MAX_VERTS) {
     setStatus(`Vertex cap (${SKEL_MAX_VERTS})`, true);
@@ -16188,7 +16645,6 @@ function commitCustomVert(e) {
     return;
   }
   pushUndo();
-  ensureEnemyRig(e);
   const pos = averageMeshBind(e, picked);
   for (const fr of e.frames) fr.push({ ...pos });
   e.mdlRig.jointVerts.push(picked);
@@ -16251,12 +16707,12 @@ function mergeCustomVerts(e) {
     setStatus("Select two vertices", true);
     return;
   }
+  ensureEnemyRig(e);
   const keep = selectedVerts[0] | 0;
   const drop = selectedVerts[1] | 0;
   const nv = stickCount(e);
   if (keep === drop || keep < 0 || drop < 0 || keep >= nv || drop >= nv) return;
   pushUndo();
-  ensureEnemyRig(e);
   const joints = e.mdlRig.jointVerts;
   joints[keep] = [...new Set([...(joints[keep] || []), ...(joints[drop] || [])])].sort((a, b) => a - b);
   const surv = keep > drop ? keep - 1 : keep;
@@ -16293,6 +16749,7 @@ function mergeCustomVerts(e) {
 }
 
 function deleteCustomVerts(e) {
+  ensureEnemyRig(e);
   const nv = stickCount(e);
   const drop = new Set(selectedVerts.filter((i) => i >= 0 && i < nv));
   if (!drop.size) return;
@@ -16336,6 +16793,27 @@ function deleteCustomSelection(e) {
 }
 
 function ensureEnemyRig(e) {
+  if (e?.customSkeleton) {
+    if (!e.mdlRig || !Array.isArray(e.mdlRig.jointVerts)) {
+      e.mdlRig = { jointVerts: [] };
+    }
+    const joints = e.mdlRig.jointVerts;
+    let donor = null;
+    if (Array.isArray(e.frames)) {
+      for (const fr of e.frames) {
+        if (Array.isArray(fr) && (!donor || fr.length > donor.length)) donor = fr;
+      }
+      for (const fr of e.frames) {
+        if (!Array.isArray(fr)) continue;
+        while (fr.length < joints.length) {
+          const src = donor && donor.length > fr.length ? donor[fr.length] : null;
+          fr.push(src ? { x: src.x, y: src.y, z: src.z } : { x: 0, y: 0, z: 0 });
+        }
+      }
+    }
+    e.verts = joints.length;
+    return e.mdlRig;
+  }
   const n = stickCount(e);
   if (!e.mdlRig || !Array.isArray(e.mdlRig.jointVerts)) {
     e.mdlRig = { jointVerts: Array.from({ length: n }, () => []) };
@@ -16343,12 +16821,7 @@ function ensureEnemyRig(e) {
   }
   const joints = e.mdlRig.jointVerts;
   if (joints.length === n) return e.mdlRig;
-  if (!e.customSkeleton) {
-    e.mdlRig = emptyMdlRig();
-    return e.mdlRig;
-  }
-  while (joints.length < n) joints.push([]);
-  joints.length = n;
+  e.mdlRig = emptyMdlRig();
   return e.mdlRig;
 }
 
@@ -16490,6 +16963,7 @@ function deriveAllEnemyFrames() {
   const keepName = active ? activeTimelineClip()?.name : null;
   const keepLocal = frameLocal;
   for (const e of doc.enemies || []) deriveEnemyFrames(e);
+  paintEnemyPaletteIcons();
   if (!active || !keepName) return;
   const timeline = getTimeline(active);
   const idx = timeline.findIndex((c) => c.name === keepName);
@@ -16516,6 +16990,7 @@ function retargetMdlFrames(options = {}) {
   applyFrameLocal();
   if (dirty) markDirty();
   if (status) setStatus(`Retargeted ${e.frames.length} frames`);
+  paintEnemyPaletteIcons();
   return true;
 }
 
@@ -16831,8 +17306,8 @@ document.getElementById("weapon-scale-num").addEventListener("change", (e) => {
 document.getElementById("btn-weapon-folder")?.addEventListener("click", () => void openSharewareFolder());
 document.getElementById("btn-anim-folder")?.addEventListener("click", () => void openSharewareFolder());
 document.getElementById("btn-sound-folder")?.addEventListener("click", () => void openSharewareFolder());
-document.getElementById("chk-show-ambience")?.addEventListener("change", (e) => {
-  showAmbience = !!e.target.checked;
+document.getElementById("chk-hide-unused")?.addEventListener("change", (e) => {
+  hideUnused = !!e.target.checked;
   markUi();
   refreshAll();
 });
@@ -17132,6 +17607,15 @@ buildPalette();
 setMode("layout");
 updateUndoButtons();
 
+async function restoreSoundBanksQuietly() {
+  try {
+    const dir = await tryRestoreSoundBankDir();
+    if (dir) await openSoundBanks(dir, true);
+  } catch {
+    /* folder optional */
+  }
+}
+
 async function restoreSharewareQuietly() {
   try {
     const dir = await tryRestoreSharewareDir();
@@ -17161,6 +17645,7 @@ async function boot() {
     if (loaded) {
       applyLoadedDoc(loaded);
       await restoreSharewareQuietly();
+      await restoreSoundBanksQuietly();
       return;
     }
     const stored = await getStoredDocHandle();
@@ -17176,6 +17661,7 @@ async function boot() {
       false
     );
     await restoreSharewareQuietly();
+    await restoreSoundBanksQuietly();
   } catch (err) {
     setStatus(String(err.message || err), true);
   }

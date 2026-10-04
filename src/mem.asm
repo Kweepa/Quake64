@@ -192,7 +192,7 @@ MAP_SMC_BASE	= $0200
 ; Play BSS: default VIC matrix / leftover boot. VIC matrix in play is $C000.
 ; map_bss.asm occupies $0400–$0523. $08F9–$08FF is reboot stub + selectors.
 FRAME13_N	= 106			; offsets 0..105
-ENEMY_PTR_N	= 8			; must == ENEMY_NTYPES (quake64.asm asserts)
+ENEMY_PTR_N	= 9			; must == ENEMY_NTYPES (quake64.asm asserts)
 frame13_lo	= $0524
 frame13_hi	= $058E
 enemy_gx_lo	= $05F8
@@ -210,23 +210,35 @@ pose_gy		= pose_gx + 13
 pose_gz		= pose_gy + 13
 pose_map_lo	= pose_gz + 13			; patched at pose load (logical → packed)
 pose_map_hi	= pose_map_lo + ENEMY_PTR_N
-enemy_sfx_evt_lo	= pose_map_hi + ENEMY_PTR_N	; clip event table on pose heap
+enemy_sfx_evt_lo	= pose_map_hi + ENEMY_PTR_N	; cue block + clip event table on pose heap
 enemy_sfx_evt_hi	= enemy_sfx_evt_lo + ENEMY_PTR_N
 en_sfx_old	= enemy_sfx_evt_hi + ENEMY_PTR_N	; local frame before this anim step
 en_sfx_new	= en_sfx_old + 1		; logical frame after the step
 en_sfx_n	= en_sfx_new + 1		; remaining events while scanning
 en_sfx_armed	= en_sfx_n + 1			; 1 = frame changed this anim step
-; next free en_sfx_armed + 1  ($06F7)
-ENEMY_DATA_BASE	= $06F7			; boot-loaded immutable enemy_data_blob.asm
-!if ENEMY_DATA_BASE <= en_sfx_armed {
-	!error "Enemy metadata overlaps play BSS"
+; next free is en_sfx_armed + 1. genenemies.py ENEMY_DATA_BASE must match.
+; Per-type cue ids ride on the pose heap, not here: enemy_sfx_evt_* points at the
+; 5-byte cue block, and the clip event table follows it (CUE_N bytes in).
+CUE_SIGHT	= 0			; generic: enemy_enter_alert (Chthon: the rise)
+CUE_WINCE	= 1			; generic: pain entry
+CUE_MELEE	= 2			; clip-timed
+CUE_SHOOT	= 3			; clip-timed
+CUE_DEATH	= 4			; generic: kill_enemy
+CUE_N		= 5
+CUE_NONE	= $ff			; $00 is a real sound
+ENEMY_DATA_BASE	= en_sfx_armed + 1	; boot-loaded enemy_data_blob.asm
+!if ENEMY_DATA_BASE != $0701 {
+	!error "tools/genenemies.py ENEMY_DATA_BASE must be $0701"
 }
-AI_ENTRY_LO	= $0876			; streamed AI entry pointer per enemy type
-AI_ENTRY_HI	= $087E
+; Pose prefix copied into one of two resident rows. Offsets match genenemies.py.
+META_STAND_START	= 0
+META_ROW		= 42
+AI_ENTRY_LO	= $0850			; streamed AI entry pointer per enemy type
+AI_ENTRY_HI	= AI_ENTRY_LO + ENEMY_PTR_N
 ENEMY_DATA_LIMIT	= AI_ENTRY_LO
-AI_BANK_LO	= $0886			; base of complete fused bank per type
-AI_BANK_HI	= $088E
-AI_LOW_END	= $0896
+AI_BANK_LO	= AI_ENTRY_HI + ENEMY_PTR_N	; base of complete fused bank per type
+AI_BANK_HI	= AI_BANK_LO + ENEMY_PTR_N
+AI_LOW_END	= AI_BANK_HI + ENEMY_PTR_N
 ; Crusher SoA pointers + tiny play scratch. Not in $0400 — that table
 ; ends at frame13_lo. Access via lda_cy/sta_cy (mp_l),y.
 crush_x		= AI_LOW_END
@@ -268,7 +280,7 @@ SKEL_BSS_END	= skel_entry_hi + ENEMY_PTR_N
 	!error "skeleton BSS overlaps reboot stub"
 }
 ; Port latch in the hole between skeleton BSS and the reboot stub.
-; $0876 is AI_ENTRY_LO; a ring there sends the attic knights through garbage.
+; AI_ENTRY_LO is $0850; a ring on those pointers sends streamed enemies through garbage.
 DBG_MAGIC	= SKEL_BSS_END
 DBG_BAD_EVT	= DBG_MAGIC + 1
 DBG_BAD_00	= DBG_BAD_EVT + 1
@@ -422,7 +434,7 @@ EN_PAIN		= 5
 EN_DYING		= 6
 EN_DEAD		= 7			; last death frame hold
 EN_GONE		= 8
-ENEMY_DETECT	= 12		; Chebyshev XZ wake distance
+ENEMY_DETECT	= 20		; Chebyshev XZ wake distance
 ENEMY_STEP_MS	= 200		; approach cell cadence (dt acc + remainder)
 PATROL_STEP_MS	= 400		; patrol cell cadence (2× approach; 16-bit)
 APPROACH_MIN_MS	= 1500		; min time in approach before attack (grunt)
@@ -456,6 +468,11 @@ OGRE_SAW_DMG	= 6		; 6–9 with rnd&3
 KNIGHT_SLASH_DMG	= 4		; 4–7 with rnd&3 (Quake ai_melee *3 vs ogre *4)
 KNIGHT_RUNATK_FIRE	= 5		; runattack clip-local hit (0-indexed)
 KNIGHT_ATKB_FIRE	= 7		; attackb clip-local hit (0-indexed)
+DEMON_MELEE_R	= 4		; claw Chebyshev; leap closes until this
+DEMON_LEAP_STEP_MS	= 100		; leap cell cadence
+DEMON_MELEE_FIRE	= 5		; attacka clip-local hit (0-indexed)
+DEMON_LEAP_FIRE	= 9		; leap clip-local hit (0-indexed)
+DEMON_DMG		= 8		; 8–15 with rnd&7
 ZOMBIE_STEP_MS	= 400		; slow walk; 2× grunt approach cadence
 ZOMBIE_HOLD_FRAME	= 10		; paine local frame held while down
 ZOMBIE_DOWN_BASE	= 50		; anim ticks at 10 before get-up (~5s)

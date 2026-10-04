@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Build src/pcsounds.asm from editor/quake64.json sounds (exported rows)."""
+"""Build src/pcsounds.asm from editor/quake64.json sounds.
+
+Exported = locked resident alias, or named by an enemy's cues
+(sight/wince/melee/shoot/death). Cue sounds ride on that enemy's pose bank."""
 from __future__ import annotations
 
 import json
 import re
 import sys
 from pathlib import Path
+
+from pcsrc import resolve
 
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "editor" / "quake64.json"
@@ -15,29 +20,21 @@ PAYLOAD_MAX = 4096
 MAX_TICKS = 255
 
 # Pose PRG DOS names (must match tools/genenemies.py).
-DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
-HUM_DOS = [d for d in DOS_NAME if d != "rott"]
-# Folder → pose files that carry a copy. HUM (soldier) cues are duplicated for now.
-STREAM_FOLDERS = {
-    "dog": ["rott"],
-    "ogre": ["ogre"],
-    "soldier": HUM_DOS,
-    "wizard": ["scrag"],
-}
+TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon", "Zombie", "Demon"]
+DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie", "demon"]
+# Fixed per-enemy cue set. sight/wince/death are required; melee/shoot are optional.
+CUES = ["sight", "wince", "melee", "shoot", "death"]
+CUES_REQUIRED = ["sight", "wince", "death"]
 
 # Locked aliases must exist so game lda #SOUND_* still assembles.
 LOCKED = [
     ("HITWALL", "sound/weapons/tink1.wav"),
     ("PLAYERDEATH", "sound/player/death1.wav"),
-    ("DOGDEATH", "sound/dog/ddeath.wav"),
     ("TAKEDAMAGE", "sound/player/pain1.wav"),
     ("OPENDOOR", "sound/doors/hydro1.wav"),
-    ("HALT", "sound/soldier/sight1.wav"),
     ("ATKMACHINEGUN", "sound/weapons/spike2.wav"),
     ("HITENEMY", "sound/weapons/lhit.wav"),
-    ("DEATHSCREAM1", "sound/soldier/death1.wav"),
     ("SHOOT", "sound/weapons/grenade.wav"),
-    ("DOGBARK", "sound/dog/dsight.wav"),
     ("GETKEY", "sound/items/itembk2.wav"),
     ("GETAMMO", "sound/weapons/pkup.wav"),
     ("HEALTH1", "sound/items/health1.wav"),
@@ -45,26 +42,18 @@ LOCKED = [
     ("BONUS1", "sound/items/damage.wav"),
     ("SHOTGN", "sound/weapons/shotgn2.wav"),
     ("BAREXP", "sound/weapons/r_exp3.wav"),
-    ("SAWFUL", "sound/ogre/ogsawatk.wav"),
-    ("SAWHIT", "sound/ogre/ogdrag.wav"),
     ("OOF", "sound/player/land.wav"),
-    ("DMPAIN", "sound/dog/dpain1.wav"),
-    ("POPAIN", "sound/soldier/pain1.wav"),
 ]
 LOCKED_PATHS = {path: alias for alias, path in LOCKED}
 EXTRA_ALIASES = {}
 LOCKED_VOICE = {
     "HITWALL": 0,
     "PLAYERDEATH": 0,
-    "DOGDEATH": 1,
     "TAKEDAMAGE": 0,
     "OPENDOOR": 2,
-    "HALT": 1,
     "ATKMACHINEGUN": 0,
     "HITENEMY": 0,
-    "DEATHSCREAM1": 1,
     "SHOOT": 1,
-    "DOGBARK": 1,
     "GETKEY": 0,
     "GETAMMO": 0,
     "HEALTH1": 0,
@@ -72,24 +61,16 @@ LOCKED_VOICE = {
     "BONUS1": 0,
     "SHOTGN": 0,
     "BAREXP": 0,
-    "SAWFUL": 0,
-    "SAWHIT": 0,
     "OOF": 0,
-    "DMPAIN": 1,
-    "POPAIN": 1,
 }
 LOCKED_PRI = {
     "HITWALL": 1,
     "PLAYERDEATH": 99,
-    "DOGDEATH": 50,
     "TAKEDAMAGE": 90,
     "OPENDOOR": 20,
-    "HALT": 50,
     "ATKMACHINEGUN": 50,
     "HITENEMY": 50,
-    "DEATHSCREAM1": 50,
     "SHOOT": 20,
-    "DOGBARK": 50,
     "GETKEY": 90,
     "GETAMMO": 80,
     "HEALTH1": 85,
@@ -97,37 +78,27 @@ LOCKED_PRI = {
     "BONUS1": 70,
     "SHOTGN": 50,
     "BAREXP": 50,
-    "SAWFUL": 20,
-    "SAWHIT": 50,
     "OOF": 50,
-    "DMPAIN": 50,
-    "POPAIN": 50,
 }
-WOLF_FREQ = {
-    "HITWALL": [131, 142, 134],
-    "PLAYERDEATH": [21, 30, 39, 45, 52, 15, 77, 98, 17, 0, 30, 0, 36, 0, 79, 79],
-    "DOGDEATH": [19, 16, 15, 27, 40, 43, 57, 69, 83, 103, 111, 157, 145, 152, 159],
-    "TAKEDAMAGE": [62, 59, 55, 52, 49, 63, 75, 80, 69, 78, 65, 77, 68, 62, 56, 74, 67, 61, 55],
-    "OPENDOOR": [119, 118, 118, 116, 114, 111, 107, 101, 95, 89, 83, 77],
-    "HALT": [42, 38, 35, 31, 31, 31, 32, 46, 60, 77, 85, 105, 132, 140, 145, 148, 151, 153, 157, 0, 0, 0, 138, 138, 138],
-    "ATKMACHINEGUN": [104, 107, 101, 123],
-    "HITENEMY": [130, 25, 33, 78, 26, 18, 18, 25, 0, 32],
-    "DEATHSCREAM1": [60, 55, 51, 26, 37, 31, 15, 16, 23, 29, 74, 28, 31, 27, 34, 42, 38, 34, 36, 41],
-    "SHOOT": [16, 110, 40, 40, 33, 103, 41, 115, 137],
-    "DOGBARK": [64, 56, 47, 41, 142, 144, 37, 48, 144, 57, 67, 82, 93, 104, 123, 151, 151],
-    "GETKEY": [36, 36, 36, 36, 36, 36, 36, 36, 0, 0, 55, 55, 55, 55, 55, 55, 55, 55, 0, 55, 55, 55, 55, 0, 25, 25, 25, 25, 25, 25],
-    "GETAMMO": [34, 34, 34, 34, 34, 34, 0, 0, 0, 20, 20, 20, 0, 20, 20, 20, 20, 20, 20, 20, 20],
-    "HEALTH1": [58, 0, 0, 51, 51, 0, 0, 38, 38, 0, 0, 22, 22, 0, 0, 22, 22, 22, 0, 0, 21, 21, 21],
-    "SWITCH": [114, 60, 114],
-    "BONUS1": [61, 53, 49, 46, 45, 51, 57, 64, 71, 74, 73, 69, 58, 41, 33, 30, 29, 28, 31, 35, 41, 46, 49, 47, 41, 30, 20, 0, 0, 0, 18, 18, 18, 0, 18, 18, 18, 18, 18, 18],
-    "SHOTGN": [40, 57, 49, 60, 48, 52, 64, 68, 57, 74, 78, 81, 72, 70, 83, 107],
-    "BAREXP": [81, 78, 60, 107, 83, 64, 32, 83, 107, 33, 36, 60, 44, 47, 64, 114, 107, 105, 26, 47, 47, 78, 101, 32, 83, 47, 43],
-    "SAWFUL": [59, 47, 59, 37, 59, 47, 59],
-    "SAWHIT": [48, 55, 44, 54, 36, 49, 30, 47, 26],
-    "OOF": [83, 78, 78, 85],
-    "DMPAIN": [15, 28, 31, 23, 31, 29, 38, 45, 45, 52, 64, 96],
-    "POPAIN": [88, 62, 57, 39, 28, 35, 28, 28, 31, 44, 57, 81, 83],
+# Locked path → (origin, library name). BAREXP exports no samples.
+LOCKED_LIB = {
+    "HITWALL": ("wolf", "HITWALL"),
+    "PLAYERDEATH": ("wolf", "PLAYERDEATH"),
+    "TAKEDAMAGE": ("wolf", "TAKEDAMAGE"),
+    "OPENDOOR": ("wolf", "OPENDOOR"),
+    "ATKMACHINEGUN": ("wolf", "ATKMACHINEGUN"),
+    "HITENEMY": ("wolf", "HITENEMY"),
+    "SHOOT": ("wolf", "SHOOT"),
+    "GETKEY": ("wolf", "GETKEY"),
+    "GETAMMO": ("wolf", "GETAMMO"),
+    "HEALTH1": ("wolf", "HEALTH1"),
+    "SWITCH": ("wolf", "MOVEGUN1"),
+    "BONUS1": ("wolf", "BONUS1"),
+    "SHOTGN": ("doom", "DPSHOTGN"),
+    "BAREXP": None,
+    "OOF": ("doom", "DPOOF"),
 }
+LIBRARY_ORIGINS = {"wolf", "doom", "dave", "keen"}
 
 
 def emit_bytes(arr: list[int], per_line: int = 16) -> str:
@@ -148,14 +119,6 @@ def ident_from_path(path: str) -> str:
     return ident or "SFX"
 
 
-def sound_folder(path: str) -> str:
-    rest = path.replace("\\", "/")
-    if rest.lower().startswith("sound/"):
-        rest = rest[6:]
-    i = rest.find("/")
-    return rest[:i].lower() if i >= 0 else ""
-
-
 def clamp_u8(n: int, lo: int, hi: int) -> int:
     v = int(n)
     if v < lo:
@@ -165,14 +128,36 @@ def clamp_u8(n: int, lo: int, hi: int) -> int:
     return v
 
 
+def library_freq(path: str, raw: dict, locked_alias: str | None) -> list[int]:
+    origin = str(raw.get("origin") or "").strip().lower()
+    library = str(raw.get("library") or "").strip().upper()
+    # Empty cue (BAREXP, or a placeholder export with no library yet): no samples.
+    if locked_alias == "BAREXP" or origin in ("", "empty"):
+        return []
+    if origin in LIBRARY_ORIGINS:
+        if not library:
+            raise SystemExit(f"{path}: exported sound has no library name")
+        freq = resolve(origin, library)
+    elif locked_alias:
+        pair = LOCKED_LIB[locked_alias]
+        freq = [] if pair is None else resolve(*pair)
+    elif raw.get("export"):
+        raise SystemExit(f"{path}: exported sound has no library name")
+    else:
+        return []
+    if len(freq) > MAX_TICKS:
+        raise SystemExit(f"{path}: {len(freq)} ticks > {MAX_TICKS}")
+    return [clamp_u8(x, 0, 255) for x in freq]
+
+
 def normalize_entry(path: str, raw: dict) -> dict:
-    freq = [clamp_u8(x, 0, 255) for x in (raw.get("freq") or [])][:MAX_TICKS]
+    locked_alias = LOCKED_PATHS.get(path)
+    freq = library_freq(path, raw, locked_alias)
     voice = clamp_u8(raw.get("voice", 0), 0, 2)
     priority = clamp_u8(raw.get("priority", 50), 0, 99)
     attack = clamp_u8(raw.get("attack", 0), 0, 15)
     alias = raw.get("alias")
     extra = list(raw.get("extraAliases") or [])
-    locked_alias = LOCKED_PATHS.get(path)
     if locked_alias:
         extra = list(EXTRA_ALIASES.get(ident_from_path(path), []))
     return {
@@ -187,6 +172,43 @@ def normalize_entry(path: str, raw: dict) -> dict:
     }
 
 
+def cue_path(raw) -> str:
+    p = str(raw or "").strip().replace("\\", "/").lower()
+    return p if p.startswith("sound/") and p.endswith(".wav") else ""
+
+
+def load_cue_hosts(doc: dict, known: set[str]) -> dict[str, list[str]]:
+    """Validate every enemy's cues; return path -> pose DOS names that reference it."""
+    by_name = {e.get("name"): e for e in doc.get("enemies") or []}
+    hosts: dict[str, list[str]] = {}
+    for name, dos in zip(TYPES, DOS_NAME):
+        enemy = by_name.get(name)
+        if enemy is None:
+            raise SystemExit(f"missing enemy {name}")
+        cues = enemy.get("cues") or {}
+        for extra in cues:
+            if extra not in CUES:
+                raise SystemExit(f"{name}: unknown cue {extra!r} (allowed: {', '.join(CUES)})")
+        for cue in CUES:
+            raw = cues.get(cue)
+            path = cue_path(raw)
+            if not path:
+                if cue in CUES_REQUIRED:
+                    raise SystemExit(f"{name}: required cue '{cue}' is not set")
+                if raw:
+                    raise SystemExit(f"{name}: cue '{cue}' is not a sound path: {raw!r}")
+                continue
+            # The path is only a key into sounds (origin + library). No entry means
+            # the cue is unset. A missing wav file is not an error.
+            if path not in known and path not in LOCKED_PATHS:
+                if cue in CUES_REQUIRED:
+                    raise SystemExit(f"{name}: required cue '{cue}' has no sound")
+                continue
+            if dos not in hosts.setdefault(path, []):
+                hosts[path].append(dos)
+    return hosts
+
+
 def main() -> None:
     if not DOC.is_file():
         raise SystemExit(f"missing {DOC}")
@@ -195,6 +217,9 @@ def main() -> None:
     if not isinstance(raw_sounds, dict):
         raise SystemExit("sounds must be an object")
 
+    # path -> pose types (DOS names) whose cue set references it.
+    cue_hosts = load_cue_hosts(doc, {str(p).replace("\\", "/").lower() for p in raw_sounds})
+
     by_path: dict[str, dict] = {}
     for path, src in raw_sounds.items():
         key = str(path).replace("\\", "/").lower()
@@ -202,6 +227,8 @@ def main() -> None:
             continue
         if not isinstance(src, dict):
             continue
+        # Exported = resident alias or referenced by an enemy cue. Nothing else ships.
+        src = {**src, "export": key in cue_hosts or key in LOCKED_PATHS}
         by_path[key] = normalize_entry(key, src)
 
     ordered: list[dict] = []
@@ -209,23 +236,21 @@ def main() -> None:
 
     for alias, path in LOCKED:
         snd = by_path.get(path)
-        if not snd or not snd["freq"]:
-            freq = WOLF_FREQ[alias]
-            snd = normalize_entry(
-                path,
-                {
-                    "export": True,
-                    "alias": alias,
-                    "voice": LOCKED_VOICE[alias],
-                    "priority": LOCKED_PRI[alias],
-                    "freq": freq,
-                    "attack": 0,
-                    "extraAliases": EXTRA_ALIASES.get(alias, []),
-                },
-            )
+        if not snd:
+            pair = LOCKED_LIB[alias]
+            fallback = {
+                "export": True,
+                "alias": alias,
+                "voice": LOCKED_VOICE[alias],
+                "priority": LOCKED_PRI[alias],
+                "attack": 0,
+                "extraAliases": EXTRA_ALIASES.get(alias, []),
+                "origin": "empty" if pair is None else pair[0],
+            }
+            if pair is not None:
+                fallback["library"] = pair[1]
+            snd = normalize_entry(path, fallback)
             by_path[path] = snd
-        if not snd["freq"]:
-            raise SystemExit(f"locked {path} missing samples")
         snd["export"] = True
         ident = ident_from_path(path)
         snd["alias"] = ident
@@ -240,8 +265,6 @@ def main() -> None:
             continue
         if not snd["export"]:
             continue
-        if not snd["freq"]:
-            raise SystemExit(f"{path}: exported but empty")
         ident = ident_from_path(path)
         if ident in used_idents:
             raise SystemExit(f"{path}: ident SOUND_{ident} already used")
@@ -267,7 +290,9 @@ def main() -> None:
         n = len(freq)
         if n > MAX_TICKS:
             raise SystemExit(f"{name}: {n} ticks > {MAX_TICKS}")
-        hosts = STREAM_FOLDERS.get(sound_folder(snd["path"]))
+        # Resident aliases stay resident (game code plays them by name); every
+        # other exported sound rides on the pose banks of the enemies whose cues name it.
+        hosts = None if snd["path"] in LOCKED_PATHS else cue_hosts.get(snd["path"])
         body = [n, (snd["attack"] << 4) & 0xF0, *freq]
         equates.append(f"SOUND_{name}\t= {local_i}")
         for extra in snd.get("extraAliases") or []:

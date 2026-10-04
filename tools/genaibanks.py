@@ -10,7 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ENEMY_DIR = ROOT / "enemies"
 SIZES_OUT = ROOT / "src" / "enemy_sizes.asm"
-DOS_NAMES = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie"]
+DOS_NAMES = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie", "demon"]
 
 MAGIC = b"QAI1"
 HEADER_SIZE = 15

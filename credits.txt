@@ -18,9 +18,10 @@ kevin cloud, paul steed,
 trent reznor & nine inch nails.
 ^
 Loader by krill / plush.
-Loader integration by chris masiero.
-Title screen by paul docherty.
+loader integration by chris masiero.
+title screen by paul docherty.
+line draw routine by michael kircher.
 
 Thanks all!
 
-quake64 v0.40.0
+quake64 v0.50.0

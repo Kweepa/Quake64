@@ -24,9 +24,9 @@ JS_ORDER = [
     "js/animView.js",
     "js/weaponView.js",
     "js/itemView.js",
-    "js/fft.js",
     "js/pcsfx.js",
     "js/soundView.js",
+    "js/pcsrc.js",
     "js/pclib.js",
     "js/main.js",
 ]
@@ -149,9 +149,9 @@ def main() -> None:
       </section>
       <section id="sounds-left" hidden>
         <h2>Sounds</h2>
-        <label class="field sound-ambience-toggle">
-          <input type="checkbox" id="chk-show-ambience" />
-          <span>Show ambience</span>
+        <label class="field sound-unused-toggle">
+          <input type="checkbox" id="chk-hide-unused" checked title="Hide ambience, plats, hknight, and buttons" />
+          <span>Hide unused</span>
         </label>
         <div id="sound-list" class="sound-list"></div>
         <div class="btn-row">

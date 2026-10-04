@@ -34,7 +34,7 @@ MAP_BSS = ROOT / "src" / "map_bss.asm"
 
 HDR_LEN = 24
 LEVEL_HDR = 4
-ENEMY_NTYPES = 8
+ENEMY_NTYPES = 9
 ROOM_MAX_TYPES = 2
 
 

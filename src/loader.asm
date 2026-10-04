@@ -12,9 +12,9 @@ level_dos_name
 	!byte 0
 
 en_name_lo
-	!byte <en_n0, <en_n1, <en_n2, <en_n3, <en_n4, <en_n5, <en_n6, <en_n7
+	!byte <en_n0, <en_n1, <en_n2, <en_n3, <en_n4, <en_n5, <en_n6, <en_n7, <en_n8
 en_name_hi
-	!byte >en_n0, >en_n1, >en_n2, >en_n3, >en_n4, >en_n5, >en_n6, >en_n7
+	!byte >en_n0, >en_n1, >en_n2, >en_n3, >en_n4, >en_n5, >en_n6, >en_n7, >en_n8
 en_n0	!text "GRUNT"
 	!byte 0
 en_n1	!text "KNIGHT"
@@ -30,6 +30,8 @@ en_n5	!text "SHAMBL"
 en_n6	!text "CHTHON"
 	!byte 0
 en_n7	!text "ZOMBIE"
+	!byte 0
+en_n8	!text "DEMON"
 	!byte 0
 crush_name
 	!text "CRUSH"
@@ -320,7 +322,8 @@ LoadLevel
 ;
 ; Bank: QAI1 header, reloc records, optional code, then pose payload.
 ; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…]
-;       [sfx_count] {id,N,AD,freq}* [evt_count] {logical_frame,id}*
+;       [sfx_count] {id,N,AD,freq}* [cue x CUE_N: sight,wince,melee,shoot,death; $FF none]
+;       [evt_count] {logical_frame,id}*
 
 ; Distinct types in room_idx → need0/need1 ($FF = empty). Cap 2 by tooling.
 collect_room_need
@@ -406,6 +409,9 @@ clear_pose_ptrs
 	inx
 	cpx #ENEMY_NTYPES
 	bcc .cpp
+	lda #$ff
+	sta meta_slot_type
+	sta meta_slot_type+1
 	lda #0
 	sta crush_entry_lo
 	sta crush_entry_hi
@@ -415,6 +421,17 @@ clear_pose_ptrs
 ; Zero pose ptrs for type A.
 clear_one_pose
 	tax
+	cmp meta_slot_type
+	bne +
+	lda #$ff
+	sta meta_slot_type
+	bne .cop_z
++
+	cmp meta_slot_type+1
+	bne .cop_z
+	lda #$ff
+	sta meta_slot_type+1
+.cop_z
 	lda #0
 	sta enemy_gx_lo,x
 	sta enemy_gx_hi,x
@@ -790,6 +807,7 @@ patch_enemy_bank
 	lda ai_pose_hi
 	sta load_dest+1
 	jsr skel_bind_prefix
+	jsr copy_meta_row
 	jsr patch_enemy_gx
 	ldx load_type
 	lda AI_BANK_LO,x
@@ -821,7 +839,7 @@ patch_crush_bank
 
 ; #region agent log
 ; A = event. Latches the first bad port. Preserves A, X, Y, P.
-; Lives at SKEL_BSS_END, stops before the reboot stub. No ring: $0876 is AI_ENTRY.
+; Lives at SKEL_BSS_END, stops before the reboot stub. No ring: AI_ENTRY_LO is $0850.
 dbg_probe
 	php
 	pha
@@ -974,7 +992,138 @@ skel_mul_ya
 .sm_rts
 	rts
 
-; dest in load_dest; type in load_type.
+; Pose at load_dest is [META_ROW][n_stored][n_logical]… after the skel prefix.
+; Copy the row into the free slot and advance load_dest past it.
+copy_meta_row
+	lda load_dest
+	sta src_ptr
+	lda load_dest+1
+	sta src_ptr+1
+	ldx #0
+	lda meta_slot_type
+	cmp #$ff
+	beq .cmr_slot
+	ldx #1
+.cmr_slot
+	lda load_type
+	sta meta_slot_type,x
+	stx meta_scratch
+	ldy #0
+	lda (src_ptr),y
+	sta enemy_stand_start,x
+	iny
+	lda (src_ptr),y
+	sta enemy_stand_len,x
+	iny
+	lda (src_ptr),y
+	sta enemy_alert_start,x
+	iny
+	lda (src_ptr),y
+	sta enemy_alert_len,x
+	iny
+	lda (src_ptr),y
+	sta enemy_run_start,x
+	iny
+	lda (src_ptr),y
+	sta enemy_run_len,x
+	iny
+	lda (src_ptr),y
+	sta enemy_walk_start,x
+	iny
+	lda (src_ptr),y
+	sta enemy_walk_len,x
+	iny
+	lda (src_ptr),y
+	sta enemy_attack_n,x
+	iny
+	lda #<enemy_attack_start
+	sta dst_ptr
+	lda #>enemy_attack_start
+	sta dst_ptr+1
+	jsr .cmr_quad
+	lda #<enemy_attack_len
+	sta dst_ptr
+	lda #>enemy_attack_len
+	sta dst_ptr+1
+	jsr .cmr_quad
+	ldx meta_scratch
+	lda (src_ptr),y
+	sta enemy_pain_n,x
+	iny
+	lda #<enemy_pain_start
+	sta dst_ptr
+	lda #>enemy_pain_start
+	sta dst_ptr+1
+	jsr .cmr_quad
+	lda #<enemy_pain_len
+	sta dst_ptr
+	lda #>enemy_pain_len
+	sta dst_ptr+1
+	jsr .cmr_quad
+	ldx meta_scratch
+	lda (src_ptr),y
+	sta enemy_death_n,x
+	iny
+	lda #<enemy_death_start
+	sta dst_ptr
+	lda #>enemy_death_start
+	sta dst_ptr+1
+	jsr .cmr_quad
+	lda #<enemy_death_len
+	sta dst_ptr
+	lda #>enemy_death_len
+	sta dst_ptr+1
+	jsr .cmr_quad
+	ldx meta_scratch
+	lda (src_ptr),y
+	sta enemy_range,x
+	iny
+	lda (src_ptr),y
+	sta enemy_pain_chance,x
+	iny
+	lda (src_ptr),y
+	sta enemy_drop_type,x
+	iny
+	lda (src_ptr),y
+	sta enemy_fire_frame,x
+	iny
+	lda (src_ptr),y
+	sta enemy_class,x
+	iny
+	lda (src_ptr),y
+	sta enemy_lod_z,x
+	iny
+	lda (src_ptr),y
+	sta enemy_nframes,x
+	clc
+	lda load_dest
+	adc #META_ROW
+	sta load_dest
+	bcc +
+	inc load_dest+1
++
+	rts
+
+; Y = first of 4 row bytes (advanced by 4). dst_ptr = dest table. Slot in meta_scratch.
+.cmr_quad
+	lda meta_scratch
+	asl
+	asl
+	sta nlo
+	ldx #4
+.cmr_q
+	lda (src_ptr),y
+	sty nhi
+	ldy nlo
+	sta (dst_ptr),y
+	inc nlo
+	ldy nhi
+	iny
+	dex
+	bne .cmr_q
+	rts
+
+; dest in load_dest; type in load_type. Meta row already consumed.
 ; Pose: [n_stored][n_logical][pose_map…][gx…][gy…][gz…] [sfx blob]
 patch_enemy_gx
 	lda load_dest
@@ -998,8 +1147,8 @@ patch_enemy_gx
 	lda pose_map_hi,y
 	adc #0
 	sta enemy_gx_hi,y
-	ldx enemy_nframes,y
-	txa
+	jsr slot_of_y
+	lda enemy_nframes,y
 	tay
 	ldx load_type
 	jsr frame_stride
@@ -1040,7 +1189,7 @@ rebind_streamed_sfx
 	rts
 
 ; A = type. Walk trailing sfx blob; sound_table[id] → N,AD,freq.
-; src_ptr then at evt table → enemy_sfx_evt_*[type].
+; src_ptr then at the cue block (CUE_N ids, then the evt table) → enemy_sfx_evt_*[type].
 bind_type_sfx
 	sta map_sv_y
 	tay
@@ -1048,8 +1197,8 @@ bind_type_sfx
 	bne .bts_go
 	rts
 .bts_go
-	ldx enemy_nframes,y
-	txa
+	jsr slot_of_y
+	lda enemy_nframes,y
 	tay
 	ldx map_sv_y
 	jsr frame_stride

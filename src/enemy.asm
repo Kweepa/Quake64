@@ -1210,11 +1210,34 @@ enemy_gunshot
 .eg_rts
 	rts
 
-; A = damage — subtract from player_hp (and armour if any); hurt/death SFX; red border flash
+; A = damage — skill scale, then subtract from player_hp (and armour if any);
+; hurt/death SFX; red border flash.
+; difficulty 0 = x1/2 (min 1), 1 = x1, 2 = x3/2 (cap 255). Before pent/armour.
 take_damage
 	sta rot0
 	lda player_hp
 	beq .td_rts
+	lda difficulty
+	beq .td_half
+	cmp #2
+	bne .td_live
+	lda rot0
+	lsr
+	clc
+	adc rot0
+	bcc +
+	lda #$ff
++
+	sta rot0
+	jmp .td_live
+.td_half
+	lda rot0
+	lsr
+	bne +
+	lda #1
++
+	sta rot0
+.td_live
 	lda pu_kind
 	cmp #BP_PENT
 	beq .td_flash
@@ -1955,14 +1978,26 @@ pick_attack_var
 
 ; ------------------------------------------------------------------
 ; X = enemy. A = damage. Pain chance if survives.
+; Quad x4 first. Flesh and Bone (difficulty 0) then x3/2, cap 255.
 damage_enemy
 	stx enemy_idx
 	sta rot2
 	lda pu_kind
 	cmp #BP_QUAD
+	bne .de_skill
+	asl rot2
+	asl rot2
+.de_skill
+	lda difficulty
 	bne .de_sub
-	asl rot2
-	asl rot2
+	lda rot2
+	lsr
+	clc
+	adc rot2
+	bcc +
+	lda #$ff
++
+	sta rot2
 .de_sub
 	lda en_state,x
 	cmp #EN_DYING
@@ -2100,11 +2135,30 @@ axe_try_kill
 	clc
 	rts
 
+; A = ceiling (>= 1). Returns A uniform in 1..ceiling. Uses rot1.
+; Ceiling 1 stays 1. Remainder matches pick_var_n (0..n−1), then +1.
+roll_upto
+	cmp #1
+	beq .ru_rts
+	sta rot1
+	jsr rnd8
+.ru_mod
+	cmp rot1
+	bcc .ru_one
+	sbc rot1
+	jmp .ru_mod
+.ru_one
+	clc
+	adc #1
+.ru_rts
+	rts
+
 ; ------------------------------------------------------------------
 ; Hitscan: mid-body project → |sx−CX|≤scan_hit_x (no screen-Y gate;
-; height auto-aims). dmg = scan_dmg_max − (z>>2), min 1, z in 0..SHOT_Z_MAX-1.
-; scan_dmg_all=1: every cone hit (SSG). =0: closest only (nail).
-; Blood splat on closest hit; col_line wall splat on miss.
+; height auto-aims). Ceiling min 1, then roll_upto → 1..ceiling.
+; SSG: ceiling = scan_dmg_max − z, every cone hit.
+; Nail: ceiling = scan_dmg_max − (z>>2), closest only.
+; z in 0..SHOT_Z_MAX-1. Blood splat on closest hit; wall splat on miss.
 shotgun_hitscan
 	lda #SHOT_HIT_X
 	sta scan_hit_x
@@ -2246,18 +2300,19 @@ gun_hitscan
 	beq .sh_cone
 	bcs .sh_n
 .sh_cone
-	; dmg = scan_dmg_max − (z >> 2), min 1
+	; SSG ceiling = scan_dmg_max − z, min 1, then 1..ceiling
 	lda scan_dmg_all
 	beq .sh_track
 	lda gidx
-	lsr
-	lsr
 	eor #$ff
 	sec
 	adc scan_dmg_max
-	bne .sh_do
+	beq .sh_one
+	bcs .sh_roll
+.sh_one
 	lda #1
-.sh_do
+.sh_roll
+	jsr roll_upto
 	ldx enemy_idx
 	jsr damage_enemy
 	ldx enemy_idx
@@ -2289,9 +2344,12 @@ gun_hitscan
 	eor #$ff
 	sec
 	adc scan_dmg_max
-	bne .sh_cd
+	beq .sh_none
+	bcs .sh_nroll
+.sh_none
 	lda #1
-.sh_cd
+.sh_nroll
+	jsr roll_upto
 	ldx shot_hit_i
 	stx enemy_idx
 	jsr damage_enemy

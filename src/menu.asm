@@ -634,11 +634,11 @@ quit_to_basic
 next_menu
 	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0, 0, 0
-	!byte NM_START, NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0
+	!byte NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0, 0
 	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
 
 menu_sizes
-	!byte 6, 5, 5, 3
+	!byte 6, 5, 4, 3
 
 ; --- drawing ---------------------------------------------------------------
 draw_menu
@@ -2670,9 +2670,8 @@ str_e3		!scr "The Netherworld",0
 str_e4		!scr "The Elder World",0
 str_fx_vol	!scr "Effects Volume 15",0
 str_mouse	!scr "Mouse (port 1) Off",0
-str_itytd	!scr "Easy",0
-str_dhm		!scr "Normal",0
-str_hmp		!scr "Hard",0
+str_flesh	!scr "Flesh and Bone",0
+str_nails	!scr "Hard as Nails",0
 str_uv		!scr "Nightmare",0
 
 str_sec_main	!byte 0				; main: no heading, box is already centered
@@ -2692,8 +2691,8 @@ menu_str_lo
 	!byte <str_credits, <str_quit, 0, 0
 	!byte <str_e1, <str_e2, <str_e3, <str_e4
 	!byte <str_back, 0, 0, 0
-	!byte <str_itytd, <str_dhm, <str_hmp, <str_uv
-	!byte <str_back, 0, 0, 0
+	!byte <str_flesh, <str_nails, <str_uv, <str_back
+	!byte 0, 0, 0, 0
 	!byte <str_fx_vol, <str_mouse, <str_back, 0
 	!byte 0, 0, 0, 0
 menu_str_hi
@@ -2701,8 +2700,8 @@ menu_str_hi
 	!byte >str_credits, >str_quit, 0, 0
 	!byte >str_e1, >str_e2, >str_e3, >str_e4
 	!byte >str_back, 0, 0, 0
-	!byte >str_itytd, >str_dhm, >str_hmp, >str_uv
-	!byte >str_back, 0, 0, 0
+	!byte >str_flesh, >str_nails, >str_uv, >str_back
+	!byte 0, 0, 0, 0
 	!byte >str_fx_vol, >str_mouse, >str_back, 0
 	!byte 0, 0, 0, 0
 

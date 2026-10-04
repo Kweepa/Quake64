@@ -945,7 +945,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "purpose": "message",
+          "purpose": "end_level",
           "text": "End of level",
           "tag": "",
           "roomId": "7aa01381-3e67-4124-a149-f7e145551ec3"

@@ -50,7 +50,7 @@ REBOOT_STUB	= $08F9			; 3-byte JMP reboot_game (installed at start)
 level_num	= $08FC			; 1..8 → e1m1..e1m8
 effects_vol	= $08FD			; menu SFX level 0..15 → SID $d418
 game_complete	= $08FE
-difficulty	= $08FF			; menu skill 0..3
+difficulty	= $08FF			; menu skill 0..2 (Flesh / Nails / Nightmare)
 MENU_COPY_TAB	= LOCODE_BASE + 3
 
 ; Menu overlay (VIC bank 1). Unused by the game image.
@@ -481,9 +481,9 @@ AXE_DMG		= 4			; Quake axe 20 ÷ 5
 AXE_HIT_R		= 3			; XZ chebyshev radius for axe hit test
 SHOT_DMG_MAX	= 11		; Quake SSG 14×4=56 ÷ 5
 SHOT_HIT_X	= 20		; |sx − SCREEN_CX| ≤ this (pixels)
-SHOT_Z_MAX	= 32		; view-Z high max range; dmg = SHOT_DMG_MAX − (z>>2), min 1
+SHOT_Z_MAX	= 32		; view-Z high max range; SSG ceiling = SHOT_DMG_MAX − z, min 1
 SHOT_MID_H	= 3			; mid-body Y above feet (≈ ENEMY_CULL_H/2)
-NAIL_DMG_MAX	= 2			; Quake nail 9 ÷ 5
+NAIL_DMG_MAX	= 2			; Quake nail 9 ÷ 5; ceiling = this − (z>>2), min 1
 NAIL_HIT_X	= 6			; |sx − SCREEN_CX| ≤ this (pixels)
 
 ITEM_CULL_Y	= 2			; AABB |y| vs Chebyshev XZ + pad
@@ -832,7 +832,7 @@ sham_alert_ph	= $CF21			; flips each anim tick; 1 = hold Shambler alert frame
 ; Hitscan params (live during gun_hitscan / splat_aim_jitter)
 scan_hit_x	= $CF26			; |sx−CX| max (inclusive)
 scan_hit_y	= $CF27			; |sy−64| max, $ff = no Y gate (both guns)
-scan_dmg_max	= $CF28			; dmg = this − (z>>2), min 1
+scan_dmg_max	= $CF28			; SSG ceiling = this − z; nail = this − (z>>2)
 scan_dmg_all	= $CF29			; 1 = damage every cone hit (SSG)
 scan_jx_mask	= $CF2A			; splat rnd X mask
 scan_jx_bias	= $CF2B

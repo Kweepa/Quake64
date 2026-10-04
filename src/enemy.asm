@@ -9,6 +9,9 @@ en_dz
 en_opp
 	!byte 4, 5, 6, 7, 0, 1, 2, 3
 
+; This type's CUE_SHOOT id, copied from the cue block while scanning clip events.
+cue_shoot_id	!byte $ff
+
 ; Facing half-plane for sight. 0=any, 1=need+, $ff=need-
 cs_need_dx = en_dx
 cs_need_dz = en_dz
@@ -224,14 +227,13 @@ eu_approach
 	sta en_timer_h,x
 .eu_ap_step
 	+ldy_mx en_type
-	lda AI_ENTRY_HI,y
-	beq .eu_ap_acc			; resident Grunt-class movement
 	lda #AI_CMD_APPROACH_MOVE
 	jsr ai_invoke
 	cmp #AI_AP_STAND
 	beq .eu_ap_rng
 	cmp #AI_AP_NEXT
-	beq .eu_ap_next
+	bne .eu_ap_acc
+	jmp eu_next
 .eu_ap_acc
 	clc
 	lda en_step,x
@@ -270,16 +272,8 @@ eu_approach
 	jmp eu_next
 .eu_ap_ready
 	+ldy_mx en_type
-	lda AI_ENTRY_HI,y
-	beq .eu_ap_glos
 	lda #AI_CMD_APPROACH_ATTACK
 	jsr ai_invoke
-	jmp eu_next
-.eu_ap_glos
-	jsr enemy_shot_clear
-	bcc .eu_ap_next			; corner / hole in the way
-	jsr enemy_enter_attack
-.eu_ap_next
 	jmp eu_next
 
 ; ------------------------------------------------------------------
@@ -568,15 +562,9 @@ enemy_anim_step
 	bcc .eas_atlen_go			; new < fire → not yet
 .eas_ff_go
 	+ldy_mx en_type
-	lda AI_ENTRY_HI,y
-	beq .eas_gun
 	lda #AI_CMD_FIRE
 	jsr ai_invoke
 	jmp .eas_atk_rest
-.eas_gun
-	lda enemy_idx
-	sta emuz_pending
-	jsr enemy_gunshot
 .eas_atk_rest
 	ldx enemy_idx
 	+ldy_mx en_type
@@ -590,33 +578,8 @@ enemy_anim_step
 +
 	ldx enemy_idx
 	+ldy_mx en_type
-	lda AI_ENTRY_HI,y
-	beq .eas_grunt_again
 	lda #AI_CMD_ATTACK_END
 	jsr ai_invoke
-	jmp .eas_n
-.eas_grunt_again
-	jsr rnd8
-	bmi .eas_to_ap
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	jsr enemy_cmp_range
-	beq .eas_again
-	bcc .eas_again
-.eas_to_ap
-	jsr enemy_enter_approach
-	jmp .eas_n
-.eas_again
-	ldx enemy_idx
-	jsr enemy_shot_clear
-	bcc .eas_to_ap
-	ldx enemy_idx
-	lda #EN_ATTACK
-	sta en_state,x
-	lda #0
-	sta en_frame,x
-	jsr pick_attack_var
-	jsr enemy_face_player
 	jmp .eas_n
 .eas_die
 	inc en_frame,x
@@ -1018,6 +981,9 @@ enemy_play_clip_sfx
 	sta src_ptr+1
 	lda enemy_sfx_evt_lo,y
 	sta src_ptr
+	ldy #CUE_SHOOT
+	lda (src_ptr),y
+	sta cue_shoot_id
 	jsr enemy_logical_frame
 	sty en_sfx_new
 	lda en_sfx_old
@@ -1069,6 +1035,14 @@ enemy_play_clip_sfx
 .epc_play
 	iny
 	lda (src_ptr),y
+	pha
+	cmp cue_shoot_id
+	bne .epc_noshoot
+	cmp #CUE_NONE
+	beq .epc_noshoot
+	jsr enemy_shoot_cue
+.epc_noshoot
+	pla
 	jsr play_sound
 .epc_skip
 	clc
@@ -1082,6 +1056,35 @@ enemy_play_clip_sfx
 	bne .epc_lp
 .epc_rts
 	ldx enemy_idx
+	rts
+
+; A shoot cue just matched. Fire frame $ff means this cue is the shot
+; (grunt): AI_CMD_FIRE. A real fire frame stays on the latch. Preserves
+; src_ptr for the event scan. Zombie is $ff but has no shoot cue.
+enemy_shoot_cue
+	ldx enemy_idx
+	lda en_state,x
+	cmp #EN_ATTACK
+	bne .esc_rts
+	jsr ldy_slot
+	lda enemy_fire_frame,y
+	cmp #$ff
+	bne .esc_rts
+	+ldy_mx en_type
+	lda AI_ENTRY_HI,y
+	beq .esc_rts
+	lda src_ptr
+	pha
+	lda src_ptr+1
+	pha
+	lda #AI_CMD_FIRE
+	jsr ai_invoke
+	pla
+	sta src_ptr+1
+	pla
+	sta src_ptr
+	ldx enemy_idx
+.esc_rts
 	rts
 
 ; A = attack variant (0=swing, 1=shoot). Face player; saw rev on swing.
@@ -1147,7 +1150,7 @@ enemy_enter_attack
 	jsr pick_attack_var
 	jmp enemy_face_player
 
-; Enter approach: streamed types own their timer policy; Grunt-class stays resident.
+; Enter approach. The type's AI owns the timer and dodge.
 enemy_enter_approach
 	stx enemy_idx
 	lda #EN_APPROACH
@@ -1157,16 +1160,8 @@ enemy_enter_approach
 	sta en_step,x
 	sta en_step_h,x
 	+ldy_mx en_type
-	lda AI_ENTRY_HI,y
-	beq .eea_grunt
 	lda #AI_CMD_APPROACH_ENTER
 	jmp ai_invoke
-.eea_grunt
-	lda #<APPROACH_MIN_MS
-	sta en_timer,x
-	lda #>APPROACH_MIN_MS
-	sta en_timer_h,x
-	jmp select_dodge_dir
 
 ; C=1 |floor_y − en_y| ≤ FALL_LEDGE (same floor piece)
 enemy_same_floor
@@ -1188,26 +1183,6 @@ enemy_same_floor
 	rts
 .esf_yes
 	sec
-	rts
-
-; Grunt fire frame: recheck LOS, distance-scaled hit roll, 8–15 HP.
-enemy_gunshot
-	jsr enemy_shot_clear	; player may have reached cover mid-anim
-	bcc .eg_rts
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	asl
-	asl			; miss threshold = dist*4
-	bcs .eg_rts		; dist ≥ 64 — out of range safety
-	sta rot1
-	jsr rnd8
-	cmp rot1
-	bcc .eg_rts		; miss
-	and #7
-	clc
-	adc #8			; 8–15 HP (player scale is 100; HURT_HP=10)
-	jmp take_damage
-.eg_rts
 	rts
 
 ; A = damage — skill scale, then subtract from player_hp (and armour if any);

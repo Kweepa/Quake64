@@ -785,8 +785,8 @@ bp_name_hi
 
 ; ASCII (UI charset), not PETSCII
 hud_str_title	!byte 81,117,97,107,101,54,52,0	; Quake64
-hud_str_health	!byte 72,101,97,108,116,104,0		; Health
-hud_str_armour	!byte 65,114,109,111,117,114,0		; Armour
+hud_str_health	!text "health",0
+hud_str_armour	!text "armour",0
 hud_str_pu	!byte 68,97,109,97,103,101			; Damage
 		!byte 83,104,105,101,108,100			; Shield
 		!byte 83,104,97,100,111,119			; Shadow

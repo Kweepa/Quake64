@@ -2651,12 +2651,11 @@ enemy_muzzle_want
 	beq .emw_no			; swing — no muzzle
 .emw_ff
 	jsr ldy_slot
-	lda enemy_fire_frame,y
-	bmi .emw_no			; $ff = none
 	lda emuz_pending
 	cmp obj_i
-	beq .emw_yes
+	beq .emw_yes		; cue-fired shot (fire frame $ff still flashes)
 	lda enemy_fire_frame,y
+	bmi .emw_no			; $ff = none
 	cmp en_frame,x
 	bne .emw_no
 .emw_yes

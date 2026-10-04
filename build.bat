@@ -106,6 +106,11 @@ popd
 python tools\genaisymbols.py --labels game-ai.lbl
 if errorlevel 1 exit /b 1
 pushd src
+"%ACME%" ai_grunt.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
 "%ACME%" ai_rott.asm
 if errorlevel 1 (
   popd

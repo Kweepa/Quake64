@@ -827,8 +827,8 @@ gr_fuse_l	= $CF11
 gr_fuse_h	= $CF15
 gr_life_l	= $CF19
 gr_life_h	= $CF1D
-; $CF22–$CF25 free (was gr_room, then gren_save_room)
 sham_alert_ph	= $CF21			; flips each anim tick; 1 = hold Shambler alert frame
+; $CF22–$CF25 free
 ; Hitscan params (live during gun_hitscan / splat_aim_jitter)
 scan_hit_x	= $CF26			; |sx−CX| max (inclusive)
 scan_hit_y	= $CF27			; |sy−64| max, $ff = no Y gate (both guns)

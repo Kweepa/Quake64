@@ -33,8 +33,10 @@ PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
 DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 # Clip-local fire frames (matches the pose-row fire byte). Pinned as an attack key.
-# Shambler magic and Demon leap are special-cased in enemy.asm; Zombie via AI_CMD_ATTACK_TICK.
-FIRE_FRAME = [2, 5, 4, 6, 2, 5, 5, 255, 5]
+# Grunt is $ff: the shoot cue calls AI_CMD_FIRE, and the shoot soundFrame is
+# pinned on its own so that pose stays stored. Shambler magic and Demon leap
+# are special-cased in enemy.asm; Zombie via AI_CMD_ATTACK_TICK.
+FIRE_FRAME = [255, 5, 4, 6, 2, 5, 5, 255, 5]
 CHTHON_FIRE2 = 17  # second lava throw; keep in sync with mem.asm CHTHON_FIRE2
 # Mid-distance stick LOD threshold (CAM_ZH); Ogre needs more for chainsaw tip.
 DEFAULT_LOD_Z = {
@@ -879,6 +881,18 @@ def cadence_keep(start: int, length: int, keys: list[int]) -> set[int]:
     return set(kept)
 
 
+def grunt_shoot_pose_key(enemy: dict, start: int) -> tuple[int, ...]:
+    """Grunt fire byte is $ff, so the shoot soundFrame is the attack pose key."""
+    for c in enemy.get("clips") or []:
+        if clip_key(c.get("name", "")) != "shoot":
+            continue
+        if int(c["start"]) != start or not c.get("sound"):
+            continue
+        frame = int(c.get("soundFrame") or 0)
+        return (start + frame,)
+    return ()
+
+
 def pack_poses(
     gx: list[int],
     gy: list[int],
@@ -908,6 +922,8 @@ def pack_poses(
                 extra = (start + fire_off, start + CHTHON_FIRE2)
             elif 0 <= fire_off < 255:
                 extra = (start + fire_off,)
+            elif TYPES[type_i] == "Grunt":
+                extra = grunt_shoot_pose_key(enemy, start)
         elif name.startswith("death") and TYPES[type_i] == "Zombie":
             extra = (start + 10,)
         keep |= cadence_keep(start, length, pick_keys(frs, start, length, extra))

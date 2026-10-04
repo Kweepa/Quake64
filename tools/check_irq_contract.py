@@ -27,6 +27,7 @@ ALLOW_IRQ_FILES = {
     "splashc.asm",
     "menu.asm",
     "menu_sfx.asm",
+    "menu_music.asm",
 }
 
 POKE = re.compile(

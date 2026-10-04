@@ -1,7 +1,9 @@
 ; Quake64 MENU overlay — load @ LOCODE_BASE ($0900), JSR from boot, then overwritten by GAME.
 ; Entry: +0 run_menu, +3 copy_tab. Hires bitmap UI + proportional Quake font.
 ; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive GAME overwrite).
-; Menu SFX: CIA1 Timer A + playsound (MOVEGUN/SHOOT/ESC from AUDIOT).
+; Menu music: MUS1..5 loaded from disk to $9000 (random at entry, Jukebox
+; switches), all 3 SID voices, CIA1 Timer A tick. No interface sounds.
+; Assembled per disk: -DUSE_KRILL=1 uses loadraw, default uses KERNAL LOAD.
 !cpu 6502
 !to "menu.prg", cbm
 
@@ -65,6 +67,7 @@ NM_ORDER	= 256 - 3
 NM_CTRL		= 256 - 4
 NM_HELP		= 256 - 5
 NM_CREDITS	= 256 - 7
+NM_JUKE		= 256 - 8
 NM_QUIT		= 256 - 6
 
 UI_UP		= 1
@@ -90,14 +93,6 @@ tmp4		= $06
 tmp5		= $07
 aux_l		= $fd
 aux_h		= $fe
-; Match zp.asm — playsound / menu_sfx (boot BSS still holds boot.prg)
-sound_index	= $b2
-sound_ptr_l	= $b3
-sound_ptr_h	= $b4
-sound_priority	= $c1
-sound_count	= $c2
-sound_max	= $c3
-; ps_save_x/y: mem.asm BSS (game); menu playsound uses the same labels
 mouse_en	= $38			; match zp.asm — 1351 on/off (survives locode LOAD)
 
 *= LOCODE_BASE
@@ -205,6 +200,7 @@ copy_tab_128
 	rts
 
 run_menu
+	jsr music_pick_load			; before SEI: KERNAL/Krill load, splash still up
 	sei
 	jsr init_font_tabs
 	jsr init_menu_vic
@@ -223,6 +219,7 @@ run_menu
 	sta effects_vol
 	jsr copy_menu_sprites
 	jsr setup_wip_spr
+	jsr sync_juke_title
 	jsr menu_sfx_init
 	jsr detect_mouse
 	jsr clear_screen_all
@@ -297,7 +294,7 @@ menu_move_up
 .mmu
 	stx menu_item
 	jsr update_selection
-	jmp sfx_movegun2
+	rts
 
 menu_move_down
 	lda menu_item
@@ -310,7 +307,7 @@ menu_move_down
 .mmd
 	stx menu_item
 	jsr update_selection
-	jmp sfx_movegun2
+	rts
 
 ; Repaint only old + new rows (no clear / full redraw)
 update_selection
@@ -322,7 +319,6 @@ update_selection
 	jmp draw_menu_item
 
 menu_esc
-	jsr sfx_esc
 	lda menu_stack_d
 	beq .me_rts
 	tax
@@ -365,7 +361,6 @@ vol_fx_inc
 	and #15
 	sta effects_vol
 	sta $d418
-	jsr sfx_movegun1
 	jmp sync_redraw
 vol_fx_dec
 	dec effects_vol
@@ -373,7 +368,6 @@ vol_fx_dec
 	and #15
 	sta effects_vol
 	sta $d418
-	jsr sfx_movegun1
 sync_redraw
 	jsr sync_vol_strings
 	jsr sync_mouse_string
@@ -413,7 +407,6 @@ mouse_toggle
 	lda mouse_en
 	eor #1
 	sta mouse_en
-	jsr sfx_movegun1
 	jmp sync_redraw
 
 sync_mouse_string
@@ -496,7 +489,6 @@ menu_select
 	beq .ms_go
 	jmp .ms_st
 .ms_go
-	jsr sfx_shoot
 	lda menu_item
 	sta difficulty
 	jsr menu_raster_off
@@ -524,7 +516,6 @@ menu_select
 	jmp .ms_st
 .ms_ne
 	bcc .ms_po
-	jsr sfx_shoot
 	ldx menu_stack_d
 	lda menu_id
 	sta menu_stk_m,x
@@ -536,10 +527,14 @@ menu_select
 	sta menu_item
 	lda tmp0
 	sta menu_id
+	cmp #4					; Jukebox: cursor starts on the playing track
+	bne .ms_nj
+	lda music_track
+	sta menu_item
+.ms_nj
 	jsr draw_menu
 	jmp .ms_st
 .ms_po
-	jsr sfx_shoot
 	ldx menu_stack_d
 	dex
 	stx menu_stack_d
@@ -561,21 +556,26 @@ menu_select
 	beq .ms_crd
 	cmp #NM_QUIT
 	beq quit_to_basic
+	cmp #NM_JUKE
+	beq .ms_juke
+	jmp .ms_st
+.ms_juke
+	lda menu_item
+	cmp music_track
+	beq .ms_st				; already playing
+	jsr jukebox_select			; ends in draw_menu; carry must be clear
 	jmp .ms_st
 .ms_ord
-	jsr sfx_shoot
 	lda #<order_text
 	ldy #>order_text
 	jsr show_text_screen
 	jmp .ms_ret
 .ms_ctl
-	jsr sfx_shoot
 	lda #<control_text
 	ldy #>control_text
 	jsr show_text_screen
 	jmp .ms_ret
 .ms_hlp
-	jsr sfx_shoot
 !if MENU_HELP_ENDINGS {
 	jsr show_ending_pages
 } else {
@@ -594,7 +594,6 @@ menu_select
 }
 	jmp .ms_ret
 .ms_crd
-	jsr sfx_shoot
 	ldx #0
 .ms_cr
 	txa
@@ -615,7 +614,6 @@ menu_select
 
 ; Warm-start BASIC → READY.
 quit_to_basic
-	jsr sfx_shoot
 	jsr menu_sfx_done
 	sei
 	lda #$37
@@ -630,15 +628,17 @@ quit_to_basic
 	cli
 	jmp ($a002)				; BASIC warm start
 
-; Root→eps/options/ctrl/help/credits/quit; E1→skill; E2-4→order; skill→start; options stay/back
+; Root→eps/jukebox/options/ctrl/help/credits/quit; E1→skill; E2-4→order; skill→start;
+; options stay/back; jukebox tracks→NM_JUKE (item = track)
 next_menu
-	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0, 0
+	!byte 1, 4, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0, 0, 0
 	!byte NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0, 0
 	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
+	!byte NM_JUKE, NM_JUKE, NM_JUKE, NM_JUKE, NM_JUKE, NM_BACK, 0, 0
 
 menu_sizes
-	!byte 6, 5, 4, 3
+	!byte 7, 5, 4, 3, 6
 
 ; --- drawing ---------------------------------------------------------------
 draw_menu
@@ -1429,6 +1429,8 @@ setup_wip_spr
 	sta $d000
 	lda wip_y
 	sta $d001
+	lda #0
+	sta mux_msb
 	lda wip_spr_xmsb
 	sta $d010
 	rts
@@ -1477,6 +1479,7 @@ mux_logo_spr
 	sta $d015
 	lda title_spr_xmsb
 	asl					; sprite 4 → 5
+	sta mux_msb				; main thread must keep this bit
 	ora wip_spr_xmsb
 	sta $d010
 	rts
@@ -1523,6 +1526,8 @@ mux_cursor_spr
 	asl					; sprites 1–4
 	ora wip_spr_en
 	sta $d015
+	lda #0
+	sta mux_msb
 	lda wip_spr_xmsb
 	sta $d010
 	rts
@@ -1574,6 +1579,8 @@ mux_hint_spr
 	asl					; sprites 1–6
 	ora wip_spr_en
 	sta $d015
+	lda #0
+	sta mux_msb
 	lda wip_spr_xmsb
 	sta $d010
 	rts
@@ -2461,8 +2468,12 @@ update_wip_spr
 	sta $d000
 	lda wip_y
 	sta $d001
-	lda wip_spr_xmsb
+	php					; the raster IRQ owns the other $d010 bits
+	sei					; (logo E MSB): read mux_msb + store atomically
+	lda mux_msb
+	ora wip_spr_xmsb
 	sta $d010
+	plp
 .uw_rts
 	rts
 
@@ -2599,6 +2610,7 @@ hint_spr_en	!byte 0
 cursor_spr_en	!byte 0
 wip_spr_en	!byte 0
 wip_spr_xmsb	!byte 0
+mux_msb		!byte 0				; non-WIP $d010 bits set by the current mux phase
 wip_x		!byte 0
 wip_y		!byte 0
 wip_dx		!byte 0
@@ -2607,6 +2619,10 @@ cursor_frame	!byte 0
 cursor_tick	!byte 0
 menu_mux_phase	!byte 0
 menu_raster_en	!byte 0
+music_en	!byte 0
+music_ok	!byte 0				; 1 = MUSn resident at $9000
+music_track	!byte 0				; 0..4 playing / selected
+music_zp	!fill MUSIC_ZP_N, 0		; player's $f0-$f7 while the menu owns ZP
 hint_spr_x	!byte 0, 0, 0
 cursor_spr_x	!byte 0
 cursor_spr_y	!byte 0
@@ -2659,11 +2675,17 @@ str_hint_adjust	!scr "adjust",0
 str_hint_select	!scr "select",0
 str_new_game	!scr "New Game",0
 str_sound	!scr "Options",0
+str_juke	!scr "Jukebox",0
 str_control	!scr "Controls",0
 str_read_this	!scr "Read This!",0
 str_credits	!scr "Credits",0
 str_quit	!scr "Quit",0
 str_back	!scr "Back",0
+str_trk1	!scr "Track 1",0
+str_trk2	!scr "Track 2",0
+str_trk3	!scr "Track 3",0
+str_trk4	!scr "Track 4",0
+str_trk5	!scr "Track 5",0
 str_e1		!scr "Dimension of the Doomed",0
 str_e2		!scr "The Realm of Black Magic",0
 str_e3		!scr "The Netherworld",0
@@ -2678,42 +2700,45 @@ str_sec_main	!byte 0				; main: no heading, box is already centered
 str_sec_new	!scr "Which episode to play?",0
 str_sec_skill	!scr "Skill",0
 str_sec_sound	!scr "Options",0
+str_sec_juke	!scr "Now playing: Track 1",0	; digit at +19 (sync_juke_title)
 
 section_lo
-	!byte <str_sec_main, <str_sec_new, <str_sec_skill, <str_sec_sound
+	!byte <str_sec_main, <str_sec_new, <str_sec_skill, <str_sec_sound, <str_sec_juke
 section_hi
-	!byte >str_sec_main, >str_sec_new, >str_sec_skill, >str_sec_sound
+	!byte >str_sec_main, >str_sec_new, >str_sec_skill, >str_sec_sound, >str_sec_juke
 
 !source "menu_text.asm"
 
 menu_str_lo
-	!byte <str_new_game, <str_sound, <str_control, <str_read_this
-	!byte <str_credits, <str_quit, 0, 0
+	!byte <str_new_game, <str_juke, <str_sound, <str_control
+	!byte <str_read_this, <str_credits, <str_quit, 0
 	!byte <str_e1, <str_e2, <str_e3, <str_e4
 	!byte <str_back, 0, 0, 0
 	!byte <str_flesh, <str_nails, <str_uv, <str_back
 	!byte 0, 0, 0, 0
 	!byte <str_fx_vol, <str_mouse, <str_back, 0
 	!byte 0, 0, 0, 0
+	!byte <str_trk1, <str_trk2, <str_trk3, <str_trk4
+	!byte <str_trk5, <str_back, 0, 0
 menu_str_hi
-	!byte >str_new_game, >str_sound, >str_control, >str_read_this
-	!byte >str_credits, >str_quit, 0, 0
+	!byte >str_new_game, >str_juke, >str_sound, >str_control
+	!byte >str_read_this, >str_credits, >str_quit, 0
 	!byte >str_e1, >str_e2, >str_e3, >str_e4
 	!byte >str_back, 0, 0, 0
 	!byte >str_flesh, >str_nails, >str_uv, >str_back
 	!byte 0, 0, 0, 0
 	!byte >str_fx_vol, >str_mouse, >str_back, 0
 	!byte 0, 0, 0, 0
+	!byte >str_trk1, >str_trk2, >str_trk3, >str_trk4
+	!byte >str_trk5, >str_back, 0, 0
 
 !source "menu_title.asm"
 !source "menu_hint_spr.asm"
 !source "menu_cursor_spr.asm"
 !source "menu_wip_spr.asm"
 !source "uifont_data.asm"
-!source "menu_playsound.asm"
 !source "menu_sfx.asm"
-!source "menu_pcsounds.asm"
-!source "menu_pcsfreq.asm"
+!source "menu_music.asm"
 
 end_menu = *
 !if end_menu > WIP_SPR_RAM {

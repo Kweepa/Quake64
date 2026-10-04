@@ -46,6 +46,8 @@ python tools\gen_menu_wip_sprite.py
 if errorlevel 1 exit /b 1
 python tools\gen_splash.py
 if errorlevel 1 exit /b 1
+python tools\genmusic.py
+if errorlevel 1 exit /b 1
 
 pushd src
 "%ACME%" enemy_data_blob.asm
@@ -211,6 +213,16 @@ if errorlevel 1 exit /b 1
 python tools\checkheap.py --labels game-krill.lbl --json heap-report-krill.json
 if errorlevel 1 exit /b 1
 
+rem MENU loads the menu music itself: loadraw on the Krill disk, KERNAL LOAD otherwise.
+pushd src
+"%ACME%" -DUSE_KRILL=1 menu.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+if exist src\menu.prg move /y src\menu.prg menu.prg >nul
+
 python tools\mkdisk.py --krill --out quake64-krill.d64
 if errorlevel 1 exit /b 1
 
@@ -255,6 +267,15 @@ python tools\memoryreport.py --labels game.lbl --json memory-report.json
 if errorlevel 1 exit /b 1
 python tools\checkheap.py --json heap-report.json
 if errorlevel 1 exit /b 1
+
+pushd src
+"%ACME%" menu.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+if exist src\menu.prg move /y src\menu.prg menu.prg >nul
 
 python tools\mkdisk.py --out quake64.d64
 if errorlevel 1 exit /b 1

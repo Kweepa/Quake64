@@ -74,6 +74,14 @@ KOALA_TAIL	= 1000 - 768		; 232
 	!error "splash colour staging overlaps bitmap; bg=$", SPLASH_BG
 }
 
+; Menu music (mus.prg, tools/genmusic.py). Boot loads it before MENU; GAME
+; overwrites it. Voices 1-2 only; menu SFX own voice 3. Player ZP $f0-$f7.
+MUSIC_BASE	= $9000
+MUSIC_INIT	= MUSIC_BASE
+MUSIC_PLAY	= MUSIC_BASE + 3
+MUSIC_ZP	= $f0
+MUSIC_ZP_N	= 8
+
 TAB_STAGING	= $8000			; tab.prg load; copy_tab unpacks tails
 TAB_ALOG	= TAB_STAGING		; 512
 TAB_LOG		= TAB_STAGING + 512	; 256

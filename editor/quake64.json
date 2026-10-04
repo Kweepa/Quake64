@@ -10111,6 +10111,9 @@
           "name": "load"
         },
         {
+          "name": "pain"
+        },
+        {
           "name": "painb"
         },
         {
@@ -10212,6 +10215,7 @@
         "stand",
         "death",
         "load",
+        "pain",
         "painb",
         "run",
         "shoot",

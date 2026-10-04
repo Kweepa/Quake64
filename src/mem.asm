@@ -332,6 +332,7 @@ AI_CMD_APPROACH_ATTACK	= 5
 AI_CMD_APPROACH_ENTER	= 6
 AI_CMD_IDLE		= 7
 AI_CMD_DRAW		= 8
+AI_CMD_PAIN		= 9
 CRUSH_CMD_TICK		= 0
 CRUSH_CMD_SOLID		= 1
 CRUSH_CMD_DRAW		= 2
@@ -438,6 +439,7 @@ ENEMY_DETECT	= 20		; Chebyshev XZ wake distance
 ENEMY_STEP_MS	= 200		; approach cell cadence (dt acc + remainder)
 PATROL_STEP_MS	= 400		; patrol cell cadence (2× approach; 16-bit)
 APPROACH_MIN_MS	= 1500		; min time in approach before attack (grunt)
+GRUNT_PAINB		= 3		; applied damage ≥ this → painb, else pain
 DOG_REPATH_MS	= 1000		; Rottweiler chase repath cadence (~Wolf DOG_REPATH)
 DOG_WAIT_MS	= 2000		; idle pause when player is on another floor piece
 DEATH_HOLD_MS	= 1600		; EN_DEAD last-frame hold before EN_GONE
@@ -828,7 +830,10 @@ gr_fuse_h	= $CF15
 gr_life_l	= $CF19
 gr_life_h	= $CF1D
 sham_alert_ph	= $CF21			; flips each anim tick; 1 = hold Shambler alert frame
-; $CF22–$CF25 free
+hit_dmg		= $CF22			; applied damage for the current damage_enemy call
+dodge_dx	= $CF23			; select_dodge_dir: signed dx toward player
+dodge_dz	= $CF24			; signed dz toward player
+dodge_i		= $CF25			; 0..4 probe index, live across enemy_probe_dir
 ; Hitscan params (live during gun_hitscan / splat_aim_jitter)
 scan_hit_x	= $CF26			; |sx−CX| max (inclusive)
 scan_hit_y	= $CF27			; |sy−64| max, $ff = no Y gate (both guns)

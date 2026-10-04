@@ -733,12 +733,12 @@ select_dodge_dir
 	lda cam_xh
 	sec
 	+sbc_mx en_x
-	sta rot0				; dx
+	sta dodge_dx
 	lda cam_zh
 	sec
 	+sbc_mx en_z
-	sta rot1				; dz
-	lda rot0
+	sta dodge_dz
+	lda dodge_dx
 	bmi .sdd_wx
 	bne .sdd_ex
 .sdd_wx
@@ -753,7 +753,7 @@ select_dodge_dir
 	lda #6
 	sta ai_dirtry+2
 .sdd_y
-	lda rot1
+	lda dodge_dz
 	bmi .sdd_nz
 	bne .sdd_sz
 .sdd_nz
@@ -770,44 +770,35 @@ select_dodge_dir
 	lda #4
 	sta ai_dirtry+3
 .sdd_diag
-	lda ai_dirtry
-	and #4
-	lsr
-	sta rot2
-	lda ai_dirtry+1
-	lsr
-	lsr
-	ora rot2
-	tay
-	lda .sdd_diag4,y
-	sta ai_dirtry+4
-	; abs compare for axis swap
-	lda rot0
+	jsr .sdd_setdiag
+	; abs compare for axis swap. Signs are already in ai_dirtry.
+	lda dodge_dx
 	bpl +
 	eor #$ff
 	clc
 	adc #1
 +
-	sta rot2
-	lda rot1
+	sta dodge_dx
+	lda dodge_dz
 	bpl +
 	eor #$ff
 	clc
 	adc #1
 +
-	cmp rot2
+	sta dodge_dz
+	cmp dodge_dx
 	bcc .sdd_ord			; |dz| < |dx| — X already major
 	lda ai_dirtry
-	sta rot2
+	pha
 	lda ai_dirtry+1
 	sta ai_dirtry
-	lda rot2
+	pla
 	sta ai_dirtry+1
 	lda ai_dirtry+2
-	sta rot2
+	pha
 	lda ai_dirtry+3
 	sta ai_dirtry+2
-	lda rot2
+	pla
 	sta ai_dirtry+3
 .sdd_ord
 	; Grunt too close: prefer away (swap toward↔away, rebuild diag)
@@ -826,45 +817,39 @@ select_dodge_dir
 	cmp #GRUNT_BACKOFF + 1
 	bcs .sdd_zig
 	lda ai_dirtry
-	ldx ai_dirtry+2
+	pha
+	lda ai_dirtry+2
+	sta ai_dirtry
+	pla
 	sta ai_dirtry+2
-	stx ai_dirtry
 	lda ai_dirtry+1
-	ldx ai_dirtry+3
+	pha
+	lda ai_dirtry+3
+	sta ai_dirtry+1
+	pla
 	sta ai_dirtry+3
-	stx ai_dirtry+1
-	lda ai_dirtry
-	and #4
-	lsr
-	sta rot2
-	lda ai_dirtry+1
-	lsr
-	lsr
-	ora rot2
-	tay
-	lda .sdd_diag4,y
-	sta ai_dirtry+4
+	jsr .sdd_setdiag
 .sdd_zig
 	; diagonal-first + random toward/away shuffle (zigzag)
 	jsr rnd8
 	bmi .sdd_try
 	lda ai_dirtry
-	sta rot2
+	pha
 	lda ai_dirtry+1
 	sta ai_dirtry
-	lda rot2
+	pla
 	sta ai_dirtry+1
 	lda ai_dirtry+2
-	sta rot2
+	pha
 	lda ai_dirtry+3
 	sta ai_dirtry+2
-	lda rot2
+	pla
 	sta ai_dirtry+3
 .sdd_try
 	lda #4				; diagonal first
-	sta rot2
+	sta dodge_i
 .sdd_lp
-	ldx rot2
+	ldx dodge_i
 	lda ai_dirtry,x
 	cmp ai_turn
 	beq .sdd_n
@@ -875,12 +860,12 @@ select_dodge_dir
 	jsr enemy_set_geom
 	rts
 .sdd_n
-	inc rot2
-	lda rot2
+	inc dodge_i
+	lda dodge_i
 	cmp #5
 	bne +
 	lda #0
-	sta rot2
+	sta dodge_i
 +
 	cmp #4
 	bne .sdd_lp
@@ -893,6 +878,23 @@ select_dodge_dir
 	lda ai_probe
 	jsr enemy_set_geom
 .sdd_rts
+	rts
+
+; ai_dirtry+4 from the toward X/Z pair. Clobbers X.
+.sdd_setdiag
+	lda ai_dirtry
+	and #4
+	lsr
+	pha
+	lda ai_dirtry+1
+	lsr
+	lsr
+	tsx
+	ora $0101,x
+	tay
+	pla
+	lda .sdd_diag4,y
+	sta ai_dirtry+4
 	rts
 .sdd_diag4
 	!byte 1, 3, 7, 5
@@ -1956,30 +1958,32 @@ pick_attack_var
 ; Quad x4 first. Flesh and Bone (difficulty 0) then x3/2, cap 255.
 damage_enemy
 	stx enemy_idx
-	sta rot2
+	sta hit_dmg
 	lda pu_kind
 	cmp #BP_QUAD
 	bne .de_skill
-	asl rot2
-	asl rot2
+	asl hit_dmg
+	asl hit_dmg
 .de_skill
 	lda difficulty
 	bne .de_sub
-	lda rot2
+	lda hit_dmg
 	lsr
 	clc
-	adc rot2
+	adc hit_dmg
 	bcc +
 	lda #$ff
 +
-	sta rot2
+	sta hit_dmg
 .de_sub
 	lda en_state,x
 	cmp #EN_DYING
-	bcs .de_rts
+	bcc .de_hp
+	jmp .de_rts
+.de_hp
 	lda en_hp,x
 	sec
-	sbc rot2
+	sbc hit_dmg
 	sta en_hp,x
 	beq .de_kill
 	bcc .de_kill
@@ -2005,7 +2009,7 @@ damage_enemy
 	ora sham_pain_h
 	bne .de_rts
 .de_sham_roll
-	lda rot2
+	lda hit_dmg
 	cmp #SHAM_PAIN_ALWAYS
 	bcs .de_sham_yes
 	sta rot0
@@ -2029,7 +2033,14 @@ damage_enemy
 	sta en_state,x
 	lda #0
 	sta en_frame,x
+	+ldy_mx en_type
+	lda #AI_CMD_PAIN
+	jsr ai_invoke
+	cmp #AI_CMD_PAIN
+	bne .de_wince
+	ldx enemy_idx
 	jsr pick_pain_var
+.de_wince
 	lda #CUE_WINCE
 	jmp enemy_play_cue
 .de_kill

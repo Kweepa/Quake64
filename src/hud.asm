@@ -615,11 +615,11 @@ hud_powerup
 	lda #HUD_CH_QUAD
 	jmp .hpu_draw
 .hpu_pent
-	ldx #6
+	ldx #hud_str_shield - hud_str_damage
 	lda #HUD_CH_PENT
 	jmp .hpu_draw
 .hpu_ring
-	ldx #12
+	ldx #hud_str_shadow - hud_str_damage
 	lda #HUD_CH_RING
 .hpu_draw
 	sta SCR_A + HUD_OFF_SHELL + HUD_PU_COL
@@ -632,7 +632,7 @@ hud_powerup
 	sta SCR_A + HUD_OFF_NAIL + HUD_PU_COL + 1
 	ldy #0
 .hpu_lab
-	lda hud_str_pu,x
+	lda hud_str_damage,x
 	sta SCR_A + HUD_OFF_GREN + HUD_PU_LABEL,y
 	inx
 	iny
@@ -757,23 +757,23 @@ update_status
 	rts
 
 HUD_GOT_LEN	= 8			; "Got the "
-hud_str_got	!byte 71,111,116,32,116,104,101,32,0	; Got the
-hud_str_silver_req	!byte 83,105,108,118,101,114,32,107,101,121,32,114,101,113,117,105,114,101,100,0	; Silver key required
-hud_str_gold_req	!byte 71,111,108,100,32,107,101,121,32,114,101,113,117,105,114,101,100,0	; Gold key required
-hud_str_remote_req	!byte 84,104,105,115,32,100,111,111,114,32,105,115,32,111,112,101,110,101,100,32,101,108,115,101,119,104,101,114,101,0	; This door is opened elsewhere
-bpn_shells	!byte 115,104,101,108,108,115,0		; shells
-bpn_nailgun	!byte 110,97,105,108,103,117,110,0	; nailgun
-bpn_nails	!byte 110,97,105,108,115,0		; nails
-bpn_gl		!byte 103,114,101,110,97,100,101,32,108,97,117,110,99,104,101,114,0	; grenade launcher
-bpn_grenades	!byte 103,114,101,110,97,100,101,115,0	; grenades
-bpn_health	!byte 104,101,97,108,116,104,0		; health
-bpn_armour	!byte 97,114,109,111,117,114,0		; armour
-bpn_quad	!byte 113,117,97,100,32,100,97,109,97,103,101,0	; quad damage
-bpn_pent	!byte 112,101,110,116,97,103,114,97,109,32,111,102,32,112,114,111,116,101,99,116,105,111,110,0	; pentagram of protection
-bpn_ring	!byte 114,105,110,103,32,111,102,32,115,104,97,100,111,119,115,0	; ring of shadows
-bpn_silver	!byte 115,105,108,118,101,114,32,107,101,121,0	; silver key
-bpn_gold	!byte 103,111,108,100,32,107,101,121,0		; gold key
-bpn_rune	!byte 114,117,110,101,32,111,102,32,101,97,114,116,104,32,109,97,103,105,99,0	; rune of earth magic
+hud_str_got	!text "Got the ",0
+hud_str_silver_req	!text "Silver key required",0
+hud_str_gold_req	!text "Gold key required",0
+hud_str_remote_req	!text "This door is opened elsewhere",0
+bpn_shells	!text "shells",0
+bpn_nailgun	!text "nailgun",0
+bpn_nails	!text "nails",0
+bpn_gl		!text "grenade launcher",0
+bpn_grenades	!text "grenades",0
+bpn_health	!text "health",0
+bpn_armour	!text "armour",0
+bpn_quad	!text "quad damage",0
+bpn_pent	!text "pentagram of protection",0
+bpn_ring	!text "ring of shadows",0
+bpn_silver	!text "silver key",0
+bpn_gold	!text "gold key",0
+bpn_rune	!text "rune of earth magic",0
 bp_name_lo
 	!byte <bpn_shells, <bpn_nailgun, <bpn_nails, <bpn_gl
 	!byte <bpn_grenades, <bpn_health, <bpn_health, <bpn_shells, <bpn_armour
@@ -784,9 +784,9 @@ bp_name_hi
 	!byte >bpn_quad, >bpn_pent, >bpn_ring, >bpn_silver, >bpn_gold, >bpn_rune
 
 ; ASCII (UI charset), not PETSCII
-hud_str_title	!byte 81,117,97,107,101,54,52,0	; Quake64
+hud_str_title	!text "Quake64",0
 hud_str_health	!text "health",0
 hud_str_armour	!text "armour",0
-hud_str_pu	!byte 68,97,109,97,103,101			; Damage
-		!byte 83,104,105,101,108,100			; Shield
-		!byte 83,104,97,100,111,119			; Shadow
+hud_str_damage	!text "Damage",0
+hud_str_shield	!text "Shield",0
+hud_str_shadow	!text "Shadow",0

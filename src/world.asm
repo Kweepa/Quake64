@@ -1233,55 +1233,33 @@ rc_inset_ok
 	clc
 	rts
 
-; Y = room. C=1 if col_x/z in a collider inset by 1 (enemy)
+; Y = room. C=1 if col_x/z is inside a collider the enemy can stand in.
+; Shared faces are not inset (rc_inset_ok), so L/T/S joins stay walkable
+; for every walker. cam_yh is the enemy eye for that Y test, then restored.
+; pla does not touch C. enemy_idx is live. X restored from pv4.
 room_cols_inset1
 	stx pv4
+	lda cam_yh
+	pha
+	ldx enemy_idx
+	+lda_mx en_y
+	clc
+	adc #EYE_HEIGHT
+	sta cam_yh
 	tya
 	jsr room_mul3
 	tax
-	jsr .rci1
+	jsr rc_inset_ok
 	bcs .rci_yes
 	inx
-	jsr .rci1
+	jsr rc_inset_ok
 	bcs .rci_yes
 	inx
-	jsr .rci1
+	jsr rc_inset_ok
 .rci_yes
-	php
+	pla
+	sta cam_yh
 	ldx pv4
-	plp
-	rts
-.rci1
-	+lda_mx rc_sx
-	beq .rci_no
-	lda col_x
-	+cmp_mx rc_x
-	bcc .rci_no
-	beq .rci_no			; inset lo: >
-	clc
-	+lda_mx rc_x
-	+adc_mx rc_sx
-	sec
-	sbc #1
-	cmp col_x
-	bcc .rci_no
-	beq .rci_no
-	lda col_z
-	+cmp_mx rc_z
-	bcc .rci_no
-	beq .rci_no
-	clc
-	+lda_mx rc_z
-	+adc_mx rc_sz
-	sec
-	sbc #1
-	cmp col_z
-	bcc .rci_no
-	beq .rci_no
-	sec
-	rts
-.rci_no
-	clc
 	rts
 
 ; ------------------------------------------------------------------

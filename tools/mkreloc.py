@@ -58,10 +58,14 @@ def scan(body: bytes, load: int, sentinel: int, max_id: int) -> list[tuple[int, 
     while i + 2 < n:
         op, lo, hi = body[i], body[i + 1], body[i + 2]
         if op in ABS_OPS and hi == sentinel and lo <= max_id:
-            # adc item_uo,y ($79 $7B $5D) ; sta src_ptr ($85 $02) looks like
-            # eor $0285,x (slope_flags). Nobody emits eor_mx. Drop that window
-            # only — do not skip-3 on every abs op (that jumped real lda $02id,x).
-            if not (op == 0x5D and lo == 0x85):
+            # Nobody emits eor_mx / eor_my ($5D / $59). Unaligned windows alias them:
+            #   adc abs,y ($79 id $5D) ; sta src_ptr ($85 $02) -> eor $0285,x
+            #   ldy oy0h/oy1h ($A4 $59/$5D) ; jsr $xx02 ($20 $02)
+            #     -> eor $0220,y / eor $0220,x
+            # The jsr form fires when .to_sy is at $xx02 and the loader then
+            # overwrites that jsr, so screen Y is the raw projected byte.
+            # Do not skip-3 on every abs op (that jumped real lda $02id,x).
+            if op not in (0x59, 0x5D):
                 recs.append((load + i + 1, lo))
             i += 3
             continue

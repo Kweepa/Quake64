@@ -2052,7 +2052,7 @@ roll_upto
 ; ------------------------------------------------------------------
 ; Hitscan: mid-body project → |sx−CX|≤scan_hit_x (no screen-Y gate;
 ; height auto-aims). Ceiling min 1, then roll_upto → 1..ceiling.
-; SSG: ceiling = scan_dmg_max − z, every cone hit.
+; SSG: ceiling = scan_dmg_max − (z>>1), every cone hit.
 ; Nail: ceiling = scan_dmg_max − (z>>2), closest only.
 ; z in 0..SHOT_Z_MAX-1. Blood splat on closest hit; wall splat on miss.
 shotgun_hitscan
@@ -2196,10 +2196,11 @@ gun_hitscan
 	beq .sh_cone
 	bcs .sh_n
 .sh_cone
-	; SSG ceiling = scan_dmg_max − z, min 1, then 1..ceiling
+	; SSG ceiling = scan_dmg_max − (z>>1), min 1, then 1..ceiling
 	lda scan_dmg_all
 	beq .sh_track
 	lda gidx
+	lsr
 	eor #$ff
 	sec
 	adc scan_dmg_max

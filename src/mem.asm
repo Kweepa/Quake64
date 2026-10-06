@@ -451,7 +451,6 @@ ENEMY_DETECT	= 20		; Chebyshev XZ wake distance
 ENEMY_STEP_MS	= 200		; approach cell cadence (dt acc + remainder)
 PATROL_STEP_MS	= 400		; patrol cell cadence (2× approach; 16-bit)
 APPROACH_MIN_MS	= 1500		; min time in approach before attack (grunt)
-GRUNT_PAINB		= 3		; applied damage ≥ this → painb, else pain
 DOG_REPATH_MS	= 1000		; Rottweiler chase repath cadence (~Wolf DOG_REPATH)
 DOG_WAIT_MS	= 2000		; idle pause when player is on another floor piece
 DEATH_HOLD_MS	= 1600		; EN_DEAD last-frame hold before EN_GONE
@@ -495,7 +494,7 @@ AXE_DMG		= 4			; Quake axe 20 ÷ 5
 AXE_HIT_R		= 3			; XZ chebyshev radius for axe hit test
 SHOT_DMG_MAX	= 11		; Quake SSG 14×4=56 ÷ 5
 SHOT_HIT_X	= 20		; |sx − SCREEN_CX| ≤ this (pixels)
-SHOT_Z_MAX	= 32		; view-Z high max range; SSG ceiling = SHOT_DMG_MAX − z, min 1
+SHOT_Z_MAX	= 32		; view-Z high max range; SSG ceiling = SHOT_DMG_MAX − (z>>1), min 1
 SHOT_MID_H	= 3			; mid-body Y above feet (≈ ENEMY_CULL_H/2)
 NAIL_DMG_MAX	= 2			; Quake nail 9 ÷ 5; ceiling = this − (z>>2), min 1
 NAIL_HIT_X	= 6			; |sx − SCREEN_CX| ≤ this (pixels)
@@ -853,7 +852,7 @@ dodge_i		= $CF25			; 0..4 probe index, live across enemy_probe_dir
 ; Hitscan params (live during gun_hitscan / splat_aim_jitter)
 scan_hit_x	= $CF26			; |sx−CX| max (inclusive)
 scan_hit_y	= $CF27			; |sy−64| max, $ff = no Y gate (both guns)
-scan_dmg_max	= $CF28			; SSG ceiling = this − z; nail = this − (z>>2)
+scan_dmg_max	= $CF28			; SSG ceiling = this − (z>>1); nail = this − (z>>2)
 scan_dmg_all	= $CF29			; 1 = damage every cone hit (SSG)
 scan_jx_mask	= $CF2A			; splat rnd X mask
 scan_jx_bias	= $CF2B

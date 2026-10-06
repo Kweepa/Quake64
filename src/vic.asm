@@ -33,6 +33,7 @@ init_vic
 	sta palette_dirty
 	sta draw_buf
 	sta show_buf
+	sta pub_ph
 	lda #D018_A_BOT
 	sta show_d018_bot
 	jsr set_draw_ptrs
@@ -219,6 +220,40 @@ apply_show
 	ldx show_buf
 	lda show_bot_tab,x
 	sta show_d018_bot
+	lda frame_flag			; stamp after the stores: an IRQ in between
+	sta pub_ff			; only moves irq_phase forward (stays safe)
+	lda irq_phase
+	sta pub_ph
+	rts
+
+; main calls this before clear_draw. The buffer about to be cleared is the one
+; that was on screen when the last frame was published, and the beam may still
+; be reading it:
+;   pub_ph 0 (before the view IRQ): the view IRQ picked up the new buffer, the
+;            old one never shows this frame.
+;   pub_ph 1 (view..split): old top charset is on screen until the split IRQ
+;            (the split already takes the new bottom).
+;   pub_ph 2 (split..flyback): old bottom charset is on screen until .top.
+; At 1 MHz the update chain between publish and clear is longer than a frame,
+; so this almost never waits. At turbo it does: without it clear_draw blanks
+; the old bottom charset under the beam (a missing lower half, every few
+; frames).
+wait_draw_free
+	lda pub_ph
+	beq .wdf_ok
+.wdf_w
+	lda frame_flag
+	cmp pub_ff
+	bne .wdf_ok			; flyback ran since the publish
+	lda pub_ph
+	cmp #1
+	beq .wdf_top
+	jmp .wdf_w			; published after the split: wait for flyback
+.wdf_top
+	lda irq_phase
+	cmp #1
+	beq .wdf_w			; still in the top half: wait for the split
+.wdf_ok
 	rts
 
 set_draw_ptrs

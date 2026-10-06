@@ -9,7 +9,8 @@
 ; $FFFA–$FFFF overlay unused UI char 255 (init_irq).
 ;
 ; Boot $0801: koala cover (splashc/splash), then menu overlay, then game at $0900.
-; Survives GAME load: reboot stub $08F9, level_num $08FC, selectors $08FD–$08FF.
+; Survives GAME load: rb_n $08F5-$08F6, reboot stub $08F9, level_num $08FC,
+; selectors $08FD–$08FF.
 ; $01: $30 = 64K RAM (game / copy_tab). $36 = I/O + KERNAL, BASIC out (init/IRQ).
 ; $34 is not I/O — PLA gives RAM at $D000 when LORAM=HIRAM=0.
 BANK_RAM	= $30
@@ -46,6 +47,15 @@ KRILL_INSTALL	= $2000			; transient; MENU/GAME overwrite it after use
 
 LOADER_BASE	= $0801
 LOCODE_BASE	= $0900			; MENU overlay, then game
+; Mid-split delay count, written by menu rb_calibrate, read by irq rb_delay
+; (rbdelay.asm). lo = first-pass count (0 = 256), hi = number of passes
+; (1..RB_HI_LIM; 0 or above is invalid and init_irq restores the 1 MHz count).
+; n = lo + 256*(hi-1) loop units of 5 CPU cycles. $08F7-$08F8 free.
+RB_CELL		= $08F5
+rb_n_lo		= $08F5
+rb_n_hi		= $08F6
+RB_HI_LIM	= 8			; n up to 2048
+RB_K_SPLIT	= 3			; 1 MHz mid split: write at poll edge + 48..54
 REBOOT_STUB	= $08F9			; 3-byte JMP reboot_game (installed at start)
 level_num	= $08FC			; 1..8 → e1m1..e1m8
 effects_vol	= $08FD			; menu SFX level 0..15 → SID $d418
@@ -108,13 +118,13 @@ SCREEN_XMAX	= 192
 MARGIN_CH	= 192			; col 24 row 0 — solid glyph, not cleared
 
 ; PAL text starts at raster 51 (YSCROLL=3). HUD 9 rows, then 16-row viewport.
-; View/split: IRQ on the line *before* the last band line, wait for that line,
-; delay into the right border / past col 31, then $d018 (and $d021 at HUD→view).
+; HUD→view is untimed (row 8 is a solid black bar, see .view in irq.asm).
+; Mid split: IRQ two lines before the last top-half line L, poll $d012 to L
+; (the edge, not IRQ latency, anchors the write), delay past col 31, $d018.
 ; UI+$d021 black runs in lower flyback after the last text row.
 RASTER_TOP	= 251			; flyback after last text line (row 24 ends ~250)
-RASTER_VIEW	= 121			; IRQ here; wait for 122, then right-border write
-RASTER_VIEW_LINE	= 122		; last HUD scanline (before badline 123)
-RASTER_SPLIT	= 185			; IRQ here; wait for 186, then right-border write
+RASTER_VIEW	= 118			; HUD row 8 = lines 115-122; stores land ~119
+RASTER_SPLIT	= 184			; IRQ here (L-2); poll to 186, then right-border write
 RASTER_SPLIT_LINE	= 186		; last top-half scanline (before badline 187)
 
 D018_A_TOP	= $04			; matrix $C000, charset $D000
@@ -281,11 +291,11 @@ skel_mul_n	= skel_base_hi + ENEMY_PTR_N
 skel_entry_lo	= skel_mul_n + 1		; streamed draw/lerp entry
 skel_entry_hi	= skel_entry_lo + ENEMY_PTR_N
 SKEL_BSS_END	= skel_entry_hi + ENEMY_PTR_N
-!if CRUSH_BSS_END > REBOOT_STUB {
-	!error "crusher BSS overlaps reboot stub"
+!if CRUSH_BSS_END > RB_CELL {
+	!error "crusher BSS overlaps rb_n cell"
 }
-!if SKEL_BSS_END > REBOOT_STUB {
-	!error "skeleton BSS overlaps reboot stub"
+!if SKEL_BSS_END > RB_CELL {
+	!error "skeleton BSS overlaps rb_n cell"
 }
 ; Port latch in the hole between skeleton BSS and the reboot stub.
 ; AI_ENTRY_LO is $0850; a ring on those pointers sends streamed enemies through garbage.
@@ -310,8 +320,8 @@ DBG_DEATH	= 8
 DBG_RESTART	= 9
 DBG_ALERT	= 10
 DBG_AI		= 11
-!if DBG_END > REBOOT_STUB {
-	!error "dbg latch overlaps reboot stub"
+!if DBG_END > RB_CELL {
+	!error "dbg latch overlaps rb_n cell"
 }
 
 SKEL_MAX_VERTS	= 48
@@ -532,6 +542,8 @@ HURT_HP		= 10			; 10% of PLAYER_HP_MAX
 elev_y		= $CBB0			; MAP_NELEVS (≤4)
 elev_noise_n	= $CBB4			; refcount: SID V3 rumble while elevs move
 den_arm		= $CBB5			; 1 = DEN held off, 2 = view IRQ may set DEN
+pub_ff		= $CBB6			; frame_flag when the draw buffer was published
+pub_ph		= $CBB7			; irq_phase then (0 = before this frame's view IRQ)
 proc_tmp0	= $CBB8
 proc_tmp1	= $CBB9
 proc_tmp2	= $CBBA

@@ -4,7 +4,7 @@
 !zone hud
 
 init_hud
-	; rows 0–8 (360 bytes): spaces + orange colour (matrix A only)
+	; rows 0–7 (320 bytes): spaces + orange colour (matrix A only)
 	ldx #0
 	lda #HUD_CH_SP
 -	sta SCR_A,x
@@ -13,7 +13,7 @@ init_hud
 	ldx #0
 -	sta SCR_A + 256,x
 	inx
-	cpx #104
+	cpx #64
 	bne -
 	ldx #0
 	lda #COL_HUD
@@ -23,8 +23,17 @@ init_hud
 	ldx #0
 -	sta $d800 + 256,x
 	inx
-	cpx #104
+	cpx #64
 	bne -
+	; row 8: the HUD→view seam. Solid glyph, black: .view (irq.asm) switches
+	; charset and $d021 inside it, and the solid bar hides both.
+	ldx #39
+-	lda #MARGIN_CH
+	sta SCR_A + (VIEW_ROW - 1) * 40,x
+	lda #COL_OUTSIDE
+	sta $d800 + (VIEW_ROW - 1) * 40,x
+	dex
+	bpl -
 
 	ldx #0
 -	lda hud_str_title,x

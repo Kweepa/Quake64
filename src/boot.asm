@@ -1,4 +1,4 @@
-; Quake64 disposable boot — fits LOADER_BASE..REBOOT_STUB-1.
+; Quake64 disposable boot — fits LOADER_BASE..RB_CELL-1 ($08F5 rb_n survives).
 ; LOAD splashc @ $4000 → JSR do_splash (koala colour then pixels; Krill install
 ; if USE_KRILL) → MENU @ $0900 → JSR menu → TAB + JSR copy_tab (+3) → file_tab
 ; → JMP $0900.
@@ -174,6 +174,6 @@ end_boot = *
 !if load_file < ENEMY_DATA_LIMIT {
 	!error "EDAT overwrites final load_file routine"
 }
-!if end_boot > REBOOT_STUB {
-	!error "Boot overlaps REBOOT_STUB; end=$", end_boot
+!if end_boot > RB_CELL {
+	!error "Boot overlaps rb_n cell ($08F5); end=$", end_boot
 }

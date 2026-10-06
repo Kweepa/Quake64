@@ -73,6 +73,7 @@ main
 	lda #$ff
 	sta mesh_vmask
 }
+	jsr wait_draw_free
 	jsr clear_draw
 !if PROFILE = 1 {
 	ldy #PROF_CLEAR

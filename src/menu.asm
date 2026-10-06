@@ -1,6 +1,7 @@
 ; Quake64 MENU overlay — load @ LOCODE_BASE ($0900), JSR from boot, then overwritten by GAME.
 ; Entry: +0 run_menu, +3 copy_tab. Hires bitmap UI + proportional Quake font.
 ; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive GAME overwrite).
+; rb_calibrate (rbcal.asm) → rb_n $08F5-$08F6: mid-split delay for the game's IRQ.
 ; Menu music: MUS1..5 loaded from disk to $9000 (random at entry, Jukebox
 ; switches), all 3 SID voices, CIA1 Timer A tick. No interface sounds.
 ; Assembled per disk: -DUSE_KRILL=1 uses loadraw, default uses KERNAL LOAD.
@@ -202,6 +203,7 @@ copy_tab_128
 run_menu
 	jsr music_pick_load			; before SEI: KERNAL/Krill load, splash still up
 	sei
+	jsr rb_calibrate			; CPU:VIC ratio → rb_n ($08F5-6) for the game's mid split
 	jsr init_font_tabs
 	jsr init_menu_vic
 	lda #0
@@ -672,7 +674,7 @@ draw_menu
 	sta cursor_spr_en
 	jmp menu_unblank
 
-; Jukebox only: "Tracks By Mandy Kane" one blank row under the option box.
+; Jukebox only: "Tracks by Mandy Kane" one blank row under the option box.
 draw_track_credit
 	lda menu_id
 	cmp #4
@@ -2426,6 +2428,8 @@ wait_frame
 .wf_rts
 	rts
 
+!source "rbcal.asm"
+
 ; DVD bounce on sprite 0. X is 16-bit (low + $d010 bit 0).
 update_wip_spr
 	lda wip_dx
@@ -2693,7 +2697,7 @@ glyph_w_tab	!fill 96, 0
 glyph_lj	!fill 768, 0			; lead-justified copies of MENU_FONT
 ft_sink		!fill 8, 0			; dummy right-cell when col=39
 
-str_track_credit !scr "Tracks By Mandy Kane",0
+str_track_credit !scr "Tracks by Mandy Kane",0
 str_hint_move	!scr "move",0
 str_hint_adjust	!scr "adjust",0
 str_hint_select	!scr "select",0

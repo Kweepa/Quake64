@@ -33,8 +33,10 @@ def matrix() -> list[int]:
     for row in range(ROWS):
         for col in range(COLS):
             i = row * COLS + col
-            if row < VIEW_ROW:
+            if row < VIEW_ROW - 1:
                 out[i] = HUD_CH_SP
+            elif row < VIEW_ROW:
+                out[i] = MARGIN_CH  # HUD→view seam: solid bar (irq.asm .view)
             elif row < VIEW_ROW + VIEW_H:
                 if col < VIEW_COL or col >= VIEW_COL + VIEW_W:
                     out[i] = MARGIN_CH

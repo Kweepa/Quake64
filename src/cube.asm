@@ -1662,7 +1662,9 @@ cube_clip
 .sxok
 	rts
 
-; A=oy lo Y=oy hi → screen y 0..127 (Y-down: screen = 64 - oy)
+; A=oy lo Y=oy hi → screen y 0..127 (Y-down: screen = 63 - oy). The clip
+; window is oy -64..63; 64 - oy put it on 1..128, so line 0 was never reached
+; (one purple scanline above the first drawn line) and oy=-64 clamped to 127.
 .to_sy
 	eor #$ff
 	clc
@@ -1674,7 +1676,7 @@ cube_clip
 	tay
 	lda nlo
 	clc
-	adc #64
+	adc #63
 	sta nlo
 	tya
 	adc #0

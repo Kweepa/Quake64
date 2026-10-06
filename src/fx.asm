@@ -164,7 +164,7 @@ draw_explosion
 	sta nhi
 	jsr proj_cam_to_proj
 	sec
-	lda #64
+	lda #63				; same origin as cube.asm .to_sy
 	sbc nlo
 	sta oy0l
 	lda #0

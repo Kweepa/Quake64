@@ -1,28 +1,25 @@
 ; Raster chain. No CIA Timer A — keys/SFX once per mid-split (PAL/NTSC sample_ms).
 ; Phases: 0=HUD→view ($d018+$d021), 1=mid-split ($d018), 2=flyback UI ($d018+$d021).
 ;
-; Right-border split (view + mid):
-;   1. IRQ on line L-1 (RASTER_VIEW / RASTER_SPLIT)
-;   2. Wait until $d012 == L (start of the real split line)
-;   3. Burn IRQ_RBORDER_* into post-viewport / right border
-;   4. sta $d018 (and $d021 on view)
+; Mid split (right border, timed):
+;   1. IRQ on line L-2 = 184. The handler prologue is ~60 cycles, so the poll
+;      below always runs, at 1 MHz and at turbo.
+;   2. Poll $d012 until == L = 186 (the raster edge anchors the write, not IRQ
+;      latency)
+;   3. jsr rb_delay (rbdelay.asm): menu-calibrated count in rb_n_* ($08F5-6),
+;      or the 1 MHz count. It tracks the CPU:VIC ratio, so a turbo C64 lands
+;      at the same video cycle as 1 MHz.
+;   4. pla / sta $d018
+; Target: write on L at cycle 48..55 after the edge. Col 31's g-access ends at
+; 47, and sprite 0-2 DMA stalls the CPU from 55. A later write meets sprite
+; 6/7 BA (cycle 4 of 187) or the badline BA (cycle 12) and slips a whole line.
+; tools/sim_rbsplit.py runs these bytes against a raster model at 1-64x.
+; HUD→view is untimed (see .view).
+; Entered at/after L (stalled IRQ, sei tail): write immediately, no poll/burn.
 ; Mid-split then: accum_keys, flush SFX, update_sfx, snapshot holds.
 ; Flyback stays ASAP on 251.
 !zone irq
-
-; After sync to split-line start: 2+N*5-1 = 5N+1 cycles.
-; Mid: preload show_d018_bot, then ldx + delay + pla/sta (5N+11 post-wait).
-; Wait exits ~cycle 6–12; col 31 ends ~47. N=7 → 46cy window: after col 31,
-; still on 186 with sprite 7 DMA (centre splat). N=10 was already end-of-line
-; and splat slipped $d018 onto 187. IRQ_DEBUG_SPLIT pokes are 12cy — drop N
-; by 2 so the stripe matches shipped timing. View: three pla/sta after delay,
-; so N=7 → 36cy + stores still on 122 (N=10 was slipping $d021 onto 123).
-!if IRQ_DEBUG_SPLIT = 1 {
-IRQ_RBORDER_N	= 5
-} else {
-IRQ_RBORDER_N	= 7
-}
-IRQ_RBORDER_VIEW	= 7
+!source "rbdelay.asm"
 
 nmi_rti
 	rti
@@ -100,7 +97,22 @@ init_irq
 	sta $d011
 	lda #1
 	sta $d01a
+
+	; Mid-split delay cell: menu-calibrated; hi 0 / above RB_HI_LIM (cold
+	; start, no menu) → the 1 MHz count.
+	lda rb_n_hi
+	beq .rbi_dflt
+	cmp #RB_HI_LIM + 1
+	bcc .rbi_ok
+.rbi_dflt
+	lda #1
+	sta rb_n_hi
+	lda #RB_K_SPLIT
+	sta rb_n_lo
+.rbi_ok
 	rts
+
++rb_delay_body
 
 ; A/$01 saved first; VIC stores before any mid-split work.
 irq_entry
@@ -128,8 +140,11 @@ irq_entry
 	beq .split
 	jmp .top
 
-; Mid-viewport: preload, sync to 186, right-border $d018, then keys/SFX.
+; Mid-viewport: preload, poll to 186, delay, right-border $d018, then keys/SFX.
 ; accum_keys adds sample_ms into in_* each video frame; main snapshots.
+; IRQ_DEBUG_SPLIT: border white from the prologue, red right after the $d018
+; store (nothing added before it). Red lands at write+6 cycles on line 186; the
+; right border (cycles ~56-62) shows white→red when the write is in [50,56].
 .split
 	txa
 	pha
@@ -137,28 +152,25 @@ irq_entry
 	pha
 	lda show_d018_bot
 	pha
-	lda $d012
-	cmp #RASTER_SPLIT_LINE
-	bcs .split_rb
-	lda #RASTER_SPLIT_LINE
--
-	cmp $d012
-	bne -
-.split_rb
 !if IRQ_DEBUG_SPLIT = 1 {
 	lda #COL_WHITE
 	sta $d020
 }
-	ldx #IRQ_RBORDER_N
+	lda $d012
+	cmp #RASTER_SPLIT_LINE
+	bcs .split_w
+	lda #RASTER_SPLIT_LINE
 -
-	dex
+	cmp $d012
 	bne -
+	jsr rb_delay
+.split_w
+	pla
+	sta $d018
 !if IRQ_DEBUG_SPLIT = 1 {
 	lda #COL_HURT
 	sta $d020
 }
-	pla
-	sta $d018
 	lda #RASTER_TOP
 	sta $d012
 	lda $d011
@@ -179,37 +191,25 @@ irq_entry
 	pla
 	rti
 
-; HUD → viewport: preload, sync to 122, shorter delay (extra stores vs mid).
+; HUD → viewport: untimed. HUD row 8 (lines 115-122) is $c0 (solid glyph) on
+; black colour RAM, and its c-access ran on 115. The IRQ is on 118; both stores
+; land on 119-120, so lines 119-122 render the viewport charset's solid glyph:
+; black whatever $d021 is. Nothing depends on the store cycle, the CPU:VIC
+; ratio, or sprite DMA (an enemy-muzzle / splat sprite on 123 stalls reads
+; from cycle 4 to 55, which used to push a timed $d021 a line late). Only
+; badline 123's c-access (cycle 12) has to come after them.
 .view
 	txa
 	pha
 	tya
 	pha
 	ldx show_buf
-	lda col_bg
-	pha
-	lda show_bot_tab,x
-	pha
 	lda show_top_tab,x
-	pha
-	lda $d012
-	cmp #RASTER_VIEW_LINE
-	bcs .view_rb
-	lda #RASTER_VIEW_LINE
--
-	cmp $d012
-	bne -
-.view_rb
-	ldx #IRQ_RBORDER_VIEW
--
-	dex
-	bne -
-	pla
 	sta $d018
-	pla
-	sta show_d018_bot
-	pla
+	lda col_bg
 	sta $d021
+	lda show_bot_tab,x
+	sta show_d018_bot
 	lda #RASTER_SPLIT
 	sta $d012
 	lda #1

@@ -54,14 +54,14 @@ credits2_text
 
 credits3_text
 	!scr "Line draw routine by michael kircher.",0
+	!scr "music by mandy kane.",0
 	!scr "loader by krill / plush.",0
 	!scr "loader integration by chris masiero.",0
 	!scr "title screen by paul docherty.",0
-	!scr "music by mandy kane.",0
 	!scr " ",0
-	!scr "Thanks all!",0
+	!scr "Thanks y'all!",0
 	!scr " ",0
-	!scr "quake64 v0.90.0",0
+	!scr "quake64 v0.90.3",0
 	!byte 0
 
 credits_lo

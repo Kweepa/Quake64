@@ -18,11 +18,11 @@ kevin cloud, paul steed,
 trent reznor & nine inch nails.
 ^
 Line draw routine by michael kircher.
+music by mandy kane.
 loader by krill / plush.
 loader integration by chris masiero.
 title screen by paul docherty.
-music by mandy kane.
 
-Thanks all!
+Thanks y'all!
 
-quake64 v0.90.0
+Quake64 v0.90.3

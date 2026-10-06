@@ -628,10 +628,10 @@ quit_to_basic
 	cli
 	jmp ($a002)				; BASIC warm start
 
-; Root→eps/jukebox/options/ctrl/help/credits/quit; E1→skill; E2-4→order; skill→start;
+; Root→eps/options/ctrl/help/credits/jukebox/quit; E1→skill; E2-4→order; skill→start;
 ; options stay/back; jukebox tracks→NM_JUKE (item = track)
 next_menu
-	!byte 1, 4, 3, NM_CTRL, NM_HELP, NM_CREDITS, NM_QUIT, 0
+	!byte 1, 3, NM_CTRL, NM_HELP, NM_CREDITS, 4, NM_QUIT, 0
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0, 0, 0
 	!byte NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0, 0
 	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
@@ -667,9 +667,32 @@ draw_menu
 	bcc .dm_l
 
 	jsr draw_hint
+	jsr draw_track_credit
 	lda #1
 	sta cursor_spr_en
 	jmp menu_unblank
+
+; Jukebox only: "Tracks By Mandy Kane" one blank row under the option box.
+draw_track_credit
+	lda menu_id
+	cmp #4
+	beq .dtc
+	rts
+.dtc
+	lda #COL_MAIN
+	sta cell_bg
+	lda #TEXT_COL
+	sta ui_text_col
+	lda box_top
+	clc
+	adc menu_size
+	adc #BOX_VGAP
+	adc #BOX_VGAP
+	adc #1
+	tax
+	lda #<str_track_credit
+	ldy #>str_track_credit
+	jmp print_centered
 
 ; Title two lines above the box. Empty string (main menu) = no heading.
 draw_section_title
@@ -2670,6 +2693,7 @@ glyph_w_tab	!fill 96, 0
 glyph_lj	!fill 768, 0			; lead-justified copies of MENU_FONT
 ft_sink		!fill 8, 0			; dummy right-cell when col=39
 
+str_track_credit !scr "Tracks By Mandy Kane",0
 str_hint_move	!scr "move",0
 str_hint_adjust	!scr "adjust",0
 str_hint_select	!scr "select",0
@@ -2710,8 +2734,8 @@ section_hi
 !source "menu_text.asm"
 
 menu_str_lo
-	!byte <str_new_game, <str_juke, <str_sound, <str_control
-	!byte <str_read_this, <str_credits, <str_quit, 0
+	!byte <str_new_game, <str_sound, <str_control, <str_read_this
+	!byte <str_credits, <str_juke, <str_quit, 0
 	!byte <str_e1, <str_e2, <str_e3, <str_e4
 	!byte <str_back, 0, 0, 0
 	!byte <str_flesh, <str_nails, <str_uv, <str_back
@@ -2721,8 +2745,8 @@ menu_str_lo
 	!byte <str_trk1, <str_trk2, <str_trk3, <str_trk4
 	!byte <str_trk5, <str_back, 0, 0
 menu_str_hi
-	!byte >str_new_game, >str_juke, >str_sound, >str_control
-	!byte >str_read_this, >str_credits, >str_quit, 0
+	!byte >str_new_game, >str_sound, >str_control, >str_read_this
+	!byte >str_credits, >str_juke, >str_quit, 0
 	!byte >str_e1, >str_e2, >str_e3, >str_e4
 	!byte >str_back, 0, 0, 0
 	!byte >str_flesh, >str_nails, >str_uv, >str_back

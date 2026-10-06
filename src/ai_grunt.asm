@@ -21,8 +21,6 @@ ai_grunt_entry
 	beq .approach_attack
 	cmp #AI_CMD_APPROACH_ENTER
 	beq .approach_enter
-	cmp #AI_CMD_PAIN
-	beq .pain
 	rts
 
 .approach_move
@@ -43,26 +41,6 @@ ai_grunt_entry
 	lda #>APPROACH_MIN_MS
 	sta en_timer_h,x
 	jmp select_dodge_dir
-
-; Variant 0 is pain, 1 is painb. Under two clips, main rolls as usual.
-.pain
-	jsr slot_of_y
-	lda enemy_pain_n,y
-	cmp #2
-	bcs .pain_pick
-	lda #AI_CMD_PAIN
-	rts
-.pain_pick
-	lda hit_dmg
-	cmp #GRUNT_PAINB
-	lda #0
-	bcc .pain_set
-	lda #1
-.pain_set
-	ldx enemy_idx
-	sta en_pain_i,x
-	lda #0
-	rts
 
 ; LOS, then miss if rnd8 < dist*4. Hit is 8–15. Muzzle is this same call.
 .fire

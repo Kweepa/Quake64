@@ -650,7 +650,7 @@ cube_project
 	sta PROJ_Y,x
 	lda nhi
 	sta PROJ_YH,x
-	jsr .vhoist
+	jsr vert_hoist
 .pnext
 	inc vindex
 	lda vindex
@@ -662,7 +662,7 @@ cube_project
 
 ; Per-vertex clip data hoisted out of mesh_clip: behind flag (0 here),
 ; outcode from 16-bit PROJ, and screen coords when fully inside.
-.vhoist
+vert_hoist
 	ldx vindex
 	lda #0
 	sta VBEHIND,x
@@ -2197,7 +2197,8 @@ xform_item_at
 	rts
 }
 
-; True-project feet (vert 11); limb PROJ = feet + dCAM * trunc(FOCAL/z) >> 8
+; True-project feet (vert 11); limb PROJ = feet + dCAM * trunc(FOCAL/z) >> 8.
+; Fills PROJ_* and per-vert outcodes. Caller runs mesh_clip.
 ent_far_project
 	lda #NVERTS
 	sta mesh_nwork
@@ -2299,60 +2300,12 @@ ent_far_project
 
 	lda #0
 	sta vindex
-.far_ed
-	lda vindex
-	asl
-	tay
-	lda (edge_ptr),y
-	tay
-	lda PROJ_X,y
-	sta ox0l
-	lda PROJ_XH,y
-	sta ox0h
-	lda PROJ_Y,y
-	sta oy0l
-	lda PROJ_YH,y
-	sta oy0h
-	lda vindex
-	asl
-	tay
-	iny
-	lda (edge_ptr),y
-	tay
-	lda PROJ_X,y
-	sta ox1l
-	lda PROJ_XH,y
-	sta ox1h
-	lda PROJ_Y,y
-	sta oy1l
-	lda PROJ_YH,y
-	sta oy1h
-	ldx vindex
-	lda ox0l
-	ldy ox0h
-	jsr .to_sx
-	sta CLIP_X0,x
-	lda oy0l
-	ldy oy0h
-	jsr .to_sy
-	sta CLIP_Y0,x
-	lda ox1l
-	ldy ox1h
-	jsr .to_sx
-	sta CLIP_X1,x
-	lda oy1l
-	ldy oy1h
-	jsr .to_sy
-	sta CLIP_Y1,x
-	ldx vindex
-	lda #1
-	sta EDGE_VIS,x
+.far_hoist
+	jsr vert_hoist
 	inc vindex
 	lda vindex
-	cmp mesh_ne
-	beq +
-	jmp .far_ed
-+
+	cmp #NVERTS
+	bne .far_hoist
 	rts
 
 ; C=1 if CAM[0] origin is in the view wedge: z>=0, |x|<=z+R, |y|<=z+H
@@ -2523,6 +2476,11 @@ draw_enemies
 	jsr ent_far_project
 !if PROFILE = 1 {
 	ldy #PROF_PROJ
+	jsr prof_add_bucket
+}
+	jsr mesh_clip
+!if PROFILE = 1 {
+	ldy #PROF_CLIP
 	jsr prof_add_bucket
 }
 	jmp .de_draw

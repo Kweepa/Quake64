@@ -21,6 +21,10 @@ ai_ogre_entry
 	beq .approach_attack
 	cmp #AI_CMD_APPROACH_ENTER
 	beq .approach_enter
+	cmp #AI_CMD_ANIM_FIRE
+	bne .og_rts
+	jmp .anim_fire
+.og_rts
 	rts
 
 .attack_end
@@ -92,4 +96,34 @@ ai_ogre_entry
 	sta emuz_pending
 	jmp spawn_ogre_grenade
 .rts
+	rts
+
+; Shoot keeps A = AI_CMD_ANIM_FIRE so the resident table supplies the frame.
+.anim_fire
+	ldx enemy_idx
+	lda en_pain_i,x
+	beq .af_swing
+	lda #AI_CMD_ANIM_FIRE
+	rts
+.af_swing
+	lda #OGRE_SWING_FIRE
+	jsr .crossed
+	bcc .af_own
+	jsr .fire
+.af_own
+	lda #0
+	rts
+
+.crossed
+	bmi .cr_no
+	cmp rot2
+	beq .cr_no
+	bcc .cr_no
+	sta rot1
+	ldx enemy_idx
+	lda en_frame,x
+	cmp rot1
+	rts
+.cr_no
+	clc
 	rts

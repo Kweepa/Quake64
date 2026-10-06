@@ -27,6 +27,10 @@ ai_demon_entry
 	beq .approach_attack
 	cmp #AI_CMD_APPROACH_ENTER
 	beq .approach_enter
+	cmp #AI_CMD_ANIM_FIRE
+	bne .dm_rts
+	jmp .anim_fire
+.dm_rts
 	rts
 
 .approach_move
@@ -151,3 +155,33 @@ ai_demon_entry
 .leap_again
 	lda #0				; leap, variant 0
 	jmp enemy_enter_demon_attack
+
+.anim_fire
+	ldx enemy_idx
+	lda en_pain_i,x
+	bne .af_claw
+	lda #DEMON_LEAP_FIRE
+	bne .af_one
+.af_claw
+	lda #DEMON_MELEE_FIRE
+.af_one
+	jsr .crossed
+	bcc .af_own
+	jsr .fire
+.af_own
+	lda #0
+	rts
+
+.crossed
+	bmi .cr_no
+	cmp rot2
+	beq .cr_no
+	bcc .cr_no
+	sta rot1
+	ldx enemy_idx
+	lda en_frame,x
+	cmp rot1
+	rts
+.cr_no
+	clc
+	rts

@@ -73,6 +73,7 @@ REQUIRED = [
     "load_box_room",
     "elev_noise_on",
     "elev_noise_off",
+    "kill_enemy",
 ]
 
 

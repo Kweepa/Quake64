@@ -33,8 +33,20 @@ ai_shambler_entry
 	jmp .approach_enter
 .nent
 	cmp #AI_CMD_DRAW
-	bne .entry_rts
+	bne .ndraw
 	jmp .draw
+.ndraw
+	cmp #AI_CMD_ANIM_FIRE
+	bne .npain
+	jmp .anim_fire
+.npain
+	cmp #AI_CMD_PAIN_TICK
+	bne .nask
+	jmp .pain_tick
+.nask
+	cmp #AI_CMD_PAIN_ASK
+	bne .entry_rts
+	jmp .pain_ask
 .entry_rts
 	rts
 
@@ -448,4 +460,109 @@ ai_shambler_entry
 	clc
 	rts
 .pr_ok
+	rts
+
+; Old frame in rot2, new frame in en_frame. A = 0: this bank owns the decision.
+.anim_fire
+	ldx enemy_idx
+	lda en_pain_i,x
+	cmp #SHAM_VAR_MAGIC
+	bne .af_melee
+	lda en_frame,x
+	cmp #SHAM_BOLT_LO
+	bcc .af_off
+	cmp #SHAM_BOLT_HI
+	bcs .af_off
+	cmp rot2
+	beq .af_own
+	bcc .af_own
+	jsr .fire
+	lda #0
+	rts
+.af_off
+	lda #0
+	sta sham_arc
+.af_own
+	lda #0
+	rts
+.af_melee
+	lda en_pain_i,x
+	bne .af_claw
+	lda #SHAM_SMASH_FIRE
+	bne .af_one
+.af_claw
+	lda #SHAM_CLAW_FIRE
+.af_one
+	jsr .crossed
+	bcc .af_own
+	jsr .fire
+	lda #0
+	rts
+
+; A = fire frame. C=1 if rot2 < frame <= en_frame.
+.crossed
+	bmi .cr_no
+	cmp rot2
+	beq .cr_no
+	bcc .cr_no
+	sta rot1
+	ldx enemy_idx
+	lda en_frame,x
+	cmp rot1
+	rts
+.cr_no
+	clc
+	rts
+
+.pain_tick
+	lda sham_pain_i
+	cmp #$ff
+	beq .lock_rts
+	sec
+	lda sham_pain_l
+	sbc dt_ms
+	sta sham_pain_l
+	lda sham_pain_h
+	sbc dt_msh
+	sta sham_pain_h
+	bcs .lock_rts
+	lda #$ff
+	sta sham_pain_i
+	lda #0
+	sta sham_pain_l
+	sta sham_pain_h
+.lock_rts
+	rts
+
+; A = 0 enter pain (lock stored). A = 1 no flinch.
+.pain_ask
+	ldx enemy_idx
+	cpx sham_pain_i
+	bne .pa_roll
+	lda sham_pain_l
+	ora sham_pain_h
+	bne .pa_no
+.pa_roll
+	lda hit_dmg
+	cmp #SHAM_PAIN_ALWAYS
+	bcs .pa_yes
+	sta rot0
+	asl
+	clc
+	adc rot0
+	sta rot0
+	jsr rnd8
+	cmp rot0
+	bcs .pa_no
+.pa_yes
+	lda #<SHAM_PAIN_MS
+	sta sham_pain_l
+	lda #>SHAM_PAIN_MS
+	sta sham_pain_h
+	stx sham_pain_i
+	lda #0
+	sta sham_arc
+	rts
+.pa_no
+	lda #1
 	rts

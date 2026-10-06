@@ -470,64 +470,14 @@ enemy_anim_step
 	jsr enemy_enter_approach
 	jmp .eas_n
 .eas_atlen
-	; Latch hit if we landed on / skipped past fire frame: old < fire <= new
-	cpy #ENT_SHAMBLER
-	bne .eas_ff_ogre
-	lda en_pain_i,x
-	cmp #SHAM_VAR_MAGIC
-	bne .eas_sham_melee
-	pla
-	pha
-	cmp #SHAM_BOLT_LO
-	bcc .eas_sham_off
-	cmp #SHAM_BOLT_HI
-	bcs .eas_sham_off
-	cmp rot2
-	beq .eas_sham_skip
-	bcs .eas_sham_fire
-.eas_sham_skip
-	jmp .eas_atlen_go
-.eas_sham_fire
-	jmp .eas_ff_go
-.eas_sham_off
-	lda #0
-	sta sham_arc
-	jmp .eas_atlen_go
-.eas_sham_melee
-	lda en_pain_i,x
-	bne .eas_sham_claw
-	lda #SHAM_SMASH_FIRE
-	bne .eas_ff
-.eas_sham_claw
-	lda #SHAM_CLAW_FIRE
-	bne .eas_ff
-.eas_ff_ogre
-	cpy #ENT_OGRE
-	bne .eas_ff_k
-	lda en_pain_i,x
-	bne .eas_ff_tbl			; shoot uses table
-	lda #OGRE_SWING_FIRE
-	bne .eas_ff
-.eas_ff_k
-	cpy #ENT_KNIGHT
-	bne .eas_ff_dem
-	lda en_pain_i,x
-	bne .eas_ff_katkb
-	lda #KNIGHT_RUNATK_FIRE
-	bne .eas_ff
-.eas_ff_katkb
-	lda #KNIGHT_ATKB_FIRE
-	bne .eas_ff
-.eas_ff_dem
-	cpy #ENT_DEMON
-	bne .eas_ff_tbl
-	lda en_pain_i,x
-	bne .eas_ff_dclaw
-	lda #DEMON_LEAP_FIRE
-	bne .eas_ff
-.eas_ff_dclaw
-	lda #DEMON_MELEE_FIRE
-	bne .eas_ff
+	; Variant fire frames live in the type bank. A unchanged → enemy_fire_frame.
+	lda AI_ENTRY_HI,y
+	beq .eas_ff_tbl
+	lda #AI_CMD_ANIM_FIRE
+	jsr ai_invoke
+	cmp #AI_CMD_ANIM_FIRE
+	beq .eas_ff_tbl
+	jmp .eas_atk_rest
 .eas_ff_tbl
 	tya
 	pha
@@ -537,19 +487,6 @@ enemy_anim_step
 	pla
 	tay
 	lda rot1
-	cpy #ENT_CHTHON
-	bne .eas_ff
-	cmp rot2
-	beq .eas_ch_ff2			; already were on frame 5
-	bcc .eas_ch_ff2			; frame 5 already past
-	sta rot1
-	pla
-	pha
-	cmp rot1
-	bcc .eas_ch_ff2			; not on frame 5 yet
-	bcs .eas_ff_go
-.eas_ch_ff2
-	lda #CHTHON_FIRE2
 .eas_ff
 	bmi .eas_atlen_go			; $ff = none
 	cmp rot2
@@ -1996,38 +1933,22 @@ damage_enemy
 .de_roll
 	+ldy_mx en_type
 	cpy #ENT_SHAMBLER
-	beq .de_sham
+	bne .de_chance
+	lda AI_ENTRY_HI,y
+	beq .de_chance
+	lda #AI_CMD_PAIN_ASK
+	jsr ai_invoke
+	cmp #AI_CMD_PAIN_ASK
+	beq .de_chance
+	cmp #0
+	beq .de_pain
+	jmp .de_rts
+.de_chance
 	jsr rnd8
 	jsr ldy_slot
 	cmp enemy_pain_chance,y
 	bcs .de_rts
 	jmp .de_pain
-.de_sham
-	cpx sham_pain_i
-	bne .de_sham_roll
-	lda sham_pain_l
-	ora sham_pain_h
-	bne .de_rts
-.de_sham_roll
-	lda hit_dmg
-	cmp #SHAM_PAIN_ALWAYS
-	bcs .de_sham_yes
-	sta rot0
-	asl
-	clc
-	adc rot0			; damage * 3 ≈ 256 * damage / 80
-	sta rot0
-	jsr rnd8
-	cmp rot0
-	bcs .de_rts
-.de_sham_yes
-	lda #<SHAM_PAIN_MS
-	sta sham_pain_l
-	lda #>SHAM_PAIN_MS
-	sta sham_pain_h
-	stx sham_pain_i
-	lda #0
-	sta sham_arc
 .de_pain
 	lda #EN_PAIN
 	sta en_state,x
@@ -2048,24 +1969,13 @@ damage_enemy
 .de_rts
 	rts
 
-; Count down the shambler pain lock. $ff index means idle.
+; Shambler pain lock. Body is in the bank so it still counts down off-room.
 sham_pain_tick
-	lda sham_pain_i
-	cmp #$ff
+	ldy #ENT_SHAMBLER
+	lda AI_ENTRY_HI,y
 	beq .spt_rts
-	sec
-	lda sham_pain_l
-	sbc dt_ms
-	sta sham_pain_l
-	lda sham_pain_h
-	sbc dt_msh
-	sta sham_pain_h
-	bcs .spt_rts
-	lda #$ff
-	sta sham_pain_i
-	lda #0
-	sta sham_pain_l
-	sta sham_pain_h
+	lda #AI_CMD_PAIN_TICK
+	jmp ai_invoke
 .spt_rts
 	rts
 

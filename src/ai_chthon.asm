@@ -37,6 +37,14 @@ ai_chthon_entry
 	bne +
 	jmp .ch_draw
 +
+	cmp #AI_CMD_ELEC
+	bne +
+	jmp ch_elec
++
+	cmp #AI_CMD_ANIM_FIRE
+	bne +
+	jmp .ch_anim_fire
++
 	rts
 
 ; en_pat_n = 0 until the rise has been started.
@@ -673,3 +681,211 @@ ai_chthon_entry
 	ldx #0
 	jsr xform_world_vert88
 	jmp project_cam0_screen
+
+; Frame 5 comes from enemy_fire_frame. Frame 17 is the second throw.
+; A = 0: this bank owns both, so the resident table must not also fire.
+.ch_anim_fire
+	ldy #ENT_CHTHON
+	lda enemy_fire_frame,y
+	jsr .ch_crossed
+	bcs .ch_af_go
+	lda #CHTHON_FIRE2
+	jsr .ch_crossed
+	bcc .ch_af_own
+.ch_af_go
+	jsr .ch_fire
+.ch_af_own
+	lda #0
+	rts
+
+.ch_crossed
+	bmi .chcr_no
+	cmp rot2
+	beq .chcr_no
+	bcc .chcr_no
+	sta rot1
+	ldx enemy_idx
+	lda en_frame,x
+	cmp rot1
+	rts
+.chcr_no
+	clc
+	rts
+
+; Electrode crates. Armed by .ch_service; stepped every frame from the resident stub.
+ch_elec
+	lda ch_bolt_l
+	ora ch_bolt_h
+	beq .el_step
+	sec
+	lda ch_bolt_l
+	sbc dt_ms
+	sta ch_bolt_l
+	lda ch_bolt_h
+	sbc dt_msh
+	sta ch_bolt_h
+	bcs .el_frozen
+	jmp .el_bolt_end
+.el_frozen
+	rts
+.el_step
+	ldx #0
+	jsr .el_crate
+	ldx #1
+	jsr .el_crate
+	rts
+
+.el_bolt_end
+	lda #0
+	sta ch_bolt_l
+	sta ch_bolt_h
+	ldx #0
+	jsr .el_up
+	ldx #1
+	jsr .el_up
+	jsr .el_step
+	lda ch_shock
+	bne .el_shock
+	rts
+.el_shock
+	lda #0
+	sta ch_shock
+	ldx ch_enemy
+	stx enemy_idx
+	lda en_state,x
+	cmp #EN_DYING
+	bcc .el_dmg
+	rts
+.el_dmg
+	lda en_hp,x
+	cmp #CH_SHOCK_DMG
+	bcc .el_kill
+	beq .el_kill
+	sec
+	sbc #CH_SHOCK_DMG
+	sta en_hp,x
+	jmp enemy_enter_attack
+.el_kill
+	jmp kill_enemy
+
+; Leave a crate that is already up or rising. Otherwise start the slow rise.
+.el_up
+	lda ch_phase,x
+	beq .el_up_rts
+	cmp #CH_PHASE_RISE
+	beq .el_up_rts
+	cmp #CH_PHASE_HOLD
+	bne .el_up_go
+	jsr elev_noise_on
+.el_up_go
+	lda #CH_PHASE_RISE
+	sta ch_phase,x
+	lda #0
+	sta ch_acc_l,x
+	sta ch_acc_h,x
+.el_up_rts
+	rts
+
+.el_crate
+	lda ch_phase,x
+	beq .elc_rts
+	cmp #CH_PHASE_DOWN
+	beq .elc_down
+	cmp #CH_PHASE_HOLD
+	bne .elc_rise_go
+	jmp .elc_hold
+.elc_rise_go
+	jmp .elc_rise
+.elc_rts
+	rts
+
+.elc_add
+	clc
+	lda ch_acc_l,x
+	adc dt_ms
+	sta ch_acc_l,x
+	lda ch_acc_h,x
+	adc dt_msh
+	sta ch_acc_h,x
+	rts
+
+.elc_down
+	jsr .elc_add
+.elc_dlp
+	lda ch_acc_h,x
+	bne .elc_dstep
+	rts
+.elc_dstep
+	dec ch_acc_h,x
+	lda ch_home,x
+	sec
+	sbc #CH_DROP
+	sta ch_psy
+	ldy ch_crate,x
+	+lda_my crate_y
+	sec
+	sbc #1
+	sta ch_pok
+	cmp ch_psy
+	bcc .elc_dhit
+	beq .elc_dhit
+	+sta_my crate_y
+	jmp .elc_dlp
+.elc_dhit
+	lda ch_psy
+	+sta_my crate_y
+	lda #CH_PHASE_HOLD
+	sta ch_phase,x
+	jsr elev_noise_off
+	lda #<CH_HOLD_MS
+	sta ch_acc_l,x
+	lda #>CH_HOLD_MS
+	sta ch_acc_h,x
+	rts
+
+.elc_hold
+	sec
+	lda ch_acc_l,x
+	sbc dt_ms
+	sta ch_acc_l,x
+	lda ch_acc_h,x
+	sbc dt_msh
+	sta ch_acc_h,x
+	bcc .elc_hold_up
+	rts
+.elc_hold_up
+	jsr elev_noise_on
+	lda #CH_PHASE_RISE
+	sta ch_phase,x
+	lda #0
+	sta ch_acc_l,x
+	sta ch_acc_h,x
+	rts
+
+.elc_rise
+	jsr .elc_add
+.elc_rlp
+	lda ch_acc_h,x
+	bne .elc_rstep
+	rts
+.elc_rstep
+	dec ch_acc_h,x
+	ldy ch_crate,x
+	+lda_my crate_y
+	clc
+	adc #1
+	sta ch_pok
+	cmp ch_home,x
+	bcs .elc_rtop
+	+sta_my crate_y
+	jmp .elc_rlp
+.elc_rtop
+	lda ch_home,x
+	+sta_my crate_y
+	lda #CH_PHASE_UP
+	sta ch_phase,x
+	jsr elev_noise_off
+	lda #0
+	sta ch_acc_l,x
+	sta ch_acc_h,x
+	rts

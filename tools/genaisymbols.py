@@ -36,7 +36,6 @@ REQUIRED = [
     "take_damage",
     "play_sound",
     "spawn_ogre_grenade",
-    "spawn_scrag_spit",
     "enemy_try_step",
     "gren_alloc",
     "gren_fill_slot",

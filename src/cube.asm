@@ -2431,7 +2431,16 @@ draw_enemies
 	beq .de_n
 	+lda_mx en_room
 	cmp room_idx
+	beq .de_in
+	lda spit_on
+	beq .de_n
+	cpx spit_owner
 	bne .de_n
+	lda #0
+	sta spit_on
+	sta spit_flash
+	jmp .de_n
+.de_in
 	jsr .de_one
 .de_n
 	inx
@@ -2458,6 +2467,15 @@ draw_enemies
 	jsr try_bite_splat			; origin in CAM[0], even if off-screen
 	jsr enemy_in_view
 	bcs .de_vis
+	ldx obj_i
+	lda spit_on
+	beq .de_cull
+	cpx spit_owner
+	bne .de_cull
+	lda #0
+	sta spit_on
+	sta spit_flash
+.de_cull
 	jmp .de_one_rts
 .de_vis
 	ldx obj_i
@@ -2534,7 +2552,10 @@ draw_enemies
 	jsr dbg_probe
 	lda ent_type
 	cmp #ENT_SHAMBLER
+	beq .de_bolt
+	cmp #ENT_SCRAG
 	bne .de_one_rts
+.de_bolt
 	tay
 	lda #AI_CMD_DRAW
 	ldx obj_i
@@ -2681,7 +2702,14 @@ kill_enemy
 	sta en_timer_h,x
 	jsr pick_death_var
 	stx enemy_idx
-	jsr clear_spit_if_owner
+	lda spit_on
+	beq .ke_cue
+	cpx spit_owner
+	bne .ke_cue
+	lda #0
+	sta spit_on
+	sta spit_flash
+.ke_cue
 	lda #CUE_DEATH
 	jmp enemy_play_cue
 

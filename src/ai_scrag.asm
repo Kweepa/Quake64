@@ -23,6 +23,10 @@ ai_scrag_entry
 	beq .approach_attack
 	cmp #AI_CMD_APPROACH_ENTER
 	beq .approach_enter
+	cmp #AI_CMD_DRAW
+	bne .no_draw
+	jmp draw_spit
+.no_draw
 	rts
 
 .approach_move
@@ -115,3 +119,5 @@ ai_scrag_entry
 .store
 	+sta_mx en_y
 	rts
+
+!source "spit.asm"

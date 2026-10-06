@@ -1,23 +1,5 @@
 ; Scrag spit — 16-unit tracer (env-clamped 8.8 segment), then hitscan.
-!zone spit
-
-init_spit
-	lda #0
-	sta spit_on
-	sta spit_flash
-	rts
-
-; X = Scrag enemy_idx. Clears live spit owned by X.
-clear_spit_if_owner
-	lda spit_on
-	beq .cso_rts
-	cpx spit_owner
-	bne .cso_rts
-	lda #0
-	sta spit_on
-	sta spit_flash
-.cso_rts
-	rts
+; Sourced from ai_scrag.asm. Resident play only zeros the BSS slot.
 
 ; Launch from wrist; end = 16 toward player midpoint, clamp to cutout/room.
 ; C=1 spawned.
@@ -202,18 +184,6 @@ spit_scale
 	lda div_n0
 	rts
 
-; After the tracer, hit if the player is still on the aim cell.
-update_spit
-	lda spit_on
-	beq .usp_rts
-	lda spit_flash
-	bne .usp_rts
-	jsr spit_hit_player
-	lda #0
-	sta spit_on
-.usp_rts
-	rts
-
 ; C=1 hit. Aim cell vs current cam XZ. spit_on = 2 means a solid blocked the aim.
 spit_hit_player
 	lda spit_on
@@ -248,14 +218,24 @@ spit_abs
 +
 	rts
 
-; Frozen 8.8 segment. draw_enemies leaves mulset as last mesh facing.
+; X = enemy index (AI_CMD_DRAW). Owner mesh is on screen this frame.
+; Stroke while spit_flash counts down; the expiring frame also hits.
 draw_spit
+	cpx spit_owner
+	bne .dsp_leave
 	lda spit_flash
-	beq .dsp_rts
+	beq .dsp_leave
 	dec spit_flash
-	lda spit_room
-	cmp room_idx
-	bne .dsp_rts
+	jsr spit_stroke
+	lda spit_flash
+	bne .dsp_leave
+	jsr spit_hit_player
+	lda #0
+	sta spit_on
+.dsp_leave
+	rts
+
+spit_stroke
 	jsr load_view_trig
 	lda spit_oxl
 	sta org_xl
@@ -272,7 +252,7 @@ draw_spit
 	ldx #0
 	jsr xform_world_vert88
 	jsr project_cam0_screen
-	bcc .dsp_rts
+	bcc .stk_rts
 	sta x0
 	sty y0
 	lda spit_xl
@@ -290,18 +270,16 @@ draw_spit
 	ldx #0
 	jsr xform_world_vert88
 	jsr project_cam0_screen
-	bcs .dsp_end
+	bcs .stk_end
 	lda #0
 	sta CAM_Z
 	lda #2
 	sta CAM_ZH
 	jsr project_cam0_screen
-	bcc .dsp_rts
-.dsp_end
+	bcc .stk_rts
+.stk_end
 	sta x1
 	sty y1
 	jmp draw_line
-.dsp_rts
+.stk_rts
 	rts
-
-spit_end = *

@@ -61,7 +61,7 @@ credits3_text
 	!scr " ",0
 	!scr "Thanks y'all!",0
 	!scr " ",0
-	!scr "quake64 v0.90.3",0
+	!scr "Quake64 v0.90.3",0
 	!byte 0
 
 credits_lo

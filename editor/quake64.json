@@ -1,6 +1,6 @@
 {
   "version": 10,
-  "activeLevel": "E1M1",
+  "activeLevel": "E1M4",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -46,7 +46,7 @@
           "axis": "z",
           "dir": 1,
           "name": "Elevator down",
-          "bgColor": 2,
+          "bgColor": 6,
           "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
@@ -720,10 +720,10 @@
         {
           "id": "b569290e-9dbc-4322-9838-ff8bdf565a1d",
           "kind": "room",
-          "x": 91,
+          "x": 98,
           "y": 48,
           "z": 48,
-          "sx": 30,
+          "sx": 23,
           "sy": 29,
           "sz": 30,
           "face": "+z",
@@ -1017,10 +1017,10 @@
         {
           "id": "6de16972-0cd1-4f8e-8339-1fee688e1d08",
           "kind": "trigger",
-          "x": 91,
+          "x": 98,
           "y": 48,
           "z": 48,
-          "sx": 30,
+          "sx": 23,
           "sy": 4,
           "sz": 30,
           "face": "+z",

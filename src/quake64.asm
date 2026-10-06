@@ -83,7 +83,6 @@ main
 	jsr dbg_probe
 	jsr draw_enemies
 	jsr draw_grenades
-	jsr draw_spit
 	jsr draw_explosion
 
 	lda draw_buf
@@ -111,7 +110,6 @@ main
 	jsr update_floor
 	jsr update_fall
 	jsr update_grenades
-	jsr update_spit
 	jsr update_status
 	jsr update_triggers
 	jsr update_chthon_elec
@@ -136,8 +134,6 @@ mod_fx
 !source "fx.asm"
 mod_grenade
 !source "grenade.asm"
-mod_spit
-!source "spit.asm"
 mod_playsound
 !source "playsound.asm"
 mod_pcsounds

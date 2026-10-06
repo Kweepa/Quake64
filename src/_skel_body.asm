@@ -456,6 +456,8 @@ draw_custom_enemy
 	cmp #ENT_CHTHON
 	beq .dce_go
 	cmp #ENT_SHAMBLER
+	beq .dce_go
+	cmp #ENT_SCRAG
 	bne .dce_nb
 .dce_go
 	tay

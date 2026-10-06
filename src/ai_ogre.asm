@@ -41,7 +41,22 @@ ai_ogre_entry
 .approach
 	jmp enemy_enter_approach
 
+; Hold in the grenade band. Chase during APPROACH_MIN_MS would walk
+; them into saw range before the first attack is allowed.
 .approach_move
+	jsr enemy_chebyshev
+	cmp #OGRE_MELEE_R + 1
+	bcc .ap_chase
+	jsr enemy_cmp_range
+	beq .ap_band
+	bcs .ap_chase
+.ap_band
+	jsr enemy_shot_clear
+	bcc .ap_chase
+	ldx enemy_idx
+	lda #AI_AP_STAND
+	rts
+.ap_chase
 	ldx enemy_idx
 	lda #AI_AP_MOVE
 	rts

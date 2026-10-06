@@ -35,8 +35,9 @@ DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 # Clip-local fire frames (matches the pose-row fire byte). Pinned as an attack key.
 # Grunt is $ff: the shoot cue calls AI_CMD_FIRE, and the shoot soundFrame is
 # pinned on its own so that pose stays stored. Shambler magic and Demon leap
-# are special-cased in enemy.asm; Zombie via AI_CMD_ATTACK_TICK.
-FIRE_FRAME = [255, 5, 4, 6, 2, 5, 5, 255, 5]
+# are special-cased in their AI banks; Zombie via AI_CMD_ATTACK_TICK.
+# Rottweiler is 3: Quake dog_bite is attack4.
+FIRE_FRAME = [255, 5, 3, 6, 2, 5, 5, 255, 5]
 CHTHON_FIRE2 = 17  # second lava throw; keep in sync with mem.asm CHTHON_FIRE2
 # Mid-distance stick LOD threshold (CAM_ZH); Ogre needs more for chainsaw tip.
 DEFAULT_LOD_Z = {

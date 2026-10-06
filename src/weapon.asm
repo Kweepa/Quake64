@@ -652,27 +652,20 @@ try_spend_ammo
 	rts
 .ts_shell
 	lda ammo_shells
-	cmp #2
-	bcc .ts_no
-	sec
-	sbc #2
-	sta ammo_shells
+	beq .ts_no
+	dec ammo_shells
 	sec
 	rts
 .ts_nail
 	lda ammo_nails
 	beq .ts_no
-	sec
-	sbc #1
-	sta ammo_nails
+	dec ammo_nails
 	sec
 	rts
 .ts_gren
 	lda ammo_grenades
 	beq .ts_no
-	sec
-	sbc #1
-	sta ammo_grenades
+	dec ammo_grenades
 	sec
 	rts
 .ts_no

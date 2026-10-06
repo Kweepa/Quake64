@@ -2217,7 +2217,7 @@ export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
 export const MAP_HDR_BYTES = 24;
 
 // Keep in sync with tools/genenemies.py (clip-local fire + role names).
-const FIRE_FRAME = [2, 5, 4, 6, 2, 4, 5, 255, 5];
+const FIRE_FRAME = [2, 5, 3, 6, 2, 4, 5, 255, 5];
 const CHTHON_FIRE2 = 17;
 const PAIN_MAX = 4;
 const ROLE_CLIPS = {

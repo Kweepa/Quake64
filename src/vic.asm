@@ -13,7 +13,7 @@ init_vic
 	lda #$00
 	sta $dd00
 
-	lda #$1b				; DEN, 25 rows, YSCROLL=3, text mode
+	lda #$0b				; 25 rows, YSCROLL=3, text, DEN off
 	sta $d011
 	lda #$08				; 40 cols, no MCM
 	sta $d016
@@ -26,6 +26,8 @@ init_vic
 	lda #COL_HUD_BG
 	sta $d021
 
+	lda #1
+	sta den_arm				; view split sets DEN after first apply_show
 	lda #0
 	sta $d015				; sprites off until init_weapon
 	sta palette_dirty

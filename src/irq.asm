@@ -214,6 +214,15 @@ irq_entry
 	sta $d012
 	lda #1
 	sta irq_phase
+	lda den_arm
+	cmp #2
+	bne .view_pop
+	lda #0
+	sta den_arm
+	lda $d011
+	ora #%00010000				; DEN on after viewport charset
+	sta $d011
+.view_pop
 	pla
 	tay
 	pla

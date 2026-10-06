@@ -532,6 +532,7 @@ HURT_HP		= 10			; 10% of PLAYER_HP_MAX
 
 elev_y		= $CBB0			; MAP_NELEVS (≤4)
 elev_noise_n	= $CBB4			; refcount: SID V3 rumble while elevs move
+den_arm		= $CBB5			; 1 = DEN held off, 2 = view IRQ may set DEN
 proc_tmp0	= $CBB8
 proc_tmp1	= $CBB9
 proc_tmp2	= $CBBA

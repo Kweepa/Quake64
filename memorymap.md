@@ -212,7 +212,8 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CBAC` | 4 | — | Unused |
 | `$CBB0` | 4 | `elev_y` | `MAP_NELEVS` ≤ 4 |
 | `$CBB4` | 1 | `elev_noise_n` | SID V3 rumble refcount |
-| `$CBB5` | 3 | — | Unused |
+| `$CBB5` | 1 | `den_arm` | 1 = DEN held off, 2 = view IRQ may set DEN |
+| `$CBB6` | 2 | — | Unused |
 | `$CBB8` | 6 | `proc_tmp0`…`proc_tmp5` | Process scratch |
 | `$CBBE` | 2 | `in_fwd` | Hold ms (IRQ) |
 | `$CBC0` | 2 | `in_back` | |

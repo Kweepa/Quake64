@@ -88,6 +88,12 @@ main
 	lda draw_buf
 	sta show_buf
 	jsr apply_show
+	lda den_arm
+	cmp #1				; hold until this frame is published
+	bne .den_pub
+	lda #2
+	sta den_arm
+.den_pub
 	jsr prof_frame_sample
 	jsr calc_frame_dt
 	jsr update_hurt_flash

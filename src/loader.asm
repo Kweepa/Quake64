@@ -227,7 +227,7 @@ LoadLevel
 	; Interrupts stay off for the whole load: LoadPrg banks the KERNAL out.
 	lda load_in_play
 	beq .ll_cold
-	jsr init_vic				; DEN on before blank/load
+	jsr init_vic				; DEN stays off through the map load
 	jmp .ll_common
 .ll_cold
 	jsr blank_screen
@@ -560,20 +560,21 @@ maybe_stream_room
 	jsr load_irq_off
 	lda #1
 	sta $d019
+	lda #1
+	sta den_arm				; hold off; cancel a pending arm
+	lda #COL_BORDER
+	sta $d020
+	lda $d011
+	and #%11101111				; DEN off: badlines stall IEC
+	sta $d011
 	lda #0
 	sta col_bg
 	sta col_line
 	jsr fill_viewport_colour
 	lda #0
 	sta $d021
-	lda $d011
-	and #%11101111				; DEN off: badlines stall IEC
-	sta $d011
 	jsr stream_room_enemies
 	bcs .msr_fail
-	lda $d011
-	ora #%00010000
-	sta $d011
 	jsr apply_room_palette
 	jsr fill_viewport_colour
 	lda col_bg

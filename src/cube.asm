@@ -1074,7 +1074,7 @@ cube_clip
 	clc
 	adc e0x
 	sta e0x
-	lda rot1
+	lda div_n1
 	adc e0xh
 	sta e0xh
 	rts
@@ -1091,7 +1091,7 @@ cube_clip
 	clc
 	adc e0y
 	sta e0y
-	lda rot1
+	lda div_n1
 	adc e0yh
 	sta e0yh
 	rts
@@ -1108,7 +1108,7 @@ cube_clip
 	clc
 	adc e1x
 	sta e1x
-	lda rot1
+	lda div_n1
 	adc e1xh
 	sta e1xh
 	rts
@@ -1125,7 +1125,7 @@ cube_clip
 	clc
 	adc e1y
 	sta e1y
-	lda rot1
+	lda div_n1
 	adc e1yh
 	sta e1yh
 	rts
@@ -1170,11 +1170,11 @@ cube_clip
 	ora dhi
 	bne +
 	lda #0
-	sta rot0
-	sta rot1
+	sta div_n0
+	sta div_n1
 	rts
 +
-	jmp lerp16			; rot0:rot1 = (ylo:yhi * n) / d; A=rot0
+	jmp lerp16			; div_n0:div_n1 = (ylo:yhi * n) / d; A=div_n0
 
 .projpair
 	lda e0z
@@ -1362,8 +1362,8 @@ cube_clip
 	sta oc1
 	jmp .cslp
 
-; rot0:rot2 = 16-bit plane, X = 0 (p0) or 1 (p1)
-; lerp16 clobbers rot0/1/2 — save plane and endpoint index
+; rot0:rot2 = 16-bit plane, X = 0 (p0) or 1 (p1).
+; Quotient of the lerp is div_n*, not rot*.
 .csx
 	txa
 	pha
@@ -1525,37 +1525,37 @@ cube_clip
 .addoy0
 	clc
 	lda oy0l
-	adc rot0
+	adc div_n0
 	sta oy0l
 	lda oy0h
-	adc rot1
+	adc div_n1
 	sta oy0h
 	rts
 .addoy1
 	clc
 	lda oy1l
-	adc rot0
+	adc div_n0
 	sta oy1l
 	lda oy1h
-	adc rot1
+	adc div_n1
 	sta oy1h
 	rts
 .addox0
 	clc
 	lda ox0l
-	adc rot0
+	adc div_n0
 	sta ox0l
 	lda ox0h
-	adc rot1
+	adc div_n1
 	sta ox0h
 	rts
 .addox1
 	clc
 	lda ox1l
-	adc rot0
+	adc div_n0
 	sta ox1l
 	lda ox1h
-	adc rot1
+	adc div_n1
 	sta ox1h
 	rts
 

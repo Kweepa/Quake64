@@ -497,7 +497,8 @@ scale_nd
 	sec
 	rts
 
-; rot0:rot1 = (ylo:yhi * nlo) / dlo after scale_nd; A = rot0. Signed, no ±127 clamp.
+; div_n0:div_n1 = (ylo:yhi * nlo) / dlo after scale_nd; A = div_n0.
+; Signed, no ±127 clamp. Does not touch rot*.
 lerp16
 	lda #0
 	sta mul_sign
@@ -538,68 +539,68 @@ lerp16
 	lda dlo
 	bne .mul
 	lda #0
-	sta rot0
-	sta rot1
+	sta div_n0
+	sta div_n1
 	rts
 .mul
 	lda ylo
 	ldy nlo
 	jsr umul8j
 	lda prod_l
-	sta rot0
+	sta div_n0
 	lda prod_h
-	sta rot1
+	sta div_n1
 	lda yhi
 	ldy nlo
 	jsr umul8j
 	clc
-	lda rot1
+	lda div_n1
 	adc prod_l
-	sta rot1
+	sta div_n1
 	lda prod_h
 	adc #0
-	sta rot2
+	sta div_n2
 	jsr div24u8
 	bit mul_sign
 	bpl .ok
 	sec
 	lda #0
-	sbc rot0
-	sta rot0
+	sbc div_n0
+	sta div_n0
 	lda #0
-	sbc rot1
-	sta rot1
+	sbc div_n1
+	sta div_n1
 .ok
-	lda rot0
+	lda div_n0
 	rts
 
-; unsigned 24-bit rot0:rot1:rot2 / dlo → 16-bit quot rot0:rot1 (sat $ffff)
+; unsigned 24-bit div_n0:div_n1:div_n2 / dlo → quot div_n0:div_n1 (sat $ffff)
 ; Leading zero bytes of the numerator only shift zeros through the
 ; remainder, so skip them: shuffle bytes up and run 16 (or 8) iterations.
 div24u8
 	lda #0
 	sta nlo				; remainder
 	ldx #24
-	lda rot2
+	lda div_n2
 	bne .d24
-	lda rot1
-	sta rot2
-	lda rot0
-	sta rot1
+	lda div_n1
+	sta div_n2
+	lda div_n0
+	sta div_n1
 	lda #0
-	sta rot0
+	sta div_n0
 	ldx #16
-	lda rot2
+	lda div_n2
 	bne .d24
-	lda rot1
-	sta rot2
+	lda div_n1
+	sta div_n2
 	lda #0
-	sta rot1
+	sta div_n1
 	ldx #8
 .d24
-	asl rot0
-	rol rot1
-	rol rot2
+	asl div_n0
+	rol div_n1
+	rol div_n2
 	rol nlo
 	lda nlo
 	bcs .dsub
@@ -608,15 +609,15 @@ div24u8
 .dsub
 	sbc dlo
 	sta nlo
-	inc rot0
+	inc div_n0
 .dnext
 	dex
 	bne .d24
-	lda rot2
+	lda div_n2
 	beq .d16
 	lda #$ff
-	sta rot0
-	sta rot1
+	sta div_n0
+	sta div_n1
 .d16
 	rts
 

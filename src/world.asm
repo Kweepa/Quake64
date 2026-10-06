@@ -619,81 +619,16 @@ update_floor
 	bcs .uf_sxz
 	jmp .uf_sn
 .uf_sxz
-	; height = slope_y + (local_8.8 * sy) / run
 	+lda_mx slope_axis
-	bne .uf_sz
+	bne .uf_szf
 	lda cam_xl
-	sta ylo
-	sec
-	lda cam_xh
-	+sbc_mx slope_x
-	sta yhi
-	+lda_mx slope_dir
-	bne .uf_sx_go
-	lda #0
-	sec
-	sbc ylo
-	sta ylo
-	+lda_mx slope_sx
-	sbc yhi
-	sta yhi
-.uf_sx_go
-	+lda_mx slope_sx
-	jmp .uf_sinterp
-.uf_sz
+	jmp .uf_sfrac
+.uf_szf
 	lda cam_zl
+.uf_sfrac
 	sta ylo
-	sec
-	lda cam_zh
-	+sbc_mx slope_z
-	sta yhi
-	+lda_mx slope_dir
-	bne .uf_sz_go
-	lda #0
-	sec
-	sbc ylo
-	sta ylo
-	+lda_mx slope_sz
-	sbc yhi
-	sta yhi
-.uf_sz_go
-	+lda_mx slope_sz
-.uf_sinterp
-	sta dlo				; run
-	beq .uf_sflat
-	stx obj_i
-	+ldy_mx slope_sy
-	lda ylo
-	jsr umul8j			; local_l * sy
-	lda prod_l
-	sta rot0
-	lda prod_h
-	sta rot1
-	lda #0
-	sta rot2
-	ldx obj_i
-	+ldy_mx slope_sy
-	lda yhi
-	jsr umul8j			; local_h * sy → bits 8–23
-	clc
-	lda rot1
-	adc prod_l
-	sta rot1
-	lda rot2
-	adc prod_h
-	sta rot2
-	jsr div24u8			; rot0:rot1 = 8.8 rise
-	ldx obj_i
-	clc
-	+lda_mx slope_y
-	adc rot1
-	sta col_y			; candidate integer; rot0 = fraction
+	jsr slope_height
 	jmp .uf_scheck
-.uf_sflat
-	+lda_mx slope_y
-	sta col_y
-	lda #0
-	sta rot0
 .uf_scheck
 	lda col_y
 	cmp floor_y
@@ -713,7 +648,7 @@ update_floor
 .uf_sadopt
 	lda col_y
 	sta floor_y
-	lda rot0
+	lda div_n0
 	sta floor_yl
 	lda #0
 	sta floor_slope
@@ -730,6 +665,85 @@ update_floor
 	inx
 	jmp .uf_s
 .uf_done
+	rts
+
+; X = slope index. col_x/col_z = world cell. ylo = run-axis fraction.
+; col_y = integer surface, div_n0 = fraction. X preserved.
+slope_height
+	+lda_mx slope_axis
+	bne .sh_z
+	sec
+	lda col_x
+	+sbc_mx slope_x
+	sta yhi
+	+lda_mx slope_dir
+	bne .sh_xgo
+	lda #0
+	sec
+	sbc ylo
+	sta ylo
+	+lda_mx slope_sx
+	sbc yhi
+	sta yhi
+.sh_xgo
+	+lda_mx slope_sx
+	jmp .sh_interp
+.sh_z
+	sec
+	lda col_z
+	+sbc_mx slope_z
+	sta yhi
+	+lda_mx slope_dir
+	bne .sh_zgo
+	lda #0
+	sec
+	sbc ylo
+	sta ylo
+	+lda_mx slope_sz
+	sbc yhi
+	sta yhi
+.sh_zgo
+	+lda_mx slope_sz
+.sh_interp
+	sta dlo
+	beq .sh_flat
+	txa
+	pha
+	+ldy_mx slope_sy
+	lda ylo
+	jsr umul8j
+	lda prod_l
+	sta div_n0
+	lda prod_h
+	sta div_n1
+	lda #0
+	sta div_n2
+	pla
+	tax
+	pha
+	+ldy_mx slope_sy
+	lda yhi
+	jsr umul8j
+	clc
+	lda div_n1
+	adc prod_l
+	sta div_n1
+	lda div_n2
+	adc prod_h
+	sta div_n2
+	jsr div24u8
+	pla
+	tax
+	clc
+	+lda_mx slope_y
+	adc div_n1
+	sta col_y
+	rts
+.sh_flat
+	+lda_mx slope_y
+	sta col_y
+	lda #0
+	sta div_n0
 	rts
 
 sync_eye

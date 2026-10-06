@@ -245,26 +245,30 @@ ai_chthon_entry
 	lda #0
 	sta rot1
 	jsr .ch_mul30
+	lda rot0
+	sta div_n0
+	lda rot1
+	sta div_n1
 	lda #0
-	sta rot2
+	sta div_n2
 	jsr div24u8
 	plp
 	php
 	ldx obj_i
-	lda rot1
+	lda div_n1
 	beq +
 	lda #$7f
-	sta rot0
+	sta div_n0
 +
 	plp
 	bpl +
-	lda rot0
+	lda div_n0
 	eor #$ff
 	clc
 	adc #1
-	sta rot0
+	sta div_n0
 +
-	lda rot0
+	lda div_n0
 	sta gr_vyh,x
 	lda #0
 	sta gr_vyl,x

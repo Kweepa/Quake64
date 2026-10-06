@@ -98,15 +98,15 @@ ai_scrag_entry
 .have_n
 	sta dlo
 	pla
-	sta rot0
+	sta div_n0
 	lda #0
-	sta rot1
-	sta rot2
+	sta div_n1
+	sta div_n2
 	jsr div24u8
 	ldx enemy_idx
 	+lda_mx en_y
 	sec
-	sbc rot0
+	sbc div_n0
 	bcc .clamp
 	cmp proc_tmp2
 	bcs .store

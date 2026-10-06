@@ -97,7 +97,7 @@ spawn_scrag_spit
 	sta spit_zl
 	lda spit_ozh
 	sta spit_zh
-	jmp .ssp_on
+	jmp .ssp_aim
 .ssp_dir
 	lda spit_xl
 	jsr spit_scale
@@ -133,13 +133,8 @@ spawn_scrag_spit
 	lda spit_zh
 	sta ln_bz
 	ldy spit_room
-	jsr line_cutouts_hit
-	bcs .ssp_clamp
-	ldy spit_room
-	jsr load_box_room
-	jsr line_hit_box
-	bcc .ssp_on
-.ssp_clamp
+	jsr line_solids_hit
+	bcc .ssp_aim
 	lda col_x
 	sta spit_xh
 	lda col_y
@@ -150,11 +145,28 @@ spawn_scrag_spit
 	sta spit_xl
 	sta spit_yl
 	sta spit_zl
-.ssp_on
+.ssp_aim
+	lda spit_oxh
+	sta ln_ax
+	lda spit_oyh
+	sta ln_ay
+	lda spit_ozh
+	sta ln_az
+	lda cam_xh
+	sta ln_bx
+	lda cam_yh
+	sta ln_by
+	lda cam_zh
+	sta ln_bz
+	ldy spit_room
+	jsr line_solids_hit
+	lda #1
+	bcc .ssp_set
+	lda #2
+.ssp_set
+	sta spit_on
 	lda #SPIT_FLASH_N
 	sta spit_flash
-	lda #1
-	sta spit_on
 	sec
 	rts
 
@@ -162,32 +174,32 @@ spawn_scrag_spit
 spit_scale
 	pha
 	jsr spit_abs
-	sta rot0
+	sta div_n0
 	lda #0
-	sta rot1
-	sta rot2
-	asl rot0
-	rol rot1
-	rol rot2
-	asl rot0
-	rol rot1
-	rol rot2
-	asl rot0
-	rol rot1
-	rol rot2
-	asl rot0
-	rol rot1
-	rol rot2
+	sta div_n1
+	sta div_n2
+	asl div_n0
+	rol div_n1
+	rol div_n2
+	asl div_n0
+	rol div_n1
+	rol div_n2
+	asl div_n0
+	rol div_n1
+	rol div_n2
+	asl div_n0
+	rol div_n1
+	rol div_n2
 	jsr div24u8
 	pla
 	bpl .ss_p
-	lda rot0
+	lda div_n0
 	eor #$ff
 	clc
 	adc #1
 	rts
 .ss_p
-	lda rot0
+	lda div_n0
 	rts
 
 ; After the tracer, hit if the player is still on the aim cell.
@@ -202,8 +214,11 @@ update_spit
 .usp_rts
 	rts
 
-; C=1 hit. Aim cell vs current cam XZ.
+; C=1 hit. Aim cell vs current cam XZ. spit_on = 2 means a solid blocked the aim.
 spit_hit_player
+	lda spit_on
+	cmp #1
+	bne .shp_no
 	lda spit_room
 	cmp room_idx
 	bne .shp_no

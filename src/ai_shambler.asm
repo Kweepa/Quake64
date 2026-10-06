@@ -178,7 +178,7 @@ ai_shambler_entry
 	lda rot0
 	rts
 
-; Chest → feet + 2. Cutouts, crates in the room, then the room shell.
+; Chest → feet + 2. Room solids via line_solids_hit.
 ; C=1 blocked (end shortened). C=0 clear. sham_best = $ff when clear.
 .trace
 	ldx enemy_idx
@@ -207,75 +207,21 @@ ai_shambler_entry
 	lda #$ff
 	sta sham_best
 	+lda_mx en_room
-	sta sham_pok
 	tay
-	jsr line_cutouts_hit
-	bcc .crates
-	jsr .nearer
-.crates
-	lda #0
-	sta sham_i
-.crate_lp
-	ldx sham_i
-	cpx map_ncrates
-	bcs .shell
-	+lda_mx crate_room
-	cmp sham_pok
-	bne .crate_n
-	+lda_mx crate_sx
-	beq .crate_n
-	sta box_sx
-	+lda_mx crate_x
-	sta box_x
-	+lda_mx crate_y
-	sta box_y
-	+lda_mx crate_z
-	sta box_z
-	+lda_mx crate_sy
-	sta box_sy
-	+lda_mx crate_sz
-	sta box_sz
-	jsr line_hit_box
-	bcc .crate_n
-	jsr .nearer
-.crate_n
-	inc sham_i
-	bne .crate_lp
-.shell
-	ldy sham_pok
-	jsr load_box_room
-	jsr line_hit_box
-	bcc .trace_end
-	jsr .nearer
-.trace_end
-	lda sham_best
-	cmp #$ff
-	beq .trace_clear
-	lda sham_hx
+	jsr line_solids_hit
+	bcc .trace_clear
+	lda ln_best
+	sta sham_best
+	lda col_x
 	sta sham_bx
-	lda sham_hy
+	lda col_y
 	sta sham_by
-	lda sham_hz
+	lda col_z
 	sta sham_bz
 	sec
 	rts
 .trace_clear
 	clc
-	rts
-
-; ln_best/col_* vs sham_best. Smaller t wins.
-.nearer
-	lda ln_best
-	cmp sham_best
-	bcs .nr_rts
-	sta sham_best
-	lda col_x
-	sta sham_hx
-	lda col_y
-	sta sham_hy
-	lda col_z
-	sta sham_hz
-.nr_rts
 	rts
 
 .draw

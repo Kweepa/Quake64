@@ -672,7 +672,10 @@ cur_weapon	= $CC34
 wpn_pose	= $CC35			; POSE_*
 fire_rpt_l	= $CC36
 fire_rpt_h	= $CC37
-; $CC38–$CC3A free (was flash4 timer)
+; Line-vs-AABB temps (util.asm). Not rot0–rot2.
+ln_r0		= $CC38
+ln_r1		= $CC39
+ln_r2		= $CC3A
 mg_frame	= $CC3B
 wpn_x		= $CC3C
 wpn_y		= $CC3D
@@ -920,7 +923,7 @@ col_z		= $CF8E
 col_y		= $CF8F
 obj_i		= $CF90
 face_bits	= $CF91			; which box faces visible
-box_x		= $CF92			; AABB scratch (util indexes box_*,x)
+box_x		= $CF92			; box under test (line/point/draw). A nested load replaces it.
 box_y		= $CF93
 box_z		= $CF94
 box_sx		= $CF95

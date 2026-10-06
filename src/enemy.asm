@@ -1889,7 +1889,7 @@ rb_inset1
 	clc
 	rts
 
-; C=1 clear LOS (no 3D hit on room cutout boxes).
+; C=1 clear LOS (no solid on the segment to the player).
 enemy_shot_clear
 	ldx enemy_idx
 	+lda_mx en_x
@@ -1907,12 +1907,12 @@ enemy_shot_clear
 	lda cam_zh
 	sta ln_bz
 	+ldy_mx en_room
-	jsr line_cutouts_hit
-	bcc .esc_clear
-	clc
-	rts
-.esc_clear
+	jsr line_solids_hit
+	bcs .esc_block
 	sec
+	rts
+.esc_block
+	clc
 	rts
 
 ; X = enemy. Pick en_pain_i = rnd8 % n. A = n.
@@ -2221,9 +2221,9 @@ gun_hitscan
 	+lda_mx en_z
 	sta ln_bz
 	+ldy_mx en_room
-	jsr line_cutouts_hit
+	jsr line_solids_hit
 	bcc .sh_vis
-	jmp .sh_n				; cutout solid (L/T/S notch)
+	jmp .sh_n				; room solid between camera and enemy
 .sh_vis
 	ldx enemy_idx
 	+lda_mx en_x
@@ -2378,8 +2378,8 @@ shotgun_hit_splat
 .shs_rts
 	rts
 
-; Miss splat at nearest cutout hit, else outer-room wall.
-; View trig loaded.
+; Miss splat at the nearest room solid (cutout, crate, platform, elevator,
+; crusher, ramp, or the outer wall). View trig loaded.
 shotgun_miss_splat
 	lda cam_xh
 	sta ln_ax
@@ -2408,12 +2408,9 @@ shotgun_miss_splat
 	ldy room_idx
 	jsr line_fit_b
 	ldy room_idx
-	jsr line_cutouts_hit
-	bcs .sms_proj			; nearest cutout
-	ldy room_idx
-	jsr load_box_room
-	jsr line_hit_box
-	bcc .sms_rts
+	jsr line_solids_hit
+	bcs .sms_proj
+	rts
 .sms_proj
 	lda col_x
 	sta ent_wx
@@ -2441,8 +2438,6 @@ shotgun_miss_splat
 	ldx rot0
 	lda rot2
 	jmp start_splat
-.sms_rts
-	rts
 
 ; A/Y = base sx/sy → /2, then splat_aim_half.
 splat_aim_jitter

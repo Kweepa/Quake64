@@ -263,7 +263,7 @@ SKEL_RISE = 16
 }
 
 ; X = obj_i. Chthon only: skel_sink:skel_sinkh = n/(len−1) * SKEL_RISE, 8.8.
-; Other custom skeletons stay on the placed Y. Clobbers rot0..rot2, dlo, nlo, Y.
+; Other custom skeletons stay on the placed Y. Divide uses div_n*, not rot*.
 skel_sink_calc
 	lda #0
 	sta skel_sink
@@ -309,22 +309,22 @@ skel_sink_calc
 	bcc .ss_div
 	lda dlo
 .ss_div
-	sta rot2
+	sta div_n2
 	asl
 	asl
 	asl
 	asl
-	sta rot1
-	lsr rot2
-	lsr rot2
-	lsr rot2
-	lsr rot2
+	sta div_n1
+	lsr div_n2
+	lsr div_n2
+	lsr div_n2
+	lsr div_n2
 	lda #0
-	sta rot0
+	sta div_n0
 	jsr div24u8
-	lda rot0
+	lda div_n0
 	sta skel_sink
-	lda rot1
+	lda div_n1
 	sta skel_sinkh
 	rts
 

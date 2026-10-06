@@ -46,7 +46,9 @@ rest_cnt	= save_x		; Bresenham: remaining pixels after y=64 split (not live duri
 bitpos		= $10			; x0&7 for SMC jump
 colptr		= $4e			; + $4f  64-byte charset column
 
-; Cube rotate scratch (not used by draw_line)
+; Cube rotate temps. NOT general scratch — callers hold these across jsr
+; (near-clip keeps a plane in rot0:rot2 across lerp16). Do not park a
+; value here, and do not alias them.
 rot0		= $40
 rot1		= $41
 rot2		= $42
@@ -149,6 +151,12 @@ sfx_zp_h	= $8b
 edge_ptr	= $8c			; + $8d → edge table
 gx_ptr		= $8e			; + $8f
 ; $90–$bf: no game labels (KERNAL)
+
+; div24u8 dividend in, 16-bit quotient back in div_n0:div_n1. Not rot*.
+; $c5/$c6 are KERNAL LSTX/NDX (menu clears $c6). $c3/$c4 unused.
+div_n0		= $c0
+div_n1		= $c1
+div_n2		= $c2
 
 ; Unique X/Z mesh rotate (xform_mesh_xz)
 mesh_nx		= $c7			; unique X count

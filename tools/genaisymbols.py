@@ -69,6 +69,7 @@ REQUIRED = [
     "project_cam0_screen",
     "draw_line",
     "line_cutouts_hit",
+    "line_solids_hit",
     "line_hit_box",
     "load_box_room",
     "elev_noise_on",

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Menu music: mkmusic/*.sid → mus1.prg .. mus5.prg (load @ $9000).
+"""Menu music: mkmusic/*.sid → mus1.prg .. mus3.prg (load @ $9000).
 
 SidTracker64 player, CIA-timed (init programs $dc04/05; the rate differs per
-tune, 25..48 Hz). All five share one player layout: $9000 init, $9003 play,
+tune, 25..48 Hz). All three share one player layout: $9000 init, $9003 play,
 ZP $f0-$f7, and a single `sta $d418` at $9057 that runs every tick with the
 tune's filter-mode nibble ($0f / $1f).
 
@@ -20,13 +20,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Track n (1-based) → source SID. Names come later from the musician.
+# Track n (1-based) → source SID.
+# MK_DOOM_21 and MK_DOOM_5 are Doom tracks, not shipped here.
 TRACKS = (
-    "MK_DOOM_REFERENCE.sid",
-    "MK_DOOM_21_REFERENCE.sid",
-    "MK_DOOM_33_REFERENCE.sid",
-    "MK_DOOM_4_REFERENCE_ringfix.sid",
-    "MK_DOOM_5_REFERENCE.sid",
+    "MK_DOOM_REFERENCE.sid",            # Searching for Quake
+    "MK_DOOM_33_REFERENCE.sid",         # Through the Slipgate
+    "MK_DOOM_4_REFERENCE_ringfix.sid",  # Realms of Chthon
 )
 
 LOAD = 0x9000

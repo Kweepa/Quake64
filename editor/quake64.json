@@ -1,6 +1,6 @@
 {
   "version": 10,
-  "activeLevel": "E1M4",
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -1078,7 +1078,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 2,
-          "enabled": false,
+          "enabled": true,
           "roomId": "acd16743-53cd-4404-bf31-cc8dc48e1434"
         },
         {
@@ -1386,7 +1386,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 2,
-          "enabled": true,
+          "enabled": false,
           "roomId": "1b122344-2ed7-4b82-a2e2-7e3a7c37caef"
         }
       ]
@@ -5957,7 +5957,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 0,
-          "enabled": false,
+          "enabled": true,
           "roomId": "5a27cfc1-63ed-4fd2-bd91-f1cbb0cd9528"
         },
         {
@@ -8384,7 +8384,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 1,
-          "enabled": true,
+          "enabled": false,
           "roomId": "6ea37ef6-9498-4caa-bedd-1605f29b391f"
         },
         {

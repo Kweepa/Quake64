@@ -37,8 +37,6 @@ FILES_TAIL = (
     ("mus1.prg", "mus1,p"),
     ("mus2.prg", "mus2,p"),
     ("mus3.prg", "mus3,p"),
-    ("mus4.prg", "mus4,p"),
-    ("mus5.prg", "mus5,p"),
     ("menu.prg", "menu,p"),
     ("tab.prg", "tab,p"),
     ("fnt.prg", "fnt,p"),

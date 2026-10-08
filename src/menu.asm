@@ -2,7 +2,7 @@
 ; Entry: +0 run_menu, +3 copy_tab. Hires bitmap UI + proportional Quake font.
 ; difficulty → $08FF; effects_vol/game_complete → $08FD/$08FE (survive GAME overwrite).
 ; rb_calibrate (rbcal.asm) → rb_n $08F5-$08F6: mid-split delay for the game's IRQ.
-; Menu music: MUS1..5 loaded from disk to $9000 (random at entry, Jukebox
+; Menu music: MUS1..3 loaded from disk to $9000 (random at entry, Jukebox
 ; switches), all 3 SID voices, CIA1 Timer A tick. No interface sounds.
 ; Assembled per disk: -DUSE_KRILL=1 uses loadraw, default uses KERNAL LOAD.
 !cpu 6502
@@ -637,10 +637,10 @@ next_menu
 	!byte 2, NM_ORDER, NM_ORDER, NM_ORDER, NM_BACK, 0, 0, 0
 	!byte NM_START, NM_START, NM_START, NM_BACK, 0, 0, 0, 0
 	!byte 3, 3, NM_BACK, 0, 0, 0, 0, 0
-	!byte NM_JUKE, NM_JUKE, NM_JUKE, NM_JUKE, NM_JUKE, NM_BACK, 0, 0
+	!byte NM_JUKE, NM_JUKE, NM_JUKE, NM_BACK, 0, 0, 0, 0
 
 menu_sizes
-	!byte 7, 5, 4, 3, 6
+	!byte 7, 5, 4, 3, 4
 
 ; --- drawing ---------------------------------------------------------------
 draw_menu
@@ -2648,7 +2648,7 @@ menu_mux_phase	!byte 0
 menu_raster_en	!byte 0
 music_en	!byte 0
 music_ok	!byte 0				; 1 = MUSn resident at $9000
-music_track	!byte 0				; 0..4 playing / selected
+music_track	!byte 0				; 0..2 playing / selected
 music_zp	!fill MUSIC_ZP_N, 0		; player's $f0-$f7 while the menu owns ZP
 hint_spr_x	!byte 0, 0, 0
 cursor_spr_x	!byte 0
@@ -2709,11 +2709,9 @@ str_read_this	!scr "Read This!",0
 str_credits	!scr "Credits",0
 str_quit	!scr "Quit",0
 str_back	!scr "Back",0
-str_trk1	!scr "Track 1",0
-str_trk2	!scr "Track 2",0
-str_trk3	!scr "Track 3",0
-str_trk4	!scr "Track 4",0
-str_trk5	!scr "Track 5",0
+str_trk1	!scr "Searching for Quake",0
+str_trk2	!scr "Through the Slipgate",0
+str_trk3	!scr "Realms of Chthon",0
 str_e1		!scr "Dimension of the Doomed",0
 str_e2		!scr "The Realm of Black Magic",0
 str_e3		!scr "The Netherworld",0
@@ -2728,12 +2726,14 @@ str_sec_main	!byte 0				; main: no heading, box is already centered
 str_sec_new	!scr "Which episode to play?",0
 str_sec_skill	!scr "Skill",0
 str_sec_sound	!scr "Options",0
-str_sec_juke	!scr "Now playing: Track 1",0	; digit at +19 (sync_juke_title)
+str_now1	!scr "Now playing: Searching for Quake",0
+str_now2	!scr "Now playing: Through the Slipgate",0
+str_now3	!scr "Now playing: Realms of Chthon",0
 
 section_lo
-	!byte <str_sec_main, <str_sec_new, <str_sec_skill, <str_sec_sound, <str_sec_juke
+	!byte <str_sec_main, <str_sec_new, <str_sec_skill, <str_sec_sound, <str_now1
 section_hi
-	!byte >str_sec_main, >str_sec_new, >str_sec_skill, >str_sec_sound, >str_sec_juke
+	!byte >str_sec_main, >str_sec_new, >str_sec_skill, >str_sec_sound, >str_now1
 
 !source "menu_text.asm"
 
@@ -2746,8 +2746,8 @@ menu_str_lo
 	!byte 0, 0, 0, 0
 	!byte <str_fx_vol, <str_mouse, <str_back, 0
 	!byte 0, 0, 0, 0
-	!byte <str_trk1, <str_trk2, <str_trk3, <str_trk4
-	!byte <str_trk5, <str_back, 0, 0
+	!byte <str_trk1, <str_trk2, <str_trk3, <str_back
+	!byte 0, 0, 0, 0
 menu_str_hi
 	!byte >str_new_game, >str_sound, >str_control, >str_read_this
 	!byte >str_credits, >str_juke, >str_quit, 0
@@ -2757,8 +2757,8 @@ menu_str_hi
 	!byte 0, 0, 0, 0
 	!byte >str_fx_vol, >str_mouse, >str_back, 0
 	!byte 0, 0, 0, 0
-	!byte >str_trk1, >str_trk2, >str_trk3, >str_trk4
-	!byte >str_trk5, >str_back, 0, 0
+	!byte >str_trk1, >str_trk2, >str_trk3, >str_back
+	!byte 0, 0, 0, 0
 
 !source "menu_title.asm"
 !source "menu_hint_spr.asm"

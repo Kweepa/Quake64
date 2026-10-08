@@ -19,7 +19,7 @@ trent reznor & nine inch nails.
 ^
 Line draw routine by michael kircher.
 music by mandy kane.
-loader by krill / plush.
+loader by krill/plush.
 loader integration by chris masiero.
 title screen by paul docherty.
 

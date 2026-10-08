@@ -1,4 +1,4 @@
-; Menu music loader + Jukebox switch. MUS1..MUS5 (tools/genmusic.py) load at
+; Menu music loader + Jukebox switch. MUS1..MUS3 (tools/genmusic.py) load at
 ; MUSIC_BASE ($9000) from disk. Krill vs KERNAL is chosen at assemble time
 ; (build.bat assembles menu.asm once per disk).
 
@@ -9,15 +9,15 @@ music_pick_load
 	lda $a2					; jiffy clock lo
 	eor $dc04				; free-running KERNAL timer A lo
 .mpl_mod
-	cmp #5
+	cmp #3
 	bcc .mpl_ok
-	sbc #5
+	sbc #3
 	bcs .mpl_mod
 .mpl_ok
 	sta music_track
 	; fall through
 
-; A = track 0..4 → MUSn at $9000. Needs I=0 and $01=$36 on entry (see
+; A = track 0..2 → MUSn at $9000. Needs I=0 and $01=$36 on entry (see
 ; menu_sfx_done). Leaves $01=$36, I=0. music_ok = 1 when the file loaded.
 music_load
 	clc
@@ -61,7 +61,7 @@ music_load
 	sta $dd00
 	rts
 
-; A = track 0..4, menu IRQs live. Silences, reloads, restarts, repaints.
+; A = track 0..2, menu IRQs live. Silences, reloads, restarts, repaints.
 jukebox_select
 	sta music_track
 	lda wip_spr_en
@@ -76,12 +76,16 @@ jukebox_select
 	jsr sync_juke_title
 	jmp draw_menu
 
-; "Now playing: Track N" heading of the Jukebox menu.
+; Jukebox heading follows music_track (menu id 4).
 sync_juke_title
-	lda music_track
-	clc
-	adc #'1'
-	sta str_sec_juke + 19
+	ldx music_track
+	lda juke_now_lo,x
+	sta section_lo + 4
+	lda juke_now_hi,x
+	sta section_hi + 4
 	rts
+
+juke_now_lo	!byte <str_now1, <str_now2, <str_now3
+juke_now_hi	!byte >str_now1, >str_now2, >str_now3
 
 music_name	!text "MUS1", 0

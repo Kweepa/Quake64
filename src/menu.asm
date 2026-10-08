@@ -529,6 +529,12 @@ menu_select
 	sta menu_item
 	lda tmp0
 	sta menu_id
+	cmp #2					; skill: cursor starts on Hard as Nails
+	bne .ms_nsk
+	lda #1
+	sta menu_item
+.ms_nsk
+	lda menu_id
 	cmp #4					; Jukebox: cursor starts on the playing track
 	bne .ms_nj
 	lda music_track

@@ -52,16 +52,17 @@ DEFAULT_LOD_Z = {
     "Demon": 8,
 }
 
-HP_QUAKE = {
-    "Grunt": 30,
-    "Rottweiler": 25,
-    "Knight": 75,
-    "Scrag": 80,
-    "Ogre": 200,
-    "Shambler": 600,
-    "Chthon": 400,
-    "Zombie": 60,
-    "Demon": 300,
+# Game byte (Quake health / 5). editor/quake64.json "hp" overrides this.
+DEFAULT_HP = {
+    "Grunt": 6,
+    "Knight": 15,
+    "Rottweiler": 5,
+    "Scrag": 16,
+    "Ogre": 40,
+    "Shambler": 120,
+    "Chthon": 80,
+    "Zombie": 12,
+    "Demon": 60,
 }
 
 # Resident only while the type's bank is loaded. Two slots, not N columns.
@@ -982,6 +983,15 @@ def pack_poses(
     return pack_axis(gx), pack_axis(gy), pack_axis(gz), pose_map, n_stored
 
 
+def enemy_hp_byte(enemy: dict, name: str) -> int:
+    raw = enemy.get("hp", DEFAULT_HP[name])
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        v = DEFAULT_HP[name]
+    return max(1, min(255, v))
+
+
 def main() -> None:
     doc = json.loads(DOC.read_text(encoding="utf-8"))
     by_name = {e["name"]: e for e in doc["enemies"]}
@@ -1082,7 +1092,7 @@ def main() -> None:
     parts.append("\t!byte " + ",".join(str(b) for b in edge_bytes))
     parts.append("enemy_edge_vert")
     parts.append("\t!byte " + ",".join("0" for _ in all_edges))
-    hp_bytes = ", ".join(str(min(255, HP_QUAKE[t] // 5)) for t in TYPES)
+    hp_bytes = ", ".join(str(enemy_hp_byte(by_name[t], t)) for t in TYPES)
     parts.append(f"enemy_hp_init\t!byte {hp_bytes}")
     parts.append("")
     parts.append("; Two resident rows, copied from the loaded bank. Width 2; variants are slot*4.")

@@ -10,7 +10,7 @@ enemy_edges
 	!byte 0,1,1,2,2,0,2,3,2,4,4,5,2,6,6,7,0,8,8,9,1,10,10,11,7,12
 enemy_edge_vert
 	!byte 0,0,0,0,0,0,0,0,0,0,0,0,0
-enemy_hp_init	!byte 6, 15, 5, 16, 40, 120, 80, 12, 60
+enemy_hp_init	!byte 6, 15, 5, 16, 25, 80, 80, 12, 40
 
 ; Two resident rows, copied from the loaded bank. Width 2; variants are slot*4.
 ; Zeros until patch_enemy_bank. meta_slot_type $ff = empty.

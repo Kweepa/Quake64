@@ -100,6 +100,7 @@ import {
   clampMdlScale,
   clampEnemyLodZ,
   defaultEnemyLodZ,
+  clampEnemyHp,
   WEAPON_KEYS,
   WEAPON_LABELS,
   clampWeaponScale,
@@ -863,6 +864,7 @@ function restore(json) {
   syncClipFromFrameIndex(activeEnemy());
   clampWeaponPreviewFrame();
   markDirty();
+  buildPalette();
   refreshAll();
 }
 
@@ -1259,7 +1261,7 @@ function buildPalette() {
   sep.className = "palette-sep";
   sep.textContent = "Enemies";
   root.appendChild(sep);
-  for (const t of enemyTypesByHp()) {
+  for (const t of enemyTypesByHp(doc.enemies)) {
     root.appendChild(paletteButton(t.name, KINDS.enemy.color, { kind: "enemy", enemy: t.name }));
   }
   bindPaletteIconResize(root);
@@ -1811,7 +1813,7 @@ function renderEnemyList() {
     const li = document.createElement("li");
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.textContent = e.name;
+    btn.textContent = `${e.name}  ${e.hp}`;
     if (i === enemyIndex) btn.className = "active";
     btn.addEventListener("click", () => {
       const prevClip = activeTimelineClip()?.name;
@@ -3326,6 +3328,23 @@ function renderInspector() {
   h.textContent = e.name;
   root.appendChild(h);
 
+  const hpInp = document.createElement("input");
+  hpInp.type = "number";
+  hpInp.min = "1";
+  hpInp.max = "255";
+  hpInp.step = "1";
+  hpInp.value = String(clampEnemyHp(e.hp, e.name));
+  hpInp.title = "Hit points loaded for this type";
+  hpInp.addEventListener("change", () => {
+    pushUndo();
+    e.hp = clampEnemyHp(hpInp.value, e.name);
+    hpInp.value = String(e.hp);
+    markDirty();
+    buildPalette();
+    refreshAll();
+  });
+  root.appendChild(field("Hit points", hpInp));
+
   const lodInp = document.createElement("input");
   lodInp.type = "number";
   lodInp.min = "0";
@@ -4360,6 +4379,7 @@ function applyLoadedDoc(loaded) {
   persistEditorSettings();
   clearUndoHistory();
   markClean();
+  buildPalette();
   refreshAll();
   setStatus(`Loaded ${docFileName()}`);
 }

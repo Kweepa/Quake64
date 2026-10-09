@@ -1480,7 +1480,8 @@ export function normalizeClips(raw, frameCount) {
 
 /**
  * Placeable types. Index is the game type id (FIRE_FRAME / ENT_*).
- * In-game HP is Quake health / 5 (Demon 300 → 60). Lists use enemyTypesByHp().
+ * hp is the default game byte (Quake health / 5). Edited values live on the
+ * enemy record; lists sort by that.
  */
 export const ENEMY_TYPES = [
   { name: "Grunt", hp: 6, scale: [1, 1, 1], rest: { 12: [0, 1, 8] } },
@@ -1570,20 +1571,35 @@ export const ENEMY_TYPES = [
   },
 ];
 
-export function enemyHp(name) {
+export function defaultEnemyHp(name) {
   const t = ENEMY_TYPES.find((e) => e.name === name);
-  return t ? t.hp : 999;
+  return t ? t.hp : 1;
+}
+
+/** Game byte written to enemy_hp_init. Missing or bad values fall back to the type default. */
+export function clampEnemyHp(n, name) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return defaultEnemyHp(name);
+  return Math.max(1, Math.min(255, v | 0));
+}
+
+export function enemyHp(name, enemies) {
+  const rec = (enemies || []).find((e) => e.name === name);
+  if (rec) return clampEnemyHp(rec.hp, name);
+  return defaultEnemyHp(name);
 }
 
 /** Placeable types, lowest HP first. */
-export function enemyTypesByHp() {
-  return [...ENEMY_TYPES].sort((a, b) => a.hp - b.hp);
+export function enemyTypesByHp(enemies) {
+  return [...ENEMY_TYPES].sort(
+    (a, b) => enemyHp(a.name, enemies) - enemyHp(b.name, enemies) || a.name.localeCompare(b.name)
+  );
 }
 
 /** Enemy records, lowest HP first. */
 export function enemiesByHp(enemies) {
   return [...(enemies || [])].sort(
-    (a, b) => enemyHp(a.name) - enemyHp(b.name) || String(a.name).localeCompare(String(b.name))
+    (a, b) => enemyHp(a.name, enemies) - enemyHp(b.name, enemies) || String(a.name).localeCompare(String(b.name))
   );
 }
 
@@ -3252,6 +3268,7 @@ export function createEnemy(name = "Grunt") {
     cues: {},
     mdlRig: emptyMdlRig(),
     lodZ: defaultEnemyLodZ(name),
+    hp: defaultEnemyHp(name),
   };
 }
 
@@ -3731,6 +3748,7 @@ export function normalizeDocument(raw) {
       enemy.cues = parseEnemyCues(e.cues);
       migrateEnemyClipSounds(enemy);
       enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
+      enemy.hp = clampEnemyHp(e.hp, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;
       doc.enemies.push(enemy);

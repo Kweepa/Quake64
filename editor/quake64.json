@@ -1,5 +1,6 @@
 {
   "version": 10,
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -1502,8 +1503,8 @@
           "doorType": "Arch",
           "doorScale": 1,
           "tag": "",
-          "locked": false,
-          "otherRoomId": "4dd2bf61-0d23-44d6-8f4f-0becf91014a7"
+          "otherRoomId": "4dd2bf61-0d23-44d6-8f4f-0becf91014a7",
+          "locked": false
         },
         {
           "id": "4dd2bf61-0d23-44d6-8f4f-0becf91014a7",
@@ -10568,6 +10569,7 @@
         ]
       },
       "lodZ": 4,
+      "hp": 6,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -10748,6 +10750,7 @@
         ]
       },
       "lodZ": 4,
+      "hp": 15,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -10917,6 +10920,7 @@
         ]
       },
       "lodZ": 4,
+      "hp": 5,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -11064,6 +11068,7 @@
         ]
       },
       "lodZ": 4,
+      "hp": 16,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -11250,6 +11255,7 @@
         ]
       },
       "lodZ": 10,
+      "hp": 25,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -11437,6 +11443,7 @@
         ]
       },
       "lodZ": 20,
+      "hp": 80,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -11686,6 +11693,7 @@
         ]
       },
       "lodZ": 40,
+      "hp": 80,
       "customSkeleton": true,
       "stockGraph": {
         "verts": 13,
@@ -12025,6 +12033,7 @@
         ]
       },
       "lodZ": 4,
+      "hp": 12,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -12206,6 +12215,7 @@
         ]
       },
       "lodZ": 8,
+      "hp": 40,
       "customSkeleton": true,
       "stockGraph": {
         "verts": 13,

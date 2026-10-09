@@ -78,7 +78,7 @@ def main() -> None:
     <h1>Quake64</h1>
     <div class="toolbar-actions" role="group" aria-label="Editor mode">
       <button type="button" id="btn-mode-layout" class="active">Maps</button>
-      <button type="button" id="btn-mode-anim">Animation</button>
+      <button type="button" id="btn-mode-anim">Enemies</button>
       <button type="button" id="btn-mode-weapons">Weapons</button>
       <button type="button" id="btn-mode-items">Items</button>
       <button type="button" id="btn-mode-sounds">Sounds</button>

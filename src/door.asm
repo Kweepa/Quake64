@@ -184,7 +184,8 @@ door_y_ok
 ; ------------------------------------------------------------------
 ; try_door_wish — blocked dest-ward wish into a door slab at sill height.
 ; Save cam, add wish on blocked axes, hit door AABB + door_y_ok.
-; Wish on the door axis must point through. Unlocked + other: snap
+; Forward held and yaw within DOOR_AIM of the through-heading; wish on
+; the door axis must still point through. Unlocked + other: snap
 ; into dest inset, C=1. Locked: key HUD, restore, C=0.
 ; ------------------------------------------------------------------
 try_door_wish
@@ -295,8 +296,30 @@ try_door_wish
 	clc
 	rts
 
-; Dest-ward wish on the door axis. Plus face: hi BMI. Minus: lo|hi != 0, hi BPL.
+; Through-heading (0=+Z). Opposite the room-side face.
+door_thru_yaw
+	!byte 128, 0, 192, 64		; PZ, MZ, PX, MX
+
+; Forward held, |yaw − through| ≤ DOOR_AIM, then dest-ward wish.
+; Plus face: hi BMI. Minus: lo|hi != 0, hi BPL. X = door index.
 .tdw_thru
+	lda hold_fwd
+	ora hold_fwd + 1
+	beq .tdw_tno
+	+lda_mx door_face
+	and #3
+	tay
+	lda door_thru_yaw,y
+	eor #$ff
+	sec
+	adc yaw				; yaw − heading
+	cmp #128
+	bcc .tdw_aim
+	eor #$ff
+	adc #0				; |delta|; C still set
+.tdw_aim
+	cmp #DOOR_AIM + 1
+	bcs .tdw_tno
 	+lda_mx door_face
 	lsr				; C=minus, A=0 Z / 1 X
 	bcs .tdw_tm

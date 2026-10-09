@@ -435,6 +435,7 @@ OC_BOT		= 8
 EYE_HEIGHT	= 3
 PLAYER_H	= 4			; Y collision height [feet, feet+PLAYER_H)
 DOOR_Y_SLACK	= 1			; |feet − door_y| to fire a wish-through
+DOOR_AIM	= 32			; yaw ticks (45°) of through-heading to transit
 MOVE_SPEED	= 2			; 8.8 step scale (asl count after wish)
 PLAYER_R	= 1			; XZ collision radius
 ENEMY_BLOCK_R	= 1			; XZ Chebyshev vs player (same cell + neighbors)

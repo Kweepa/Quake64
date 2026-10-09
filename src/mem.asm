@@ -250,7 +250,7 @@ ENEMY_DATA_BASE	= en_sfx_armed + 1	; boot-loaded enemy_data_blob.asm
 }
 ; Pose prefix copied into one of two resident rows. Offsets match genenemies.py.
 META_STAND_START	= 0
-META_ROW		= 42
+META_ROW		= 41
 AI_ENTRY_LO	= $0850			; streamed AI entry pointer per enemy type
 AI_ENTRY_HI	= AI_ENTRY_LO + ENEMY_PTR_N
 ENEMY_DATA_LIMIT	= AI_ENTRY_LO
@@ -355,6 +355,7 @@ AI_CMD_ELEC		= 10
 AI_CMD_ANIM_FIRE	= 11
 AI_CMD_PAIN_TICK	= 12
 AI_CMD_PAIN_ASK		= 13
+AI_CMD_DEATH		= 14		; corpse finished: grunt/ogre drop
 CRUSH_CMD_TICK		= 0
 CRUSH_CMD_SOLID		= 1
 CRUSH_CMD_DRAW		= 2

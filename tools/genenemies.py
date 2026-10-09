@@ -28,7 +28,7 @@ TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon",
 DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie", "demon"]
 ENEMY_POSE_MAX = 7680
 ENEMY_DATA_BASE = 0x0701  # mem.asm asserts en_sfx_armed+1 == $0701
-META_ROW = 42  # mem.asm META_ROW; prepended to every .pose
+META_ROW = 41  # mem.asm META_ROW; prepended to every .pose
 PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
 DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
@@ -80,7 +80,6 @@ RANGE = {
     "Demon": 10,
 }
 PAIN_CHANCE = {"Rottweiler": 0xC0}
-DROP_TYPE = {"Grunt": 7, "Ogre": 4}
 ENEMY_CLASS = {"Rottweiler": 1}
 
 # Single roles: (clip_name, len_override|None). Attack: list of candidate names
@@ -516,7 +515,7 @@ def pad_variants(clips: list[tuple[int, int]]) -> tuple[int, list[int], list[int
 
 
 def build_meta_row(name: str, enemy: dict, nframes: int, n_stored: int, lod: int) -> bytes:
-    """42-byte pose prefix. Offsets match copy_meta_row in loader.asm."""
+    """41-byte pose prefix. Offsets match copy_meta_row in loader.asm."""
     row = bytearray(META_ROW)
     o = 0
     for role in ("stand", "alert", "run", "walk"):
@@ -550,8 +549,6 @@ def build_meta_row(name: str, enemy: dict, nframes: int, n_stored: int, lod: int
     o += 1
     row[o] = PAIN_CHANCE.get(name, 0x80)
     o += 1
-    row[o] = DROP_TYPE.get(name, 0xFF)
-    o += 1
     row[o] = FIRE_FRAME[TYPES.index(name)] & 0xFF
     o += 1
     row[o] = ENEMY_CLASS.get(name, 0)
@@ -575,7 +572,7 @@ def build_meta_row(name: str, enemy: dict, nframes: int, n_stored: int, lod: int
         leap_len = int(leap["len"]) if leap else 0
         print(
             f"Demon attack_n={row[8]} starts={list(row[9:13])} lens={list(row[13:17])} "
-            f"leap_len={leap_len} fire_byte={row[38]}"
+            f"leap_len={leap_len} fire_byte={row[37]}"
         )
         if leap_len < 10:
             raise SystemExit(
@@ -1124,7 +1121,6 @@ def main() -> None:
     for label in (
         "enemy_range",
         "enemy_pain_chance",
-        "enemy_drop_type",
         "enemy_fire_frame",
         "enemy_class",
         "enemy_lod_z",

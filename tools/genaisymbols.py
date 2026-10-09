@@ -76,6 +76,7 @@ REQUIRED = [
     "elev_noise_on",
     "elev_noise_off",
     "kill_enemy",
+    "spawn_death_drop",
 ]
 
 

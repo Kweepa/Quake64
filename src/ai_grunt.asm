@@ -11,6 +11,10 @@
 
 *= AI_LINK_BASE
 ai_grunt_entry
+	cmp #AI_CMD_DEATH
+	bne +
+	jmp .death
++
 	cmp #AI_CMD_FIRE
 	beq .fire
 	cmp #AI_CMD_ATTACK_END
@@ -66,3 +70,7 @@ ai_grunt_entry
 
 .attack_end
 	jmp enemy_enter_approach
+
+.death
+	lda #BP_SHELLS5
+	jmp spawn_death_drop

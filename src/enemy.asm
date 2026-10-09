@@ -314,6 +314,48 @@ eu_dead
 	jsr finish_enemy_death
 	jmp eu_next
 
+; X = enemy finishing death. EN_GONE, then the type bank.
+; Chthon ends the episode. Grunt and ogre drop on AI_CMD_DEATH.
+finish_enemy_death
+	lda #EN_GONE
+	sta en_state,x
+	+lda_mx en_type
+	tay
+	cpy #ENT_CHTHON
+	bne +
+	jmp episode_done
++
+	lda #AI_CMD_DEATH
+	jmp ai_invoke
+
+; A = BP_*. Corpse is enemy_idx. Clobbers X, Y, rot2.
+spawn_death_drop
+	sta rot2
+	ldx #0
+.ddp_lp
+	cpx	map_nenemies
+	bcs .ddp_rts
+	lda drop_taken,x
+	beq .ddp_n
+	ldy enemy_idx
+	+lda_my en_x
+	sta drop_x,x
+	+lda_my en_y
+	sta drop_y,x
+	+lda_my en_z
+	sta drop_z,x
+	+lda_my en_room
+	sta drop_room,x
+	lda rot2
+	sta drop_type,x
+	dec drop_taken,x
+	beq .ddp_rts
+.ddp_n
+	inx
+	bne .ddp_lp
+.ddp_rts
+	rts
+
 eu_next
 	ldx enemy_idx
 	inx

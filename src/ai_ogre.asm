@@ -24,8 +24,12 @@ ai_ogre_entry
 	cmp #AI_CMD_APPROACH_ENTER
 	beq .approach_enter
 	cmp #AI_CMD_ANIM_FIRE
-	bne .og_rts
+	bne +
 	jmp .anim_fire
++
+	cmp #AI_CMD_DEATH
+	bne .og_rts
+	jmp .death
 .og_rts
 	rts
 
@@ -145,6 +149,16 @@ ogre_grenade_live
 	bcc .ogl
 	clc
 	rts
+
+.death
+	lda have_wpn
+	and #HAVE_GREN
+	beq .drop_gl
+	lda #BP_GRENADES
+	jmp spawn_death_drop
+.drop_gl
+	lda #BP_GRENLAUNCHER
+	jmp spawn_death_drop
 
 ; Shoot keeps A = AI_CMD_ANIM_FIRE so the resident table supplies the frame.
 .anim_fire

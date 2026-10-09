@@ -1049,9 +1049,6 @@ copy_meta_row
 	sta enemy_pain_chance,x
 	iny
 	lda (src_ptr),y
-	sta enemy_drop_type,x
-	iny
-	lda (src_ptr),y
 	sta enemy_fire_frame,x
 	iny
 	lda (src_ptr),y

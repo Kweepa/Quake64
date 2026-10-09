@@ -33,7 +33,6 @@ enemy_death_start	!byte 0, 0, 0, 0, 0, 0, 0, 0
 enemy_death_len	!byte 0, 0, 0, 0, 0, 0, 0, 0
 enemy_range	!byte 0, 0
 enemy_pain_chance	!byte 0, 0
-enemy_drop_type	!byte 0, 0
 enemy_fire_frame	!byte 0, 0
 enemy_class	!byte 0, 0
 enemy_lod_z	!byte 0, 0

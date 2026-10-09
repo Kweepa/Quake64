@@ -74,15 +74,15 @@ READTHIS_PAGES = 6
 readthis1_text
 	!scr "You get the phone call at 0400.",0
 	!scr "the commander explains: \"it's about",0
-	!scr "the slipgate device. once we perfect",0
-	!scr "these, we'll be able to transport people",0
+	!scr "the slipgate devices. once we perfect",0
+	!scr "them, we'll be able to transport people",0
 	!scr "and cargo instantly.",0
 	!byte 0
 
 readthis2_text
 	!scr "\"An enemy codenamed quake is using his",0
 	!scr "own slipgates to drop death squads",0
-	!scr "inside our bases to steal, kidnap,",0
+	!scr "inside our bases to plunder, kidnap,",0
 	!scr "and kill.",0
 	!byte 0
 
@@ -111,8 +111,8 @@ readthis5_text
 	!scr "damn, that quake bastard works fast!",0
 	!scr "he heard about operation counterstrike,",0
 	!scr "and hit first. the place is overrun.",0
-	!scr "operation counterstrike is over.",0
-	!scr "except for you.",0
+	!scr "operation counterstrike has been wiped",0
+	!scr "out. except for you.",0
 	!byte 0
 
 readthis6_text

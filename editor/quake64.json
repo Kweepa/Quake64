@@ -3904,7 +3904,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "purpose": "hurt",
+          "purpose": "hurt_small",
           "text": "",
           "tag": "",
           "roomId": "509b8043-73ee-4e67-be27-fb3df68cf6dd"

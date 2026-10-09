@@ -545,8 +545,9 @@ vic_border	= $CBAC			; staged $d020 (IRQ)
 palette_dirty	= $CBAD			; 1 = IRQ refill viewport colour RAM
 flash4_col	= $CBAE			; staged sprite 4 colour
 flash5_col	= $CBAF			; staged sprite 5 colour
-HURT_MS		= 2000			; hurt trigger period
-HURT_HP		= 10			; 10% of PLAYER_HP_MAX
+HURT_MS		= 1000			; hurt trigger period (both sizes)
+HURT_SM_HP	= 2			; small hurt, once per second
+HURT_LG_HP	= 10			; large hurt, once per second
 
 elev_y		= $CBB0			; MAP_NELEVS (≤4)
 elev_noise_n	= $CBB4			; refcount: SID V3 rumble while elevs move

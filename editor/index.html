@@ -3185,11 +3185,12 @@ function usesLinkTag(kind) {
 }
 
 /** Trigger purposes. Tag is used for teleport / elevator / summon / unlock. */
-const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "teleport", "elevator", "summon", "unlock", "lower_electrode", "fire_electrodes"];
+const TRIGGER_PURPOSES = ["message", "end_level", "hurt", "hurt_small", "teleport", "elevator", "summon", "unlock", "lower_electrode", "fire_electrodes"];
 const TRIGGER_PURPOSE_LABELS = {
   message: "Display message",
   end_level: "End of level",
-  hurt: "Hurt player",
+  hurt: "Large hurt",
+  hurt_small: "Small hurt",
   teleport: "Teleport",
   elevator: "Activate elevator",
   summon: "Summon elevator",

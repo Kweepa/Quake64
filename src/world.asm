@@ -2198,7 +2198,10 @@ update_triggers
 	cmp #TRIG_MSG
 	beq .ut_msghold
 	cmp #TRIG_HURT
+	beq .ut_hurt
+	cmp #TRIG_HURT_SM
 	bne .ut_adv
+.ut_hurt
 	lda trig_seen
 	lsr
 	bcs .ut_adv
@@ -2221,7 +2224,7 @@ update_triggers
 	sta hurt_ms_l
 	lda #>HURT_MS
 	sta hurt_ms_h
-	lda #HURT_HP
+	jsr hurt_amount
 	jsr take_damage
 .ut_hn
 	pla
@@ -2277,6 +2280,17 @@ update_triggers
 ut_bits
 	!byte $01,$02,$04,$08,$10,$20,$40,$80
 
+; A = HP for the hurt trigger in X. Small is TRIG_HURT_SM, else large.
+hurt_amount
+	+lda_mx tr_purpose
+	cmp #TRIG_HURT_SM
+	beq .ha_sm
+	lda #HURT_LG_HP
+	rts
+.ha_sm
+	lda #HURT_SM_HP
+	rts
+
 ; X = trigger SoA. On-entry dispatch.
 trig_enter
 	+lda_mx tr_purpose
@@ -2292,6 +2306,8 @@ trig_enter
 .te_act
 	+lda_mx tr_purpose
 	cmp #TRIG_HURT
+	beq .te_hurt
+	cmp #TRIG_HURT_SM
 	beq .te_hurt
 	cmp #TRIG_TELE
 	beq .te_tele
@@ -2321,7 +2337,7 @@ trig_enter
 	sta hurt_ms_l
 	lda #>HURT_MS
 	sta hurt_ms_h
-	lda #HURT_HP
+	jsr hurt_amount
 	jmp take_damage
 .te_elev
 	+lda_mx tr_arg

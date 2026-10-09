@@ -1,12 +1,12 @@
 You get the phone call at 0400.
 the commander explains: "it's about
-the slipgate device. once we perfect
-these, we'll be able to transport people
+the slipgate devices. once we perfect
+them, we'll be able to transport people
 and cargo instantly.
 ^
 "An enemy codenamed quake is using his
 own slipgates to drop death squads
-inside our bases to steal, kidnap,
+inside our bases to plunder, kidnap,
 and kill.
 ^
 "The hell of it is we have no idea
@@ -29,8 +29,8 @@ As you approach the base, you hear shots.
 damn, that quake bastard works fast!
 he heard about operation counterstrike,
 and hit first. the place is overrun.
-operation counterstrike is over.
-except for you.
+operation counterstrike has been wiped
+out. except for you.
 ^
 The heart of the installation holds a
 slipgate. since quake's killers came

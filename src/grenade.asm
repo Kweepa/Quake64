@@ -532,6 +532,17 @@ gren_hit_enemies
 	sta pv1
 	jsr gren_in_y
 	bcc .ghe_n
+	ldx enemy_idx
+	+lda_mx en_type
+	cmp #ENT_ZOMBIE
+	bne .ghe_boom
+	; No knockdown. The burst stands in for the gib.
+	lda obj_i
+	pha
+	jsr finish_enemy_death
+	pla
+	sta obj_i
+.ghe_boom
 	jmp gren_explode
 .ghe_n
 	ldx enemy_idx

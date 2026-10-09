@@ -230,7 +230,7 @@ pose_map_lo	= pose_gz + 13			; patched at pose load (logical → packed)
 pose_map_hi	= pose_map_lo + ENEMY_PTR_N
 enemy_sfx_evt_lo	= pose_map_hi + ENEMY_PTR_N	; cue block + clip event table on pose heap
 enemy_sfx_evt_hi	= enemy_sfx_evt_lo + ENEMY_PTR_N
-en_sfx_old	= enemy_sfx_evt_hi + ENEMY_PTR_N	; local frame before this anim step
+en_sfx_old	= enemy_sfx_evt_hi + ENEMY_PTR_N	; local frame before this anim step; fire cross-check reads it, then the sfx scan rewrites it
 en_sfx_new	= en_sfx_old + 1		; logical frame after the step
 en_sfx_n	= en_sfx_new + 1		; remaining events while scanning
 en_sfx_armed	= en_sfx_n + 1			; 1 = frame changed this anim step
@@ -661,6 +661,7 @@ GREN_DMG_MAX		= 24		; Quake 120 ÷ 5
 GREN_RAD		= 6
 GREN_HIT_R		= 1
 GREN_WRIST_L		= 5			; skeleton "Wrist L"
+GREN_WRIST_R		= 7			; skeleton "Wrist R"
 GREN_R			= $60			; screen-triangle half-extent 0.375
 GREN_VEL_ASR		= 5			; tip = view-vel >> 5
 ; Scrag spit — tracer + delayed hitscan

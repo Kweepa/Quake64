@@ -529,7 +529,7 @@ ai_shambler_entry
 .pr_ok
 	rts
 
-; Old frame in rot2, new frame in en_frame. A = 0: this bank owns the decision.
+; Old frame in en_sfx_old, new frame in en_frame. A = 0: this bank owns the decision.
 .anim_fire
 	ldx enemy_idx
 	lda en_pain_i,x
@@ -540,7 +540,7 @@ ai_shambler_entry
 	bcc .af_off
 	cmp #SHAM_BOLT_HI
 	bcs .af_off
-	cmp rot2
+	cmp en_sfx_old
 	beq .af_own
 	bcc .af_own
 	jsr .fire
@@ -566,10 +566,10 @@ ai_shambler_entry
 	lda #0
 	rts
 
-; A = fire frame. C=1 if rot2 < frame <= en_frame.
+; A = fire frame. C=1 if en_sfx_old < frame <= en_frame.
 .crossed
 	bmi .cr_no
-	cmp rot2
+	cmp en_sfx_old
 	beq .cr_no
 	bcc .cr_no
 	sta rot1

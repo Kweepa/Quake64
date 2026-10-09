@@ -35,7 +35,9 @@ DEATH_KEY = re.compile(r"^(bdeath|death[a-z]?)$")
 # Clip-local fire frames (matches the pose-row fire byte). Pinned as an attack key.
 # Grunt is $ff: the shoot cue calls AI_CMD_FIRE, and the shoot soundFrame is
 # pinned on its own so that pose stays stored. Shambler magic and Demon leap
-# are special-cased in their AI banks; Zombie via AI_CMD_ATTACK_TICK.
+# are special-cased in their AI banks. Zombie is $ff too: AI_CMD_ANIM_FIRE
+# throws at attack_len-3 (the melee sound, two frames before the last), and
+# pack_poses pins that frame.
 # Rottweiler is 3: Quake dog_bite is attack4.
 FIRE_FRAME = [255, 5, 3, 6, 2, 5, 5, 255, 5]
 CHTHON_FIRE2 = 17  # second lava throw; keep in sync with mem.asm CHTHON_FIRE2
@@ -919,7 +921,7 @@ def pack_poses(
             elif TYPES[type_i] == "Demon":
                 extra = (start + 5, start + 9)
             elif TYPES[type_i] == "Zombie":
-                extra = (start + length - 1,)
+                extra = (start + length - 3,)
             elif TYPES[type_i] == "Chthon":
                 extra = (start + fire_off, start + CHTHON_FIRE2)
             elif 0 <= fire_off < 255:

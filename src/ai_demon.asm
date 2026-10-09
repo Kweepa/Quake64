@@ -155,7 +155,7 @@ ai_demon_entry
 
 .crossed
 	bmi .cr_no
-	cmp rot2
+	cmp en_sfx_old
 	beq .cr_no
 	bcc .cr_no
 	sta rot1

@@ -739,7 +739,7 @@ ai_chthon_entry
 
 .ch_crossed
 	bmi .chcr_no
-	cmp rot2
+	cmp en_sfx_old
 	beq .chcr_no
 	bcc .chcr_no
 	sta rot1

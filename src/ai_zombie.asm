@@ -27,18 +27,14 @@ ai_zombie_entry
 	beq .approach_attack
 	cmp #AI_CMD_APPROACH_ENTER
 	beq .approach_enter
+	cmp #AI_CMD_ANIM_FIRE
+	bne +
+	jmp .anim_fire
++
 	rts
 
+; Throw is the anim step that crosses the last frame, not this think.
 .tick
-	ldx enemy_idx
-	lda en_frame,x
-	jsr pain_var_off
-	lda enemy_attack_len,y
-	sec
-	sbc #1
-	ldx enemy_idx
-	cmp en_frame,x
-	beq .fire
 	rts
 
 .approach_move
@@ -100,11 +96,33 @@ ai_zombie_entry
 	rts
 +
 	ldx enemy_idx
+	lda en_frame,x
+	pha
+	jsr pain_var_off
+	lda enemy_attack_len,y
+	sec
+	sbc #3				; melee sound: two frames before the last
+	ldx enemy_idx
+	sta en_frame,x
 	stx obj_i
 	+lda_mx en_type
 	sta ent_type
 	ldy #GREN_WRIST_L
 	jsr ent_vert_world
+	lda org_yh
+	pha
+	ldy #GREN_WRIST_R
+	jsr ent_vert_world
+	pla
+	cmp org_yh
+	bcc .fire_hand
+	beq .fire_hand
+	ldy #GREN_WRIST_L
+	jsr ent_vert_world
+.fire_hand
+	ldx enemy_idx
+	pla
+	sta en_frame,x
 	jsr gren_alloc
 	bcc .fire_rts
 	stx obj_i
@@ -124,9 +142,39 @@ ai_zombie_entry
 	ldx obj_i
 	lda #GREN_F_FLESH
 	sta gr_flags,x
-	asl gr_vxh,x
-	asl gr_vzh,x
+	lsr gr_vyh,x
 .fire_rts
+	rts
+
+; Old frame in en_sfx_old, new frame in en_frame. A = 0: this bank owns the decision.
+; Throw frame is this variant's melee sound frame (attack_len - 3).
+.anim_fire
+	ldx enemy_idx
+	lda en_frame,x
+	jsr pain_var_off
+	lda enemy_attack_len,y
+	sec
+	sbc #3
+	jsr .crossed
+	bcc .af_own
+	jsr .fire
+.af_own
+	lda #0
+	rts
+
+; A = fire frame. C=1 if en_sfx_old < frame <= en_frame.
+.crossed
+	bmi .cr_no
+	cmp en_sfx_old
+	beq .cr_no
+	bcc .cr_no
+	sta rot1
+	ldx enemy_idx
+	lda en_frame,x
+	cmp rot1
+	rts
+.cr_no
+	clc
 	rts
 
 .flesh_live

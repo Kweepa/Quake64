@@ -432,8 +432,6 @@ enemy_anim_step
 	jmp .eas_n
 .eas_oneshot
 	+ldy_mx en_type
-	lda en_frame,x
-	sta rot2				; old local frame (detect fire-frame skip)
 	inc en_frame,x
 	lda en_frame,x
 	pha
@@ -489,7 +487,7 @@ enemy_anim_step
 	lda rot1
 .eas_ff
 	bmi .eas_atlen_go			; $ff = none
-	cmp rot2
+	cmp en_sfx_old
 	beq .eas_atlen_go			; already were on fire frame
 	bcc .eas_atlen_go			; fire < old → already past
 	sta rot1

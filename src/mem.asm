@@ -297,20 +297,8 @@ SKEL_BSS_END	= skel_entry_hi + ENEMY_PTR_N
 !if SKEL_BSS_END > RB_CELL {
 	!error "skeleton BSS overlaps rb_n cell"
 }
-; Port latch in the hole between skeleton BSS and the reboot stub.
-; AI_ENTRY_LO is $0850; a ring on those pointers sends streamed enemies through garbage.
-DBG_MAGIC	= SKEL_BSS_END
-DBG_BAD_EVT	= DBG_MAGIC + 1
-DBG_BAD_00	= DBG_BAD_EVT + 1
-DBG_BAD_01	= DBG_BAD_00 + 1
-DBG_BAD_X	= DBG_BAD_01 + 1
-DBG_BAD_Y	= DBG_BAD_X + 1
-DBG_BAD_ROOM	= DBG_BAD_Y + 1
-DBG_BAD_SEQ	= DBG_BAD_ROOM + 1
-DBG_SEQ		= DBG_BAD_SEQ + 1
-DBG_END		= DBG_SEQ + 1
 ; F5/F7. IRQ ORs the latch, poll_quick_keys clears it. Not KERNAL ZP $90–$bf.
-in_qsave	= DBG_END
+in_qsave	= SKEL_BSS_END
 in_qload	= in_qsave + 1
 qs_cmd		= in_qload + 1		; 0 = save, 1 = load (overlay reads this)
 save_end	= qs_cmd + 1		; word: exclusive KERNAL SAVE end
@@ -318,20 +306,6 @@ QS_LATCH_END	= save_end + 2
 QS_FAIL_SALVAGE	= 1			; overlay A on C=1: state already overwritten
 !if QS_LATCH_END > RB_CELL {
 	!error "quicksave latches overlap rb_n"
-}
-DBG_MAIN	= 1
-DBG_WORLD	= 2
-DBG_DE_IN	= 3
-DBG_DE_ROT	= 4
-DBG_DE_PRE	= 5
-DBG_DE_MESH	= 6
-DBG_DE_RTS	= 7
-DBG_DEATH	= 8
-DBG_RESTART	= 9
-DBG_ALERT	= 10
-DBG_AI		= 11
-!if DBG_END > RB_CELL {
-	!error "dbg latch overlaps rb_n cell"
 }
 
 SKEL_MAX_VERTS	= 48

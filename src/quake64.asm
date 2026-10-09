@@ -66,8 +66,6 @@ start
 main
 	jsr poll_quick_keys			; F5 save / F7 load; screen redraws after
 	cld
-	lda #DBG_MAIN
-	jsr dbg_probe
 !if PROFILE = 1 {
 	jsr prof_reset_frame
 } else {
@@ -81,8 +79,6 @@ main
 	jsr prof_add_bucket
 }
 	jsr draw_world
-	lda #DBG_WORLD
-	jsr dbg_probe
 	jsr draw_enemies
 	jsr draw_grenades
 	jsr draw_explosion

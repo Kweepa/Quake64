@@ -911,8 +911,6 @@ enemy_enter_alert
 	lda #0
 	sta en_frame,x
 	sta sham_alert_ph
-	lda #DBG_ALERT
-	jsr dbg_probe
 	lda #CUE_SIGHT
 	; fall through
 

@@ -2506,8 +2506,6 @@ draw_enemies
 
 .de_one
 	stx obj_i
-	lda #DBG_DE_IN
-	jsr dbg_probe
 	+lda_mx en_x
 	sta ent_wx
 	+lda_mx en_y
@@ -2563,9 +2561,6 @@ draw_enemies
 	lda #>ident_col
 	sta col_ptr+1
 	jsr ent_rotate
-	ldx obj_i
-	lda #DBG_DE_ROT
-	jsr dbg_probe
 !if PROFILE = 1 {
 	ldy #PROF_ROT
 	jsr prof_add_bucket
@@ -2599,18 +2594,12 @@ draw_enemies
 	jsr prof_add_bucket
 }
 .de_draw
-	ldx obj_i
-	lda #DBG_DE_PRE
-	jsr dbg_probe
 	jsr try_enemy_muzzle
 	jsr mesh_draw
 !if PROFILE = 1 {
 	ldy #PROF_DRAW
 	jsr prof_add_bucket
 }
-	ldx obj_i
-	lda #DBG_DE_MESH
-	jsr dbg_probe
 	lda ent_type
 	cmp #ENT_SHAMBLER
 	beq .de_bolt
@@ -2622,9 +2611,6 @@ draw_enemies
 	ldx obj_i
 	jsr ai_invoke
 .de_one_rts
-	ldx obj_i
-	lda #DBG_DE_RTS
-	jsr dbg_probe
 	ldx obj_i
 	rts
 

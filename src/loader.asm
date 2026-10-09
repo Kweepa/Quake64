@@ -1079,73 +1079,9 @@ patch_crush_bank
 	rts
 
 
-; #region agent log
-; A = event. Latches the first bad port. Preserves A, X, Y, P.
-; Lives at SKEL_BSS_END, stops before the reboot stub. No ring: AI_ENTRY_LO is $0850.
-dbg_probe
-	php
-	pha
-	txa
-	pha
-	tya
-	pha
-	lda DBG_MAGIC
-	cmp #$d6
-	beq .dp_go
-	lda #$d6
-	sta DBG_MAGIC
-	ldx #0
-	lda #0
-.dp_clr
-	sta DBG_BAD_EVT,x
-	inx
-	cpx #DBG_END - DBG_BAD_EVT
-	bcc .dp_clr
-.dp_go
-	tsx
-	lda $00
-	cmp #$2f
-	bne .dp_bad
-	lda $01
-	cmp #BANK_RAM
-	beq .dp_ok
-	cmp #BANK_IO
-	beq .dp_ok
-	cmp #BANK_LOADER
-	beq .dp_ok
-.dp_bad
-	lda DBG_BAD_EVT
-	bne .dp_ok
-	lda $0103,x
-	sta DBG_BAD_EVT
-	lda $00
-	sta DBG_BAD_00
-	lda $01
-	sta DBG_BAD_01
-	lda $0102,x
-	sta DBG_BAD_X
-	lda $0101,x
-	sta DBG_BAD_Y
-	lda room_idx
-	sta DBG_BAD_ROOM
-	lda DBG_SEQ
-	sta DBG_BAD_SEQ
-.dp_ok
-	inc DBG_SEQ
-	pla
-	tay
-	pla
-	tax
-	pla
-	plp
-	rts
-; #endregion
-
 ; A=command, X=enemy index, Y=type. No entry means no-op.
 ai_invoke
 	sta ai_cmd
-	lda #DBG_AI
-	jsr dbg_probe
 	lda AI_ENTRY_HI,y
 	beq .aiv_rts
 	sta .aiv_call+2
@@ -1613,8 +1549,6 @@ death_restart
 	bcc .dw_hold
 .dw_go
 	sei
-	lda #DBG_DEATH
-	jsr dbg_probe
 	jsr reset_loadout
 	jsr restart_level
 	bcc .dw_ok
@@ -1657,8 +1591,6 @@ restart_level
 	jsr mulset_init
 	jsr world_init
 	jsr maybe_stream_room
-	lda #DBG_RESTART
-	jsr dbg_probe
 	cli
 	clc
 .rl_fail

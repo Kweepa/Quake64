@@ -223,6 +223,17 @@ if errorlevel 1 (
 popd
 if exist src\menu.prg move /y src\menu.prg menu.prg >nul
 
+python tools\genqsyms.py --labels game-krill.lbl --krill
+if errorlevel 1 exit /b 1
+pushd src
+"%ACME%" -DUSE_KRILL=1 quicksave.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+if exist src\qsave.prg move /y src\qsave.prg qsave.prg >nul
+
 python tools\mkdisk.py --krill --out quake64-krill.d64
 if errorlevel 1 exit /b 1
 
@@ -276,6 +287,17 @@ if errorlevel 1 (
 )
 popd
 if exist src\menu.prg move /y src\menu.prg menu.prg >nul
+
+python tools\genqsyms.py --labels game.lbl
+if errorlevel 1 exit /b 1
+pushd src
+"%ACME%" quicksave.asm
+if errorlevel 1 (
+  popd
+  exit /b 1
+)
+popd
+if exist src\qsave.prg move /y src\qsave.prg qsave.prg >nul
 
 python tools\mkdisk.py --out quake64.d64
 if errorlevel 1 exit /b 1

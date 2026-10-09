@@ -36,6 +36,9 @@ en_n8	!text "DEMON"
 crush_name
 	!text "CRUSH"
 	!byte 0
+qsave_dos
+	!text "QSAVE"
+	!byte 0
 
 ; FormatDosName — E1MN from level_num (1..8); 1541 names are PETSCII A–Z
 FormatDosName
@@ -157,11 +160,283 @@ LoadPrg
 
 }
 
+!if USE_KRILL = 0 {
+
+; KERNAL SAVE. X/Y = 0-terminated name. load_dest = start, save_end = end
+; (exclusive). Binds load_name_* / load_namelen first — those cells sit inside
+; the QB image, so a later SAVE of that range must bind the same bytes the
+; checksum already saw. Scratch S0:name and drain the error channel (a 1541
+; does not finish the scratch until then). No IOINIT. $EA31 only across CLI.
+; C=0 ok. Returns I=1, CIA1 off, raster off.
+SavePrg
+	jsr save_bind
+	jsr load_irq_off
+	lda $0314
+	pha
+	lda $0315
+	pha
+	lda #<$ea31
+	sta $0314
+	lda #>$ea31
+	sta $0315
+	lda #0
+	sta $98					; open-file count
+	sta $90					; ST
+	sta $9d					; bit7 set → SAVE CHROUTs CR+"SAVING"
+	cli
+	jsr $ffe7				; CLALL
+	jsr SavePrg_scratch
+	bcs .sp_fail
+	lda load_namelen
+	ldx load_name_l
+	ldy load_name_h
+	jsr $ffbd				; SETNAM
+	lda #1
+	ldx load_device
+	ldy #1					; SA=1 → file load address is the start pointer
+	jsr $ffba				; SETLFS
+	lda load_dest
+	sta nlo
+	lda load_dest+1
+	sta nhi
+	ldx save_end
+	ldy save_end+1
+	lda #nlo
+	jsr $ffd8				; SAVE
+	sei
+	lda #0
+	rol
+	pha
+	jsr load_irq_off
+	pla
+	tay
+	pla
+	sta $0315
+	pla
+	sta $0314
+	jsr mulset_init
+	tya
+	lsr
+	cld
+	rts
+.sp_fail
+	jsr load_irq_off
+	pla
+	sta $0315
+	pla
+	sta $0314
+	jsr mulset_init
+	cld
+	sec
+	rts
+
+; X/Y = 0-terminated name → load_name_*, load_namelen. No disk.
+save_bind
+	stx load_name_l
+	sty load_name_h
+	stx .sb_nm+1
+	sty .sb_nm+2
+	ldy #0
+.sb_nm
+	lda $ffff,y
+	beq .sb_got
+	iny
+	bne .sb_nm
+.sb_got
+	sty load_namelen
+	rts
+
+; "S0:" + name at save_cmd. Status digits in nlo/nhi (replaced before SAVE).
+; C=0 for 00/01 (scratched) or 62 (no such file).
+SavePrg_scratch
+	lda load_name_l
+	sta src_ptr
+	lda load_name_h
+	sta src_ptr+1
+	ldy #0
+.sc_cp
+	lda (src_ptr),y
+	sta save_cmd_name,y
+	iny
+	cpy load_namelen
+	bcc .sc_cp
+	lda load_namelen
+	clc
+	adc #3
+	ldx #<save_cmd
+	ldy #>save_cmd
+	jsr $ffbd
+	lda #15
+	ldx load_device
+	ldy #15
+	jsr $ffba
+	jsr $ffc0				; OPEN
+	bcs .sc_err
+	ldx #15
+	jsr $ffc6				; CHKIN
+	bcs .sc_close
+	jsr $ffcf
+	sta nlo
+	jsr $ffcf
+	sta nhi
+.sc_drain
+	jsr $ffcf
+	cmp #$0d
+	beq .sc_shut
+	lda $90
+	beq .sc_drain
+.sc_shut
+	jsr $ffcc				; CLRCHN
+	lda #15
+	jsr $ffc3				; CLOSE
+	lda nlo
+	cmp #'0'				; 00 ok, 01 scratched
+	beq .sc_ok
+	cmp #'6'
+	bne .sc_err
+	lda nhi
+	cmp #'2'				; 62 file not found
+	bne .sc_err
+.sc_ok
+	clc
+	rts
+.sc_close
+	jsr $ffcc
+	lda #15
+	jsr $ffc3
+.sc_err
+	sec
+	rts
+
+save_cmd
+	!text "S0:"
+save_cmd_name
+	!text "XX"
+
+}
+
 blank_screen
 	lda #0
 	sta $d015
 	sta $d020
 	sta $d021
+	rts
+
+; Top of main. Latches are OR'd by the raster IRQ. F5 wins over F7.
+; Loads QSAVE over screen A ($C000) and calls it. DEN stays off until the
+; next published frame (den_arm). C is unused; always returns to the draw.
+poll_quick_keys
+	sei
+!if USE_KRILL = 0 {
+	lda in_qsave
+	beq .pq_load
+	lda #0
+	sta qs_cmd
+	beq .pq_take
+.pq_load
+}
+	lda in_qload
+	beq .pq_none
+	lda #1
+	sta qs_cmd
+.pq_take
+	lda #0
+	sta in_qsave
+	sta in_qload
+	jsr load_irq_off
+	jsr blank_screen
+	lda $d011
+	and #%11101111				; DEN off while the saver owns the matrix
+	sta $d011
+	lda #<SCR_A
+	sta load_dest
+	lda #>SCR_A
+	sta load_dest+1
+	ldx #<qsave_dos
+	ldy #>qsave_dos
+	jsr LoadPrg
+	bcs .pq_noload
+	jsr SCR_A				; overlay resumes HUD, then overwrites itself
+	bcc .pq_unlatch
+	cmp #QS_FAIL_SALVAGE
+	beq .pq_salvage
+	jsr qs_red
+.pq_unlatch
+	jmp qs_unlatch
+.pq_none
+	lda #0
+	sta in_qsave				; Krill disk has no save; drop a stale F5
+	cli
+	rts
+; QSAVE never arrived, so the overlay's exit never ran. LOAD writes the
+; destination as it goes; put the template back and reopen the raster.
+.pq_noload
+	jsr qs_restore_view
+	lda #BANK_IO
+	sta $01
+	jsr init_hud
+	jsr hud_ammo
+	lda #1
+	sta den_arm
+	jsr init_irq
+	jsr qs_red
+	jmp qs_unlatch
+.pq_salvage
+	jsr restart_level
+	bcs .pq_hang
+	jsr qs_red
+	jmp qs_unlatch
+.pq_hang
+	jmp load_fail_hang
+
+; Matrix B's viewport is the scr.prg pattern. Used when the overlay is not
+; in RAM. The success path restores from inside QSAVE instead.
+qs_restore_view
+	ldx #0
+.qrv
+	lda SCR_B + VIEW_ROW * 40,x
+	sta SCR_A + VIEW_ROW * 40,x
+	lda SCR_B + VIEW_ROW * 40 + $100,x
+	sta SCR_A + VIEW_ROW * 40 + $100,x
+	inx
+	bne .qrv
+	ldx #0
+.qrv2
+	lda SCR_B + VIEW_ROW * 40 + $200,x
+	sta SCR_A + VIEW_ROW * 40 + $200,x
+	inx
+	cpx #VIEW_H * 40 - $200
+	bne .qrv2
+	rts
+
+qs_red
+	lda #BANK_IO
+	sta $01
+	lda #COL_HURT
+	sta vic_border
+	sta $d020
+	rts
+
+; Key is still down after a multi-second disk op. Poll with the raster
+; off: the IRQ also writes $dc00, and it re-latches F5 the moment it runs.
+; I stays 1 from load_irq_off until the key is up.
+qs_unlatch
+	lda #BANK_IO
+	sta $01
+.qu
+	lda #$fe
+	sta $dc00
+	lda $dc01
+	and #$48				; F5 | F7, active low
+	cmp #$48
+	bne .qu
+	lda #0
+	sta in_qsave
+	sta in_qload
+	lda #BANK_RAM
+	sta $01
+	cld
+	cli
 	rts
 
 ; Fill frame13_lo/hi[i] = i*13 (pose gx/gy/gz stride). Called each LoadLevel.

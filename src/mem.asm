@@ -309,6 +309,16 @@ DBG_BAD_ROOM	= DBG_BAD_Y + 1
 DBG_BAD_SEQ	= DBG_BAD_ROOM + 1
 DBG_SEQ		= DBG_BAD_SEQ + 1
 DBG_END		= DBG_SEQ + 1
+; F5/F7. IRQ ORs the latch, poll_quick_keys clears it. Not KERNAL ZP $90–$bf.
+in_qsave	= DBG_END
+in_qload	= in_qsave + 1
+qs_cmd		= in_qload + 1		; 0 = save, 1 = load (overlay reads this)
+save_end	= qs_cmd + 1		; word: exclusive KERNAL SAVE end
+QS_LATCH_END	= save_end + 2
+QS_FAIL_SALVAGE	= 1			; overlay A on C=1: state already overwritten
+!if QS_LATCH_END > RB_CELL {
+	!error "quicksave latches overlap rb_n"
+}
 DBG_MAIN	= 1
 DBG_WORLD	= 2
 DBG_DE_IN	= 3

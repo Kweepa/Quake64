@@ -67,6 +67,8 @@ init_irq
 	sta wish_dz
 	sta wish_dzh
 	sta sfx_q_len
+	sta in_qsave
+	sta in_qload
 	ldx #11
 -
 	sta in_fwd,x
@@ -397,6 +399,22 @@ accum_keys
 	lda #1
 	sta in_fire
 .nospc
+	; F5/F7 on PA0 = $FE (RETURN / cursors). Unused by play.
+	lda #$fe
+	sta $dc00
+	lda $dc01
+	tax
+	and #$40				; F5 quick save (poll ignores it on the Krill disk)
+	bne .nof5
+	lda #1
+	sta in_qsave
+.nof5
+	txa
+	and #$08				; F7 quick load
+	bne .nof7
+	lda #1
+	sta in_qload
+.nof7
 	rts
 
 ; Publish in_* → hold_* / key_* then clear (main, once per game frame).

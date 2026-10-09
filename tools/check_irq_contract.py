@@ -32,9 +32,19 @@ ALLOW_IRQ_FILES = {
 
 POKE = re.compile(
     r"\b(sta|lda)\s+(\$dc0d|\$d01a|\$0314|\$0315)\b"
-    r"|\bjsr\s+(\$ff84|\$ffd5|\$ffc3)\b",
+    r"|\bjsr\s+(\$ff84|\$ffd5|\$ffd8|\$ffc0|\$ffc3|\$ffc6|\$ffcf|\$ffcc|\$ffe7|\$ffbd|\$ffba)\b",
     re.IGNORECASE,
 )
+
+# KERNAL write / scratch. Load stays in LoadPrg. quicksave.asm calls these.
+SAVE_ONLY = {
+    "jsr $ffd8": {"SavePrg"},
+    "jsr $ffe7": {"SavePrg"},
+    "jsr $ffc0": {"SavePrg_scratch"},
+    "jsr $ffc6": {"SavePrg_scratch"},
+    "jsr $ffcf": {"SavePrg_scratch"},
+    "jsr $ffcc": {"SavePrg_scratch"},
+}
 
 
 def code_of_line(line: str) -> str:
@@ -158,6 +168,29 @@ def check_loader() -> int:
     if file_dc != off_dc:
         fail(f"loader.asm: sta $dc0d only allowed in load_irq_off ({file_dc} in file, {off_dc} in helper)")
         errs += 1
+
+    errs += check_must_forbid(
+        "SavePrg",
+        r.get("SavePrg", []),
+        must=["jsr load_irq_off", "jsr $ffd8", "jsr $ffe7"],
+        forbid=["sta $dc0d", "sta $d01a", "jsr $ff84"],
+    )
+    if len(r.get("SavePrg", [])) != 1:
+        fail(f"SavePrg: want one definition, got {len(r.get('SavePrg', []))}")
+        errs += 1
+    errs += save_ops_only(r)
+    return errs
+
+
+def save_ops_only(r: dict[str, list[str]]) -> int:
+    """$FFD8 / scratch channel ops stay in SavePrg, not LoadPrg or the overlay."""
+    errs = 0
+    for needle, allowed in SAVE_ONLY.items():
+        found = [name for name, bodies in r.items() if any(has(b, needle) for b in bodies)]
+        extra = [name for name in found if name not in allowed]
+        if extra or not found:
+            fail(f"{needle}: want {sorted(allowed)}, found {found or 'none'}")
+            errs += 1
     return errs
 
 

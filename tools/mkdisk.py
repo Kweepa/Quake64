@@ -44,6 +44,7 @@ FILES_TAIL = (
     ("sqt.prg", "sqt,p"),
     ("enemydata.prg", "edata,p"),
     ("game.prg", "game,p"),
+    ("qsave.prg", "qsave,p"),
 )
 
 MAP_FILES = [(f"maps/e1m{i}.prg", f"e1m{i},p") for i in range(1, 9)]

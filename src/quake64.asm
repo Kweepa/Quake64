@@ -64,6 +64,7 @@ start
 	cli
 
 main
+	jsr poll_quick_keys			; F5 save / F7 load; screen redraws after
 	cld
 	lda #DBG_MAIN
 	jsr dbg_probe

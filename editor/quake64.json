@@ -1,6 +1,6 @@
 {
   "version": 10,
-  "activeLevel": "E1M7",
+  "activeLevel": "E1M1",
   "maps": {
     "E1M1": {
       "name": "The Slipgate Complex",
@@ -2957,6 +2957,21 @@
           "dir": 1,
           "roomId": "80430749-edbc-4d7d-bbca-332263790b75",
           "pickup": "health 25%"
+        },
+        {
+          "id": "314b1933-b87d-4635-b48c-3cdf7e941cc3",
+          "kind": "pickup",
+          "x": 35,
+          "y": 91,
+          "z": 145,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "7b2e58fd-ad8a-4d66-b1bb-9855f518c055",
+          "pickup": "nailgun"
         }
       ]
     },
@@ -4790,9 +4805,9 @@
         {
           "id": "3e64e997-1b89-4757-a05c-a0b168e73da8",
           "kind": "pickup",
-          "x": 99,
+          "x": 131,
           "y": 75,
-          "z": 71,
+          "z": 85,
           "sx": 0.9270509831248422,
           "sy": 1.5,
           "sz": 0.8028497019894523,
@@ -4801,6 +4816,36 @@
           "dir": 1,
           "roomId": "7cc30490-9e84-47d3-8991-5015ca448267",
           "pickup": "shells"
+        },
+        {
+          "id": "24644c65-845e-4d0e-a73c-84df3ee6f260",
+          "kind": "pickup",
+          "x": 135,
+          "y": 75,
+          "z": 66,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "7cc30490-9e84-47d3-8991-5015ca448267",
+          "pickup": "nails"
+        },
+        {
+          "id": "fb74a8cc-250d-46c8-a7da-7702753a6aea",
+          "kind": "pickup",
+          "x": 111,
+          "y": 83,
+          "z": 150,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "f8a948cc-7a09-45e9-af37-a6cb119e36aa",
+          "pickup": "nails"
         }
       ]
     },
@@ -6276,6 +6321,21 @@
           "dir": 1,
           "roomId": "52d9a56f-4cff-4b71-9071-ca2675a7e39d",
           "pickup": "health 25%"
+        },
+        {
+          "id": "0b67db9a-dafb-44e9-b294-d03af421825c",
+          "kind": "pickup",
+          "x": 101,
+          "y": 116,
+          "z": 139,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "156da2b6-105d-4a9d-aa43-65d8663f5971",
+          "pickup": "nails"
         }
       ]
     },
@@ -8846,6 +8906,21 @@
           "dir": 1,
           "roomId": "2fe44a8b-7a6a-4532-a1aa-3c5ba8e0f99a",
           "pickup": "armour"
+        },
+        {
+          "id": "20012f84-b7d2-4835-b238-6ec99f37ef4a",
+          "kind": "pickup",
+          "x": 143,
+          "y": 134,
+          "z": 158,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "72fade6e-d174-4ce5-9531-b7fa2b517b5c",
+          "pickup": "nails"
         }
       ]
     },
@@ -9454,7 +9529,7 @@
           "z": 67,
           "sx": 6,
           "sy": 16,
-          "sz": 12,
+          "sz": 18,
           "face": "+z",
           "axis": "z",
           "dir": 1,
@@ -9474,10 +9549,10 @@
           "kind": "elevator",
           "x": 78,
           "y": 90,
-          "z": 72,
+          "z": 73,
           "sx": 6,
           "sy": 1,
-          "sz": 7,
+          "sz": 6,
           "face": "+z",
           "axis": "z",
           "dir": 1,
@@ -9495,7 +9570,7 @@
           "z": 74,
           "sx": 6,
           "sy": 4,
-          "sz": 5,
+          "sz": 4,
           "face": "+z",
           "axis": "z",
           "dir": 1,
@@ -9755,7 +9830,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "purpose": "message",
+          "purpose": "hurt",
           "text": "",
           "tag": "",
           "roomId": "2bcffa42-52b8-4554-96f7-fcab6ccec92e"
@@ -10250,6 +10325,53 @@
           "axis": "z",
           "dir": 1,
           "roomId": "03802a49-dde4-4c63-96d4-2f9ebcf565cb",
+          "pickup": "nails"
+        },
+        {
+          "id": "c8034c4b-250e-4c42-a670-8429a99c9d6c",
+          "kind": "pickup",
+          "x": 80,
+          "y": 90,
+          "z": 81,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "f3664b5f-16e6-4cc4-b8fc-9ce0e4d7f19b",
+          "pickup": "nailgun"
+        },
+        {
+          "id": "3a0660e8-e77d-4a91-961d-4f00eccbea43",
+          "kind": "trigger",
+          "x": 78,
+          "y": 90,
+          "z": 78,
+          "sx": 6,
+          "sy": 4,
+          "sz": 4,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "summon",
+          "text": "",
+          "tag": "yoink",
+          "roomId": "f3664b5f-16e6-4cc4-b8fc-9ce0e4d7f19b"
+        },
+        {
+          "id": "de70ed55-bcfa-4a1c-9a78-8c26f1338b93",
+          "kind": "pickup",
+          "x": 143,
+          "y": 106,
+          "z": 86,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "b5e9c243-d723-4125-b390-bcb7dd3e3175",
           "pickup": "nails"
         }
       ]

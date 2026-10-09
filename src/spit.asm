@@ -251,10 +251,16 @@ spit_stroke
 	sta org_zh
 	ldx #0
 	jsr xform_world_vert88
-	jsr project_cam0_screen
+	jsr cam0_proj_xy
 	bcc .stk_rts
-	sta x0
-	sty y0
+	lda ox0l
+	pha
+	lda ox0h
+	pha
+	lda oy0l
+	pha
+	lda oy0h
+	pha
 	lda spit_xl
 	sta org_xl
 	lda spit_xh
@@ -269,17 +275,36 @@ spit_stroke
 	sta org_zh
 	ldx #0
 	jsr xform_world_vert88
-	jsr project_cam0_screen
+	jsr cam0_proj_xy
 	bcs .stk_end
 	lda #0
 	sta CAM_Z
 	lda #2
 	sta CAM_ZH
-	jsr project_cam0_screen
-	bcc .stk_rts
+	jsr cam0_proj_xy
+	bcs .stk_end
+	pla
+	pla
+	pla
+	pla
+	rts
 .stk_end
-	sta x1
-	sty y1
-	jmp draw_line
+	lda ox0l
+	sta ox1l
+	lda ox0h
+	sta ox1h
+	lda oy0l
+	sta oy1l
+	lda oy0h
+	sta oy1h
+	pla
+	sta oy0h
+	pla
+	sta oy0l
+	pla
+	sta ox0h
+	pla
+	sta ox0l
+	jmp clip_draw_xy
 .stk_rts
 	rts

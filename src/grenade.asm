@@ -132,6 +132,10 @@ spawn_ogre_grenade
 	ldx obj_i
 	lda #GREN_OWN_EN
 	jsr gren_fill_slot
+	; 2× GL horizontal. Low bytes are 0; |v|~30 so the shift stays signed.
+	ldx obj_i
+	asl gr_vxh,x
+	asl gr_vzh,x
 	lda #SOUND_WEAPONS_GRENADE
 	jmp play_sound
 .sog_rts
@@ -192,6 +196,13 @@ gren_tick
 	jsr gren_move_x
 	jsr gren_move_z
 	jsr gren_move_y
+	ldx obj_i
+	lda gr_owner,x
+	beq .gt_tick
+	jsr gren_hit_player
+	ldx obj_i
+	lda gr_on,x
+	beq .gt_rts
 	jmp .gt_tick
 .gt_tdone
 	ldx obj_i
@@ -764,7 +775,8 @@ draw_grenades
 .dgr_rts
 	rts
 
-; One projected centre, then a fixed screen triangle of half-extent GREN_R.
+; One projected centre, then a screen triangle of half-extent GREN_R.
+; Edges are clipped; off-screen corners are not pulled onto the border.
 gren_draw_one
 	stx obj_i
 	lda gr_xl,x
@@ -781,86 +793,118 @@ gren_draw_one
 	sta org_zh
 	ldx #0
 	jsr xform_world_vert88
-	jsr project_cam0_screen
-	bcs .gdo_on
-	rts
-.gdo_on
-	sta ox0l				; centre sx
-	sty oy0l
+	jsr cam0_proj_xy
+	bcc .gdo_rts
+	lda ox0l
+	sta gdo_cx
+	lda ox0h
+	sta gdo_cxh
+	lda oy0l
+	sta gdo_cy
+	lda oy0h
+	sta gdo_cyh
 	lda #GREN_R
 	sta ylo
 	lda #0
 	sta yhi
-	jsr persp88				; z_eye still set; 8-bit radius
-	sta ox1l
-	lda ox0l
-	sta e0x
-	lda oy0l
-	ldx #128
-	sec
-	jsr .gdo_pm
-	sta e0y
-	lda ox0l
-	ldx #192
-	sec
-	jsr .gdo_pm
-	sta e0z
-	lda oy0l
-	ldx #128
-	clc
-	jsr .gdo_pm
-	sta e1x
-	sta e1z
-	lda ox0l
-	ldx #192
-	clc
-	jsr .gdo_pm
-	sta e1y
-	ldx #0
-.gdo_ed
-	stx rot0
-	lda e0x,x
-	sta x0
-	lda e0y,x
-	sta y0
-	inx
-	inx
-	cpx #6
-	bne .gdo_e2
-	ldx #0
-.gdo_e2
-	lda e0x,x
-	sta x1
-	lda e0y,x
-	sta y1
-	jsr draw_line
-	ldx rot0
-	inx
-	inx
-	cpx #6
-	bcc .gdo_ed
+	jsr persp88
+	sta gdo_r
+	jsr .gdo_tl
+	jsr .gdo_lr
+	jmp .gdo_rt
+.gdo_rts
 	rts
 
-; A = centre, X = limit. C=1 subtract radius, C=0 add. Result in A.
-.gdo_pm
-	stx rot2
-	bcc .gdo_add
-	sbc ox1l
-	bcc .gdo_z
-	bcs .gdo_chk
-.gdo_add
-	adc ox1l
-	bcs .gdo_hi
-.gdo_chk
-	cmp rot2
-	bcc .gdo_ok
-.gdo_hi
-	lda rot2
-	sbc #1
-	rts
-.gdo_z
-	lda #0
-.gdo_ok
-	rts
+; Centered space: top (cx, cy+r), left (cx−r, cy−r), right (cx+r, cy−r).
+.gdo_tl
+	lda gdo_cx
+	sta ox0l
+	lda gdo_cxh
+	sta ox0h
+	clc
+	lda gdo_cy
+	adc gdo_r
+	sta oy0l
+	lda gdo_cyh
+	adc #0
+	sta oy0h
+	sec
+	lda gdo_cx
+	sbc gdo_r
+	sta ox1l
+	lda gdo_cxh
+	sbc #0
+	sta ox1h
+	sec
+	lda gdo_cy
+	sbc gdo_r
+	sta oy1l
+	lda gdo_cyh
+	sbc #0
+	sta oy1h
+	jmp clip_draw_xy
+.gdo_lr
+	sec
+	lda gdo_cx
+	sbc gdo_r
+	sta ox0l
+	lda gdo_cxh
+	sbc #0
+	sta ox0h
+	sec
+	lda gdo_cy
+	sbc gdo_r
+	sta oy0l
+	lda gdo_cyh
+	sbc #0
+	sta oy0h
+	clc
+	lda gdo_cx
+	adc gdo_r
+	sta ox1l
+	lda gdo_cxh
+	adc #0
+	sta ox1h
+	sec
+	lda gdo_cy
+	sbc gdo_r
+	sta oy1l
+	lda gdo_cyh
+	sbc #0
+	sta oy1h
+	jmp clip_draw_xy
+.gdo_rt
+	clc
+	lda gdo_cx
+	adc gdo_r
+	sta ox0l
+	lda gdo_cxh
+	adc #0
+	sta ox0h
+	sec
+	lda gdo_cy
+	sbc gdo_r
+	sta oy0l
+	lda gdo_cyh
+	sbc #0
+	sta oy0h
+	lda gdo_cx
+	sta ox1l
+	lda gdo_cxh
+	sta ox1h
+	clc
+	lda gdo_cy
+	adc gdo_r
+	sta oy1l
+	lda gdo_cyh
+	adc #0
+	sta oy1h
+	jmp clip_draw_xy
+
+gdo_cx	!byte 0
+gdo_cxh	!byte 0
+gdo_cy	!byte 0
+gdo_cyh	!byte 0
+gdo_r	!byte 0
 
 grenade_end = *

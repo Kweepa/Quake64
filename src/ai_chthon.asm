@@ -504,41 +504,80 @@ ai_chthon_entry
 	jsr .ch_point
 	jsr .ch_project
 	bcc .chd_loop
-	sta x0
-	sty y0
+	lda ox0l
+	pha
+	lda ox0h
+	pha
+	lda oy0l
+	pha
+	lda oy0h
+	pha
 	lda #1
 	sta ch_pok
 .chd_loop
 	inc ch_i
 	lda ch_i
 	cmp #11
-	bcs .chd_rts
+	bcs .chd_pop
 	jsr .ch_point
 	jsr .ch_project
 	bcc .chd_miss
-	ldx ch_pok
+	lda ox0l
+	sta ch_best
+	lda ox0h
+	sta ch_dist
+	lda oy0l
+	sta ch_prod
+	lda oy0h
+	sta ch_prod_h
+	lda ch_pok
 	beq .chd_arm
-	sta x1
-	sty y1
-	sta ch_psx
-	lda y1
-	sta ch_psy
-	jsr draw_line
-	lda ch_psx
-	sta x0
-	lda ch_psy
-	sta y0
-	jmp .chd_loop
+	pla
+	sta oy0h
+	pla
+	sta oy0l
+	pla
+	sta ox0h
+	pla
+	sta ox0l
+	lda ch_best
+	sta ox1l
+	lda ch_dist
+	sta ox1h
+	lda ch_prod
+	sta oy1l
+	lda ch_prod_h
+	sta oy1h
+	jsr clip_draw_xy
 .chd_arm
-	sta x0
-	sty y0
+	lda ch_best
+	pha
+	lda ch_dist
+	pha
+	lda ch_prod
+	pha
+	lda ch_prod_h
+	pha
 	lda #1
 	sta ch_pok
 	jmp .chd_loop
 .chd_miss
+	lda ch_pok
+	beq .chd_loop
+	pla
+	pla
+	pla
+	pla
 	lda #0
 	sta ch_pok
 	jmp .chd_loop
+.chd_pop
+	lda ch_pok
+	beq .chd_rts
+	pla
+	pla
+	pla
+	pla
 .chd_rts
 	rts
 
@@ -680,7 +719,7 @@ ai_chthon_entry
 	sta org_zh
 	ldx #0
 	jsr xform_world_vert88
-	jmp project_cam0_screen
+	jmp cam0_proj_xy
 
 ; Frame 5 comes from enemy_fire_frame. Frame 17 is the second throw.
 ; A = 0: this bank owns both, so the resident table must not also fire.

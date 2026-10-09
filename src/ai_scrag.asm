@@ -53,9 +53,9 @@ ai_scrag_entry
 
 .approach_enter
 	ldx enemy_idx
-	lda #<SCRAG_REFIRE_MS
+	lda #<SCRAG_ATK_MS
 	sta en_timer,x
-	lda #>SCRAG_REFIRE_MS
+	lda #>SCRAG_ATK_MS
 	sta en_timer_h,x
 	jmp select_dodge_dir
 

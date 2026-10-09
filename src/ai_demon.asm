@@ -46,10 +46,6 @@ ai_demon_entry
 	lda #AI_AP_MOVE
 	rts
 .approach_stand
-	ldx enemy_idx
-	lda #0
-	sta en_timer,x
-	sta en_timer_h,x
 	lda #AI_AP_STAND
 	rts
 
@@ -74,8 +70,9 @@ ai_demon_entry
 
 .approach_enter
 	ldx enemy_idx
-	lda #0
+	lda #<DEMON_ATK_MS
 	sta en_timer,x
+	lda #>DEMON_ATK_MS
 	sta en_timer_h,x
 	jmp select_dodge_dir
 
@@ -138,23 +135,7 @@ ai_demon_entry
 	rts
 
 .attack_end
-	ldx enemy_idx
-	jsr enemy_same_floor
-	bcc .approach
-	jsr enemy_chebyshev
-	cmp #DEMON_MELEE_R + 1
-	bcs .maybe_leap
-	lda #1				; attacka, variant 1
-	jmp enemy_enter_demon_attack
-.maybe_leap
-	jsr enemy_cmp_range
-	beq .leap_again
-	bcc .leap_again
-.approach
 	jmp enemy_enter_approach
-.leap_again
-	lda #0				; leap, variant 0
-	jmp enemy_enter_demon_attack
 
 .anim_fire
 	ldx enemy_idx

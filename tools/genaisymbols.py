@@ -66,6 +66,8 @@ REQUIRED = [
     "load_view_trig",
     "xform_world_vert88",
     "project_cam0_screen",
+    "cam0_proj_xy",
+    "clip_draw_xy",
     "draw_line",
     "line_cutouts_hit",
     "line_solids_hit",

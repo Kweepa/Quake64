@@ -334,6 +334,9 @@ collect_room_need
 .crn_lp
 	cpx map_nenemies
 	bcs .crn_rts
+	lda en_state,x
+	cmp #EN_GONE				; dead and finished: bank never read again
+	beq .crn_n
 	+lda_mx en_room
 	cmp room_idx
 	bne .crn_n
@@ -416,43 +419,6 @@ clear_pose_ptrs
 	sta crush_entry_lo
 	sta crush_entry_hi
 	jsr unbind_streamed_sfx
-	rts
-
-; Zero pose ptrs for type A.
-clear_one_pose
-	tax
-	cmp meta_slot_type
-	bne +
-	lda #$ff
-	sta meta_slot_type
-	bne .cop_z
-+
-	cmp meta_slot_type+1
-	bne .cop_z
-	lda #$ff
-	sta meta_slot_type+1
-.cop_z
-	lda #0
-	sta enemy_gx_lo,x
-	sta enemy_gx_hi,x
-	sta enemy_gy_lo,x
-	sta enemy_gy_hi,x
-	sta enemy_gz_lo,x
-	sta enemy_gz_hi,x
-	sta pose_map_lo,x
-	sta pose_map_hi,x
-	sta enemy_sfx_evt_lo,x
-	sta enemy_sfx_evt_hi,x
-	sta AI_ENTRY_LO,x
-	sta AI_ENTRY_HI,x
-	sta AI_BANK_LO,x
-	sta AI_BANK_HI,x
-	sta skel_nv,x
-	sta skel_ne,x
-	sta skel_base_lo,x
-	sta skel_base_hi,x
-	sta skel_entry_lo,x
-	sta skel_entry_hi,x
 	rts
 
 ; A = type or $FF. Load if absent. C=0 ok, C=1 fail.

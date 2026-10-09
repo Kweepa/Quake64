@@ -31,9 +31,8 @@ ai_rott_entry
 	jsr enemy_same_floor
 	bcs .approach_same
 	ldx enemy_idx
-	lda en_timer,x
-	ora en_timer_h,x
-	bne .approach_move_yes
+	lda en_pat_n,x
+	bne .wf_dec
 	lda #EN_IDLE
 	sta en_state,x
 	lda #0
@@ -44,6 +43,9 @@ ai_rott_entry
 	sta en_timer_h,x
 	lda #AI_AP_NEXT
 	rts
+.wf_dec
+	dec en_pat_n,x
+	jmp .approach_move_yes
 .approach_same
 	ldx enemy_idx
 	jsr enemy_chebyshev
@@ -51,15 +53,15 @@ ai_rott_entry
 	beq .approach_stand
 	bcc .approach_stand
 	ldx enemy_idx
-	lda en_timer,x
-	ora en_timer_h,x
-	bne .approach_move_yes
+	lda en_pat_n,x
+	bne .dec_move
 	jsr select_dodge_dir
 	ldx enemy_idx
-	lda #<DOG_REPATH_MS
-	sta en_timer,x
-	lda #>DOG_REPATH_MS
-	sta en_timer_h,x
+	lda #DOG_REPATH_N
+	sta en_pat_n,x
+	jmp .approach_move_yes
+.dec_move
+	dec en_pat_n,x
 .approach_move_yes
 	ldx enemy_idx
 	lda #AI_AP_MOVE
@@ -67,8 +69,7 @@ ai_rott_entry
 .approach_stand
 	ldx enemy_idx
 	lda #0
-	sta en_timer,x
-	sta en_timer_h,x
+	sta en_pat_n,x
 	lda #AI_AP_STAND
 	rts
 
@@ -81,9 +82,11 @@ ai_rott_entry
 
 .approach_enter
 	ldx enemy_idx
-	lda #<DOG_REPATH_MS
+	lda #DOG_REPATH_N
+	sta en_pat_n,x
+	lda #<ROTT_ATK_MS
 	sta en_timer,x
-	lda #>DOG_REPATH_MS
+	lda #>ROTT_ATK_MS
 	sta en_timer_h,x
 	jmp select_dodge_dir
 
@@ -114,21 +117,4 @@ ai_rott_entry
 	rts
 
 .attack_end
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	jsr enemy_cmp_range
-	beq .same
-	bcc .same
-	jmp enemy_enter_approach
-.same
-	jsr enemy_same_floor
-	bcc .approach
-	ldx enemy_idx
-	lda #EN_ATTACK
-	sta en_state,x
-	lda #0
-	sta en_frame,x
-	jsr pick_attack_var
-	jmp enemy_face_player
-.approach
 	jmp enemy_enter_approach

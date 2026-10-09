@@ -57,8 +57,9 @@ ai_shambler_entry
 
 .approach_enter
 	ldx enemy_idx
-	lda #0
+	lda #<SHAM_ATK_MS
 	sta en_timer,x
+	lda #>SHAM_ATK_MS
 	sta en_timer_h,x
 	jmp select_dodge_dir
 
@@ -80,6 +81,11 @@ ai_shambler_entry
 
 .pick_melee
 	ldx enemy_idx
+	lda en_pain_i,x
+	cmp #SHAM_VAR_SWINGR
+	beq .deferred
+	cmp #SHAM_VAR_SWINGL
+	beq .deferred
 	lda en_hp,x
 	cmp enemy_hp_init + ENT_SHAMBLER
 	beq .smash
@@ -95,6 +101,8 @@ ai_shambler_entry
 	jmp enemy_enter_shambler_attack
 .swingr
 	lda #SHAM_VAR_SWINGR
+	jmp enemy_enter_shambler_attack
+.deferred
 	jmp enemy_enter_shambler_attack
 
 .attack_end
@@ -118,11 +126,16 @@ ai_shambler_entry
 	cmp #SHAM_VAR_SWINGR
 	beq .chain_l
 	lda #SHAM_VAR_SWINGR
-	jmp enemy_enter_shambler_attack
+	sta en_pain_i,x
+	jmp enemy_enter_approach
 .chain_l
 	lda #SHAM_VAR_SWINGL
-	jmp enemy_enter_shambler_attack
+	sta en_pain_i,x
+	jmp enemy_enter_approach
 .to_ap
+	ldx enemy_idx
+	lda #SHAM_VAR_SMASH
+	sta en_pain_i,x
 	jmp enemy_enter_approach
 
 .fire
@@ -268,8 +281,14 @@ ai_shambler_entry
 	bcs .draw_a
 	rts
 .draw_a
-	sta x0
-	sty y0
+	lda ox0l
+	sta sham_hx
+	lda ox0h
+	sta sham_hy
+	lda oy0l
+	sta sham_hz
+	lda oy0h
+	sta sham_psy
 	lda sham_bx
 	sta sham_px
 	lda sham_by
@@ -282,9 +301,23 @@ ai_shambler_entry
 	bcs .draw_b
 	rts
 .draw_b
-	sta x1
-	sty y1
-	jmp draw_line
+	lda ox0l
+	sta ox1l
+	lda ox0h
+	sta ox1h
+	lda oy0l
+	sta oy1l
+	lda oy0h
+	sta oy1h
+	lda sham_hx
+	sta ox0l
+	lda sham_hy
+	sta ox0h
+	lda sham_hz
+	sta oy0l
+	lda sham_psy
+	sta oy0h
+	jmp clip_draw_xy
 
 .jagged
 	lda #0
@@ -294,25 +327,52 @@ ai_shambler_entry
 	jsr .point
 	jsr .project
 	bcc .jmiss
-	ldx sham_pok
+	lda ox0l
+	sta sham_hx
+	lda ox0h
+	sta sham_hy
+	lda oy0l
+	sta sham_hz
+	lda oy0h
+	sta sham_psy
+	lda sham_pok
 	beq .jarm
-	sta x1
-	sty y1
-	sta sham_psx
-	sty sham_psy
-	jsr draw_line
-	lda sham_psx
-	sta x0
+	pla
+	sta oy0h
+	pla
+	sta oy0l
+	pla
+	sta ox0h
+	pla
+	sta ox0l
+	lda sham_hx
+	sta ox1l
+	lda sham_hy
+	sta ox1h
+	lda sham_hz
+	sta oy1l
 	lda sham_psy
-	sta y0
-	jmp .jnext
+	sta oy1h
+	jsr clip_draw_xy
 .jarm
-	sta x0
-	sty y0
+	lda sham_hx
+	pha
+	lda sham_hy
+	pha
+	lda sham_hz
+	pha
+	lda sham_psy
+	pha
 	lda #1
 	sta sham_pok
 	jmp .jnext
 .jmiss
+	lda sham_pok
+	beq .jnext
+	pla
+	pla
+	pla
+	pla
 	lda #0
 	sta sham_pok
 .jnext
@@ -320,6 +380,13 @@ ai_shambler_entry
 	lda sham_i
 	cmp #11
 	bcc .jlp
+	lda sham_pok
+	beq .jdone
+	pla
+	pla
+	pla
+	pla
+.jdone
 	rts
 
 ; sham_i → world point. Ends stay on the segment; interior X/Z ±2.
@@ -439,7 +506,7 @@ ai_shambler_entry
 	sta org_zh
 	ldx #0
 	jsr xform_world_vert88
-	jsr project_cam0_screen
+	jsr cam0_proj_xy
 	bcs .pr_ok
 	; Player end sits on the camera, so Z fails. Push it to the near plane
 	; and keep the view-space X/Y (feet + 2 is below the eye). Snapping to
@@ -454,7 +521,7 @@ ai_shambler_entry
 	sta CAM_Z
 	lda #2
 	sta CAM_ZH
-	jsr project_cam0_screen
+	jsr cam0_proj_xy
 	bcs .pr_ok
 .pr_no
 	clc

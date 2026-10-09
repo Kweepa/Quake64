@@ -46,10 +46,6 @@ ai_knight_entry
 	lda #AI_AP_MOVE
 	rts
 .approach_stand
-	ldx enemy_idx
-	lda #0
-	sta en_timer,x
-	sta en_timer_h,x
 	lda #AI_AP_STAND
 	rts
 
@@ -58,13 +54,15 @@ ai_knight_entry
 	bcs +
 	rts
 +
-	lda #0
+	ldx enemy_idx
+	lda en_pain_i,x
 	jmp enemy_enter_knight_attack
 
 .approach_enter
 	ldx enemy_idx
-	lda #0
+	lda #<KNIGHT_ATK_MS
 	sta en_timer,x
+	lda #>KNIGHT_ATK_MS
 	sta en_timer_h,x
 	jmp select_dodge_dir
 
@@ -133,10 +131,15 @@ ai_knight_entry
 	beq .again
 	bcc .again
 .approach
+	ldx enemy_idx
+	lda #0
+	sta en_pain_i,x
 	jmp enemy_enter_approach
 .again
+	ldx enemy_idx
 	lda #1
-	jmp enemy_enter_knight_attack
+	sta en_pain_i,x
+	jmp enemy_enter_approach
 
 .anim_fire
 	ldx enemy_idx

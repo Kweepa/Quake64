@@ -88,8 +88,9 @@ ai_zombie_entry
 
 .approach_enter
 	ldx enemy_idx
-	lda #0
+	lda #<ZOMBIE_ATK_MS
 	sta en_timer,x
+	lda #>ZOMBIE_ATK_MS
 	sta en_timer_h,x
 	jmp select_dodge_dir
 

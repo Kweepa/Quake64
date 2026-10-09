@@ -36,9 +36,9 @@ ai_grunt_entry
 
 .approach_enter
 	ldx enemy_idx
-	lda #<APPROACH_MIN_MS
+	lda #<GRUNT_ATK_MS
 	sta en_timer,x
-	lda #>APPROACH_MIN_MS
+	lda #>GRUNT_ATK_MS
 	sta en_timer_h,x
 	jmp select_dodge_dir
 
@@ -64,25 +64,5 @@ ai_grunt_entry
 .fire_rts
 	rts
 
-; Random back to approach, or another shot if still in range with LOS.
 .attack_end
-	jsr rnd8
-	bmi .to_approach
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	jsr enemy_cmp_range
-	beq .again
-	bcc .again
-.to_approach
 	jmp enemy_enter_approach
-.again
-	ldx enemy_idx
-	jsr enemy_shot_clear
-	bcc .to_approach
-	ldx enemy_idx
-	lda #EN_ATTACK
-	sta en_state,x
-	lda #0
-	sta en_frame,x
-	jsr pick_attack_var
-	jmp enemy_face_player

@@ -1858,6 +1858,20 @@ pick_var_n
 	cmp #1
 	beq .pvn_one
 	sta rot1
+	; rnd8 bit 0 = previous bit 7. Pain chance < $80 leaves bit 7 clear,
+	; so the next sample is even and % 2 sticks on variant 0. Copy bit 0 up.
+	lda random8
+	lsr
+	lda random8
+	bcc +
+	ora #$80
+	bne .pvn_st
++
+	and #$7f
+	bne .pvn_st
+	lda #1
+.pvn_st
+	sta random8
 	jsr rnd8
 .pvn_mod
 	cmp rot1

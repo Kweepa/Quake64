@@ -1693,6 +1693,40 @@ cube_clip
 .syok
 	rts
 
+; ox0/oy0 and ox1/oy1 centered 16-bit. Clip to the viewport and stroke.
+; C=1 if the segment is fully outside. Clobbers ox/oy, oc0/oc1, rot0, rot2.
+clip_draw_xy
+	ldx #0
+	jsr .mkoc
+	sta oc0
+	ldx #1
+	jsr .mkoc
+	sta oc1
+	jsr .csrun
+	bcs .cd_no
+	lda ox0l
+	ldy ox0h
+	jsr .to_sx
+	sta x0
+	lda oy0l
+	ldy oy0h
+	jsr .to_sy
+	sta y0
+	lda ox1l
+	ldy ox1h
+	jsr .to_sx
+	sta x1
+	lda oy1l
+	ldy oy1h
+	jsr .to_sy
+	sta y1
+	jsr draw_line
+	clc
+	rts
+.cd_no
+	sec
+	rts
+
 mesh_draw
 cube_draw
 	lda #0
@@ -1909,6 +1943,73 @@ project_cam0_screen
 .pcs_b0
 	lda #0
 .pcs_bok
+	rts
+
+; CAM[0] in front → centered 16-bit ox0/oy0 (mesh PROJ space). C=0 if z<=0.
+; z >= ZCLIP is proj_invz. Closer is persp88, sign-extended, not viewport-clamped.
+cam0_proj_xy
+	lda CAM_ZH
+	bmi .cp_no
+	bne .cp_far
+	lda CAM_Z
+	beq .cp_no
+	sta z_eye
+	lda #0
+	sta z_eye_h
+	lda CAM_X
+	sta ylo
+	lda CAM_XH
+	sta yhi
+	jsr persp88
+	jsr .cp_sex
+	sta ox0l
+	sty ox0h
+	lda CAM_Y
+	sta ylo
+	lda CAM_YH
+	sta yhi
+	jsr persp88
+	jsr .cp_sex
+	sta oy0l
+	sty oy0h
+	sec
+	rts
+.cp_far
+	lda CAM_Z
+	sta z_eye
+	lda CAM_ZH
+	sta z_eye_h
+	jsr proj_invz
+	lda CAM_X
+	sta nlo
+	lda CAM_XH
+	sta nhi
+	jsr proj_cam_to_proj
+	lda nlo
+	sta ox0l
+	lda nhi
+	sta ox0h
+	lda CAM_Y
+	sta nlo
+	lda CAM_YH
+	sta nhi
+	jsr proj_cam_to_proj
+	lda nlo
+	sta oy0l
+	lda nhi
+	sta oy0h
+	sec
+	rts
+.cp_no
+	clc
+	rts
+; A signed 8-bit → Y = high byte. A preserved.
+.cp_sex
+	ldy #0
+	ora #0
+	bpl +
+	ldy #$ff
++
 	rts
 
 ; Unique UX/UZ * sin/cos, then CAM[v] from (xid,zid,VY[v]).

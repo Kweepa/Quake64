@@ -1150,10 +1150,12 @@ enemy_same_floor
 	rts
 
 ; A = damage — skill scale, then subtract from player_hp (and armour if any);
-; hurt/death SFX; red border flash.
+; hurt/death SFX; red border flash. god_mode returns before any of that.
 ; difficulty 0 = x1/2 (min 1), 1 = x1, 2 = x3/2 (cap 255). Before pent/armour.
 take_damage
 	sta rot0
+	lda god_mode
+	bne .td_rts
 	lda player_hp
 	beq .td_rts
 	lda difficulty

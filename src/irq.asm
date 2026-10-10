@@ -415,7 +415,7 @@ accum_keys
 	lda #1
 	sta in_qload
 .nof7
-	rts
+	jmp check_cheats
 
 ; Publish in_* → hold_* / key_* then clear (main, once per game frame).
 ; IRQ only accumulates into in_* each mid-split — do not snapshot there or

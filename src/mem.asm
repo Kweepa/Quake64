@@ -317,6 +317,28 @@ QS_FAIL_SALVAGE	= 1			; overlay A on C=1: state already overwritten
 !if QS_LATCH_END > RB_CELL {
 	!error "quicksave latches overlap rb_n"
 }
+; Cheat FSM + god_mode. Outside the quicksave image ($CB70–$D000) and not
+; cleared by game_zp_init / LoadLevel, so god mode survives idmap and death.
+; Cleared once from start. Hole ends at RB_CELL.
+god_mode	= QS_LATCH_END		; 1 = idgod, take_damage returns
+cheat_phase	= god_mode + 1
+cheat_god	= cheat_phase + 1	; table offset; cheat_kfa, cheat_map follow
+cheat_kfa	= cheat_god + 1
+cheat_map	= cheat_kfa + 1		; letters typed, then digits
+cheat_ep_dig	= cheat_map + 1
+cheat_map_dig	= cheat_ep_dig + 1
+cheat_ep_latch	= cheat_map_dig + 1	; stable copy for main
+cheat_map_latch	= cheat_ep_latch + 1
+cheat_was	= cheat_map_latch + 1	; 4 rising-edge slots
+cheat_dig_prev	= cheat_was + 4
+cheat_a		= cheat_dig_prev + 1
+cheat_b		= cheat_a + 1
+cheat_c		= cheat_b + 1
+cheat_req	= cheat_c + 1		; 0 / CHEAT_REQ_*
+CHEAT_BSS_END	= cheat_req + 1
+!if CHEAT_BSS_END > RB_CELL {
+	!error "cheat BSS overlaps rb_n"
+}
 
 SKEL_MAX_VERTS	= 48
 SKEL_MAX_EDGES	= 64

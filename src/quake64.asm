@@ -24,6 +24,7 @@ start
 
 	lda #0
 	sta load_in_play
+	jsr cheat_init
 	lda $ba
 	bne +
 	lda #8
@@ -81,6 +82,7 @@ main
 	sta draw_buf
 	jsr set_draw_ptrs
 	jsr read_input
+	jsr apply_cheats
 	jsr update_weapon
 	jsr apply_move_world
 	jsr maybe_room_palette
@@ -147,6 +149,8 @@ mod_enemy
 !source "enemy.asm"
 mod_loader
 !source "loader.asm"
+mod_cheats
+!source "cheats.asm"
 
 !source "map_bss.asm"
 

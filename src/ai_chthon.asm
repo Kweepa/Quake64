@@ -771,8 +771,7 @@ ch_elec
 	ldx #0
 	jsr .el_crate
 	ldx #1
-	jsr .el_crate
-	rts
+	jmp .el_crate
 
 .el_bolt_end
 	lda #0

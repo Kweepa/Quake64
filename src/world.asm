@@ -66,8 +66,7 @@ world_init
 	jsr sync_eye
 	lda #$ff
 	sta palette_room
-	jsr apply_room_palette
-	rts
+	jmp apply_room_palette
 
 ; Clear bp_taken[0..MAP_NBACKPACKS)
 init_backpacks
@@ -426,15 +425,13 @@ floor_below_y
 	inx
 	bne .fb_c
 .fb_p
-	ldx #0
+	ldy col_room
+	+slice_x room_plat_o
 .fb_pl
-	cpx	map_nplats
+	cpx sl_end
 	bcs .fb_done
 	+lda_mx plat_solid
 	beq .fb_pn
-	+lda_mx plat_room
-	cmp col_room
-	bne .fb_pn
 	+lda_mx plat_x
 	sta box_x
 	+lda_mx plat_z
@@ -449,7 +446,7 @@ floor_below_y
 	jsr .fb_cand
 .fb_pn
 	inx
-	bne .fb_pl
+	bne .fb_pl			; sl_end <= 255; X wraps only after the slice
 .fb_done
 	lda proc_tmp0
 	beq .fb_no
@@ -544,15 +541,13 @@ update_floor
 	jmp .uf_c
 .uf_p
 	; platforms (walkable if solid)
-	ldx #0
+	ldy room_idx
+	+slice_x room_plat_o
 .uf_pl
-	cpx	map_nplats
+	cpx sl_end
 	bcs .uf_plats_done
 	+lda_mx plat_solid
 	beq .uf_pn
-	+lda_mx plat_room
-	cmp room_idx
-	bne .uf_pn
 	+lda_mx plat_x
 	sta box_x
 	+lda_mx plat_z
@@ -589,21 +584,16 @@ update_floor
 	sta floor_y
 .uf_pn
 	inx
-	beq .uf_plats_done
 	jmp .uf_pl
 .uf_plats_done
 	jsr elev_update_floor
 .uf_slope
-	ldx #0
+	ldy room_idx
+	+slice_x room_slope_o
 .uf_s
-	cpx	map_nslopes
-	bcc .uf_sgo
+	cpx sl_end
+	bcc .uf_sroom
 	jmp .uf_done
-.uf_sgo
-	+lda_mx slope_room
-	cmp room_idx
-	beq .uf_sroom
-	jmp .uf_sn
 .uf_sroom
 	+lda_mx slope_x
 	sta box_x
@@ -943,15 +933,13 @@ solid_at_col
 	jmp .sa_c
 .sa_p
 	; platforms — solid on Y overlap (plane as sy=0); rise <= STEP_UP is a step-up
-	ldx #0
+	ldy col_room			; Y flag is dead past the crates
+	+slice_x room_plat_o
 .sa_pl
-	cpx	map_nplats
+	cpx sl_end
 	bcs .sa_d
 	+lda_mx plat_solid
 	beq .sa_pn
-	+lda_mx plat_room
-	cmp col_room
-	bne .sa_pn
 	+lda_mx plat_y
 	sta box_y
 	lda #0
@@ -979,7 +967,6 @@ solid_at_col
 	bcs .sa_yes
 .sa_pn
 	inx
-	beq .sa_d
 	jmp .sa_pl
 .sa_d
 	ldy col_room
@@ -1422,6 +1409,9 @@ apply_move_world
 	lda #0
 	sta door_blk
 
+	lda wish_dx			; no wish on an axis: position is unchanged, skip pos_ok
+	ora wish_dxh
+	beq .am_zx
 	clc
 	lda cam_xl
 	adc wish_dx
@@ -1445,6 +1435,9 @@ apply_move_world
 	sta save_xh
 	lda cam_xl
 	sta save_xl
+	lda wish_dz
+	ora wish_dzh
+	beq .am_done
 	clc
 	lda cam_zl
 	adc wish_dz
@@ -1486,8 +1479,7 @@ apply_move_world
 	cmp mv0_zh
 	bne .am_rts
 	lda #SOUND_WEAPONS_TINK1
-	jsr play_sound
-	rts
+	jmp play_sound
 .am_hydro
 	lda #SOUND_DOORS_HYDRO1
 	jsr play_sound
@@ -1640,15 +1632,13 @@ try_proximity
 
 ; Walk-over backpacks: grant if not full / not already owned
 try_backpack_pickup
-	ldx #0
+	ldy room_idx
+	+slice_x room_bp_o
 .tbp_lp
-	cpx	map_nbackpacks
+	cpx sl_end
 	bcs .tbp_rts
 	stx obj_i
 	lda bp_taken,x
-	bne .tbp_n
-	+lda_mx bp_room
-	cmp room_idx
 	bne .tbp_n
 	+lda_mx bp_x
 	sta box_x
@@ -1691,7 +1681,6 @@ try_backpack_pickup
 .tbp_n
 	ldx obj_i
 	inx
-	beq .tbp_rts
 	jmp .tbp_lp
 .tbp_rts
 	; death-drop backpacks
@@ -1919,11 +1908,6 @@ pickup_sound
 	lda #SOUND_WEAPONS_PKUP
 	jmp play_sound
 .ps_hp
-	cmp #BP_HEALTH50
-	beq .ps_hp2
-	lda #SOUND_ITEMS_HEALTH1
-	jmp play_sound
-.ps_hp2
 	lda #SOUND_ITEMS_HEALTH1
 	jmp play_sound
 
@@ -2110,26 +2094,16 @@ trig_arm_tag
 update_triggers
 	lda #0
 	sta trig_seen
-	ldx #0
-	ldy #0				; room-local bit
+	ldy room_idx
+	+lda_my room_trig_o
+	tax
+	iny
+	+lda_my room_trig_o
+	sta ut_end
+	ldy #0				; room-local bit (slice <= TRIG_ROOM_MAX, genmap)
 .ut
-	cpx	map_ntrigs
-	bcc .ut_go
-	jmp .ut_fin
-.ut_go
-	+lda_mx tr_room
-	cmp room_idx
-	beq .ut_room
-	inx
-	bne .ut_back
-	jmp .ut_fin
-.ut_back
-	jmp .ut
-.ut_room
-	cpy #TRIG_ROOM_MAX
+	cpx ut_end
 	bcc .ut_bit
-	inx
-	bne .ut_back
 	jmp .ut_fin
 .ut_bit
 	lda ut_bits,y
@@ -2240,9 +2214,6 @@ update_triggers
 .ut_adv
 	iny
 	inx
-	bne .ut_more
-	jmp .ut_fin
-.ut_more
 	jmp .ut
 .ut_msghold
 	lda msg_on

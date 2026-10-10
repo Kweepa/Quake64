@@ -108,14 +108,9 @@ stroke_mesh
 	ldy #PROF_PROJ
 	jsr prof_add_bucket
 }
-	jsr mesh_clip
+	jsr mesh_clip			; strokes each edge as it accepts it
 !if PROFILE = 1 {
 	ldy #PROF_CLIP
-	jsr prof_add_bucket
-}
-	jsr mesh_draw
-!if PROFILE = 1 {
-	ldy #PROF_DRAW
 	jsr prof_add_bucket
 }
 	lda #$ff
@@ -270,8 +265,7 @@ cull_box_faces
 	bcc .cf_z1
 	lda #0
 	ldy #$20
-	jsr box_apply_face
-	rts
+	jmp box_apply_face
 .cf_z1
 	sta rot1
 	lda #0
@@ -283,8 +277,7 @@ cull_box_faces
 .cf_pzk
 	lda rot0
 	ldy #$20
-	jsr box_apply_face
-	rts
+	jmp box_apply_face
 
 ; Pack edges with a visible face into box_vis_edges; mesh_ne = count
 box_pack_edges
@@ -496,8 +489,14 @@ box_xz_cheby
 .ret
 	rts
 
-; rot0=Nx rot1=Nz. C=1 if N·(p-vertex − cam) >= 0
+; rot0=Nx rot1=Nz. C=1 if N·(p-vertex − cam) >= 0 (p-vertex = box corner
+; furthest along N). |d|·|N| via set A (Nx) / set B (Nz): 8x8 products, halved,
+; mixed signs compare magnitudes instead of negating. Clobbers sets A/B.
 plane_pvert
+	lda rot0
+	jsr mulset_a
+	lda rot1
+	jsr mulset_b
 	lda rot0
 	bmi .pp_minx
 	clc
@@ -511,15 +510,15 @@ plane_pvert
 .pp_x
 	sec
 	sbc cam_xh
-	sta nlo
-	lda #0
-	sbc #0
-	sta nhi
-	ldy rot0
-	jsr smul16_7
-	lda nlo
+	jsr .pp_absd
+	eor rot0			; bit7 = sign of Nx·dx
+	sta rot2
+	jsr umul8a
+	lsr prod_h
+	ror prod_l
+	lda prod_l
 	sta pv0
-	lda nhi
+	lda prod_h
 	sta pv1
 	lda rot1
 	bmi .pp_minz
@@ -534,22 +533,59 @@ plane_pvert
 .pp_z
 	sec
 	sbc cam_zh
-	sta nlo
-	lda #0
-	sbc #0
-	sta nhi
-	ldy rot1
-	jsr smul16_7
+	jsr .pp_absd
+	eor rot1			; bit7 = sign of Nz·dz
+	eor rot2			; bit7 = signs differ
+	bmi .pp_mixed
+	lda rot2			; same sign: sum >= 0 only if positive, or both zero
+	bpl .pp_yes
+	jsr umul8b
+	lsr prod_h
+	ror prod_l
+	lda prod_l
+	ora prod_h
+	ora pv0
+	ora pv1
+	beq .pp_yes
+.pp_no
 	clc
-	lda nlo
-	adc pv0
-	lda nhi
-	adc pv1
-	bmi .pp_out
+	rts
+.pp_yes
 	sec
 	rts
-.pp_out
-	clc
+.pp_mixed
+	jsr umul8b
+	lsr prod_h
+	ror prod_l
+	lda rot2			; sign of the first term
+	bmi .pp_p2pos			; first negative → second positive
+	; first positive (pv), second negative (prod): visible iff pv >= prod
+	lda pv1
+	cmp prod_h
+	bne .pp_cmp
+	lda pv0
+	cmp prod_l
+.pp_cmp
+	rts				; C = pv >= prod
+.pp_p2pos
+	lda prod_h
+	cmp pv1
+	bne .pp_cmp
+	lda prod_l
+	cmp pv0
+	rts				; C = prod >= pv
+
+; A = d mod 256, C = no borrow → Y = |d|, A = $80 if d < 0
+.pp_absd
+	bcs .pp_dpos
+	eor #$ff
+	adc #1
+	tay
+	lda #$80
+	rts
+.pp_dpos
+	tay
+	lda #0
 	rts
 
 ; ------------------------------------------------------------------
@@ -1522,13 +1558,11 @@ draw_world
 	beq .dw_sl
 	jmp .dw_el
 .dw_sl
-	ldx #0
+	ldy room_idx
+	+slice_x room_slope_o
 .dw_slope
-	cpx	map_nslopes
+	cpx sl_end
 	bcs .dw_pl
-	+lda_mx slope_room
-	cmp room_idx
-	bne .dw_sln
 	stx obj_i
 	+lda_mx slope_x
 	sta box_x
@@ -1549,16 +1583,13 @@ draw_world
 	ldx obj_i
 .dw_sln
 	inx
-	beq .dw_pl
 	jmp .dw_slope
 .dw_pl
-	ldx #0
+	ldy room_idx
+	+slice_x room_plat_o
 .dw_plat
-	cpx	map_nplats
+	cpx sl_end
 	bcs .dw_bp
-	+lda_mx plat_room
-	cmp room_idx
-	bne .dw_pln
 	stx obj_i
 	+lda_mx plat_x
 	sta box_x
@@ -1599,18 +1630,15 @@ draw_world
 	ldx obj_i
 .dw_pln
 	inx
-	beq .dw_bp
 	jmp .dw_plat
 	; backpacks
 .dw_bp
-	ldx #0
+	ldy room_idx
+	+slice_x room_bp_o
 .dw_bpl
-	cpx	map_nbackpacks
+	cpx sl_end
 	bcs .dw_drops
 	lda bp_taken,x
-	bne .dw_bpn
-	+lda_mx bp_room
-	cmp room_idx
 	bne .dw_bpn
 	stx obj_i
 	+lda_mx bp_x
@@ -1632,7 +1660,6 @@ draw_world
 	ldx obj_i
 .dw_bpn
 	inx
-	beq .dw_drops
 	jmp .dw_bpl
 	; death drops
 .dw_drops

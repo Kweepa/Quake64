@@ -201,8 +201,7 @@ init_weapon_hw
 	; nail R bitmap stays in WPN_FLASH2
 	lda #<spr_nail_fr
 	ldy #>spr_nail_fr
-	jsr blit_flash2
-	rts
+	jmp blit_flash2
 
 ; First start: hardware + starting inventory.
 init_weapon

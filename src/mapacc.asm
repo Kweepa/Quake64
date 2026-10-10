@@ -76,3 +76,14 @@
 	lda MAP_SMC_BASE + ((.fld - room_x) / 2),y
 	tay
 }
+
+; Room slice: Y = room. X = first object of that room, sl_end = one past the last.
+; Tables are room_<type>_o (nrooms+1 entries, objects baked room-sorted by genmap).
+; Y is clobbered (+1). Loop bodies must not reach another slice user (sl_end).
+!macro slice_x .tab {
+	+lda_my .tab
+	tax
+	iny
+	+lda_my .tab
+	sta sl_end
+}

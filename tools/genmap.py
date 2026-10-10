@@ -407,6 +407,10 @@ def cook_one(level: dict, map_key: str) -> bytes:
     backpacks = [o for o in objs if o["kind"] in ("pickup", "backpack", "key")]
     spawns = [o for o in objs if o["kind"] == "spawn"]
 
+    # Room-sorted (stable): runtime loops walk one room slice via room_*_o.
+    for lst, kind in ((slopes, "slope"), (plats, "platform"), (triggers, "trigger"), (backpacks, "pickup")):
+        lst.sort(key=lambda o: room_index(rooms, o, kind))
+
     if not spawns:
         raise SystemExit(f"{map_key} needs a spawn")
     enabled = [o for o in spawns if o.get("enabled")]
@@ -1082,7 +1086,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(room_line)
     add(room_fx)
     add(room_wpn)
-    add(room_id)
     add(col_x)
     add(col_y)
     add(col_z)
@@ -1134,7 +1137,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(crate_sy)
     add(crate_sz)
     add(crate_room)
-    add(crate_id)
     add(slope_x)
     add(slope_y)
     add(slope_z)
@@ -1144,7 +1146,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(slope_axis)
     add(slope_dir)
     add(slope_room)
-    add(slope_id)
     add(slope_flags)
     add(plat_x)
     add(plat_y)
@@ -1153,7 +1154,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(plat_sz)
     add(plat_room)
     add(plat_solid)
-    add(plat_id)
     add(elev_x)
     add(elev_y)
     add(elev_z)
@@ -1185,7 +1185,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(sw_tag)
     add(sw_room)
     add(sw_face)
-    add(sw_id)
     add(en_x)
     add(en_y)
     add(en_z)
@@ -1193,7 +1192,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(en_rot)
     add(en_room)
     add(en_patrol)
-    add(en_id)
     add(tr_x)
     add(tr_y)
     add(tr_z)
@@ -1203,7 +1201,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(tr_room)
     add(tr_purpose)
     add(tr_arg)
-    add(tr_id)
     add(td_x)
     add(td_y)
     add(td_z)
@@ -1214,7 +1211,9 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(bp_z)
     add(bp_type)
     add(bp_room)
-    add(bp_id)
+    # room_<type>_o: first index of each room's slice (nrooms+1; last = count)
+    for lst in (slope_room, plat_room, tr_room, bp_room):
+        add([sum(1 for r in lst if r < i) for i in range(len(rooms) + 1)])
     payload.extend(text_blob if text_blob else [0])
 
     if len(payload) > MAP_MAX_BYTES:

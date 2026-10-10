@@ -85,6 +85,9 @@ def bind_sequence() -> list[tuple[str, str]]:
         if re.match(r"^\+bind_set_n3\b", s):
             pending = "nrooms*3"
             continue
+        if re.match(r"^\+bind_set_n1\b", s):
+            pending = "nrooms+1"
+            continue
         if re.match(r"^\+bind_set_n2\b", s):
             pending = "nrooms*2"
             continue
@@ -117,6 +120,8 @@ def field_offsets(payload: bytes) -> tuple[dict[str, int], dict[str, int]]:
     cur = end + 1
 
     def resolve(expr: str) -> int:
+        if expr == "nrooms+1":
+            return counts["map_nrooms"] + 1
         if expr == "nrooms*2":
             return counts["map_nrooms"] * 2
         if expr == "nrooms*3":

@@ -432,11 +432,6 @@ draw_custom_enemy
 	ldy #PROF_CLIP
 	jsr prof_add_bucket
 }
-	jsr mesh_draw
-!if PROFILE = 1 {
-	ldy #PROF_DRAW
-	jsr prof_add_bucket
-}
 	jmp .db_batch
 .dce_done
 	lda #NVERTS

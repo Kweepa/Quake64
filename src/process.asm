@@ -97,26 +97,6 @@ proc_add_dt
 	sta PROC_D,x
 	rts
 
-proc_try_step
-	lda PROC_D,x
-	bne .acc_hi
-	lda PROC_C,x
-	cmp #MOTION_STEP_MS
-	bcc .acc_no
-.acc_hi
-	sec
-	lda PROC_C,x
-	sbc #MOTION_STEP_MS
-	sta PROC_C,x
-	lda PROC_D,x
-	sbc #0
-	sta PROC_D,x
-	clc				; step
-	rts
-.acc_no
-	sec
-	rts
-
 ; ------------------------------------------------------------------
 ; Loop / next / work are global so elevator.asm can jmp proc_update_next
 proc_update

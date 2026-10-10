@@ -422,8 +422,18 @@ line_cutouts_hit
 ; ln_best / col_* = hit. C=0 clear. Running best in proc_tmp1–4.
 ; Room in proc_tmp5. Does not use rot*. line_hit_box clobbers X.
 line_solids_hit
+	lda #0
+	!byte $2c			; BIT abs: skips the lda #1 below
+line_solids_blocked			; C=1 on the first solid found (col_* / ln_best not nearest)
+	lda #1
+	sta ls_first
 	sty proc_tmp5
 	jsr line_cutouts_hit
+	bcc +
+	lda ls_first
+	beq +
+	jmp .lsh_pub
++
 	ldx #0
 .lsh_crate
 	cpx map_ncrates
@@ -455,15 +465,13 @@ line_solids_hit
 	inx
 	bne .lsh_crate
 .lsh_plats
-	ldx #0
+	ldy proc_tmp5
+	+slice_x room_plat_o
 .lsh_pl
-	cpx map_nplats
+	cpx sl_end
 	bcs .lsh_elevs
 	+lda_mx plat_solid
 	beq .lsh_pn
-	+lda_mx plat_room
-	cmp proc_tmp5
-	bne .lsh_pn
 	+lda_mx plat_x
 	sta box_x
 	+lda_mx plat_y
@@ -537,13 +545,11 @@ line_solids_hit
 	iny
 	bne .lsh_cu
 .lsh_slopes
-	ldx #0
+	ldy proc_tmp5
+	+slice_x room_slope_o
 .lsh_sl
-	cpx map_nslopes
+	cpx sl_end
 	bcs .lsh_shell
-	+lda_mx slope_room
-	cmp proc_tmp5
-	bne .lsh_sn
 	txa
 	pha
 	jsr .slope_one
@@ -589,6 +595,11 @@ line_solids_hit
 	sta proc_tmp3
 	lda col_z
 	sta proc_tmp4
+	lda ls_first
+	beq .lsh_nr
+	pla				; first-hit mode: drop .lsh_near's return, publish
+	pla
+	jmp .lsh_pub
 .lsh_nr
 	rts
 

@@ -36,32 +36,9 @@ start
 	bcc .start_ok
 	jmp load_fail_hang
 .start_ok
-	sei
-	lda #BANK_IO
-	sta $01
-	jsr game_zp_init
-
-	jsr fill_colour
-	jsr init_vic
-	jsr init_irq
-	jsr play_sound_init
+	jsr play_up1
 	jsr init_weapon
-	jsr prof_init
-	lda #BANK_RAM				; all RAM; I/O only in IRQ
-	sta $01
-	jsr clear_charsets
-	jsr fill_margin_glyph
-	lda #BANK_IO				; colour RAM + HUD after charset wipe
-	sta $01
-	jsr init_hud
-	jsr hud_ammo
-	jsr hud_powerup
-	lda #BANK_RAM
-	sta $01
-	jsr mulset_init
-	jsr world_init
-	jsr maybe_stream_room			; room_idx is valid now: pull its poses
-	cli
+	jsr play_up2
 
 main
 	jsr poll_quick_keys			; F5 save / F7 load; screen redraws after
@@ -142,8 +119,6 @@ mod_playsound
 !source "playsound.asm"
 mod_pcsounds
 !source "pcsounds.asm"
-mod_pcsfreq
-!source "pcsfreq.asm"
 mod_weapon
 !source "weapon.asm"
 mod_weapon_spr

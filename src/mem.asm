@@ -297,12 +297,22 @@ SKEL_BSS_END	= skel_entry_hi + ENEMY_PTR_N
 !if SKEL_BSS_END > RB_CELL {
 	!error "skeleton BSS overlaps rb_n cell"
 }
+; Cassette buffer / $0334-$03FF (204 B): free during play (KERNAL disk LOAD/SAVE
+; never touches it). Not $02xx (MAP_SMC_HI sentinel), not $0314-$0319 (vectors).
+LINE_TAB	= $0334			; col_lo[32] col_hi[32] vbits[8] = 72 B (line.asm)
+LINE_TAB_END	= LINE_TAB + 72
+SOUND_TABLE	= LINE_TAB_END		; sound_table: SOUND_COUNT words (playsound.asm)
+SOUND_TABLE_MAX	= $0400 - SOUND_TABLE	; 132 B = 66 sounds
+
 ; F5/F7. IRQ ORs the latch, poll_quick_keys clears it. Not KERNAL ZP $90–$bf.
 in_qsave	= SKEL_BSS_END
 in_qload	= in_qsave + 1
 qs_cmd		= in_qload + 1		; 0 = save, 1 = load (overlay reads this)
 save_end	= qs_cmd + 1		; word: exclusive KERNAL SAVE end
-QS_LATCH_END	= save_end + 2
+ls_first	= save_end + 2		; 1 = line_solids_* stops at the first hit
+sl_end		= ls_first + 1		; room-slice loop bound (leaf loops only, never nested)
+ut_end		= sl_end + 1		; update_triggers slice bound (trig_enter may reach sl_end users)
+QS_LATCH_END	= ut_end + 1
 QS_FAIL_SALVAGE	= 1			; overlay A on C=1: state already overwritten
 !if QS_LATCH_END > RB_CELL {
 	!error "quicksave latches overlap rb_n"

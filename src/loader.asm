@@ -693,8 +693,7 @@ clear_pose_ptrs
 	lda #0
 	sta crush_entry_lo
 	sta crush_entry_hi
-	jsr unbind_streamed_sfx
-	rts
+	jmp unbind_streamed_sfx
 
 ; A = type or $FF. Load if absent. C=0 ok, C=1 fail.
 load_pose_if_needed
@@ -1415,7 +1414,7 @@ bind_type_sfx
 	ldy #1
 	lda (src_ptr),y			; N
 	clc
-	adc #3				; id, N, AD, freq[N]
+	adc #4				; id, N, AD|voice, priority, fnhi[N]
 	tax
 	lda #0
 	adc #0
@@ -1564,24 +1563,35 @@ restart_level
 	lda #0
 	sta load_in_play
 	bcs .rl_fail
+	jsr play_up1
+	jsr init_weapon_hw
+	ldx cur_weapon
+	jsr setup_weapon
+	jsr play_up2
+	clc
+.rl_fail
+	rts
 
+; Play bring-up shared by start and restart_level. I=1 on return.
+play_up1
 	sei
 	lda #BANK_IO
 	sta $01
 	jsr game_zp_init
+	jsr line_tab_init
 	jsr fill_colour
 	jsr init_vic
 	jsr init_irq
 	jsr prof_init
-	jsr play_sound_init
-	jsr init_weapon_hw
-	ldx cur_weapon
-	jsr setup_weapon
-	lda #BANK_RAM
+	jmp play_sound_init
+
+; Charsets, HUD, world. Ends with CLI (room_idx valid: pulls its poses).
+play_up2
+	lda #BANK_RAM				; all RAM; I/O only in IRQ
 	sta $01
 	jsr clear_charsets
 	jsr fill_margin_glyph
-	lda #BANK_IO
+	lda #BANK_IO				; colour RAM + HUD after charset wipe
 	sta $01
 	jsr init_hud
 	jsr hud_ammo
@@ -1592,8 +1602,6 @@ restart_level
 	jsr world_init
 	jsr maybe_stream_room
 	cli
-	clc
-.rl_fail
 	rts
 
 ; TRIG_END: next e1mN, or episode done → menu endings.

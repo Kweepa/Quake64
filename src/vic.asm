@@ -36,8 +36,7 @@ init_vic
 	sta pub_ph
 	lda #D018_A_BOT
 	sta show_d018_bot
-	jsr set_draw_ptrs
-	rts
+	jmp set_draw_ptrs
 
 ; Colour RAM: outside = background (invisible), viewport = vector colour
 fill_colour
@@ -51,33 +50,9 @@ fill_colour
 	inx
 	bne -
 
-	lda #<($d800 + VIEW_OFF)
-	sta init_ptr
-	lda #>($d800 + VIEW_OFF)
-	sta init_ptr+1
-	lda #VIEW_H
-	sta init_row
-.row
-	ldy #0
 	lda #COL_LINE
-.col
-	sta (init_ptr),y
-	iny
-	cpy #VIEW_W
-	bne .col
-	clc
-	lda init_ptr
-	adc #40
-	sta init_ptr
-	bcc +
-	inc init_ptr+1
-+
-	dec init_row
-	bne .row
-	rts
-
-; 24×16 viewport only — uses col_line (room palette)
-fill_viewport_colour
+fill_vp						; A = colour for the VIEW_W x VIEW_H viewport
+	tax
 	lda #<($d800 + VIEW_OFF)
 	sta init_ptr
 	lda #>($d800 + VIEW_OFF)
@@ -86,7 +61,7 @@ fill_viewport_colour
 	sta init_row
 .vrow
 	ldy #0
-	lda col_line
+	txa
 .vcol
 	sta (init_ptr),y
 	iny
@@ -102,6 +77,11 @@ fill_viewport_colour
 	dec init_row
 	bne .vrow
 	rts
+
+; 24x16 viewport only — uses col_line (room palette)
+fill_viewport_colour
+	lda col_line
+	jmp fill_vp
 
 ; room_idx → col_bg/line/fx/wpn; IRQ publishes colour RAM / weapon sprites
 apply_room_palette

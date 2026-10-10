@@ -2,15 +2,6 @@
 ITEM_ORIGIN	= 0
 ITEM_BIAS	= 1
 
-item_bp_nv	!byte 4
-item_bp_ne	!byte 6
-item_bp_nx	!byte 3
-item_bp_nz	!byte 2
-item_bp_vo	!byte 0
-item_bp_eo	!byte 0
-item_bp_uo	!byte 0
-item_bp_zo	!byte 0
-
 item_nv
 	!byte 6,6,6,5,4,6,6,0,5,8,5,5,7,7,9,4
 item_ne

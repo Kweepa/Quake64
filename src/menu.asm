@@ -295,8 +295,7 @@ menu_move_up
 	dex
 .mmu
 	stx menu_item
-	jsr update_selection
-	rts
+	jmp update_selection
 
 menu_move_down
 	lda menu_item
@@ -308,8 +307,7 @@ menu_move_down
 	ldx #0
 .mmd
 	stx menu_item
-	jsr update_selection
-	rts
+	jmp update_selection
 
 ; Repaint only old + new rows (no clear / full redraw)
 update_selection
@@ -1081,8 +1079,7 @@ show_story_screen
 	bcc .st_l
 .st_wait
 	jsr menu_unblank
-	jsr wait_any_key
-	rts
+	jmp wait_any_key
 
 ; Size box from body lines. Leaves ui_str at first line.
 calc_text_box

@@ -834,8 +834,7 @@ select_dodge_dir
 	bcc .sdd_n
 	ldx enemy_idx
 	lda ai_probe
-	jsr enemy_set_geom
-	rts
+	jmp enemy_set_geom
 .sdd_n
 	inc dodge_i
 	lda dodge_i
@@ -1090,21 +1089,9 @@ enemy_enter_shambler_attack
 	jmp enemy_face_player
 
 ; A = attack variant (0=leap, 1=claw). MDL order. Zero step so the leap doesn't inherit chase cadence.
-enemy_enter_demon_attack
-	ldx enemy_idx
-	sta en_pain_i,x
-	lda #EN_ATTACK
-	sta en_state,x
-	lda #0
-	sta en_frame,x
-	sta en_step,x
-	sta en_step_h,x
-	jsr enemy_play_clip_sfx_enter
-	ldx enemy_idx
-	jmp enemy_face_player
-
-; A = attack variant (0=runattack, 1=attackb). Zero step so lunge doesn't inherit chase cadence.
+; Knight (0=runattack, 1=attackb) shares the demon entry: same state, zero step.
 enemy_enter_knight_attack
+enemy_enter_demon_attack
 	ldx enemy_idx
 	sta en_pain_i,x
 	lda #EN_ATTACK
@@ -1286,8 +1273,7 @@ enemy_probe_dir
 	+lda_mx en_z
 	adc en_dz,y
 	sta col_z
-	jsr enemy_pos_ok
-	rts
+	jmp enemy_pos_ok
 
 ; Try step in en_dir; repath if blocked. Also clamp.
 ; Scrag: keep hover Y (do not floor-snap).
@@ -1451,8 +1437,7 @@ enemy_patrol_pick
 	sta en_timer,x
 	sta en_timer_h,x
 	lda ai_probe
-	jsr enemy_set_geom
-	rts
+	jmp enemy_set_geom
 .epp_fail
 	clc
 	rts
@@ -1882,7 +1867,7 @@ enemy_shot_clear
 	lda cam_zh
 	sta ln_bz
 	+ldy_mx en_room
-	jsr line_solids_hit
+	jsr line_solids_blocked
 	bcs .esc_block
 	sec
 	rts
@@ -2183,7 +2168,7 @@ gun_hitscan
 	+lda_mx en_z
 	sta ln_bz
 	+ldy_mx en_room
-	jsr line_solids_hit
+	jsr line_solids_blocked
 	bcc .sh_vis
 	jmp .sh_n				; room solid between camera and enemy
 .sh_vis

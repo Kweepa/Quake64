@@ -29,6 +29,8 @@ bind_apply
 	beq .ba_n3
 	cmp #2
 	beq .ba_n2
+	cmp #3
+	beq .ba_n1
 .ba_fld
 	ldy #0
 	lda bind_cur
@@ -63,6 +65,12 @@ bind_apply
 	clc
 	adc map_nrooms
 	sta bind_n
+	clc
+	bcc .ba_nxt
+.ba_n1
+	lda map_nrooms
+	sta bind_n
+	inc bind_n
 	clc
 	bcc .ba_nxt
 .ba_n2
@@ -157,6 +165,10 @@ patch_map_smc
 	!word 2
 	!word 0
 }
+!macro bind_set_n1 {
+	!word 3
+	!word 0
+}
 
 bind_tab
 	+bind_add room_x, map_nrooms
@@ -169,7 +181,6 @@ bind_tab
 	+bind_add room_line, map_nrooms
 	+bind_add room_fx, map_nrooms
 	+bind_add room_wpn, map_nrooms
-	+bind_add room_id, map_nrooms
 	+bind_set_n3
 	+bind_add rc_x, bind_n
 	+bind_add rc_y, bind_n
@@ -223,7 +234,6 @@ bind_tab
 	+bind_add crate_sy, map_ncrates
 	+bind_add crate_sz, map_ncrates
 	+bind_add crate_room, map_ncrates
-	+bind_add crate_id, map_ncrates
 	+bind_add slope_x, map_nslopes
 	+bind_add slope_y, map_nslopes
 	+bind_add slope_z, map_nslopes
@@ -233,7 +243,6 @@ bind_tab
 	+bind_add slope_axis, map_nslopes
 	+bind_add slope_dir, map_nslopes
 	+bind_add slope_room, map_nslopes
-	+bind_add slope_id, map_nslopes
 	+bind_add slope_flags, map_nslopes
 	+bind_add plat_x, map_nplats
 	+bind_add plat_y, map_nplats
@@ -242,7 +251,6 @@ bind_tab
 	+bind_add plat_sz, map_nplats
 	+bind_add plat_room, map_nplats
 	+bind_add plat_solid, map_nplats
-	+bind_add plat_id, map_nplats
 	+bind_add elev_x, map_nelevs
 	+bind_add elev_y0, map_nelevs
 	+bind_add elev_z, map_nelevs
@@ -274,7 +282,6 @@ bind_tab
 	+bind_add sw_tag, map_nswitches
 	+bind_add sw_room, map_nswitches
 	+bind_add sw_face, map_nswitches
-	+bind_add sw_id, map_nswitches
 	+bind_add en_x, map_nenemies
 	+bind_add en_y, map_nenemies
 	+bind_add en_z, map_nenemies
@@ -282,7 +289,6 @@ bind_tab
 	+bind_add en_rot, map_nenemies
 	+bind_add en_room, map_nenemies
 	+bind_add en_patrol, map_nenemies
-	+bind_add en_id, map_nenemies
 	+bind_add tr_x, map_ntrigs
 	+bind_add tr_y, map_ntrigs
 	+bind_add tr_z, map_ntrigs
@@ -292,7 +298,6 @@ bind_tab
 	+bind_add tr_room, map_ntrigs
 	+bind_add tr_purpose, map_ntrigs
 	+bind_add tr_arg, map_ntrigs
-	+bind_add tr_id, map_ntrigs
 	+bind_add td_x, map_ndests
 	+bind_add td_y, map_ndests
 	+bind_add td_z, map_ndests
@@ -303,5 +308,9 @@ bind_tab
 	+bind_add bp_z, map_nbackpacks
 	+bind_add bp_type, map_nbackpacks
 	+bind_add bp_room, map_nbackpacks
-	+bind_add bp_id, map_nbackpacks
+	+bind_set_n1
+	+bind_add room_slope_o, bind_n
+	+bind_add room_plat_o, bind_n
+	+bind_add room_trig_o, bind_n
+	+bind_add room_bp_o, bind_n
 	!word 0, 0

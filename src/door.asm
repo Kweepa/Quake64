@@ -126,8 +126,6 @@ door_unlock_tag
 ; door_blocks — col_x/col_z vs locked door in this room. C=1 blocked
 ; door_blocks_y — Y = room
 ; ------------------------------------------------------------------
-door_blocks
-	ldy room_idx
 door_blocks_y
 	+lda_my room_door_o
 	sta door_i0

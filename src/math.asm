@@ -121,14 +121,6 @@ mulset_au
 	sta pa_s2h
 	rts
 
-mulset_bu
-	sta pb_s1l
-	sta pb_s1h
-	eor #$ff
-	sta pb_s2l
-	sta pb_s2h
-	rts
-
 ; Y = unsigned multiplicand → prod = Y * m. Preserves X and Y.
 umul8a
 	sec
@@ -150,10 +142,11 @@ umul8b
 	sta prod_h
 	rts
 
-; nlo:nhi (signed) * set-A/B multiplier >> 7 → nlo:nhi (smul16_7 contract)
-smul16_a
+; nlo:nhi (signed) * set-A/B multiplier >> 7 → nlo:nhi (smul16_7 contract).
+; Products inlined; X preserved, Y/ylo/dlo/dhi/prod_* clobbered.
+!macro smul16_body .sg, .s1l, .s1h, .s2l, .s2h {
 	lda nhi
-	eor sg_a
+	eor .sg
 	sta mul_sign
 	lda nhi
 	bpl +
@@ -166,38 +159,21 @@ smul16_a
 	sta nhi
 +
 	ldy nlo
-	jsr umul8a
-	lda prod_l
-	sta dlo
-	lda prod_h
-	sta dhi
-	ldy nhi
-	jsr umul8a
-	jmp smul16_tail
-
-smul16_b
-	lda nhi
-	eor sg_b
-	sta mul_sign
-	lda nhi
-	bpl +
 	sec
-	lda #0
-	sbc nlo
-	sta nlo
-	lda #0
-	sbc nhi
-	sta nhi
-+
-	ldy nlo
-	jsr umul8b
-	lda prod_l
+	lda (.s1l),y
+	sbc (.s2l),y
 	sta dlo
-	lda prod_h
+	lda (.s1h),y
+	sbc (.s2h),y
 	sta dhi
 	ldy nhi
-	jsr umul8b
-smul16_tail
+	sec
+	lda (.s1l),y
+	sbc (.s2l),y
+	sta prod_l
+	lda (.s1h),y
+	sbc (.s2h),y
+	sta prod_h
 	clc
 	lda dhi
 	adc prod_l
@@ -205,12 +181,13 @@ smul16_tail
 	lda prod_h
 	adc #0
 	sta ylo
-	asl dlo				; (p>>7) == (p<<1)>>8, p < 2^23
-	rol dhi
-	rol ylo
+	lda dlo				; (p>>7) == (p<<1)>>8, p < 2^23
+	asl
 	lda dhi
+	rol
 	sta nlo
 	lda ylo
+	rol
 	sta nhi
 	bit mul_sign
 	bpl +
@@ -223,61 +200,12 @@ smul16_tail
 	sta nhi
 +
 	rts
+}
 
-; A signed 8-bit × set-A/B multiplier → nlo:nhi = (A*m) >> 2 signed 16-bit.
-; For enemy locals: 8.8 of (A/8)·(m/128) — same truncation as
-; scale_s8_88 (A*32) then smul16_7 (>>7). Clobbers X.
-smul8_88a
-	ldx #0
-	tay
-	bpl +
-	dex				; X=$ff marks negative A
-	eor #$ff
-	clc
-	adc #1
-	tay
-+
-	txa
-	eor sg_a
-	sta mul_sign
-	jsr umul8a
-	jmp smul8_88_tail
-
-smul8_88b
-	ldx #0
-	tay
-	bpl +
-	dex
-	eor #$ff
-	clc
-	adc #1
-	tay
-+
-	txa
-	eor sg_b
-	sta mul_sign
-	jsr umul8b
-smul8_88_tail
-	lsr prod_h
-	ror prod_l
-	lsr prod_h
-	ror prod_l
-	bit mul_sign
-	bmi +
-	lda prod_l
-	sta nlo
-	lda prod_h
-	sta nhi
-	rts
-+
-	sec
-	lda #0
-	sbc prod_l
-	sta nlo
-	lda #0
-	sbc prod_h
-	sta nhi
-	rts
+smul16_a
+	+smul16_body sg_a, pa_s1l, pa_s1h, pa_s2l, pa_s2h
+smul16_b
+	+smul16_body sg_b, pb_s1l, pb_s1h, pb_s2l, pb_s2h
 
 ; nlo:nhi * Y (signed) >> 7 → nlo:nhi. Judd 8×8 twice, then >>7.
 smul16_7

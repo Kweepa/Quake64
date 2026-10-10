@@ -255,16 +255,12 @@ def main() -> None:
     ]
     parts += emit_cells("spr_shot2", shot)
     parts += [
-        "spr_nail_count",
-        f"\t!byte {len(nail)}",
         "spr_nail",
     ]
     for i, cells in enumerate(nail):
         parts += emit_cells(f"spr_nail_{i}", cells)
     parts += emit_cells("spr_rock", rock)
     parts += [
-        "spr_axe_count",
-        "\t!byte 1",
         "spr_axe",
     ]
     parts += emit_cells("spr_axe_0", axe)

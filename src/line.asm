@@ -6,15 +6,33 @@
 ; dx=0 uses draw_vline (no error term; two runs at the y=64 charset split).
 !zone line
 
-col_lo
-	!byte 0,64,128,192,0,64,128,192,0,64,128,192,0,64,128,192
-	!byte 0,64,128,192,0,64,128,192,0,64,128,192,0,64,128,192
-col_hi
-	!byte 0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3
-	!byte 4,4,4,4,5,5,5,5,6,6,6,6,7,7,7,7
-vbits
-	!byte $80,$40,$20,$10,$08,$04,$02,$01
+; Tables live in the cassette buffer (LINE_TAB), built by line_tab_init.
+col_lo		= LINE_TAB		; 32: (i & 3) * 64
+col_hi		= LINE_TAB + 32		; 32: i >> 2
+vbits		= LINE_TAB + 64		; 8: $80 >> i
 
+line_tab_init
+	ldx #31
+.lti
+	txa
+	lsr
+	lsr
+	sta col_hi,x
+	txa
+	lsr
+	ror
+	ror
+	and #$c0
+	sta col_lo,x
+	dex
+	bpl .lti
+	lda #$80
+.ltv
+	inx
+	sta vbits,x
+	lsr
+	bcc .ltv
+	rts
 ; Preserve X (pixel countdown) and C for the next SBC.
 y_cross_down
 	stx save_x
@@ -117,32 +135,8 @@ plot_pixel
 	sta (colptr),y
 	rts
 
+; Callers pass x 0..191, y 0..127 (mesh_clip / clip_draw_xy clamp). D is clear (main).
 draw_line
-	cld
-	lda x0
-	cmp #192
-	bcc +
-	lda #191
-	sta x0
-+
-	lda x1
-	cmp #192
-	bcc +
-	lda #191
-	sta x1
-+
-	lda y0
-	cmp #128
-	bcc +
-	lda #127
-	sta y0
-+
-	lda y1
-	cmp #128
-	bcc +
-	lda #127
-	sta y1
-+
 	lda x0
 	cmp x1
 	bcc .ord

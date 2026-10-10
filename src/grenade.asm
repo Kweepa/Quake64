@@ -27,13 +27,14 @@ gren_alloc
 	sec
 	rts
 
-; A = yaw. X = slot. Horizontal GREN_SPEED, upward GREN_SPEED_Y.
+; A = yaw. Y = horizontal speed. X = slot. Upward GREN_SPEED_Y.
 gren_set_vel
 	stx obj_i
 	sta rot2
+	sty rot0
 	tay
 	lda SINTAB,y
-	ldy #GREN_SPEED
+	ldy rot0
 	jsr smul7
 	ldx obj_i
 	sta gr_vxh,x
@@ -41,7 +42,7 @@ gren_set_vel
 	sta gr_vxl,x
 	ldy rot2
 	lda COSTAB,y
-	ldy #GREN_SPEED
+	ldy rot0
 	jsr smul7
 	ldx obj_i
 	sta gr_vzh,x
@@ -79,6 +80,11 @@ gren_fill_slot
 	sta gr_life_h,x
 	lda #1
 	sta gr_on,x
+	ldy #GREN_SPEED
+	lda gr_owner,x
+	bne +
+	ldy #GREN_SPEED_PL
++
 	lda rot2
 	jmp gren_set_vel
 
@@ -132,10 +138,12 @@ spawn_ogre_grenade
 	ldx obj_i
 	lda #GREN_OWN_EN
 	jsr gren_fill_slot
-	; 2× GL horizontal. Low bytes are 0; |v|~30 so the shift stays signed.
+	; 2× GREN_SPEED horizontal. Low bytes are 0; |v|~30 so the shift stays signed.
 	ldx obj_i
 	asl gr_vxh,x
 	asl gr_vzh,x
+	lda #GREN_OGRE_Y
+	sta gr_vyh,x
 	lda #SOUND_WEAPONS_GRENADE
 	jmp play_sound
 .sog_rts

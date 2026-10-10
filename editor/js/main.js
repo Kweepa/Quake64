@@ -101,6 +101,7 @@ import {
   clampEnemyLodZ,
   defaultEnemyLodZ,
   clampEnemyHp,
+  clampEnemyPainChance,
   WEAPON_KEYS,
   WEAPON_LABELS,
   clampWeaponScale,
@@ -3343,7 +3344,27 @@ function renderInspector() {
     buildPalette();
     refreshAll();
   });
-  root.appendChild(field("Hit points", hpInp));
+  const painInp = document.createElement("input");
+  painInp.type = "number";
+  painInp.min = "0";
+  painInp.max = "255";
+  painInp.step = "1";
+  painInp.value = String(clampEnemyPainChance(e.painChance, e.name));
+  painInp.title =
+    e.name === "Shambler"
+      ? "Shambler rolls from damage instead of this byte"
+      : "Flinch when the roll is below this";
+  painInp.addEventListener("change", () => {
+    pushUndo();
+    e.painChance = clampEnemyPainChance(painInp.value, e.name);
+    painInp.value = String(e.painChance);
+    markDirty();
+    refreshAll();
+  });
+  const statRow = document.createElement("div");
+  statRow.className = "field-pair";
+  statRow.append(field("Hit points", hpInp), field("Pain chance", painInp));
+  root.appendChild(statRow);
 
   const lodInp = document.createElement("input");
   lodInp.type = "number";

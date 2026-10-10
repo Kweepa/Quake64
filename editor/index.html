@@ -228,6 +228,27 @@ h2 {
   gap: 0.35rem;
 }
 
+.field-pair {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.field-pair > .field {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.field-pair > .field > span {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.right-editors .field-pair {
+  margin-bottom: 0.12rem;
+}
+
 .right-editors .muted {
   margin: 0.1rem 0 0.15rem;
 }
@@ -4093,9 +4114,20 @@ const ENEMY_TYPES = [
   },
 ];
 
+/** Flinch when rnd8 is below this. Ogre and rottweiler override the shared half. */
+const DEFAULT_ENEMY_PAIN_CHANCE = 0x80;
+const ENEMY_PAIN_CHANCE_BY_NAME = {
+  Rottweiler: 0xc0,
+  Ogre: 0x40,
+};
+
 function defaultEnemyHp(name) {
   const t = ENEMY_TYPES.find((e) => e.name === name);
   return t ? t.hp : 1;
+}
+
+function defaultEnemyPainChance(name) {
+  return ENEMY_PAIN_CHANCE_BY_NAME[name] ?? DEFAULT_ENEMY_PAIN_CHANCE;
 }
 
 /** Game byte written to enemy_hp_init. Missing or bad values fall back to the type default. */
@@ -4103,6 +4135,13 @@ function clampEnemyHp(n, name) {
   const v = Number(n);
   if (!Number.isFinite(v)) return defaultEnemyHp(name);
   return Math.max(1, Math.min(255, v | 0));
+}
+
+/** Game byte written to enemy_pain_chance. 0 never flinches. Missing values use the type default. */
+function clampEnemyPainChance(n, name) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return defaultEnemyPainChance(name);
+  return Math.max(0, Math.min(255, v | 0));
 }
 
 function enemyHp(name, enemies) {
@@ -5791,6 +5830,7 @@ function createEnemy(name = "Grunt") {
     mdlRig: emptyMdlRig(),
     lodZ: defaultEnemyLodZ(name),
     hp: defaultEnemyHp(name),
+    painChance: defaultEnemyPainChance(name),
   };
 }
 
@@ -6271,6 +6311,7 @@ function normalizeDocument(raw) {
       migrateEnemyClipSounds(enemy);
       enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
       enemy.hp = clampEnemyHp(e.hp, enemy.name);
+      enemy.painChance = clampEnemyPainChance(e.painChance, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;
       doc.enemies.push(enemy);
@@ -16352,7 +16393,27 @@ function renderInspector() {
     buildPalette();
     refreshAll();
   });
-  root.appendChild(field("Hit points", hpInp));
+  const painInp = document.createElement("input");
+  painInp.type = "number";
+  painInp.min = "0";
+  painInp.max = "255";
+  painInp.step = "1";
+  painInp.value = String(clampEnemyPainChance(e.painChance, e.name));
+  painInp.title =
+    e.name === "Shambler"
+      ? "Shambler rolls from damage instead of this byte"
+      : "Flinch when the roll is below this";
+  painInp.addEventListener("change", () => {
+    pushUndo();
+    e.painChance = clampEnemyPainChance(painInp.value, e.name);
+    painInp.value = String(e.painChance);
+    markDirty();
+    refreshAll();
+  });
+  const statRow = document.createElement("div");
+  statRow.className = "field-pair";
+  statRow.append(field("Hit points", hpInp), field("Pain chance", painInp));
+  root.appendChild(statRow);
 
   const lodInp = document.createElement("input");
   lodInp.type = "number";

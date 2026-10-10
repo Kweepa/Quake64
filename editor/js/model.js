@@ -1572,9 +1572,20 @@ export const ENEMY_TYPES = [
   },
 ];
 
+/** Flinch when rnd8 is below this. Ogre and rottweiler override the shared half. */
+export const DEFAULT_ENEMY_PAIN_CHANCE = 0x80;
+export const ENEMY_PAIN_CHANCE_BY_NAME = {
+  Rottweiler: 0xc0,
+  Ogre: 0x40,
+};
+
 export function defaultEnemyHp(name) {
   const t = ENEMY_TYPES.find((e) => e.name === name);
   return t ? t.hp : 1;
+}
+
+export function defaultEnemyPainChance(name) {
+  return ENEMY_PAIN_CHANCE_BY_NAME[name] ?? DEFAULT_ENEMY_PAIN_CHANCE;
 }
 
 /** Game byte written to enemy_hp_init. Missing or bad values fall back to the type default. */
@@ -1582,6 +1593,13 @@ export function clampEnemyHp(n, name) {
   const v = Number(n);
   if (!Number.isFinite(v)) return defaultEnemyHp(name);
   return Math.max(1, Math.min(255, v | 0));
+}
+
+/** Game byte written to enemy_pain_chance. 0 never flinches. Missing values use the type default. */
+export function clampEnemyPainChance(n, name) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return defaultEnemyPainChance(name);
+  return Math.max(0, Math.min(255, v | 0));
 }
 
 export function enemyHp(name, enemies) {
@@ -3270,6 +3288,7 @@ export function createEnemy(name = "Grunt") {
     mdlRig: emptyMdlRig(),
     lodZ: defaultEnemyLodZ(name),
     hp: defaultEnemyHp(name),
+    painChance: defaultEnemyPainChance(name),
   };
 }
 
@@ -3750,6 +3769,7 @@ export function normalizeDocument(raw) {
       migrateEnemyClipSounds(enemy);
       enemy.lodZ = clampEnemyLodZ(e.lodZ, enemy.name);
       enemy.hp = clampEnemyHp(e.hp, enemy.name);
+      enemy.painChance = clampEnemyPainChance(e.painChance, enemy.name);
       const exportClips = normalizeExportClips(e.exportClips);
       if (exportClips) enemy.exportClips = exportClips;
       doc.enemies.push(enemy);

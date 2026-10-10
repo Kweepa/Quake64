@@ -79,7 +79,9 @@ RANGE = {
     "Zombie": 30,
     "Demon": 10,
 }
-PAIN_CHANCE = {"Rottweiler": 0xC0}
+# Used when the enemy record has no painChance. Editor value wins.
+DEFAULT_PAIN_CHANCE = 0x80
+PAIN_CHANCE = {"Rottweiler": 0xC0, "Ogre": 0x40}
 ENEMY_CLASS = {"Rottweiler": 1}
 
 # Single roles: (clip_name, len_override|None). Attack: list of candidate names
@@ -547,7 +549,7 @@ def build_meta_row(name: str, enemy: dict, nframes: int, n_stored: int, lod: int
             o += 1
     row[o] = RANGE[name]
     o += 1
-    row[o] = PAIN_CHANCE.get(name, 0x80)
+    row[o] = enemy_pain_chance_byte(enemy, name)
     o += 1
     row[o] = FIRE_FRAME[TYPES.index(name)] & 0xFF
     o += 1
@@ -989,6 +991,15 @@ def enemy_hp_byte(enemy: dict, name: str) -> int:
     except (TypeError, ValueError):
         v = DEFAULT_HP[name]
     return max(1, min(255, v))
+
+
+def enemy_pain_chance_byte(enemy: dict, name: str) -> int:
+    raw = enemy.get("painChance", PAIN_CHANCE.get(name, DEFAULT_PAIN_CHANCE))
+    try:
+        v = int(raw)
+    except (TypeError, ValueError):
+        v = PAIN_CHANCE.get(name, DEFAULT_PAIN_CHANCE)
+    return max(0, min(255, v))
 
 
 def main() -> None:

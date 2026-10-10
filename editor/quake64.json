@@ -11144,6 +11144,7 @@
       },
       "lodZ": 4,
       "hp": 6,
+      "painChance": 128,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -11325,6 +11326,7 @@
       },
       "lodZ": 4,
       "hp": 15,
+      "painChance": 128,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -11400,7 +11402,7 @@
         {
           "name": "attack",
           "sound": "melee",
-          "soundFrame": 0
+          "soundFrame": 1
         },
         {
           "name": "deathb"
@@ -11495,6 +11497,7 @@
       },
       "lodZ": 4,
       "hp": 5,
+      "painChance": 192,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -11643,6 +11646,7 @@
       },
       "lodZ": 4,
       "hp": 16,
+      "painChance": 128,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -11830,6 +11834,7 @@
       },
       "lodZ": 10,
       "hp": 25,
+      "painChance": 64,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -12018,6 +12023,7 @@
       },
       "lodZ": 20,
       "hp": 80,
+      "painChance": 32,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -12268,6 +12274,7 @@
       },
       "lodZ": 40,
       "hp": 80,
+      "painChance": 0,
       "customSkeleton": true,
       "stockGraph": {
         "verts": 13,
@@ -12608,6 +12615,7 @@
       },
       "lodZ": 4,
       "hp": 12,
+      "painChance": 192,
       "customSkeleton": false,
       "stockGraph": null,
       "customGraph": null,
@@ -12790,6 +12798,7 @@
       },
       "lodZ": 8,
       "hp": 40,
+      "painChance": 96,
       "customSkeleton": true,
       "stockGraph": {
         "verts": 13,

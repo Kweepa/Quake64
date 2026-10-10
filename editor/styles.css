@@ -220,6 +220,27 @@ h2 {
   gap: 0.35rem;
 }
 
+.field-pair {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.field-pair > .field {
+  flex: 1 1 0;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.field-pair > .field > span {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.right-editors .field-pair {
+  margin-bottom: 0.12rem;
+}
+
 .right-editors .muted {
   margin: 0.1rem 0 0.15rem;
 }

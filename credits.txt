@@ -25,4 +25,4 @@ title screen by paul docherty.
 
 Thanks y'all!
 
-Quake64 v0.90.3
+Quake64 v0.90.4, built 12 Oct 2026

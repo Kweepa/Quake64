@@ -2415,6 +2415,7 @@ shotgun_miss_splat
 	jmp start_splat
 
 ; Closest shootable switch in the cone. A = index ($ff none), Y = its CAM_ZH.
+; Body must overlap the switch AABB (no pitching up or down onto it).
 ; Best index/depth sit on the stack across the line and project calls.
 scan_shoot_switches
 	lda #$ff
@@ -2441,6 +2442,14 @@ scan_shoot_switches
 	bcc .ss_dest
 	jmp .ss_n
 .ss_dest
+	+lda_mx sw_y
+	sta box_y
+	+lda_mx sw_sy
+	sta box_sy
+	jsr player_overlaps_y
+	bcs .ss_level
+	jmp .ss_n
+.ss_level
 	+lda_mx sw_sx
 	lsr
 	clc

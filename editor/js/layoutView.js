@@ -1290,49 +1290,13 @@ export class LayoutView {
       ctx.setLineDash([]);
     }
 
-    const edges = this.#meshEdges(doc);
-    const head = `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${tag}  spd ${cam.speed | 0}  `;
-    const tail = `edges ${edges}`;
-    ctx.font = "11px Segoe UI, sans-serif";
     ctx.fillStyle = "#8b91a0";
-    ctx.fillText(head, 8, 16);
-    if (edges > 255) ctx.fillStyle = "#f88";
-    ctx.fillText(tail, 8 + ctx.measureText(head).width, 16);
-  }
-
-  /** Map-wide wireframe edges (box rooms contribute 0). Packed table is one byte. */
-  #meshEdges(doc) {
-    const parts = [];
-    const rooms = [];
-    for (const obj of activeMap(doc).objects) {
-      if (obj.kind !== "room") continue;
-      rooms.push(obj);
-      const cuts = obj.cuts;
-      parts.push(
-        obj.shape,
-        obj.rx,
-        obj.ry,
-        obj.rz,
-        obj.sx,
-        obj.sy,
-        obj.sz,
-        cuts ? cuts.map((c) => `${c.su},${c.sv}`).join(";") : "",
-        obj.cutU,
-        obj.cutV,
-        obj.stemW,
-        obj.stemPos,
-        obj.barD,
-        obj.shift,
-        obj.mid
-      );
-    }
-    const key = parts.join("|");
-    if (key === this._edgeKey) return this._edgeN;
-    this._edgeKey = key;
-    let n = 0;
-    for (const obj of rooms) n += roomGeometry(obj).edges.length;
-    this._edgeN = n;
-    return n;
+    ctx.font = "11px Segoe UI, sans-serif";
+    ctx.fillText(
+      `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${tag}  spd ${cam.speed | 0}`,
+      8,
+      16
+    );
   }
 
   #syncGridY(doc) {

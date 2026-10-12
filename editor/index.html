@@ -470,7 +470,8 @@ select.error {
   text-align: right;
 }
 
-#map-stats.error {
+#map-stats.error,
+#map-stats .over {
   color: #f88;
 }
 
@@ -4996,6 +4997,7 @@ const MAX_MAP_OBJECTS = 255;
 const ROOM_MAX = 24; // keep in sync with tools/genmap.py
 const ROOM_MAX_TYPES = 2;
 const ENEMY_MAX = 24; // keep in sync with tools/genmap.py / src/mem.asm
+const MESH_EDGE_MAX = 255; // packed mesh-edge table is one byte; box rooms store 0
 const MAP_MAX_BYTES = 4096;
 const ENEMY_POSE_MAX = 7680;
 const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
@@ -5392,6 +5394,7 @@ function mapStats(doc) {
   let total = 0;
   let c64Bytes = MAP_HDR_BYTES;
   c64Bytes += clampName(map.name).length + 1; // map_name + NUL
+  let meshEdges = 0;
   let hasSpawn = false;
   let mapText = 0;
   for (const obj of map.objects) {
@@ -5415,6 +5418,7 @@ function mapStats(doc) {
       c64Bytes += 2; // room_door_o + room_ndoor
       if (clampRoomShape(obj.shape) !== "box") {
         const g = roomGeometry(obj);
+        meshEdges += g.edges.length;
         const nx = new Set(g.verts.map((v) => v.x)).size;
         const nz = new Set(g.verts.map((v) => v.z)).size;
         c64Bytes += nx + nz + g.verts.length * 4 + g.edges.length * 4;
@@ -5475,6 +5479,7 @@ function mapStats(doc) {
     loadBytes,
     poseParts,
     max: MAX_MAP_OBJECTS,
+    meshEdges,
     enemyTypes,
     enemyTypeCount,
     overTypes,
@@ -5525,13 +5530,15 @@ function mapKindCountLabel(kind, n) {
 function formatMapStats(stats) {
   const rooms = stats.byKind.room || 0;
   const enemies = stats.byKind.enemy || 0;
+  const edges = stats.meshEdges || 0;
   return [
-    `${stats.c64Bytes}:${stats.loadBytes}`,
-    `${stats.total}/${stats.max} objects`,
-    `${rooms}/${ROOM_MAX} ${mapKindCountLabel("room", rooms)}`,
-    `${enemies}/${ENEMY_MAX} ${mapKindCountLabel("enemy", enemies)}`,
-    `≤${ROOM_MAX_TYPES} types/room`,
-  ].join(" · ");
+    { text: `${stats.c64Bytes}:${stats.loadBytes}` },
+    { text: `${stats.total}/${stats.max} objects` },
+    { text: `${rooms}/${ROOM_MAX} ${mapKindCountLabel("room", rooms)}` },
+    { text: `${enemies}/${ENEMY_MAX} ${mapKindCountLabel("enemy", enemies)}` },
+    { text: `≤${ROOM_MAX_TYPES} types/room` },
+    { text: `${edges}/${MESH_EDGE_MAX} edges`, over: edges > MESH_EDGE_MAX },
+  ];
 }
 
 /** Kind counts for the empty-selection inspector. */
@@ -9838,49 +9845,13 @@ class LayoutView {
       ctx.setLineDash([]);
     }
 
-    const edges = this.#meshEdges(doc);
-    const head = `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${tag}  spd ${cam.speed | 0}  `;
-    const tail = `edges ${edges}`;
-    ctx.font = "11px Segoe UI, sans-serif";
     ctx.fillStyle = "#8b91a0";
-    ctx.fillText(head, 8, 16);
-    if (edges > 255) ctx.fillStyle = "#f88";
-    ctx.fillText(tail, 8 + ctx.measureText(head).width, 16);
-  }
-
-  /** Map-wide wireframe edges (box rooms contribute 0). Packed table is one byte. */
-  #meshEdges(doc) {
-    const parts = [];
-    const rooms = [];
-    for (const obj of activeMap(doc).objects) {
-      if (obj.kind !== "room") continue;
-      rooms.push(obj);
-      const cuts = obj.cuts;
-      parts.push(
-        obj.shape,
-        obj.rx,
-        obj.ry,
-        obj.rz,
-        obj.sx,
-        obj.sy,
-        obj.sz,
-        cuts ? cuts.map((c) => `${c.su},${c.sv}`).join(";") : "",
-        obj.cutU,
-        obj.cutV,
-        obj.stemW,
-        obj.stemPos,
-        obj.barD,
-        obj.shift,
-        obj.mid
-      );
-    }
-    const key = parts.join("|");
-    if (key === this._edgeKey) return this._edgeN;
-    this._edgeKey = key;
-    let n = 0;
-    for (const obj of rooms) n += roomGeometry(obj).edges.length;
-    this._edgeN = n;
-    return n;
+    ctx.font = "11px Segoe UI, sans-serif";
+    ctx.fillText(
+      `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${tag}  spd ${cam.speed | 0}`,
+      8,
+      16
+    );
   }
 
   #syncGridY(doc) {
@@ -14935,7 +14906,18 @@ function updateCenterChrome() {
     if (statsEl) {
       const stats = mapStats(doc);
       statsEl.hidden = false;
-      statsEl.textContent = formatMapStats(stats);
+      statsEl.replaceChildren();
+      formatMapStats(stats).forEach((part, i) => {
+        if (i) statsEl.append(" · ");
+        if (part.over) {
+          const span = document.createElement("span");
+          span.className = "over";
+          span.textContent = part.text;
+          statsEl.append(span);
+        } else {
+          statsEl.append(part.text);
+        }
+      });
       statsEl.title = formatMapLoadTitle(stats);
       statsEl.classList.toggle("error", !!stats.overBudget);
     }

@@ -1618,7 +1618,18 @@ function updateCenterChrome() {
     if (statsEl) {
       const stats = mapStats(doc);
       statsEl.hidden = false;
-      statsEl.textContent = formatMapStats(stats);
+      statsEl.replaceChildren();
+      formatMapStats(stats).forEach((part, i) => {
+        if (i) statsEl.append(" · ");
+        if (part.over) {
+          const span = document.createElement("span");
+          span.className = "over";
+          span.textContent = part.text;
+          statsEl.append(span);
+        } else {
+          statsEl.append(part.text);
+        }
+      });
       statsEl.title = formatMapLoadTitle(stats);
       statsEl.classList.toggle("error", !!stats.overBudget);
     }

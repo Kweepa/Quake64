@@ -2277,6 +2277,7 @@ export const MAX_MAP_OBJECTS = 255;
 export const ROOM_MAX = 24; // keep in sync with tools/genmap.py
 export const ROOM_MAX_TYPES = 2;
 export const ENEMY_MAX = 24; // keep in sync with tools/genmap.py / src/mem.asm
+export const MESH_EDGE_MAX = 255; // packed mesh-edge table is one byte; box rooms store 0
 export const MAP_MAX_BYTES = 4096;
 export const ENEMY_POSE_MAX = 7680;
 export const STICK_POSE_BYTES = 13 * 3; // gx+gy+gz per stored pose
@@ -2673,6 +2674,7 @@ export function mapStats(doc) {
   let total = 0;
   let c64Bytes = MAP_HDR_BYTES;
   c64Bytes += clampName(map.name).length + 1; // map_name + NUL
+  let meshEdges = 0;
   let hasSpawn = false;
   let mapText = 0;
   for (const obj of map.objects) {
@@ -2696,6 +2698,7 @@ export function mapStats(doc) {
       c64Bytes += 2; // room_door_o + room_ndoor
       if (clampRoomShape(obj.shape) !== "box") {
         const g = roomGeometry(obj);
+        meshEdges += g.edges.length;
         const nx = new Set(g.verts.map((v) => v.x)).size;
         const nz = new Set(g.verts.map((v) => v.z)).size;
         c64Bytes += nx + nz + g.verts.length * 4 + g.edges.length * 4;
@@ -2756,6 +2759,7 @@ export function mapStats(doc) {
     loadBytes,
     poseParts,
     max: MAX_MAP_OBJECTS,
+    meshEdges,
     enemyTypes,
     enemyTypeCount,
     overTypes,
@@ -2806,13 +2810,15 @@ function mapKindCountLabel(kind, n) {
 export function formatMapStats(stats) {
   const rooms = stats.byKind.room || 0;
   const enemies = stats.byKind.enemy || 0;
+  const edges = stats.meshEdges || 0;
   return [
-    `${stats.c64Bytes}:${stats.loadBytes}`,
-    `${stats.total}/${stats.max} objects`,
-    `${rooms}/${ROOM_MAX} ${mapKindCountLabel("room", rooms)}`,
-    `${enemies}/${ENEMY_MAX} ${mapKindCountLabel("enemy", enemies)}`,
-    `≤${ROOM_MAX_TYPES} types/room`,
-  ].join(" · ");
+    { text: `${stats.c64Bytes}:${stats.loadBytes}` },
+    { text: `${stats.total}/${stats.max} objects` },
+    { text: `${rooms}/${ROOM_MAX} ${mapKindCountLabel("room", rooms)}` },
+    { text: `${enemies}/${ENEMY_MAX} ${mapKindCountLabel("enemy", enemies)}` },
+    { text: `≤${ROOM_MAX_TYPES} types/room` },
+    { text: `${edges}/${MESH_EDGE_MAX} edges`, over: edges > MESH_EDGE_MAX },
+  ];
 }
 
 /** Kind counts for the empty-selection inspector. */

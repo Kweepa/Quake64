@@ -74,6 +74,43 @@ load_box_rb
 	sta box_sz
 	rts
 
+; A = FACE_*; box_x/z/sx/sz set.
+; C=1 if camera is in front of (or on) the outward plane. X preserved.
+check_face_front
+	cmp #FACE_PX
+	bcs .cff_x
+	cmp #FACE_MZ
+	beq .cff_mz
+	; FACE_PZ: plane at z+sz; front if cam_zh >= plane
+	clc
+	lda box_z
+	adc box_sz
+	sta pv0
+	lda cam_zh
+	cmp pv0
+	rts
+.cff_mz
+	; FACE_MZ: plane at z; front if cam_zh <= plane
+	lda box_z
+	cmp cam_zh
+	rts
+.cff_x
+	cmp #FACE_MX
+	beq .cff_mx
+	; FACE_PX: plane at x+sx; front if cam_xh >= plane
+	clc
+	lda box_x
+	adc box_sx
+	sta pv0
+	lda cam_xh
+	cmp pv0
+	rts
+.cff_mx
+	; FACE_MX: plane at x; front if cam_xh <= plane
+	lda box_x
+	cmp cam_xh
+	rts
+
 ; Y = room. ln_a* = origin, ln_b* = signed dir.
 ; B = origin except on the dominant look axis, where B sits just outside
 ; the room AABB (min−1 or exclusive max). ln_r0/1/2 temps. X clobbered.

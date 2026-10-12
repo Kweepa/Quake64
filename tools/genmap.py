@@ -470,6 +470,7 @@ def cook_one(level: dict, map_key: str) -> bytes:
     SW_DEST_DOOR = 0
     SW_DEST_ELEV = 1
     SW_DEST_TRIG = 2
+    SW_SHOOT = 0x80
     TRIG_ENABLE_SHIFT = 4
     TRIG_ENABLE_MAX = 15
 
@@ -859,6 +860,8 @@ def cook_one(level: dict, map_key: str) -> bytes:
             kind, arg = SW_DEST_TRIG, enable_tag_ids[tag]
         else:
             raise SystemExit(f"{map_key} switch tag {tag!r} has no destination")
+        if s.get("shootable") and kind <= SW_DEST_TRIG:
+            kind |= SW_SHOOT
         sw_x.append(s["x"])
         sw_y.append(s["y"])
         sw_z.append(s["z"])
@@ -1260,6 +1263,7 @@ TRIG_GATED_MASK	= $F0
 SW_DEST_DOOR	= 0
 SW_DEST_ELEV	= 1
 SW_DEST_TRIG	= 2
+SW_SHOOT	= $80
 FACE_PZ	= 0
 FACE_MZ	= 1
 FACE_PX	= 2

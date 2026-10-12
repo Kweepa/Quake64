@@ -38,45 +38,6 @@ door_other_room
 	rts
 
 ; ------------------------------------------------------------------
-; door_front — X=door; C=1 if camera is in front of (or on) the door plane
-; ------------------------------------------------------------------
-door_front
-	+lda_mx door_face
-	cmp #FACE_PX
-	bcs .df_x
-	cmp #FACE_MZ
-	beq .df_mz
-	; FACE_PZ: plane at z+sz; front if cam_zh >= plane
-	clc
-	+lda_mx door_z
-	+adc_mx door_sz
-	sta pv0
-	lda cam_zh
-	cmp pv0
-	rts
-.df_mz
-	; FACE_MZ: plane at z; front if cam_zh <= plane
-	+lda_mx door_z
-	cmp cam_zh
-	rts
-.df_x
-	cmp #FACE_MX
-	beq .df_mx
-	; FACE_PX: plane at x+sx; front if cam_xh >= plane
-	clc
-	+lda_mx door_x
-	+adc_mx door_sx
-	sta pv0
-	lda cam_xh
-	cmp pv0
-	rts
-.df_mx
-	; FACE_MX: plane at x; front if cam_xh <= plane
-	+lda_mx door_x
-	cmp cam_xh
-	rts
-
-; ------------------------------------------------------------------
 ; door_unlocked — X=door; C=1 if no key or player has the key
 ; ------------------------------------------------------------------
 door_unlocked

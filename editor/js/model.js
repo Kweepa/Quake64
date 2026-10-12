@@ -2035,6 +2035,10 @@ export function clampObject(obj) {
   if (obj.kind === "crusher") clampCrushStops(obj);
   if (obj.kind === "pickup") obj.pickup = clampPickupType(obj.pickup);
   if (obj.kind === "enemy") obj.patrol = !!obj.patrol;
+  if (obj.kind === "switch") {
+    if (obj.shootable) obj.shootable = true;
+    else delete obj.shootable;
+  }
   if (obj.kind === "doorway") {
     obj.lockKey = clampDoorLock(obj.lockKey);
     obj.doorType = clampDoorType(obj.doorType);
@@ -2113,6 +2117,7 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.roomId = String(extra.roomId);
   }
   if (usesLinkTag(kind)) obj.tag = clampTag(extra.tag);
+  if (kind === "switch" && extra.shootable) obj.shootable = true;
   if (kind === "elevator") {
     obj.elevAuto = extra.elevAuto !== false;
     if (extra.elevLow != null) obj.elevLow = extra.elevLow | 0;
@@ -3341,6 +3346,7 @@ function parseObjects(list) {
       flags: o.flags,
       enemy: o.enemy,
       patrol: o.patrol,
+      shootable: o.shootable,
       rot: o.rot,
       text: o.text,
       purpose: o.purpose,

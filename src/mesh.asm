@@ -1473,9 +1473,6 @@ draw_world
 	cpx door_i1
 	bcs .dw_sw
 	stx obj_i
-	jsr door_front
-	bcc .dw_dn0
-	ldx obj_i
 	+lda_mx door_type
 	bmi .dw_dn0
 	+lda_mx door_x
@@ -1490,6 +1487,9 @@ draw_world
 	sta box_sy
 	+lda_mx door_sz
 	sta box_sz
+	+lda_mx door_face
+	jsr check_face_front
+	bcc .dw_dn0
 	jsr frustum_hits
 	bcc .dw_dn0
 	jsr draw_door_mesh
@@ -1519,6 +1519,11 @@ draw_world
 	sta box_sy
 	+lda_mx sw_sz
 	sta box_sz
+	ldx obj_i
+	+lda_mx sw_face
+	jsr check_face_front
+	; Face id points at the wall. The camera stands on the other side of that plane.
+	bcs .dw_sr
 	jsr frustum_hits
 	bcc .dw_sr
 	jsr draw_switch_mesh

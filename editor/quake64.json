@@ -1438,9 +1438,9 @@
           "doorType": "Tech",
           "doorScale": 1,
           "tag": "quaddoor",
+          "hidden": true,
           "otherRoomId": "8d3fbe0c-0404-4c98-abf2-557ad46a9314",
-          "locked": true,
-          "hidden": true
+          "locked": true
         },
         {
           "id": "8d3fbe0c-0404-4c98-abf2-557ad46a9314",
@@ -1493,7 +1493,8 @@
           "axis": "z",
           "dir": 1,
           "roomId": "a537a113-f506-4ee9-bb08-41449d638e8e",
-          "tag": "quaddoor"
+          "tag": "quaddoor",
+          "shootable": true
         }
       ]
     },

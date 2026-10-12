@@ -1599,27 +1599,13 @@ try_proximity
 	jsr .prox_switch
 	bcc .tp_sn
 	+lda_mx sw_kind
-	bne .tp_nk
-	+lda_mx sw_tag
-	jsr door_unlock_tag
-	jmp .tp_sfx
-.tp_nk
-	cmp #SW_DEST_ELEV
-	beq .tp_elev
-	cmp #SW_DEST_TRIG
-	bne .tp_el
-	+lda_mx sw_tag
-	jsr trig_arm_tag
-	jmp .tp_sfx
-.tp_elev
-	+ldy_mx sw_tag
-	tya
-	tax
-	jsr elev_activate
-	bcs .tp_el
-.tp_sfx
-	lda #SOUND_MISC_MENU2
-	jsr play_sound
+	bpl .tp_go
+	and #$7f
+	cmp #SW_DEST_TRIG + 1
+	bcs .tp_go			; $ff: no dest
+	jmp .tp_el			; shootable: press consumed, no sound
+.tp_go
+	jsr fire_switch
 	jmp .tp_el			; one switch per press
 .tp_sn
 	ldx obj_i
@@ -1628,6 +1614,35 @@ try_proximity
 .tp_el
 	jsr try_backpack_pickup
 .tp_rts
+	rts
+
+; X = switch. Low 7 bits of sw_kind are the dest. SW_SHOOT is ignored.
+; Menu sound unless the dest is none or elev_activate refuses (C=1).
+fire_switch
+	+lda_mx sw_kind
+	and #$7f
+	bne .fs_nk
+	+lda_mx sw_tag
+	jsr door_unlock_tag
+	jmp .fs_sfx
+.fs_nk
+	cmp #SW_DEST_ELEV
+	beq .fs_elev
+	cmp #SW_DEST_TRIG
+	bne .fs_rts
+	+lda_mx sw_tag
+	jsr trig_arm_tag
+	jmp .fs_sfx
+.fs_elev
+	+ldy_mx sw_tag
+	tya
+	tax
+	jsr elev_activate
+	bcs .fs_rts
+.fs_sfx
+	lda #SOUND_MISC_MENU2
+	jsr play_sound
+.fs_rts
 	rts
 
 ; Walk-over backpacks: grant if not full / not already owned

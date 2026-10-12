@@ -2269,6 +2269,25 @@ gun_hitscan
 	inx
 	jmp .sh_lp
 .sh_done
+	jsr scan_shoot_switches		; A = index ($ff none), Y = CAM_ZH
+	pha
+	cmp #$ff
+	beq .sh_splats
+	ldx scan_dmg_all
+	bne .sh_splats			; shotgun: switch and enemies both count
+	ldx shot_hit_i
+	cpx #$ff
+	beq .sh_splats			; nail miss: switch takes the shot
+	cpy shot_hit_z
+	bcc .sh_sup			; switch strictly closer
+	pla
+	lda #$ff
+	pha				; closer enemy keeps the nail
+	jmp .sh_splats
+.sh_sup
+	lda #$ff
+	sta shot_hit_i
+.sh_splats
 	lda shot_hit_i
 	cmp #$ff
 	beq .sh_miss
@@ -2291,10 +2310,16 @@ gun_hitscan
 	jsr damage_enemy
 .sh_splat
 	jsr shotgun_hit_splat
-	jmp .sh_out
+	jmp .sh_fired
 .sh_miss
 	jsr shotgun_miss_splat
-.sh_out
+.sh_fired
+	pla
+	cmp #$ff
+	beq .sh_rts
+	tax
+	jsr fire_switch
+.sh_rts
 	rts
 
 ; Mid-body blood splat on shot_hit_i (view trig loaded).
@@ -2388,6 +2413,115 @@ shotgun_miss_splat
 	ldx rot0
 	lda rot2
 	jmp start_splat
+
+; Closest shootable switch in the cone. A = index ($ff none), Y = its CAM_ZH.
+; Best index/depth sit on the stack across the line and project calls.
+scan_shoot_switches
+	lda #$ff
+	pha
+	pha
+	ldx #0
+.ss_lp
+	cpx	map_nswitches
+	bcc .ss_body
+	jmp .ss_done
+.ss_body
+	stx enemy_idx
+	+lda_mx sw_room
+	cmp room_idx
+	beq .ss_room
+	jmp .ss_n
+.ss_room
+	+lda_mx sw_kind
+	bmi .ss_bit
+	jmp .ss_n
+.ss_bit
+	and #$7f
+	cmp #SW_DEST_TRIG + 1
+	bcc .ss_dest
+	jmp .ss_n
+.ss_dest
+	+lda_mx sw_sx
+	lsr
+	clc
+	+adc_mx sw_x
+	sta ln_bx
+	sta ent_wx
+	+lda_mx sw_sy
+	lsr
+	clc
+	+adc_mx sw_y
+	sta ln_by
+	sta ent_wy
+	+lda_mx sw_sz
+	lsr
+	clc
+	+adc_mx sw_z
+	sta ln_bz
+	sta ent_wz
+	lda cam_xh
+	sta ln_ax
+	lda cam_yh
+	sta ln_ay
+	lda cam_zh
+	sta ln_az
+	ldy room_idx
+	jsr line_solids_blocked
+	bcs .ss_n
+	lda cs_b
+	jsr mulset_a
+	lda sn_b
+	jsr mulset_b
+	ldx #0
+	jsr xform_world_vert
+	lda CAM_ZH
+	bpl .ss_zpos
+	jmp .ss_n
+.ss_zpos
+	cmp #SHOT_Z_MAX
+	bcc .ss_zok
+	jmp .ss_n
+.ss_zok
+	sta gidx
+	bne .ss_proj
+	lda CAM_Z
+	bne .ss_proj
+	jmp .ss_n
+.ss_proj
+	jsr project_cam0_screen
+	bcc .ss_n
+	sec
+	sbc #SCREEN_CX
+	bpl .ss_xabs
+	eor #$ff
+	clc
+	adc #1
+.ss_xabs
+	cmp scan_hit_x
+	beq .ss_xok
+	bcs .ss_n
+.ss_xok
+	pla
+	cmp gidx
+	bcc .ss_keep
+	beq .ss_keep
+	pla
+	lda enemy_idx
+	pha
+	lda gidx
+	pha
+	jmp .ss_n
+.ss_keep
+	pha
+.ss_n
+	ldx enemy_idx
+	inx
+	jmp .ss_lp
+.ss_done
+	pla
+	tay
+	pla
+	rts
 
 ; A/Y = base sx/sy → /2, then splat_aim_half.
 splat_aim_jitter

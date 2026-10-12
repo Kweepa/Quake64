@@ -2938,6 +2938,13 @@ function renderLayoutObjectFields(root, objs) {
     );
   }
 
+  if (kind === "switch") {
+    const allOn = objs.every((o) => !!o.shootable);
+    root.appendChild(
+      toggleField("Shootable", allOn, () => apply((obj) => (obj.shootable = !allOn)))
+    );
+  }
+
   if (kind === "elevator") {
     const allAuto = objs.every((o) => elevHeightsAuto(o));
     root.appendChild(

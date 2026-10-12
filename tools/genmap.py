@@ -1039,7 +1039,13 @@ def cook_one(level: dict, map_key: str) -> bytes:
         (n_edge, "mesh edges"),
     ):
         if n > 255:
-            raise SystemExit(f"{map_key} {what} length {n} > 255")
+            msg = f"{map_key} {what} length {n} > 255"
+            if what == "mesh edges":
+                msg += (
+                    "\nBox rooms cost 0 edges; L is 18, T and S are 24. "
+                    "Turn one into a box (T or S to L only saves 6)."
+                )
+            raise SystemExit(msg)
 
     payload = bytearray()
     payload.extend(

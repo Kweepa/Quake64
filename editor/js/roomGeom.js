@@ -1303,6 +1303,187 @@ export function snapSwitchToRoom(sw, room) {
   return snapBoxToHullFace(sw, f, SWITCH_SIZE, true);
 }
 
+function boxLo(obj, axis) {
+  return obj[axis] | 0;
+}
+
+function boxHi(obj, axis) {
+  return boxLo(obj, axis) + (obj["s" + axis] | 0);
+}
+
+/** 0 when the AABB touches or crosses the plane. */
+function aabbPlaneGap(obj, axis, plane) {
+  const lo = boxLo(obj, axis);
+  const hi = boxHi(obj, axis);
+  const p = plane | 0;
+  if (hi < p) return p - hi;
+  if (lo > p) return lo - p;
+  return 0;
+}
+
+function rangesTouch(a0, a1, b0, b1) {
+  return a1 >= b0 && a0 <= b1;
+}
+
+function switchOverlapsFace(sw, f) {
+  const [fy0, fy1] = faceYRange(f);
+  if (!rangesTouch(boxLo(sw, "y"), boxHi(sw, "y"), fy0, fy1)) return false;
+  if (f.axis === "x") return rangesTouch(boxLo(sw, "z"), boxHi(sw, "z"), f.b0, f.b1);
+  return rangesTouch(boxLo(sw, "x"), boxHi(sw, "x"), f.a0, f.a1);
+}
+
+/** +1 when air is on the +axis side of a room hull face (switch mounts in the air). */
+function wallAirSign(f) {
+  return f.sign > 0 ? -1 : 1;
+}
+
+/** Touching a room wall from the air side, overlapping that fragment. */
+function switchMeetsWall(sw, f) {
+  if (aabbPlaneGap(sw, f.axis, f.plane) !== 0) return false;
+  if (!switchOverlapsFace(sw, f)) return false;
+  if (wallAirSign(f) > 0) return boxHi(sw, f.axis) > (f.plane | 0);
+  return boxLo(sw, f.axis) < (f.plane | 0);
+}
+
+function aabbTouch(a, b) {
+  return (
+    boxLo(a, "x") <= boxHi(b, "x") &&
+    boxHi(a, "x") >= boxLo(b, "x") &&
+    boxLo(a, "y") <= boxHi(b, "y") &&
+    boxHi(a, "y") >= boxLo(b, "y") &&
+    boxLo(a, "z") <= boxHi(b, "z") &&
+    boxHi(a, "z") >= boxLo(b, "z")
+  );
+}
+
+/**
+ * Crate sides, wound so snapBoxToHullFace(..., inside) parks the switch in the
+ * air with the triangle on the crate surface.
+ */
+function crateSwitchFaces(crate) {
+  const x0 = crate.x | 0;
+  const y0 = crate.y | 0;
+  const z0 = crate.z | 0;
+  const x1 = x0 + (crate.sx | 0);
+  const y1 = y0 + (crate.sy | 0);
+  const z1 = z0 + (crate.sz | 0);
+  return [
+    { axis: "x", sign: 1, plane: x0, a0: y0, a1: y1, b0: z0, b1: z1, faceId: "+x" },
+    { axis: "x", sign: -1, plane: x1, a0: y0, a1: y1, b0: z0, b1: z1, faceId: "-x" },
+    { axis: "z", sign: 1, plane: z0, a0: x0, a1: x1, b0: y0, b1: y1, faceId: "+z" },
+    { axis: "z", sign: -1, plane: z1, a0: x0, a1: x1, b0: y0, b1: y1, faceId: "-z" },
+  ];
+}
+
+function mountDist(sw, f) {
+  const c = boxLo(sw, f.axis) + (sw["s" + f.axis] | 0) / 2;
+  return Math.abs(c - f.plane);
+}
+
+/** Nearest crate side to `p`. `dir` (unit ray) breaks placement ties toward the face being looked at. */
+function nearestCrateSide(crate, p, dir) {
+  let best = null;
+  for (const f of crateSwitchFaces(crate)) {
+    const d = Math.abs(p[f.axis] - f.plane);
+    const air = f.sign > 0 ? -1 : 1;
+    const into = dir ? -air * (dir[f.axis] || 0) : 0;
+    const score = d - into * 0.25;
+    if (!best || score < best.score) best = { f, score };
+  }
+  return best?.f || null;
+}
+
+function fitSwitchY(sw, f) {
+  const [fy0, fy1] = faceYRange(f);
+  const sy = sw.sy | 0;
+  const maxY = fy1 - sy;
+  if (maxY <= fy0) {
+    sw.y = fy0 | 0;
+    return;
+  }
+  let y = sw.y | 0;
+  if (y >= fy1 || y + sy <= fy0) y = maxY | 0;
+  if (y < fy0) y = fy0 | 0;
+  if (y > maxY) y = maxY | 0;
+  sw.y = y;
+}
+
+function betterMount(a, b, sw) {
+  if (a.dist < b.dist) return true;
+  if (a.dist > b.dist) return false;
+  const am = a.f.faceId === sw.face;
+  const bm = b.f.faceId === sw.face;
+  if (am !== bm) return am;
+  return !!a.crate && !b.crate;
+}
+
+/**
+ * Flush a switch onto a wall or crate it is actually touching.
+ * A switch sitting in the room, off every surface, is left where it is.
+ */
+export function alignSwitchToContact(sw, rooms, crates) {
+  if (!sw) return sw;
+  let best = null;
+  const consider = (f, roomId, dist, crate) => {
+    const cand = { f, roomId, dist, crate };
+    if (!best || betterMount(cand, best, sw)) best = cand;
+  };
+  for (const room of rooms || []) {
+    if (!room) continue;
+    for (const f of roomGeometry(room).hullFaces || []) {
+      if (f.axis === "y" || !DOOR_FACE_IDS.includes(f.faceId)) continue;
+      if (!switchMeetsWall(sw, f)) continue;
+      consider(f, room.id, mountDist(sw, f), false);
+    }
+  }
+  for (const crate of crates || []) {
+    if (!crate) continue;
+    if ((crate.sx | 0) < 1 || (crate.sy | 0) < 1 || (crate.sz | 0) < 1) continue;
+    if (!aabbTouch(sw, crate)) continue;
+    const c = {
+      x: boxLo(sw, "x") + (sw.sx | 0) / 2,
+      y: boxLo(sw, "y") + (sw.sy | 0) / 2,
+      z: boxLo(sw, "z") + (sw.sz | 0) / 2,
+    };
+    const f = nearestCrateSide(crate, c, null);
+    if (!f) continue;
+    consider(f, crate.roomId, mountDist(sw, f), true);
+  }
+  if (!best) return sw;
+  if (best.roomId != null) sw.roomId = best.roomId;
+  snapBoxToHullFace(sw, best.f, SWITCH_SIZE, true);
+  fitSwitchY(sw, best.f);
+  return sw;
+}
+
+/** Nearest switch mount on a crate: a side face, or the top mapped to the nearest side. */
+export function rayCrateSwitchFace(crate, origin, dir) {
+  if (!crate || !origin || !dir) return null;
+  if ((crate.sx | 0) < 1 || (crate.sy | 0) < 1 || (crate.sz | 0) < 1) return null;
+  let bestSide = null;
+  for (const f of crateSwitchFaces(crate)) {
+    const hit = rayHullFace(origin, dir, f);
+    if (hit && (!bestSide || hit.t < bestSide.t)) bestSide = { ...hit, face: f };
+  }
+  const top = {
+    axis: "y",
+    sign: 1,
+    plane: (crate.y | 0) + (crate.sy | 0),
+    a0: crate.x | 0,
+    a1: (crate.x | 0) + (crate.sx | 0),
+    b0: crate.z | 0,
+    b1: (crate.z | 0) + (crate.sz | 0),
+    faceId: "+y",
+  };
+  const topHit = rayHullFace(origin, dir, top);
+  if (topHit && (!bestSide || topHit.t < bestSide.t - 1e-6)) {
+    const face = nearestCrateSide(crate, topHit.point, dir);
+    if (!face) return bestSide;
+    return { t: topHit.t, point: topHit.point, face };
+  }
+  return bestSide;
+}
+
 /** Permute AABB sizes for one +90° about axis and re-anchor around AABB center. */
 function permuteRoomAabb(room, axis) {
   const x = room.x | 0;

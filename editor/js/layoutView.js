@@ -18,7 +18,8 @@ import {
   preserveRoomSplits,
   applyRoomSplitDelta,
   assignDoorRooms,
-  snapSwitchToRoom,
+  alignSwitchToContact,
+  rayCrateSwitchFace,
   rayRoomHull,
   xzOnRoomFloor,
   roomById,
@@ -596,7 +597,11 @@ export class LayoutView {
         assignDoorRooms(doc, obj, roomById(doc, obj.roomId), false);
         clampObject(obj);
       } else if (obj.kind === "switch") {
-        snapSwitchToRoom(obj, roomById(doc, obj.roomId));
+        alignSwitchToContact(
+          obj,
+          objs.filter((o) => o.kind === "room"),
+          objs.filter((o) => o.kind === "crate")
+        );
         clampObject(obj);
       }
     }
@@ -1050,17 +1055,33 @@ export class LayoutView {
 
       if (kind === "doorway" || kind === "switch") {
         const wall = this.#nearestRoomHull(visRooms, ray, (f) => f.axis !== "y", focus);
-        if (wall) {
+        let mount = wall
+          ? { t: wall.t, point: wall.point, face: wall.face, room: wall.room }
+          : null;
+        if (kind === "switch") {
+          for (const obj of visible) {
+            if (obj.kind !== "crate") continue;
+            const hit = rayCrateSwitchFace(obj, ray.origin, ray.dir);
+            if (!hit || (mount && hit.t >= mount.t)) continue;
+            mount = {
+              t: hit.t,
+              point: hit.point,
+              face: hit.face,
+              room: roomById(doc, obj.roomId) || mount?.room || null,
+            };
+          }
+        }
+        if (mount) {
           return {
             ...pose(
-              wall.point.x,
-              Math.round(wall.point.y - def.defaultSize[1] / 2),
-              wall.point.z,
-              wall.room,
+              mount.point.x,
+              Math.round(mount.point.y - def.defaultSize[1] / 2),
+              mount.point.z,
+              mount.room,
               false
             ),
-            face: wall.face,
-            hitY: wall.point.y,
+            face: mount.face,
+            hitY: mount.point.y,
           };
         }
       } else {
@@ -1269,13 +1290,49 @@ export class LayoutView {
       ctx.setLineDash([]);
     }
 
-    ctx.fillStyle = "#8b91a0";
+    const edges = this.#meshEdges(doc);
+    const head = `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${tag}  spd ${cam.speed | 0}  `;
+    const tail = `edges ${edges}`;
     ctx.font = "11px Segoe UI, sans-serif";
-    ctx.fillText(
-      `xyz ${cam.x | 0},${cam.y | 0},${cam.z | 0}  ${tag}  spd ${cam.speed | 0}`,
-      8,
-      16
-    );
+    ctx.fillStyle = "#8b91a0";
+    ctx.fillText(head, 8, 16);
+    if (edges > 255) ctx.fillStyle = "#f88";
+    ctx.fillText(tail, 8 + ctx.measureText(head).width, 16);
+  }
+
+  /** Map-wide wireframe edges (box rooms contribute 0). Packed table is one byte. */
+  #meshEdges(doc) {
+    const parts = [];
+    const rooms = [];
+    for (const obj of activeMap(doc).objects) {
+      if (obj.kind !== "room") continue;
+      rooms.push(obj);
+      const cuts = obj.cuts;
+      parts.push(
+        obj.shape,
+        obj.rx,
+        obj.ry,
+        obj.rz,
+        obj.sx,
+        obj.sy,
+        obj.sz,
+        cuts ? cuts.map((c) => `${c.su},${c.sv}`).join(";") : "",
+        obj.cutU,
+        obj.cutV,
+        obj.stemW,
+        obj.stemPos,
+        obj.barD,
+        obj.shift,
+        obj.mid
+      );
+    }
+    const key = parts.join("|");
+    if (key === this._edgeKey) return this._edgeN;
+    this._edgeKey = key;
+    let n = 0;
+    for (const obj of rooms) n += roomGeometry(obj).edges.length;
+    this._edgeN = n;
+    return n;
   }
 
   #syncGridY(doc) {

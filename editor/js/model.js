@@ -3691,7 +3691,6 @@ function persistSounds(sounds) {
 export function gameDocument(doc) {
   return {
     version: doc.version,
-    activeLevel: doc.activeLevel,
     maps: doc.maps,
     enemies: (doc.enemies || []).map(persistEnemy),
     weapons: doc.weapons,

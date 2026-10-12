@@ -6411,7 +6411,6 @@ function persistSounds(sounds) {
 function gameDocument(doc) {
   return {
     version: doc.version,
-    activeLevel: doc.activeLevel,
     maps: doc.maps,
     enemies: (doc.enemies || []).map(persistEnemy),
     weapons: doc.weapons,
@@ -14889,7 +14888,6 @@ function switchLevel(name) {
   selectedIds = [];
   lastRoomId = null;
   collapsedRooms.clear();
-  markDirty();
   markUi();
   refreshAll();
   setStatus(name);

@@ -1341,13 +1341,9 @@ def main() -> None:
         sizes.append(len(payload))
         cooked.append(f"{key} {len(payload)}B")
 
-    active = doc.get("activeLevel")
-    if active not in LEVEL_NAMES:
-        active = LEVEL_NAMES[0]
-    start_idx = LEVEL_NAMES.index(active)
-    if sizes[start_idx] == 0:
-        start_idx = next((i for i, s in enumerate(sizes) if s), 0)
-    start_level = start_idx + 1
+    # Editor activeLevel is which map is open. The game always boots E1M1.
+    start_idx = 0
+    start_level = 1
     counts = ENUMS.replace(
         "MAP_NLEVELS\t= 8\n",
         f"MAP_NLEVELS\t= 8\nSTART_LEVEL\t= {start_level}\n",

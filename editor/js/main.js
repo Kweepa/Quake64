@@ -1601,7 +1601,6 @@ function switchLevel(name) {
   selectedIds = [];
   lastRoomId = null;
   collapsedRooms.clear();
-  markDirty();
   markUi();
   refreshAll();
   setStatus(name);

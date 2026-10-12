@@ -854,6 +854,7 @@ scale_door_u
 fill_door_type_verts
 	ldx obj_i
 	+lda_mx door_type
+	and #($ff - DOOR_HIDDEN)
 	cmp #DOOR_NTYPES
 	bcc +
 	lda #0
@@ -1475,6 +1476,8 @@ draw_world
 	jsr door_front
 	bcc .dw_dn0
 	ldx obj_i
+	+lda_mx door_type
+	bmi .dw_dn0
 	+lda_mx door_x
 	sta box_x
 	+lda_mx door_y

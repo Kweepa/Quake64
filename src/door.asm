@@ -102,6 +102,7 @@ door_unlocked
 	rts
 
 ; A = cooked tag id. Unlock every remote door with that tag.
+; Clears the lock and DOOR_HIDDEN so the mesh draws.
 door_unlock_tag
 	sta sw_match
 	ldx #0
@@ -116,6 +117,9 @@ door_unlock_tag
 	bne .dut_n
 	lda #0
 	+sta_mx door_key
+	+lda_mx door_type
+	and #($ff - DOOR_HIDDEN)
+	+sta_mx door_type
 .dut_n
 	inx
 	bne .dut

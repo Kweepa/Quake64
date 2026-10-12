@@ -2041,6 +2041,8 @@ export function clampObject(obj) {
     obj.locked = obj.lockKey !== "unlocked";
     obj.tag = clampTag(obj.tag);
     delete obj.keyTag;
+    if (obj.hidden) obj.hidden = true;
+    else delete obj.hidden;
     if (obj.otherRoomId != null) obj.otherRoomId = String(obj.otherRoomId);
     else obj.otherRoomId = null;
   }
@@ -2129,6 +2131,7 @@ export function createObject(kind, x, y, z, extra = {}) {
     obj.doorType = clampDoorType(extra.doorType);
     obj.doorScale = clampDoorScale(extra.doorScale);
     obj.tag = clampTag(extra.tag);
+    if (extra.hidden) obj.hidden = true;
     if (extra.otherRoomId) obj.otherRoomId = String(extra.otherRoomId);
   }
   if (kind === "platform") obj.collide = extra.collide !== false;
@@ -3347,6 +3350,7 @@ function parseObjects(list) {
       lockKey: o.lockKey,
       doorType: o.doorType,
       doorScale: o.doorScale,
+      hidden: o.hidden,
       locked: o.locked,
       keyTag: o.keyTag,
       elevAuto: o.elevAuto,

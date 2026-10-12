@@ -3154,6 +3154,15 @@ function renderLayoutObjectFields(root, objs) {
         )
       )
     );
+    const allHidden = objs.every((o) => !!o.hidden);
+    root.appendChild(
+      toggleField("Hidden", allHidden, () =>
+        apply((obj) => {
+          if (allHidden) delete obj.hidden;
+          else obj.hidden = true;
+        })
+      )
+    );
     const scaleCur = unanimous(objs, (o) => clampDoorScale(o.doorScale));
     root.appendChild(
       field(

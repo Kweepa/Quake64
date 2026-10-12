@@ -79,36 +79,40 @@ item_evert
 	!byte 0,1,0,1,0
 
 door_nv
-	!byte 4,5,3
+	!byte 4,5,3,6
 door_ne
-	!byte 3,4,2
+	!byte 3,4,2,5
 door_nx
-	!byte 2,3,3
+	!byte 2,3,3,4
 door_nz
-	!byte 1,1,1
+	!byte 1,1,1,1
 door_vo
-	!byte 0,4,9
+	!byte 0,4,9,12
 door_eo
-	!byte 0,6,14
+	!byte 0,6,14,18
 door_uo
-	!byte 0,2,5
+	!byte 0,2,5,8
 door_zo
-	!byte 0,1,2
+	!byte 0,1,2,3
 
 door_ux
-	!byte 254,2,254,2,0,254,2,0
+	!byte 254,2,254,2,0,254,2,0,1,254,255,0
 door_uz
-	!byte 0,0,0
+	!byte 0,0,0,0
 door_vy
-	!byte 0,0,5,5,0,0,4,6,4,0,0,6
+	!byte 0,0,5,5,0,0,4,6,4,0,0,6,4,2,4,3
+	!byte 2,0
 door_xid
-	!byte 0,1,1,0,0,1,1,2,0,0,1,2
+	!byte 0,1,1,0,0,1,1,2,0,0,1,2,0,1,2,3
+	!byte 2,3
 door_zid
-	!byte 0,0,0,0,0,0,0,0,0,0,0,0
+	!byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	!byte 0,0
 door_col
-	!byte 0,1,1,0,0,1,1,2,0,0,1,2
+	!byte 0,1,1,0,0,1,1,2,0,0,1,2,0,1,2,3
+	!byte 2,3
 door_edges
 	!byte 1,2,2,3,0,3,1,2,2,3,3,4,0,4,1,2
-	!byte 0,2
+	!byte 0,2,2,3,3,4,4,5,1,4,0,3
 door_evert
-	!byte 1,0,1,1,0,0,1,0,0
+	!byte 1,0,1,1,0,0,1,0,0,0,0,0,0,0

@@ -2457,7 +2457,8 @@
           "axis": "z",
           "dir": 1,
           "roomId": "a4ecfeb2-96ea-43bc-afb7-6d92efb18b0c",
-          "tag": "reveal"
+          "tag": "reveal",
+          "shootable": true
         },
         {
           "id": "159cbe77-d951-4041-b45a-5abceb23845d",
@@ -3079,6 +3080,7 @@
           "doorType": "Tech",
           "doorScale": 1,
           "tag": "quaddoor",
+          "hidden": true,
           "otherRoomId": "d289447c-7d65-46a0-a426-d49a80025710",
           "locked": true
         },
@@ -3094,7 +3096,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "Quad Room",
+          "name": "Quad Cache",
           "bgColor": 11,
           "lineColor": 12,
           "fxColor": 1,
@@ -3123,13 +3125,13 @@
         {
           "id": "6d4bb8e7-e558-415d-b24b-6a4bfff3ce5d",
           "kind": "switch",
-          "x": 100,
+          "x": 96,
           "y": 97,
           "z": 147,
           "sx": 1,
           "sy": 3,
           "sz": 2,
-          "face": "+x",
+          "face": "-x",
           "axis": "z",
           "dir": 1,
           "roomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085",
@@ -5023,7 +5025,7 @@
           "dir": 1,
           "roomId": "509b8043-73ee-4e67-be27-fb3df68cf6dd",
           "lockKey": "unlocked",
-          "doorType": "Tri",
+          "doorType": "Crack",
           "doorScale": 1,
           "tag": "",
           "otherRoomId": "537a8136-843f-4d8e-bda5-8313250fca16",
@@ -5041,7 +5043,7 @@
           "face": "+z",
           "axis": "z",
           "dir": 1,
-          "name": "",
+          "name": "Ring Cache",
           "bgColor": 9,
           "lineColor": 7,
           "fxColor": 1,
@@ -13888,6 +13890,62 @@
         [
           0,
           2
+        ]
+      ]
+    },
+    "Crack": {
+      "verts": [
+        {
+          "x": 1,
+          "y": 4,
+          "z": 0
+        },
+        {
+          "x": -2,
+          "y": 2,
+          "z": 0
+        },
+        {
+          "x": -1,
+          "y": 4,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "y": 3,
+          "z": 0
+        },
+        {
+          "x": -1,
+          "y": 2,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        }
+      ],
+      "lines": [
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          4
+        ],
+        [
+          4,
+          5
+        ],
+        [
+          1,
+          4
+        ],
+        [
+          0,
+          3
         ]
       ]
     },

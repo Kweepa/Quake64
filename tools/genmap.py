@@ -662,7 +662,16 @@ def cook_one(level: dict, map_key: str) -> bytes:
         ra, rb = door_rooms(rooms, d)
         key = door_lock_key(d)
         dt = str(d.get("doorType") or "Tech").strip()
-        dtype = {"Tech": 0, "Arch": 1, "Tri": 2, "tech": 0, "arch": 1, "tri": 2}.get(dt, 0)
+        dtype = {
+            "Tech": 0,
+            "Arch": 1,
+            "Tri": 2,
+            "Crack": 3,
+            "tech": 0,
+            "arch": 1,
+            "tri": 2,
+            "crack": 3,
+        }.get(dt, 0)
         if d.get("hidden"):
             dtype |= 0x80
         did = map_id[id(d)]
@@ -1291,7 +1300,8 @@ DOOR_KEY_REMOTE	= 3
 DOOR_TECH	= 0
 DOOR_ARCH	= 1
 DOOR_TRI	= 2
-DOOR_NTYPES	= 3
+DOOR_CRACK	= 3
+DOOR_NTYPES	= 4
 DOOR_HIDDEN	= $80
 ENT_GRUNT	= 0
 ENT_KNIGHT	= 1

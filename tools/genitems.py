@@ -36,8 +36,8 @@ BP_MESH_KEY = [
     "gold key",
     "rune of earth magic",
 ]
-DOOR_MESH_KEY = ["Tech", "Arch", "Tri"]
-DOOR_ALIAS = {"tech": "Tech", "arch": "Arch", "tri": "Tri"}
+DOOR_MESH_KEY = ["Tech", "Arch", "Tri", "Crack"]
+DOOR_ALIAS = {"tech": "Tech", "arch": "Arch", "tri": "Tri", "crack": "Crack"}
 
 
 def v(x, y, z):
@@ -161,6 +161,18 @@ DEFAULT_MESHES = {
     "Tri": {
         "verts": [v(-2, 0, 0), v(2, 0, 0), v(0, 5, 0)],
         "lines": [[0, 1], [1, 2], [2, 0]],
+    },
+    "Crack": {
+        "verts": [
+            v(-2, 0, 0),
+            v(-2, 4, 0),
+            v(-1, 2, 0),
+            v(0, 5, 0),
+            v(1, 2, 0),
+            v(2, 4, 0),
+            v(2, 0, 0),
+        ],
+        "lines": [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6]],
     },
 }
 

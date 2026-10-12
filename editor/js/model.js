@@ -942,7 +942,7 @@ export const PICKUP_TYPES = [
 export const BACKPACK_TYPES = PICKUP_TYPES;
 
 export const ITEM_MESH_KEYS = ["backpack", ...PICKUP_TYPES];
-export const DOOR_TYPES = ["Tech", "Arch", "Tri"];
+export const DOOR_TYPES = ["Tech", "Arch", "Tri", "Crack"];
 export const DOOR_MESH_KEYS = DOOR_TYPES;
 export const ALL_MESH_KEYS = [...ITEM_MESH_KEYS, ...DOOR_MESH_KEYS];
 /** Items-tab floor/cube and paste-nudge window. Not a coord cap. */
@@ -995,6 +995,7 @@ export function clampDoorType(s) {
   if (lower === "tech") return "Tech";
   if (lower === "arch") return "Arch";
   if (lower === "tri") return "Tri";
+  if (lower === "crack") return "Crack";
   return "Tech";
 }
 
@@ -1015,7 +1016,7 @@ export function doorSizeForScale(scale) {
 
 export function isDoorMeshKey(key) {
   const t = String(key ?? "");
-  return DOOR_TYPES.includes(t) || t === "tech" || t === "arch" || t === "tri";
+  return DOOR_TYPES.includes(t) || t === "tech" || t === "arch" || t === "tri" || t === "crack";
 }
 
 export function clampItemCoord(n) {
@@ -1268,6 +1269,25 @@ export function defaultItemMeshes() {
         [2, 0],
       ]
     ),
+    Crack: meshOf(
+      [
+        [-2, 0, 0],
+        [-2, 4, 0],
+        [-1, 2, 0],
+        [0, 5, 0],
+        [1, 2, 0],
+        [2, 4, 0],
+        [2, 0, 0],
+      ],
+      [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [5, 6],
+      ]
+    ),
   };
 }
 
@@ -1312,6 +1332,7 @@ export function parseItemMeshes(raw) {
   if (src.tech != null && src.Tech == null) src.Tech = src.tech;
   if (src.arch != null && src.Arch == null) src.Arch = src.arch;
   if (src.tri != null && src.Tri == null) src.Tri = src.tri;
+  if (src.crack != null && src.Crack == null) src.Crack = src.crack;
   for (const key of ALL_MESH_KEYS) {
     if (src[key] == null) continue;
     const mesh = parseItemMesh(src[key]);

@@ -372,6 +372,7 @@ AI_CMD_ANIM_FIRE	= 11
 AI_CMD_PAIN_TICK	= 12
 AI_CMD_PAIN_ASK		= 13
 AI_CMD_DEATH		= 14		; corpse finished: grunt/ogre drop
+AI_CMD_SCRAG_DODGE	= 15		; scrag bank: hold-bubble sidestep, C=1 if set
 CRUSH_CMD_TICK		= 0
 CRUSH_CMD_SOLID		= 1
 CRUSH_CMD_DRAW		= 2
@@ -687,10 +688,9 @@ GREN_R			= $60			; screen-triangle half-extent 0.375
 GREN_VEL_ASR		= 5			; tip = view-vel >> 5
 ; Scrag spit — tracer + delayed hitscan
 SPIT_DMG		= 9			; Quake wizard spike (unscaled; player HP is 100)
-SPIT_HIT_R		= 1
 SPIT_TIP_VERT		= 12			; muzzle tip bone
 SPIT_LEN		= 16			; tracer Chebyshev length toward player
-SPIT_FLASH_N		= 2			; draw frames of frozen segment
+SPIT_FLIGHT_MS		= 160			; ~1.3 units at 8 u/s; strafe clears perp > 1
 VIEW_SPR_X0	= 24 + VIEW_COL * 8	; 88 — viewport (0,0) → VIC
 VIEW_SPR_Y0	= 50 + VIEW_ROW * 8	; 122
 SPLAT_INSET_X	= 24		; melee cue never on viewport edge (0..191)
@@ -935,25 +935,28 @@ stream_room	= $CF42
 ; Explosion particle vel — FX_N × vx/vy s8 (integrated at draw)
 fx_vx		= $CF43			; 24
 fx_vy		= $CF5B			; 24
-; Scrag spit — control + hitscan + tracer 8.8 start/end (12 bytes)
+; Scrag spit — 4 control + 3 axes (player 8.8, wrist 8.8).
+; Axis stride 4: player lo, player hi, wrist lo, wrist hi. X, Y, Z.
+; Tracer end is rebuilt at draw.
 spit_on		= $CF73
 spit_room	= $CF74
 spit_owner	= $CF75			; enemy index
 spit_flash	= $CF76			; 0 = tracer done, hitscan next update
-spit_hitx	= $CF77			; player XZ at fire
-spit_hitz	= $CF78
-spit_oxl	= $CF79			; start 8.8
-spit_oxh	= $CF7A
-spit_oyl	= $CF7B
-spit_oyh	= $CF7C
-spit_ozl	= $CF7D
-spit_ozh	= $CF7E
-spit_xl		= $CF7F			; end 8.8
-spit_xh		= $CF80
-spit_yl		= $CF81
-spit_yh		= $CF82
-spit_zl		= $CF83
-spit_zh		= $CF84
+spit_axes	= $CF77
+spit_xl		= spit_axes		; player X lo at fire
+spit_xh		= spit_axes+1
+spit_oxl	= spit_axes+2		; wrist X
+spit_oxh	= spit_axes+3
+spit_yl		= spit_axes+4		; aim Y lo (eye − 1)
+spit_yh		= spit_axes+5
+spit_oyl	= spit_axes+6		; wrist Y
+spit_oyh	= spit_axes+7
+spit_zl		= spit_axes+8		; player Z lo at fire
+spit_zh		= spit_axes+9
+spit_ozl	= spit_axes+10		; wrist Z
+spit_ozh	= spit_axes+11
+spit_prod	= spit_axes+4		; 32-bit product, lo first. Y axis is dead once the hitscan runs.
+; $CF83-$CF84 free
 ; Evicted from KERNAL ZP ($90–$bf / SETNAM $b7–$bc). Abs OK — not (ptr),y.
 wish_dx		= $CF85			; signed move intent X
 wish_dz		= $CF86
@@ -1089,4 +1092,4 @@ CH_REQ_FIRE	= 2
 HAVE_SILVER	= 1
 HAVE_GOLD	= 2
 HAVE_EARTH	= 4
-POWERUP_MS	= 30000
+POWERUP_MS	= 45000

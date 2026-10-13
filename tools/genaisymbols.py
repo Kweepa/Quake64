@@ -25,6 +25,8 @@ REQUIRED = [
     "enemy_cmp_range",
     "enemy_enter_shambler_attack",
     "select_dodge_dir",
+    "enemy_probe_dir",
+    "enemy_set_geom",
     "enemy_patrol_step",
     "enemy_face_player",
     "pick_attack_var",

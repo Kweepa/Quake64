@@ -694,7 +694,17 @@ enemy_facing_ok
 ; ------------------------------------------------------------------
 ; Wolf-style dodge: pick en_dir toward player (diagonal first)
 ; Rottweiler: nodir turnaround (may 180°); grunt: forbid reverse while walking
+; Scrag inside the spit bubble: the scrag bank rolls a side (C=0 → this search)
 select_dodge_dir
+	ldx enemy_idx
+	jsr enemy_get_class
+	cpy #ENT_SCRAG
+	bne .sdd_class
+	lda #AI_CMD_SCRAG_DODGE
+	jsr ai_invoke
+	bcc .sdd_class
+	rts
+.sdd_class
 	ldx enemy_idx
 	jsr enemy_get_class
 	bne .sdd_nodir

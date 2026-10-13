@@ -23,32 +23,31 @@ ai_scrag_entry
 	beq .approach_attack
 	cmp #AI_CMD_APPROACH_ENTER
 	beq .approach_enter
+	cmp #AI_CMD_SCRAG_DODGE
+	beq .dodge
 	cmp #AI_CMD_DRAW
-	bne .no_draw
+	bne .rts
 	jmp draw_spit
-.no_draw
-	rts
+
+; Hold bubble: C=1 and en_dir set if a side probed clear. C=0 → caller
+; falls into the toward-search. Not in the bubble: C=0.
+.dodge
+	jsr scrag_in_hold
+	bcc .rts
+	jmp scrag_roll_side
 
 .approach_move
-	ldx enemy_idx
-	jsr enemy_chebyshev
-	cmp #SCRAG_HOLD_R + 1
-	bcs .approach_move_yes
-	jsr enemy_shot_clear
-	bcc .approach_move_yes
-	ldx enemy_idx
-	lda #AI_AP_STAND
-	rts
-.approach_move_yes
+	jsr scrag_in_hold
+	bcc +
+	jsr scrag_hold_dir
++
 	ldx enemy_idx
 	lda #AI_AP_MOVE
 	rts
 
 .approach_attack
 	jsr enemy_shot_clear
-	bcs +
-	rts
-+
+	bcc .rts
 	jmp enemy_enter_attack
 
 .approach_enter
@@ -118,6 +117,85 @@ ai_scrag_entry
 	lda proc_tmp2
 .store
 	+sta_mx en_y
+	rts
+
+; Already on a side: leave it. Otherwise roll. Both blocked: en_dir unchanged.
+scrag_hold_dir
+	jsr scrag_side_pair
+	ldx enemy_idx
+	lda en_dir,x
+	cmp ai_dirtry
+	beq .shd_rts
+	cmp ai_dirtry+1
+	beq .shd_rts
+	jmp scrag_roll_side
+.shd_rts
+	rts
+
+; Always roll a side into en_dir. C=1 if a probe cleared.
+scrag_roll_side
+	jsr scrag_side_pair
+	jsr rnd8
+	bmi .srs_try
+	lda ai_dirtry
+	ldx ai_dirtry+1
+	sta ai_dirtry+1
+	stx ai_dirtry
+.srs_try
+	lda ai_dirtry
+	jsr enemy_probe_dir
+	bcs .srs_set
+	lda ai_dirtry+1
+	jsr enemy_probe_dir
+	bcc .shd_rts
+.srs_set
+	ldx enemy_idx
+	lda ai_probe
+	jsr enemy_set_geom
+	sec
+	rts
+
+; C=1 if Chebyshev <= SCRAG_HOLD_R and the shot line is clear.
+scrag_in_hold
+	ldx enemy_idx
+	jsr enemy_chebyshev
+	cmp #SCRAG_HOLD_R + 1
+	bcc .sih_los
+	clc
+	rts
+.sih_los
+	jmp enemy_shot_clear
+
+; ai_dirtry / +1 = the two side cardinals. |dx| / |dz| left in dodge_dx / dodge_dz.
+scrag_side_pair
+	ldx enemy_idx
+	lda cam_xh
+	sec
+	+sbc_mx en_x
+	bpl .ssp_dx
+	eor #$ff
+	clc
+	adc #1
+.ssp_dx
+	sta dodge_dx
+	lda cam_zh
+	sec
+	+sbc_mx en_z
+	bpl .ssp_dz
+	eor #$ff
+	clc
+	adc #1
+.ssp_dz
+	sta dodge_dz
+	ldx #0
+	cmp dodge_dx
+	bcc .ssp_set
+	ldx #2
+.ssp_set
+	stx ai_dirtry
+	txa
+	ora #4
+	sta ai_dirtry+1
 	rts
 
 !source "spit.asm"

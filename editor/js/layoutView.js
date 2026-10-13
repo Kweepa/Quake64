@@ -25,6 +25,8 @@ import {
   roomById,
   itemMeshFor,
   itemMeshWorldSegs,
+  layoutSearchTerms,
+  objectMatchesLayoutSearch,
   elevStopBottoms,
   crushStopOrigins,
   crushAxisX,
@@ -1271,6 +1273,8 @@ export class LayoutView {
       ctx.globalAlpha = 1;
     }
 
+    this.#drawSearchArrows(ctx, doc, cam, w, h);
+
     const selIds = this.#selectedIds();
     if (selIds.length === 1) {
       const elev = objs.find((o) => o.id === selIds[0] && o.kind === "elevator");
@@ -1379,6 +1383,30 @@ export class LayoutView {
     ctx.moveTo(seg.ax, seg.ay);
     ctx.lineTo(seg.bx, seg.by);
     ctx.stroke();
+  }
+
+  /** Downward marker above each Maps-panel search hit. Ignores Local / Rooms Only. */
+  #drawSearchArrows(ctx, doc, cam, w, h) {
+    const terms = layoutSearchTerms(this.opts.getLayoutSearch?.() || "");
+    if (!terms.length) return;
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#5ad0ff";
+    for (const obj of activeMap(doc).objects) {
+      if (!objectMatchesLayoutSearch(obj, terms)) continue;
+      const cx = obj.x + obj.sx / 2;
+      const cz = obj.z + obj.sz / 2;
+      const tipY = (obj.y | 0) + (obj.sy | 0) + 1;
+      const head = 4;
+      const half = 2;
+      const tip = { x: cx, y: tipY, z: cz };
+      const neckY = tipY + head;
+      const tail = { x: cx, y: neckY + 16, z: cz };
+      this.#line3(ctx, tail, tip, cam, w, h);
+      this.#line3(ctx, tip, { x: cx - half, y: neckY, z: cz }, cam, w, h);
+      this.#line3(ctx, tip, { x: cx + half, y: neckY, z: cz }, cam, w, h);
+      this.#line3(ctx, tip, { x: cx, y: neckY, z: cz - half }, cam, w, h);
+      this.#line3(ctx, tip, { x: cx, y: neckY, z: cz + half }, cam, w, h);
+    }
   }
 
   #drawObject(ctx, doc, obj, cam, w, h, highlight, selected, primary) {

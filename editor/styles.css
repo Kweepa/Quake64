@@ -177,6 +177,23 @@ h2 {
   flex: 0 0 auto;
 }
 
+.layout-search {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.65rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.3rem 0.4rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.layout-search:focus {
+  outline: 1px solid var(--accent);
+  border-color: var(--accent);
+}
+
 .layout-left-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -518,6 +535,18 @@ button.armed {
   color: var(--accent);
 }
 
+button.search-hit {
+  background: rgba(212, 160, 23, 0.3);
+  border-color: var(--accent);
+}
+
+button.active.search-hit,
+button.armed.search-hit {
+  background: rgba(212, 160, 23, 0.3);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 button.danger {
   border-color: var(--danger);
   color: #f99;
@@ -534,7 +563,7 @@ button:disabled {
 
 .item-palette {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 4px;
   margin-bottom: 1rem;
 }
@@ -546,6 +575,13 @@ button:disabled {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
+}
+
+.palette-enemies {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
 }
 
 .palette-item {
@@ -667,7 +703,7 @@ button:disabled {
   margin: 0 0 1rem;
   padding: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 2px;
 }
 

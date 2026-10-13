@@ -2213,6 +2213,50 @@ export function objectLabel(obj) {
   return KINDS[obj.kind].label;
 }
 
+/** Whitespace-separated Maps-panel search terms. Empty when the query is blank. */
+export function layoutSearchTerms(query) {
+  return String(query ?? "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** Kind, list label, and the text fields that distinguish a placed object. */
+export function layoutSearchHaystack(obj) {
+  if (!obj || !KINDS[obj.kind]) return "";
+  const parts = [obj.kind, KINDS[obj.kind].label, objectLabel(obj)];
+  if (obj.kind === "doorway") {
+    const lock = clampDoorLock(obj.lockKey);
+    parts.push(lock, DOOR_LOCK_LABELS[lock]);
+    if (lock !== "unlocked") parts.push("locked");
+    if (obj.hidden) parts.push("hidden");
+    if (obj.tag) parts.push(obj.tag);
+  } else if (obj.kind === "trigger") {
+    const purpose = clampTriggerPurpose(obj.purpose);
+    parts.push(purpose, TRIGGER_PURPOSE_LABELS[purpose]);
+    if (obj.text) parts.push(obj.text);
+    if (obj.tag) parts.push(obj.tag);
+    if (obj.enableTag) parts.push(obj.enableTag);
+  } else if (usesLinkTag(obj.kind) && obj.tag) {
+    parts.push(obj.tag);
+  }
+  return parts.filter(Boolean).join(" ");
+}
+
+/** True when any term is a case-insensitive substring of the object's search text. */
+export function objectMatchesLayoutSearch(obj, terms) {
+  if (!terms?.length) return false;
+  const hay = layoutSearchHaystack(obj).toLowerCase();
+  if (!hay) return false;
+  return terms.some((term) => hay.includes(term));
+}
+
+export function mapMatchesLayoutSearch(map, terms) {
+  if (!terms?.length) return false;
+  return (map?.objects || []).some((obj) => objectMatchesLayoutSearch(obj, terms));
+}
+
 export function figureTemplateName(obj) {
   return obj.kind === "spawn" ? "Grunt" : obj.enemy || "Grunt";
 }

@@ -80,6 +80,9 @@ import {
   ensureSpawnExclusive,
   objectLabel,
   objectTree,
+  layoutSearchTerms,
+  objectMatchesLayoutSearch,
+  mapMatchesLayoutSearch,
   roomUnderObject,
   roomById,
   roomsOf,
@@ -249,6 +252,8 @@ let sharewareSounds = new Map();
 const sfxPreview = new SfxPreview();
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
+/** Maps-panel search. Session only; does not dirty the document. */
+let layoutSearch = "";
 /** Last room used for placement / parenting. */
 let lastRoomId = null;
 
@@ -303,6 +308,14 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   onStatus: setStatus,
   beginUndo,
   endUndo,
+  getLayoutSearch: () => layoutSearch,
+});
+
+document.getElementById("layout-search")?.addEventListener("input", (e) => {
+  layoutSearch = e.target.value;
+  renderLevelList();
+  renderObjectList();
+  if (editorMode === "layout") layoutView.draw();
 });
 
 const overheadView = new OverheadView(document.getElementById("overhead-canvas"), {
@@ -1262,9 +1275,12 @@ function buildPalette() {
   sep.className = "palette-sep";
   sep.textContent = "Enemies";
   root.appendChild(sep);
+  const enemies = document.createElement("div");
+  enemies.className = "palette-enemies";
   for (const t of enemyTypesByHp(doc.enemies)) {
-    root.appendChild(paletteButton(t.name, KINDS.enemy.color, { kind: "enemy", enemy: t.name }));
+    enemies.appendChild(paletteButton(t.name, KINDS.enemy.color, { kind: "enemy", enemy: t.name }));
   }
+  root.appendChild(enemies);
   bindPaletteIconResize(root);
   paintEnemyPaletteIcons();
 }
@@ -1669,6 +1685,7 @@ function renderLevelList() {
   title.textContent = "Levels";
   root.appendChild(title);
   const ul = document.createElement("ul");
+  const terms = layoutSearchTerms(layoutSearch);
   for (const name of LEVEL_NAMES) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
@@ -1677,7 +1694,8 @@ function renderLevelList() {
     const display = clampName(map?.name);
     btn.textContent = name;
     btn.title = display ? `${name} — ${display}` : name;
-    if (name === doc.activeLevel) btn.className = "active";
+    if (name === doc.activeLevel) btn.classList.add("active");
+    if (mapMatchesLayoutSearch(map, terms)) btn.classList.add("search-hit");
     btn.addEventListener("click", () => switchLevel(name));
     li.appendChild(btn);
     ul.appendChild(li);
@@ -1733,12 +1751,13 @@ function connectUnlinkedDoors(ids) {
   return true;
 }
 
-function makeObjectListButton(obj) {
+function makeObjectListButton(obj, terms) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = objectLabel(obj);
   btn.classList.add(obj.kind === "room" ? "tree-label-wrap" : "tree-label-elide");
   if (selectedIds.includes(obj.id)) btn.classList.add("active");
+  if (objectMatchesLayoutSearch(obj, terms)) btn.classList.add("search-hit");
   if (obj.kind === "doorway" && !doorDoublyConnected(doc, obj)) {
     btn.classList.add("door-unlinked");
     btn.title = "Not connected to two rooms";
@@ -1754,6 +1773,8 @@ function renderObjectList() {
   ul.innerHTML = "";
   ul.classList.add("object-tree");
   const { nodes, orphans } = objectTree(doc);
+  const terms = layoutSearchTerms(layoutSearch);
+  const searching = terms.length > 0;
 
   for (const { room, children } of nodes) {
     const li = document.createElement("li");
@@ -1763,7 +1784,9 @@ function renderObjectList() {
     const twist = document.createElement("button");
     twist.type = "button";
     twist.className = "tree-twist";
-    const collapsed = collapsedRooms.has(room.id);
+    const roomHit = objectMatchesLayoutSearch(room, terms);
+    const childHit = children.some((obj) => objectMatchesLayoutSearch(obj, terms));
+    const collapsed = !(searching && (roomHit || childHit)) && collapsedRooms.has(room.id);
     twist.textContent = collapsed ? "▸" : "▾";
     twist.title = collapsed ? "Expand" : "Collapse";
     twist.addEventListener("click", (e) => {
@@ -1773,7 +1796,7 @@ function renderObjectList() {
       markUi();
       renderObjectList();
     });
-    const roomBtn = makeObjectListButton(room);
+    const roomBtn = makeObjectListButton(room, terms);
     roomBtn.classList.add("tree-room-btn");
     row.append(twist, roomBtn);
     li.appendChild(row);
@@ -1788,7 +1811,7 @@ function renderObjectList() {
       } else {
         for (const obj of children) {
           const cli = document.createElement("li");
-          cli.appendChild(makeObjectListButton(obj));
+          cli.appendChild(makeObjectListButton(obj, terms));
           childUl.appendChild(cli);
         }
       }
@@ -1808,7 +1831,7 @@ function renderObjectList() {
     childUl.className = "tree-children";
     for (const obj of orphans) {
       const cli = document.createElement("li");
-      cli.appendChild(makeObjectListButton(obj));
+      cli.appendChild(makeObjectListButton(obj, terms));
       childUl.appendChild(cli);
     }
     li.appendChild(childUl);

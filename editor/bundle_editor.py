@@ -102,6 +102,14 @@ def main() -> None:
     <aside class="left">
       <section id="layout-left">
         <div class="layout-left-fixed">
+          <input
+            type="search"
+            id="layout-search"
+            class="layout-search"
+            placeholder="items, enemies, rooms"
+            spellcheck="false"
+            autocomplete="off"
+          />
           <section id="level-list"></section>
           <h2>Place</h2>
           <div id="item-palette" class="item-palette"></div>

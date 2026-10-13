@@ -185,6 +185,23 @@ h2 {
   flex: 0 0 auto;
 }
 
+.layout-search {
+  display: block;
+  width: 100%;
+  margin: 0 0 0.65rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.3rem 0.4rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.layout-search:focus {
+  outline: 1px solid var(--accent);
+  border-color: var(--accent);
+}
+
 .layout-left-scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -526,6 +543,18 @@ button.armed {
   color: var(--accent);
 }
 
+button.search-hit {
+  background: rgba(212, 160, 23, 0.3);
+  border-color: var(--accent);
+}
+
+button.active.search-hit,
+button.armed.search-hit {
+  background: rgba(212, 160, 23, 0.3);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 button.danger {
   border-color: var(--danger);
   color: #f99;
@@ -542,7 +571,7 @@ button:disabled {
 
 .item-palette {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 4px;
   margin-bottom: 1rem;
 }
@@ -554,6 +583,13 @@ button:disabled {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted);
+}
+
+.palette-enemies {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 4px;
 }
 
 .palette-item {
@@ -675,7 +711,7 @@ button:disabled {
   margin: 0 0 1rem;
   padding: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 2px;
 }
 
@@ -1142,6 +1178,14 @@ button:disabled {
     <aside class="left">
       <section id="layout-left">
         <div class="layout-left-fixed">
+          <input
+            type="search"
+            id="layout-search"
+            class="layout-search"
+            placeholder="items, enemies, rooms"
+            spellcheck="false"
+            autocomplete="off"
+          />
           <section id="level-list"></section>
           <h2>Place</h2>
           <div id="item-palette" class="item-palette"></div>
@@ -4931,6 +4975,50 @@ function objectLabel(obj) {
   if (obj.kind === "doorway") return `Doorway (${clampDoorType(obj.doorType)})`;
   if (obj.kind === "spawn" && !obj.enabled) return "Spawn (off)";
   return KINDS[obj.kind].label;
+}
+
+/** Whitespace-separated Maps-panel search terms. Empty when the query is blank. */
+function layoutSearchTerms(query) {
+  return String(query ?? "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/** Kind, list label, and the text fields that distinguish a placed object. */
+function layoutSearchHaystack(obj) {
+  if (!obj || !KINDS[obj.kind]) return "";
+  const parts = [obj.kind, KINDS[obj.kind].label, objectLabel(obj)];
+  if (obj.kind === "doorway") {
+    const lock = clampDoorLock(obj.lockKey);
+    parts.push(lock, DOOR_LOCK_LABELS[lock]);
+    if (lock !== "unlocked") parts.push("locked");
+    if (obj.hidden) parts.push("hidden");
+    if (obj.tag) parts.push(obj.tag);
+  } else if (obj.kind === "trigger") {
+    const purpose = clampTriggerPurpose(obj.purpose);
+    parts.push(purpose, TRIGGER_PURPOSE_LABELS[purpose]);
+    if (obj.text) parts.push(obj.text);
+    if (obj.tag) parts.push(obj.tag);
+    if (obj.enableTag) parts.push(obj.enableTag);
+  } else if (usesLinkTag(obj.kind) && obj.tag) {
+    parts.push(obj.tag);
+  }
+  return parts.filter(Boolean).join(" ");
+}
+
+/** True when any term is a case-insensitive substring of the object's search text. */
+function objectMatchesLayoutSearch(obj, terms) {
+  if (!terms?.length) return false;
+  const hay = layoutSearchHaystack(obj).toLowerCase();
+  if (!hay) return false;
+  return terms.some((term) => hay.includes(term));
+}
+
+function mapMatchesLayoutSearch(map, terms) {
+  if (!terms?.length) return false;
+  return (map?.objects || []).some((obj) => objectMatchesLayoutSearch(obj, terms));
 }
 
 function figureTemplateName(obj) {
@@ -9825,6 +9913,8 @@ class LayoutView {
       ctx.globalAlpha = 1;
     }
 
+    this.#drawSearchArrows(ctx, doc, cam, w, h);
+
     const selIds = this.#selectedIds();
     if (selIds.length === 1) {
       const elev = objs.find((o) => o.id === selIds[0] && o.kind === "elevator");
@@ -9933,6 +10023,30 @@ class LayoutView {
     ctx.moveTo(seg.ax, seg.ay);
     ctx.lineTo(seg.bx, seg.by);
     ctx.stroke();
+  }
+
+  /** Downward marker above each Maps-panel search hit. Ignores Local / Rooms Only. */
+  #drawSearchArrows(ctx, doc, cam, w, h) {
+    const terms = layoutSearchTerms(this.opts.getLayoutSearch?.() || "");
+    if (!terms.length) return;
+    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#5ad0ff";
+    for (const obj of activeMap(doc).objects) {
+      if (!objectMatchesLayoutSearch(obj, terms)) continue;
+      const cx = obj.x + obj.sx / 2;
+      const cz = obj.z + obj.sz / 2;
+      const tipY = (obj.y | 0) + (obj.sy | 0) + 1;
+      const head = 4;
+      const half = 2;
+      const tip = { x: cx, y: tipY, z: cz };
+      const neckY = tipY + head;
+      const tail = { x: cx, y: neckY + 16, z: cz };
+      this.#line3(ctx, tail, tip, cam, w, h);
+      this.#line3(ctx, tip, { x: cx - half, y: neckY, z: cz }, cam, w, h);
+      this.#line3(ctx, tip, { x: cx + half, y: neckY, z: cz }, cam, w, h);
+      this.#line3(ctx, tip, { x: cx, y: neckY, z: cz - half }, cam, w, h);
+      this.#line3(ctx, tip, { x: cx, y: neckY, z: cz + half }, cam, w, h);
+    }
   }
 
   #drawObject(ctx, doc, obj, cam, w, h, highlight, selected, primary) {
@@ -13536,6 +13650,8 @@ let sharewareSounds = new Map();
 const sfxPreview = new SfxPreview();
 /** Collapsed room ids in the Objects tree. */
 const collapsedRooms = new Set();
+/** Maps-panel search. Session only; does not dirty the document. */
+let layoutSearch = "";
 /** Last room used for placement / parenting. */
 let lastRoomId = null;
 
@@ -13590,6 +13706,14 @@ const layoutView = new LayoutView(document.getElementById("view-canvas"), {
   onStatus: setStatus,
   beginUndo,
   endUndo,
+  getLayoutSearch: () => layoutSearch,
+});
+
+document.getElementById("layout-search")?.addEventListener("input", (e) => {
+  layoutSearch = e.target.value;
+  renderLevelList();
+  renderObjectList();
+  if (editorMode === "layout") layoutView.draw();
 });
 
 const overheadView = new OverheadView(document.getElementById("overhead-canvas"), {
@@ -14549,9 +14673,12 @@ function buildPalette() {
   sep.className = "palette-sep";
   sep.textContent = "Enemies";
   root.appendChild(sep);
+  const enemies = document.createElement("div");
+  enemies.className = "palette-enemies";
   for (const t of enemyTypesByHp(doc.enemies)) {
-    root.appendChild(paletteButton(t.name, KINDS.enemy.color, { kind: "enemy", enemy: t.name }));
+    enemies.appendChild(paletteButton(t.name, KINDS.enemy.color, { kind: "enemy", enemy: t.name }));
   }
+  root.appendChild(enemies);
   bindPaletteIconResize(root);
   paintEnemyPaletteIcons();
 }
@@ -14956,6 +15083,7 @@ function renderLevelList() {
   title.textContent = "Levels";
   root.appendChild(title);
   const ul = document.createElement("ul");
+  const terms = layoutSearchTerms(layoutSearch);
   for (const name of LEVEL_NAMES) {
     const li = document.createElement("li");
     const btn = document.createElement("button");
@@ -14964,7 +15092,8 @@ function renderLevelList() {
     const display = clampName(map?.name);
     btn.textContent = name;
     btn.title = display ? `${name} — ${display}` : name;
-    if (name === doc.activeLevel) btn.className = "active";
+    if (name === doc.activeLevel) btn.classList.add("active");
+    if (mapMatchesLayoutSearch(map, terms)) btn.classList.add("search-hit");
     btn.addEventListener("click", () => switchLevel(name));
     li.appendChild(btn);
     ul.appendChild(li);
@@ -15020,12 +15149,13 @@ function connectUnlinkedDoors(ids) {
   return true;
 }
 
-function makeObjectListButton(obj) {
+function makeObjectListButton(obj, terms) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.textContent = objectLabel(obj);
   btn.classList.add(obj.kind === "room" ? "tree-label-wrap" : "tree-label-elide");
   if (selectedIds.includes(obj.id)) btn.classList.add("active");
+  if (objectMatchesLayoutSearch(obj, terms)) btn.classList.add("search-hit");
   if (obj.kind === "doorway" && !doorDoublyConnected(doc, obj)) {
     btn.classList.add("door-unlinked");
     btn.title = "Not connected to two rooms";
@@ -15041,6 +15171,8 @@ function renderObjectList() {
   ul.innerHTML = "";
   ul.classList.add("object-tree");
   const { nodes, orphans } = objectTree(doc);
+  const terms = layoutSearchTerms(layoutSearch);
+  const searching = terms.length > 0;
 
   for (const { room, children } of nodes) {
     const li = document.createElement("li");
@@ -15050,7 +15182,9 @@ function renderObjectList() {
     const twist = document.createElement("button");
     twist.type = "button";
     twist.className = "tree-twist";
-    const collapsed = collapsedRooms.has(room.id);
+    const roomHit = objectMatchesLayoutSearch(room, terms);
+    const childHit = children.some((obj) => objectMatchesLayoutSearch(obj, terms));
+    const collapsed = !(searching && (roomHit || childHit)) && collapsedRooms.has(room.id);
     twist.textContent = collapsed ? "▸" : "▾";
     twist.title = collapsed ? "Expand" : "Collapse";
     twist.addEventListener("click", (e) => {
@@ -15060,7 +15194,7 @@ function renderObjectList() {
       markUi();
       renderObjectList();
     });
-    const roomBtn = makeObjectListButton(room);
+    const roomBtn = makeObjectListButton(room, terms);
     roomBtn.classList.add("tree-room-btn");
     row.append(twist, roomBtn);
     li.appendChild(row);
@@ -15075,7 +15209,7 @@ function renderObjectList() {
       } else {
         for (const obj of children) {
           const cli = document.createElement("li");
-          cli.appendChild(makeObjectListButton(obj));
+          cli.appendChild(makeObjectListButton(obj, terms));
           childUl.appendChild(cli);
         }
       }
@@ -15095,7 +15229,7 @@ function renderObjectList() {
     childUl.className = "tree-children";
     for (const obj of orphans) {
       const cli = document.createElement("li");
-      cli.appendChild(makeObjectListButton(obj));
+      cli.appendChild(makeObjectListButton(obj, terms));
       childUl.appendChild(cli);
     }
     li.appendChild(childUl);

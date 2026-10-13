@@ -2196,8 +2196,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Key Room",
-          "bgColor": 5,
-          "lineColor": 7,
+          "bgColor": 12,
+          "lineColor": 15,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
@@ -3135,6 +3135,23 @@
           "dir": 1,
           "roomId": "dfd0d1a8-cc60-40ad-8c32-b76b5e15f085",
           "tag": "quaddoor"
+        },
+        {
+          "id": "f306195e-f433-4c31-b954-4376659a55c4",
+          "kind": "trigger",
+          "x": 70,
+          "y": 88,
+          "z": 118,
+          "sx": 10,
+          "sy": 4,
+          "sz": 13,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "purpose": "hurt",
+          "text": "",
+          "tag": "",
+          "roomId": "ec707e69-9eec-4e53-a32b-681dccd8ec0f"
         }
       ]
     },
@@ -5317,7 +5334,7 @@
           "axis": "z",
           "dir": 1,
           "roomId": "773d257d-abee-4475-bb1c-fb2732c7aa0d",
-          "pickup": "nails"
+          "pickup": "armour"
         },
         {
           "id": "7fe64a99-3835-477d-ae04-71bd5d9a6bce",
@@ -5482,10 +5499,10 @@
           "axis": "z",
           "dir": 1,
           "name": "Drawbridge",
-          "bgColor": 4,
-          "lineColor": 7,
+          "bgColor": 12,
+          "lineColor": 3,
           "fxColor": 1,
-          "weaponColor": 15,
+          "weaponColor": 6,
           "shape": "L",
           "rx": 0,
           "ry": 0,
@@ -6557,6 +6574,21 @@
           "dir": 1,
           "roomId": "156da2b6-105d-4a9d-aa43-65d8663f5971",
           "pickup": "nails"
+        },
+        {
+          "id": "01224fff-951c-4668-af6e-5c6a665cd79c",
+          "kind": "pickup",
+          "x": 111,
+          "y": 122,
+          "z": 90,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "7fe64a99-3835-477d-ae04-71bd5d9a6bce",
+          "pickup": "nails"
         }
       ]
     },
@@ -7625,8 +7657,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Key Room",
-          "bgColor": 4,
-          "lineColor": 10,
+          "bgColor": 12,
+          "lineColor": 3,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
@@ -9318,8 +9350,8 @@
           "axis": "z",
           "dir": 1,
           "name": "Pit",
-          "bgColor": 2,
-          "lineColor": 10,
+          "bgColor": 8,
+          "lineColor": 7,
           "fxColor": 1,
           "weaponColor": 0,
           "shape": "T",
@@ -14648,7 +14680,8 @@
       "voice": 1,
       "priority": 50,
       "attack": 0,
-      "origin": "empty"
+      "origin": "doom",
+      "library": "DPBGDTH1"
     },
     "sound/boss1/death.wav": {
       "export": true,

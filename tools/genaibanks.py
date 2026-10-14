@@ -16,6 +16,8 @@ MAGIC = b"QAI1"
 HEADER_SIZE = 15
 NO_ENTRY = 0xFFFF
 ENEMY_BANK_MAX = 8192
+SKEL_PFX = 7  # size.w, nv, ne, entry.w, shift
+MESH_MAX_VERTS = 16
 
 
 def load_module(dos: str) -> tuple[bytes, list[int], list[int], int]:
@@ -82,6 +84,18 @@ def attach_skel(
     )
 
 
+def resident_batch(pose: bytes) -> bool:
+    """Shift 0 and one batch of 12..16 slots. The resident rotator draws it."""
+    if len(pose) < SKEL_PFX + 2 or pose[6] != 0:
+        return False
+    nslot = pose[SKEL_PFX]
+    nedge = pose[SKEL_PFX + 1]
+    if nslot < 12 or nslot > MESH_MAX_VERTS:
+        return False
+    end = SKEL_PFX + 2 + nslot + nedge * 2
+    return end < len(pose) and pose[end] == 0
+
+
 def fuse(
     dos: str,
     code: bytes,
@@ -92,18 +106,21 @@ def fuse(
     skel: int = 0,
 ) -> bytes:
     skel_at = 0
+    attach = False
     if skel:
         if len(pose) < 6:
             raise SystemExit(f"{dos}: custom skeleton prefix shorter than 6 bytes")
-        code, internal, map_sites, skel_at = attach_skel(code, internal, map_sites)
         pose_b = bytearray(pose)
+        if not resident_batch(pose):
+            code, internal, map_sites, skel_at = attach_skel(code, internal, map_sites)
+            attach = True
     else:
         pose_b = bytearray(pose)
     records_size = 2 * (len(internal) + len(map_sites))
     code_off = HEADER_SIZE + records_size
     pose_off = code_off + len(code)
     entry_off = NO_ENTRY if entry == NO_ENTRY else code_off + entry
-    if skel:
+    if attach:
         skel_entry = code_off + skel_at
         pose_b[4] = skel_entry & 0xFF
         pose_b[5] = (skel_entry >> 8) & 0xFF

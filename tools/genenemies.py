@@ -715,11 +715,42 @@ def cluster_edges(lines: list[list[int]]) -> tuple[list[list[int]], int, int]:
     return best, cost[0], cost[1]
 
 
-def skel_prefix(nv: int, lines: list[list[int]], shift: int, name: str) -> bytes:
+def pin_feet_slot(body: bytearray, feet: int) -> bool:
+    """One batch of 12..16 slots: put the feet vertex in slot 11 and remap pairs.
+    Slot 11 is the far-LOD anchor (ent_far_project)."""
+    if not body or body[0] < 12 or body[0] > MESH_BATCH_VERTS:
+        return False
+    nslot = body[0]
+    nedge = body[1]
+    end = 2 + nslot + nedge * 2
+    if end >= len(body) or body[end] != 0:
+        return False
+    slots = bytearray(body[2:2 + nslot])
+    try:
+        src = slots.index(feet)
+    except ValueError:
+        return False
+    anchor = 11
+    if src != anchor:
+        slots[src], slots[anchor] = slots[anchor], slots[src]
+        body[2:2 + nslot] = slots
+        pair_at = 2 + nslot
+        for i in range(nedge * 2):
+            p = body[pair_at + i]
+            if p == src:
+                body[pair_at + i] = anchor
+            elif p == anchor:
+                body[pair_at + i] = src
+    return True
+
+
+def skel_prefix(nv: int, lines: list[list[int]], shift: int, name: str, feet: int = 0) -> bytes:
     ne = len(lines)
     lines, batches, slots = cluster_edges(lines)
     print(f"{name}: edge order {batches} batches, {slots} vert slots")
     body = bytearray(baked_batches(lines))
+    if shift == 0 and pin_feet_slot(body, feet):
+        print(f"{name}: feet vert {feet} in slot 11")
     size = SKEL_PFX + len(body)
     out = bytearray(size)
     out[0] = size & 0xFF
@@ -1039,7 +1070,11 @@ def main() -> None:
         if not sfx_path.is_file():
             raise SystemExit(f"missing {sfx_path}; run gensounds.py first")
         custom = bool(enemy.get("customSkeleton"))
-        prefix = skel_prefix(nv, lines, shift, name) if custom else b""
+        if custom and nv:
+            feet = min(range(nv), key=lambda i: ((gy[i] - 256) if gy[i] >= 128 else gy[i], i))
+            prefix = skel_prefix(nv, lines, shift, name, feet)
+        else:
+            prefix = b""
         raw_lod = enemy.get("lodZ", DEFAULT_LOD_Z.get(name, 4))
         try:
             lod = int(raw_lod)

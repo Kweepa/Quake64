@@ -1127,6 +1127,11 @@ skel_bind_prefix
 	sta skel_ne,x
 	iny
 	lda (src_ptr),y
+	iny
+	ora (src_ptr),y
+	beq .sbp_noent			; entry word 0: resident single-batch draw
+	dey
+	lda (src_ptr),y
 	clc
 	adc AI_BANK_LO,x
 	sta skel_entry_lo,x
@@ -1134,6 +1139,12 @@ skel_bind_prefix
 	lda (src_ptr),y
 	adc AI_BANK_HI,x
 	sta skel_entry_hi,x
+	jmp .sbp_size
+.sbp_noent
+	lda #0
+	sta skel_entry_lo,x
+	sta skel_entry_hi,x
+.sbp_size
 	ldy #0
 	lda (src_ptr),y
 	sta nlo

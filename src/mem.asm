@@ -478,6 +478,7 @@ EN_DEAD		= 7			; last death frame hold
 EN_GONE		= 8
 ENEMY_DETECT	= 20		; Chebyshev XZ wake distance
 ENEMY_STEP_MS	= 200		; approach cell cadence (dt acc + remainder)
+ENEMY_STEP_JIT	= $7f		; approach entry step phase mask, < ENEMY_STEP_MS
 PATROL_STEP_MS	= 400		; patrol cell cadence (2× approach; 16-bit)
 OGRE_STEP_MS	= 400		; ogre approach cadence (2× ENEMY_STEP_MS)
 DOG_REPATH_N	= 50		; dog chase frames between repaths (~1s at 20ms)

@@ -342,7 +342,7 @@ frame_stride
 
 pose_lerp
 	ldx ent_type
-	lda skel_base_hi,x
+	lda skel_entry_hi,x
 	beq .pl_res
 	lda #SKEL_CMD_LERP
 	jmp skel_call
@@ -2334,10 +2334,10 @@ xform_item_at
 	rts
 }
 
-; True-project feet (vert 11); limb PROJ = feet + dCAM * trunc(FOCAL/z) >> 8.
-; Fills PROJ_* and per-vert outcodes. Caller runs mesh_clip.
+; True-project feet (slot 11); limb PROJ = feet + dCAM * trunc(FOCAL/z) >> 8.
+; mesh_nv verts. Fills PROJ_* and per-vert outcodes. Caller runs mesh_clip.
 ent_far_project
-	lda #NVERTS
+	lda mesh_nv
 	sta mesh_nwork
 !if PROFILE = 1 {
 	ldx #NV_PROJ
@@ -2432,7 +2432,7 @@ ent_far_project
 	sta PROJ_YH,x
 	inc vindex
 	lda vindex
-	cmp #NVERTS
+	cmp mesh_nv
 	bne .far_pv
 
 	lda #0
@@ -2441,8 +2441,34 @@ ent_far_project
 	jsr vert_hoist
 	inc vindex
 	lda vindex
-	cmp #NVERTS
+	cmp mesh_nv
 	bne .far_hoist
+	rts
+
+; CAM[] filled, mesh_nv/mesh_ne and edge pointers set. Slot 11 is the feet.
+; Far when that depth reaches the type's lodZ; otherwise a full project.
+enemy_project
+	lda CAM_ZH+11
+	bmi .ep_full
+	ldx obj_i
+	jsr ldy_slot
+	cmp enemy_lod_z,y
+	bcc .ep_full
+	jsr ent_far_project
+	jmp .ep_clip
+.ep_full
+	jsr mesh_project
+.ep_clip
+!if PROFILE = 1 {
+	ldy #PROF_PROJ
+	jsr prof_add_bucket
+}
+	jsr try_enemy_muzzle
+	jsr mesh_clip
+!if PROFILE = 1 {
+	ldy #PROF_CLIP
+	jsr prof_add_bucket
+}
 	rts
 
 ; C=1 if CAM[0] origin is in the view wedge: z>=0, |x|<=z+R, |y|<=z+H
@@ -2572,10 +2598,15 @@ draw_enemies
 	tay
 	+lda_mx en_rot
 	sta ent_rot
-	lda skel_base_hi,y
-	beq .de_std
+	lda skel_entry_hi,y
+	beq .de_batch
 	lda #SKEL_CMD_DRAW
 	jsr skel_call
+	jmp .de_one_rts
+.de_batch
+	lda skel_base_hi,y
+	beq .de_std
+	jsr draw_one_batch
 	jmp .de_one_rts
 .de_std
 	lda #NVERTS
@@ -2599,36 +2630,7 @@ draw_enemies
 	ldy #PROF_ROT
 	jsr prof_add_bucket
 }
-	lda CAM_ZH+11
-	bmi .de_full
-	ldx obj_i
-	jsr ldy_slot
-	cmp enemy_lod_z,y
-	bcc .de_full
-	jsr ent_far_project
-!if PROFILE = 1 {
-	ldy #PROF_PROJ
-	jsr prof_add_bucket
-}
-	jsr try_enemy_muzzle
-	jsr mesh_clip
-!if PROFILE = 1 {
-	ldy #PROF_CLIP
-	jsr prof_add_bucket
-}
-	jmp .de_draw
-.de_full
-	jsr mesh_project
-!if PROFILE = 1 {
-	ldy #PROF_PROJ
-	jsr prof_add_bucket
-}
-	jsr try_enemy_muzzle
-	jsr mesh_clip
-!if PROFILE = 1 {
-	ldy #PROF_CLIP
-	jsr prof_add_bucket
-}
+	jsr enemy_project
 .de_draw
 	lda ent_type
 	cmp #ENT_SHAMBLER
@@ -2647,6 +2649,112 @@ draw_enemies
 
 SKEL_CMD_DRAW = 0
 SKEL_CMD_LERP = 1
+
+; Shift-0 custom mesh, one batch, 12..16 slots. Same rotate as the stick.
+; Slot 11 is the feet (pinned at export). Falls into the stick LOD tail.
+; ent_type set, CAM[0] is the origin.
+batch_evert	!fill MESH_MAX_EDGES, 0
+
+draw_one_batch
+	jsr ent_set_pose
+	sec
+	lda yaw
+	sbc ent_rot
+	tay
+	lda COSTAB,y
+	jsr mulset_a
+	lda SINTAB,y
+	jsr mulset_b
+	lda CAM_X
+	sta org_xl
+	lda CAM_XH
+	sta org_xh
+	lda CAM_Y
+	sta org_yl
+	lda CAM_YH
+	sta org_yh
+	lda CAM_Z
+	sta org_zl
+	lda CAM_ZH
+	sta org_zh
+	ldx ent_type
+	clc
+	lda skel_base_lo,x
+	adc #SKEL_PFX
+	sta src_ptr
+	lda skel_base_hi,x
+	adc #0
+	sta src_ptr+1
+	ldy #0
+	lda (src_ptr),y
+	sta mesh_nv
+	iny
+	lda (src_ptr),y
+	sta mesh_ne
+	iny
+	lda #0
+	sta vindex
+.dob_lp
+	lda (src_ptr),y
+	sta gidx
+	tya
+	pha
+	jsr ent_rot_local
+	ldx vindex
+	clc
+	lda org_xl
+	adc e0x
+	sta CAM_X,x
+	lda org_xh
+	adc e0xh
+	sta CAM_XH,x
+	clc
+	lda org_zl
+	adc e1z
+	sta CAM_Z,x
+	lda org_zh
+	adc e1zh
+	sta CAM_ZH,x
+	ldy gidx
+	lda (gy_ptr),y
+	jsr scale_s8_88
+	ldx vindex
+	clc
+	lda org_yl
+	adc nlo
+	sta CAM_Y,x
+	lda org_yh
+	adc nhi
+	sta CAM_YH,x
+	inc vindex
+	pla
+	tay
+	iny
+	lda vindex
+	cmp mesh_nv
+	bcc .dob_lp
+	tya
+	clc
+	adc src_ptr
+	sta edge_ptr
+	lda src_ptr+1
+	adc #0
+	sta edge_ptr+1
+!if PROFILE = 1 {
+	ldy #PROF_ROT
+	jsr prof_add_bucket
+}
+	lda #<batch_evert
+	sta edge_vert_ptr
+	lda #>batch_evert
+	sta edge_vert_ptr+1
+	lda #<ident_col
+	sta col_ptr
+	lda #>ident_col
+	sta col_ptr+1
+	lda #$ff
+	sta mesh_vmask
+	jmp enemy_project
 
 ; A = command. ent_type set. Y preserved. jsr the streamed skeleton entry.
 skel_call

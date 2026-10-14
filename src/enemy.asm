@@ -1125,17 +1125,41 @@ enemy_enter_attack
 	jmp enemy_face_player
 
 ; Enter approach. The type's AI owns the timer and dodge.
+; Step phase, run frame and cooldown are jittered so same-room enemies drift apart.
 enemy_enter_approach
 	stx enemy_idx
 	lda #EN_APPROACH
 	sta en_state,x
 	lda #0
-	sta en_frame,x
-	sta en_step,x
 	sta en_step_h,x
+	jsr rnd8
+	and #ENEMY_STEP_JIT
+	sta en_step,x
+	jsr ldy_slot
+	lda enemy_run_len,y
+	beq .eea_fr
+	jsr rnd8
+-	cmp enemy_run_len,y
+	bcc .eea_fr
+	sbc enemy_run_len,y
+	bcs -
+.eea_fr
+	sta en_frame,x
 	+ldy_mx en_type
 	lda #AI_CMD_APPROACH_ENTER
-	jmp ai_invoke
+	jsr ai_invoke
+	ldx enemy_idx
+	lda en_timer,x
+	ora en_timer_h,x
+	beq .eea_rts			; no cooldown (Chthon)
+	jsr rnd8
+	clc
+	adc en_timer,x
+	sta en_timer,x
+	bcc .eea_rts
+	inc en_timer_h,x
+.eea_rts
+	rts
 
 ; C=1 |floor_y − en_y| ≤ FALL_LEDGE (same floor piece)
 enemy_same_floor

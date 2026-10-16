@@ -3645,7 +3645,16 @@ function parseLayoutCamera(raw, fallback) {
 export function parseEditorState(raw) {
   const d = defaultEditorState();
   if (!raw || typeof raw !== "object") return d;
-  if (raw.mode === "anim" || raw.mode === "layout" || raw.mode === "weapons" || raw.mode === "items" || raw.mode === "sounds") d.mode = raw.mode;
+  if (
+    raw.mode === "anim" ||
+    raw.mode === "layout" ||
+    raw.mode === "weapons" ||
+    raw.mode === "items" ||
+    raw.mode === "sounds" ||
+    raw.mode === "build"
+  ) {
+    d.mode = raw.mode;
+  }
   d.localDraw = !!raw.localDraw;
   d.neighbourDraw = !!raw.neighbourDraw;
   d.roomsOnlyDraw = !!raw.roomsOnlyDraw;

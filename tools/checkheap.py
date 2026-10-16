@@ -131,17 +131,17 @@ def used_types(per_room: dict[int, set[int]]) -> list[int]:
     return sorted(out)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description="Check LoadLevel heap vs GAME size")
-    ap.add_argument("--labels", default="game.lbl")
-    ap.add_argument("--json", type=Path, default=None, help="write the per-level manifest")
-    args = ap.parse_args()
+def heap_report(labels_path: Path | str) -> tuple[dict, bool]:
+    """Per-level heap manifest. (report, failed).
 
-    lbl = Path(args.labels)
+    Missing labels or map PRGs raise SystemExit. A room over ROOM_MAX_TYPES
+    or a missing pose sets failed and still returns the manifest.
+    """
+    lbl = Path(labels_path)
     if not lbl.is_file():
-        lbl = ROOT / args.labels
+        lbl = ROOT / labels_path
     if not lbl.is_file():
-        print(f"missing: {args.labels}", file=sys.stderr)
+        print(f"missing: {labels_path}", file=sys.stderr)
         sys.exit(1)
 
     labels = parse_labels(lbl)
@@ -157,15 +157,6 @@ def main() -> None:
     poses = enemy_sizes()
     crush_sz = crush_bank_size()
     names_by_level = level_room_names()
-
-    print(
-        f"heap  GAME ${locode:04X}-${end_game:04X}  "
-        f"avail {avail}  prefix {prefix}"
-    )
-    print(
-        f"      per-room model (max {ROOM_MAX_TYPES} types/room): "
-        "gate is packed + max(prefix, worst room pose sum)."
-    )
 
     failed = False
     any_level = False
@@ -225,7 +216,6 @@ def main() -> None:
 
         need = len(packed) + max(prefix, worst_sum)
         slack = avail - need
-        pose_s = ",".join(worst_names) if worst_names else "-"
         labels = names_by_level.get(key) or []
         room_label = labels[worst_room] if 0 <= worst_room < len(labels) else ""
         if room_label:
@@ -238,6 +228,7 @@ def main() -> None:
             "map_bytes": len(packed),
             "load_peak": len(packed) + prefix,
             "worst_room": worst_room,
+            "where": where,
             "worst_types": worst_names,
             "room_assets": worst_sum,
             "play_peak": len(packed) + worst_sum,
@@ -249,18 +240,42 @@ def main() -> None:
                 for room in sorted(per_room)
             },
         }
-        head = (
-            f"{key}  map {len(packed)}  "
-            f"worst {worst_sum} ({where}: {pose_s})"
-        )
-        if slack <= 0:
-            print(f"{head}  OVER {need - avail}")
-        else:
-            print(f"{head}  slack {slack}")
 
     if not any_level:
         print("checkheap: no map PRGs", file=sys.stderr)
         sys.exit(1)
+    return report, failed
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Check LoadLevel heap vs GAME size")
+    ap.add_argument("--labels", default="game.lbl")
+    ap.add_argument("--json", type=Path, default=None, help="write the per-level manifest")
+    args = ap.parse_args()
+
+    report, failed = heap_report(args.labels)
+    game = report["game"]
+    avail = int(game["heap_available"])
+    prefix = int(report["level_prefix"])
+    print(
+        f"heap  GAME ${game['load']:04X}-${game['end']:04X}  "
+        f"avail {avail}  prefix {prefix}"
+    )
+    print(
+        f"      per-room model (max {report['room_max_types']} types/room): "
+        "gate is packed + max(prefix, worst room pose sum)."
+    )
+    for key, lv in report["levels"].items():
+        pose_s = ",".join(lv["worst_types"]) if lv["worst_types"] else "-"
+        head = (
+            f"{key}  map {lv['map_bytes']}  "
+            f"worst {lv['room_assets']} ({lv['where']}: {pose_s})"
+        )
+        if lv["slack"] <= 0:
+            print(f"{head}  OVER {lv['need'] - avail}")
+        else:
+            print(f"{head}  slack {lv['slack']}")
+
     if args.json is not None:
         out = args.json if args.json.is_absolute() else ROOT / args.json
         out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")

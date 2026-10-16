@@ -292,9 +292,9 @@ line_face_hit
 	sec
 	sbc ln_ax,x
 	tay
-	stx ln_t0				; smul7 clobbers X
+	stx ln_t0				; face_mul7 clobbers X
 	lda ln_r1
-	jsr smul7
+	jsr face_mul7
 	ldx ln_t0
 	clc
 	adc ln_ax,x
@@ -316,6 +316,39 @@ line_face_hit
 	rts
 .lfh_no
 	clc
+	rts
+
+; A = t (0..127), Y = signed delta. A = round(delta * t / 128).
+; Clobbers X, Y, mul_*, prod_*. Does not touch ln_r* or ln_t0.
+face_mul7
+	sta mul_a
+	sty mul_sign
+	tya
+	bpl .fm_abs
+	eor #$ff
+	clc
+	adc #1
+.fm_abs
+	tay
+	lda mul_a
+	jsr umul8j
+	clc
+	lda prod_l
+	adc #64
+	tax
+	lda prod_h
+	adc #0
+	pha
+	txa
+	asl
+	pla
+	rol
+	bit mul_sign
+	bpl .fm_rts
+	eor #$ff
+	clc
+	adc #1
+.fm_rts
 	rts
 
 line_hit_to_col

@@ -161,6 +161,7 @@ import {
   ensureWeaponsPngDirectory,
   writePngFile,
 } from "./io.js";
+import { showBuildView } from "./buildView.js";
 import { parsePakBuffers } from "./pak.js";
 import {
   loadEnemyMdls,
@@ -1108,6 +1109,20 @@ function setMode(mode) {
   document.getElementById("btn-mode-weapons").classList.toggle("active", mode === "weapons");
   document.getElementById("btn-mode-items")?.classList.toggle("active", mode === "items");
   document.getElementById("btn-mode-sounds")?.classList.toggle("active", mode === "sounds");
+  document.getElementById("btn-mode-build")?.classList.toggle("active", mode === "build");
+  document.querySelector(".layout")?.classList.toggle("layout-build", mode === "build");
+  const leftAside = document.querySelector(".left");
+  if (leftAside) leftAside.hidden = mode === "build";
+  const rightAside = document.querySelector(".right");
+  if (rightAside) rightAside.hidden = mode === "build";
+  const buildPanel = document.getElementById("build-panel");
+  if (buildPanel) buildPanel.hidden = mode !== "build";
+  const centerHeading = document.querySelector(".center-heading");
+  if (centerHeading) centerHeading.hidden = mode === "build";
+  const mapStage = document.getElementById("map-stage");
+  if (mapStage) mapStage.hidden = mode === "build";
+  const hintEl = document.getElementById("hint");
+  if (hintEl) hintEl.hidden = mode === "build";
   document.getElementById("layout-left").hidden = mode !== "layout";
   document.querySelector(".left")?.classList.toggle("left-map", mode === "layout");
   document.getElementById("anim-left").hidden = mode !== "anim";
@@ -1135,7 +1150,9 @@ function setMode(mode) {
           ? "LMB box-select verts · click vert/line to select · Shift add · gizmo moves · V add vert · L add line · Ctrl+C/V copy/paste · Del · F focus · MMB pan · Alt+LMB / RMB orbit · Alt+RMB zoom"
           : mode === "sounds"
             ? "Select a library sound to hear it · wheel scrolls · Apply copies it onto the cue"
-            : animHintText();
+            : mode === "build"
+              ? "Open the repo once · Reload after a build"
+              : animHintText();
   layoutView.enabled = mode === "layout";
   animView.enabled = mode === "anim";
   weaponView.enabled = mode === "weapons";
@@ -1146,6 +1163,7 @@ function setMode(mode) {
   else if (mode === "weapons") weaponView.resize();
   else if (mode === "items") itemView.resize();
   else if (mode === "sounds") soundView.resize();
+  if (mode === "build") showBuildView();
   if (mode !== "anim") stopAnimPlay();
   refreshAll();
   markUi();
@@ -1659,7 +1677,9 @@ function updateCenterChrome() {
           : itemMeshKey
         : editorMode === "sounds"
           ? libraryName || "Sounds"
-          : "Enemy";
+          : editorMode === "build"
+            ? "Build"
+            : "Enemy";
   if (statsEl) {
     if (editorMode === "sounds") {
       const bytes = soundPayloadBytes(doc.sounds, cueFreq);
@@ -4339,7 +4359,7 @@ function refreshPanels() {
   renderInspector();
   syncWeaponScaleInputs();
   syncSharewareFolderButtons();
-  overheadView.draw();
+  if (editorMode !== "build") overheadView.draw();
   if (editorMode === "layout") previewView.draw();
   if (editorMode === "layout") layoutView.draw();
   if (editorMode === "anim") animView.draw();
@@ -4355,7 +4375,7 @@ function refreshAll() {
   else if (editorMode === "weapons") weaponView.draw();
   else if (editorMode === "items") itemView.draw();
   else if (editorMode === "sounds") soundView.draw();
-  else animView.draw();
+  else if (editorMode !== "build") animView.draw();
 }
 
 document.getElementById("btn-mode-layout").addEventListener("click", () => {
@@ -4372,6 +4392,9 @@ document.getElementById("btn-mode-items")?.addEventListener("click", () => {
 });
 document.getElementById("btn-mode-sounds")?.addEventListener("click", () => {
   setMode("sounds");
+});
+document.getElementById("btn-mode-build")?.addEventListener("click", () => {
+  setMode("build");
 });
 document.getElementById("mdl-scale").addEventListener("input", (e) => {
   setMdlScale(e.target.value);

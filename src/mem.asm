@@ -495,6 +495,7 @@ ROTT_ATK_MS	= 1500
 SCRAG_ATK_MS	= 2000		; Q1 wiz_fast14 SUB_AttackFinished(2)
 OGRE_ATK_MS	= 1500
 SHAM_ATK_MS	= 1500
+SHAM_STEP_MS	= 400		; approach cadence (2× ENEMY_STEP_MS)
 ZOMBIE_ATK_MS	= 1500
 DEMON_ATK_MS	= 1500
 OGRE_MELEE_R	= 6		; chainsaw Chebyshev; grenade uses enemy_range
@@ -511,6 +512,9 @@ SHAM_BOLT_HI	= 8
 SHAM_BOLT_H	= 6		; chest above feet (Q1 origin+40)
 SHAM_BOLT_DROP	= EYE_HEIGHT - 2	; end Y = cam_yh − this (feet + 2)
 SHAM_BOLT_DMG	= 10		; Q1 LightningDamage 10; player HP is 100
+SHAM_BODY_R	= 4		; hitscan half-width; pixels += R*FOCAL/z
+SHAM_HIT_R	= 4		; grenade XZ chebyshev
+SHAM_HIT_H	= 10		; grenade Y span above feet (exclusive)
 SHAM_PAIN_MS	= 2000		; Q1 pain_finished = time + 2
 SHAM_PAIN_ALWAYS	= 80		; damage/80 flinch; 400÷5 because HP is ÷5
 CHTHON_FIRE2	= 17		; second throw in the attack clip (vert 13)
@@ -886,7 +890,7 @@ gr_fuse_l	= $CF11
 gr_fuse_h	= $CF15
 gr_life_l	= $CF19
 gr_life_h	= $CF1D
-sham_alert_ph	= $CF21			; flips each anim tick; 1 = hold Shambler alert frame
+sham_alert_ph	= $CF21			; flips each anim tick; 1 = hold Shambler alert or magic frame
 hit_dmg		= $CF22			; applied damage for the current damage_enemy call
 dodge_dx	= $CF23			; select_dodge_dir: signed dx toward player
 dodge_dz	= $CF24			; signed dz toward player

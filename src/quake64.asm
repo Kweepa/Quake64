@@ -147,10 +147,10 @@ mod_cube
 !source "cube.asm"
 mod_enemy
 !source "enemy.asm"
-mod_loader
-!source "loader.asm"
 mod_cheats
 !source "cheats.asm"
+mod_loader
+!source "loader.asm"
 
 !source "map_bss.asm"
 

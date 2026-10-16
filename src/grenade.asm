@@ -530,13 +530,30 @@ gren_hit_enemies
 	sta pv0
 	+lda_mx en_z
 	sta pv1
-	jsr gren_near_xz
+	ldx enemy_idx
+	+lda_mx en_type
+	cmp #ENT_SHAMBLER
+	bne .ghe_r1
+	lda #SHAM_HIT_R + 1
+	bne .ghe_rn
+.ghe_r1
+	lda #GREN_HIT_R + 1
+.ghe_rn
+	jsr gren_near_lim
 	bcs .ghe_n
 	ldx enemy_idx
 	+lda_mx en_y
 	sta pv0
+	+lda_mx en_type
+	cmp #ENT_SHAMBLER
+	bne .ghe_h1
+	lda #SHAM_HIT_H
+	bne .ghe_hn
+.ghe_h1
+	lda #ENEMY_CULL_H
+.ghe_hn
 	clc
-	adc #ENEMY_CULL_H
+	adc pv0
 	sta pv1
 	jsr gren_in_y
 	bcc .ghe_n
@@ -614,20 +631,24 @@ gren_clear
 	sta gr_on,x
 	rts
 
-; pv0/pv1 = other x/z. C=1 miss.
+; pv0/pv1 = other x/z. C=1 miss. Limit is GREN_HIT_R+1.
 gren_near_xz
+	lda #GREN_HIT_R + 1
+; A = exclusive chebyshev limit. C=1 miss.
+gren_near_lim
+	sta pv2
 	ldx obj_i
 	lda gr_xh,x
 	sec
 	sbc pv0
 	jsr gren_abs
-	cmp #GREN_HIT_R + 1
+	cmp pv2
 	bcs .gnx_no
 	lda gr_zh,x
 	sec
 	sbc pv1
 	jsr gren_abs
-	cmp #GREN_HIT_R + 1
+	cmp pv2
 .gnx_no
 	rts
 

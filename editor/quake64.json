@@ -6651,7 +6651,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 0,
-          "enabled": true,
+          "enabled": false,
           "roomId": "5a27cfc1-63ed-4fd2-bd91-f1cbb0cd9528"
         },
         {
@@ -9062,7 +9062,7 @@
           "axis": "z",
           "dir": 1,
           "rot": 1,
-          "enabled": false,
+          "enabled": true,
           "roomId": "6ea37ef6-9498-4caa-bedd-1605f29b391f"
         },
         {

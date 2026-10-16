@@ -399,6 +399,7 @@ spit_stroke
 	sta ox1l,x
 	dex
 	bpl .stk_cp
+	jsr load_view_trig
 	ldx #4
 .stk_wr
 	txa

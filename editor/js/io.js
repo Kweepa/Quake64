@@ -4,6 +4,7 @@ const HANDLE_KEY = "doc";
 const SHAREWARE_KEY = "shareware";
 const SOUND_BANK_KEY = "sound-banks";
 const WEAPONS_PNG_KEY = "weapons-png";
+const REPO_KEY = "repo";
 
 export const DEFAULT_DOC_PATH = "quake64.json";
 
@@ -13,6 +14,8 @@ let docFileHandle = null;
 let sharewareDirHandle = null;
 /** @type {FileSystemDirectoryHandle | null} */
 let weaponsPngDirHandle = null;
+/** @type {FileSystemDirectoryHandle | null} */
+let repoDirHandle = null;
 
 export function docFileName() {
   return docFileHandle?.name || DEFAULT_DOC_PATH;
@@ -299,6 +302,47 @@ export async function allowStoredSharewareDir(handle) {
   if (!(await ensurePermission(handle, "read"))) return null;
   await storeSharewareHandle(handle);
   return handle;
+}
+
+export function repoFolderName() {
+  return repoDirHandle?.name || "";
+}
+
+export async function tryRestoreRepoDir() {
+  const handle = await loadStoredHandle(REPO_KEY);
+  if (!handle) return null;
+  const state = await queryPermission(handle, "read");
+  if (state !== "granted") return null;
+  repoDirHandle = handle;
+  return handle;
+}
+
+export async function pickRepoDirectory() {
+  if (!window.showDirectoryPicker) {
+    throw new Error("This browser cannot open a folder (needs Chromium file access)");
+  }
+  try {
+    const opts = { id: "quake64-repo", mode: "read" };
+    const startIn = repoDirHandle || (await loadStoredHandle(REPO_KEY));
+    if (startIn) opts.startIn = startIn;
+    const handle = await window.showDirectoryPicker(opts);
+    repoDirHandle = handle;
+    await storeHandle(REPO_KEY, handle);
+    return handle;
+  } catch (e) {
+    if (e.name === "AbortError") return null;
+    throw e;
+  }
+}
+
+/** Text of a file in the repo root, or null if it is not there. */
+export async function readRepoFile(dirHandle, name) {
+  if (!(await ensurePermission(dirHandle, "read"))) {
+    throw new Error("No read permission for the repo folder");
+  }
+  const fh = await getFileInDir(dirHandle, name);
+  if (!fh) return null;
+  return (await fh.getFile()).text();
 }
 
 export async function pickSharewareDirectory() {

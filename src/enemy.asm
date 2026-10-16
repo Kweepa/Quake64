@@ -400,11 +400,17 @@ enemy_anim_step
 	bne .eas_step
 	lda en_state,x
 	cmp #EN_ALERT
+	beq .eas_sham_ph
+	cmp #EN_ATTACK
 	bne .eas_step
+	lda en_pain_i,x
+	cmp #SHAM_VAR_MAGIC
+	bne .eas_step			; melee stays on ANIM_MS
+.eas_sham_ph
 	lda sham_alert_ph
 	eor #1
 	sta sham_alert_ph
-	bne .eas_nx			; hold this smash frame another ANIM_MS
+	bne .eas_nx			; hold this frame another ANIM_MS
 .eas_step
 	lda en_frame,x
 	sta en_sfx_old
@@ -2240,7 +2246,9 @@ gun_hitscan
 	jmp .sh_n				; exactly at camera
 .sh_proj
 	jsr project_cam0_screen
-	bcc .sh_n
+	bcs .sh_on
+	jmp .sh_n
+.sh_on
 	sty rot1				; sy
 	; |sx − SCREEN_CX| ≤ scan_hit_x
 	sec

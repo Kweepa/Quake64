@@ -1126,9 +1126,296 @@ button:disabled {
   border-color: var(--accent);
 }
 
+.layout.layout-build {
+  grid-template-columns: 1fr;
+}
+
+.center-heading[hidden],
+.map-stage[hidden],
+.left[hidden],
+.right[hidden],
+#hint[hidden] {
+  display: none !important;
+}
+
+.build-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.build-panel[hidden] {
+  display: none !important;
+}
+
+.build-toolbar {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.build-meta {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.build-empty {
+  margin: 0.5rem 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.build-fail {
+  margin: 0 0 0.75rem;
+  color: #f88;
+  font-size: 0.85rem;
+}
+
+.build-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.build-card {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  padding: 0.55rem 0.7rem;
+}
+
+.build-card .k {
+  color: var(--muted);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.build-card .v {
+  margin-top: 0.2rem;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.build-card .sub {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.build-card.danger .v {
+  color: #f88;
+}
+
+.build-section {
+  margin-bottom: 1.15rem;
+}
+
+.build-section h3 {
+  margin: 0 0 0.4rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.build-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.build-mod {
+  display: grid;
+  grid-template-columns: 7.5rem 9.5rem 1fr auto;
+  gap: 0.45rem;
+  align-items: center;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.12rem 0;
+}
+
+.build-mod .addr,
+.build-mod .bytes {
+  color: var(--muted);
+}
+
+.build-mod .bytes.danger {
+  color: #f88;
+}
+
+.build-mod.short {
+  grid-template-columns: 7.5rem 1fr auto;
+}
+
+.build-advanced > .build-empty {
+  margin: 0 0 0.45rem;
+}
+
+.build-tree summary {
+  display: grid;
+  grid-template-columns: 1rem minmax(8rem, 22rem) 1fr auto;
+  gap: 0.45rem;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.18rem 0.2rem;
+}
+
+.build-tree summary::-webkit-details-marker {
+  display: none;
+}
+
+.build-tree summary::marker {
+  content: "";
+}
+
+.build-tree summary .chev::before {
+  content: "▸";
+  color: var(--muted);
+}
+
+.build-tree details[open] > summary .chev::before {
+  content: "▾";
+}
+
+.build-tree summary:hover {
+  background: var(--panel);
+}
+
+.build-tree summary .name,
+.build-sym .name {
+  overflow-wrap: anywhere;
+}
+
+.build-tree summary .bytes,
+.build-sym .bytes {
+  color: var(--muted);
+}
+
+.build-mod-block {
+  border-top: 1px solid var(--border);
+}
+
+.build-syms {
+  padding: 0.05rem 0 0.35rem;
+}
+
+.build-sym {
+  display: grid;
+  grid-template-columns: minmax(8rem, 22rem) 1fr auto;
+  gap: 0.45rem;
+  align-items: center;
+  margin-left: 1.45rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0.1rem 0.2rem;
+}
+
+.build-bar {
+  display: block;
+  height: 8px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.build-bar.stack {
+  display: flex;
+}
+
+.build-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.build-bar.stack > span {
+  flex: 0 0 auto;
+}
+
+.build-bar .seg-map,
+.build-bar .seg-code {
+  background: var(--accent);
+}
+
+.build-bar .seg-assets,
+.build-bar .seg-pose {
+  background: #6a8caf;
+}
+
+.build-bar .seg-reloc {
+  background: #c47a4a;
+}
+
+.build-bar .seg-sites {
+  background: #7d9a6a;
+}
+
+.build-bar > span.danger {
+  background: #c44;
+}
+
+.build-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.build-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.45rem 0.2rem 0;
+}
+
+.build-table td {
+  padding: 0.16rem 0.45rem 0.16rem 0;
+  border-top: 1px solid var(--border);
+  vertical-align: baseline;
+}
+
+.build-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.build-table td.danger {
+  color: #f88;
+}
+
+.build-table .bar-cell {
+  width: 8rem;
+}
+
+.build-table .bar-cell .build-bar {
+  margin-top: 0.15rem;
+}
+
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
+  }
+
+  .build-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .build-mod {
+    grid-template-columns: 6.5rem 1fr auto;
+  }
+
+  .build-mod .addr {
+    display: none;
   }
 
   .left,

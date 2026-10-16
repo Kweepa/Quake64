@@ -12,6 +12,7 @@
 overlay.bin
 memory-report*.json
 heap-report*.json
+build-report.json
 enemies/sfx_*.bin
 enemies/sound_ids.json
 enemies/*.pose

@@ -26,6 +26,7 @@ JS_ORDER = [
     "js/itemView.js",
     "js/pcsfx.js",
     "js/soundView.js",
+    "js/buildView.js",
     "js/pcsrc.js",
     "js/pclib.js",
     "js/main.js",
@@ -82,6 +83,7 @@ def main() -> None:
       <button type="button" id="btn-mode-weapons">Weapons</button>
       <button type="button" id="btn-mode-items">Items</button>
       <button type="button" id="btn-mode-sounds">Sounds</button>
+      <button type="button" id="btn-mode-build">Build</button>
     </div>
     <div class="toolbar-actions" id="draw-mode-group" role="group" aria-label="Draw mode">
       <button type="button" id="btn-draw-all" class="active">All</button>
@@ -177,6 +179,7 @@ def main() -> None:
         <canvas id="view-canvas" tabindex="0"></canvas>
       </div>
       <p class="hint" id="hint"></p>
+      <div id="build-panel" class="build-panel" hidden></div>
     </section>
 
     <aside class="right">

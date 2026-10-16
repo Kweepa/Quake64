@@ -50,9 +50,33 @@ ai_shambler_entry
 .entry_rts
 	rts
 
+; Own the cell step at half cadence. One step per call. STAND skips the shared stepper.
 .approach_move
 	ldx enemy_idx
-	lda #AI_AP_MOVE
+	clc
+	lda en_step,x
+	adc dt_ms
+	sta en_step,x
+	lda en_step_h,x
+	adc dt_msh
+	sta en_step_h,x
+	cmp #>SHAM_STEP_MS
+	bcc .am_done
+	bne .am_go
+	lda en_step,x
+	cmp #<SHAM_STEP_MS
+	bcc .am_done
+.am_go
+	sec
+	lda en_step,x
+	sbc #<SHAM_STEP_MS
+	sta en_step,x
+	lda en_step_h,x
+	sbc #>SHAM_STEP_MS
+	sta en_step_h,x
+	jsr enemy_try_step
+.am_done
+	lda #AI_AP_STAND
 	rts
 
 .approach_enter

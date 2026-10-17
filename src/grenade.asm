@@ -138,12 +138,18 @@ spawn_ogre_grenade
 	ldx obj_i
 	lda #GREN_OWN_EN
 	jsr gren_fill_slot
-	; 2× GREN_SPEED horizontal. Low bytes are 0; |v|~30 so the shift stays signed.
 	ldx obj_i
-	asl gr_vxh,x
-	asl gr_vzh,x
 	lda #GREN_OGRE_Y
 	sta gr_vyh,x
+	; Half horizontal speed, double the loft: same range, twice the air time.
+	lda gr_vxh,x
+	cmp #$80
+	ror gr_vxh,x
+	ror gr_vxl,x
+	lda gr_vzh,x
+	cmp #$80
+	ror gr_vzh,x
+	ror gr_vzl,x
 	lda #SOUND_WEAPONS_GRENADE
 	jmp play_sound
 .sog_rts
@@ -191,7 +197,7 @@ gren_tick
 	sta proc_tmp1
 	ldx obj_i
 	lda gr_flags,x
-	and #GREN_F_LAVA
+	and #GREN_F_LAVA | GREN_F_FLESH
 	bne .gt_move
 	sec
 	lda gr_vyl,x
@@ -276,7 +282,10 @@ gren_asr5
 	bne .ga5
 	rts
 
-; A = <vel_lo, Y = <vel_hi. Negate and asr1.
+!if (gr_vxh != gr_vxl + 4) | (gr_vyl != gr_vxl + 8) | (gr_vyh != gr_vyl + 4) | (gr_vzl != gr_vxl + 16) | (gr_vzh != gr_vzl + 4) {
+	!error "gr_v* layout"
+}
+; A = <vel_lo (Y unused). Negate and asr1.
 gren_bounce
 	pha
 	ldx obj_i
@@ -293,23 +302,23 @@ gren_bounce
 	jmp gren_clear
 .gb_n
 	pla
-	sta .bl+1
-	sta .sl+1
-	sta .rl+1
-	sty .bh+1
-	sty .sh+1
-	sty .rh+1
-	ldx obj_i
+	; A = <gr_v?l. The arrays are 4 apart per slot, axes 8 apart, hi = lo + 4,
+	; and they straddle a page, so index off gr_vxl instead of patching low bytes.
+	sec
+	sbc #<gr_vxl
+	clc
+	adc obj_i
+	tax
 	sec
 	lda #0
-.bl	sbc gr_vxl,x
-.sl	sta gr_vxl,x
+	sbc gr_vxl,x
+	sta gr_vxl,x
 	lda #0
-.bh	sbc gr_vxh,x
-.sh	sta gr_vxh,x
+	sbc gr_vxl+4,x
+	sta gr_vxl+4,x
 	cmp #$80
-.rh	ror gr_vxh,x
-.rl	ror gr_vxl,x
+	ror gr_vxl+4,x
+	ror gr_vxl,x
 	ldx obj_i
 	lda gr_flags,x
 	and #GREN_F_BOUNCE
@@ -502,9 +511,19 @@ gren_col_xz
 
 ; C=1 allowed (room colliders only — doors do not pass grenades)
 gren_pos_ok
+	; Grenades are points: the PLAYER_R wall margin killed them at the launcher.
 	lda col_room
-	jsr in_room_inset_a
+	jsr room_mul3
+	tax
+	jsr point_in_rc_xz
+	bcs .gpo_sol
+	inx
+	jsr point_in_rc_xz
+	bcs .gpo_sol
+	inx
+	jsr point_in_rc_xz
 	bcc .gpo_no
+.gpo_sol
 	jsr gren_solid_at
 	bcs .gpo_no
 	sec

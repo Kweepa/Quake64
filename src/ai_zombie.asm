@@ -142,8 +142,113 @@ ai_zombie_entry
 	ldx obj_i
 	lda #GREN_F_FLESH
 	sta gr_flags,x
-	lsr gr_vyh,x
+	jsr .half3
+	jsr .aim_y			; flesh flies straight (no gravity): vy aims at the chest
 .fire_rts
+	rts
+
+; vy = dy * 15 / L (8.8), L ~ max + 3/8 min of |dx|,|dz|. 15 = half GREN_SPEED.
+; Chunk was falling ~3 units and hitting the floor 2-5 units short of the player.
+.aim_y
+	ldx obj_i
+	lda cam_xh
+	sec
+	sbc gr_xh,x
+	jsr .z_abs
+	sta zc_dx
+	lda cam_zh
+	sec
+	sbc gr_zh,x
+	jsr .z_abs
+	sta zc_dz
+	lda zc_dx
+	cmp zc_dz
+	bcs +
+	tax
+	lda zc_dz
+	sta zc_dx
+	stx zc_dz
++
+	lda zc_dz
+	lsr
+	lsr
+	sta zc_dz
+	lsr
+	clc
+	adc zc_dz
+	clc
+	adc zc_dx
+	bcc +
+	lda #$ff
++
+	bne +
+	lda #1
++
+	sta dlo
+	ldx obj_i
+	lda cam_yh
+	clc
+	sbc gr_yh,x			; cam_yh - gr_yh - 1: chest
+	sta zc_dy
+	jsr .z_abs
+	cmp #9
+	bcc +
+	lda #8
++
+	sta zc_dz
+	asl
+	asl
+	asl
+	asl
+	sec
+	sbc zc_dz
+	sta div_n1
+	lda #0
+	sta div_n0
+	sta div_n2
+	jsr div24u8
+	lda zc_dy
+	bpl +
+	sec
+	lda #0
+	sbc div_n0
+	sta div_n0
+	lda #0
+	sbc div_n1
+	sta div_n1
++
+	ldx obj_i
+	lda div_n0
+	sta gr_vyl,x
+	lda div_n1
+	sta gr_vyh,x
+	rts
+
+.z_abs
+	bpl +
+	eor #$ff
+	clc
+	adc #1
++
+	rts
+
+; Halve signed 8.8. X = slot. .half3 does vx/vy/vz; .halfy is vy only.
+.half3
+	jsr .halfy
+	lda gr_vxh,x
+	cmp #$80
+	ror gr_vxh,x
+	ror gr_vxl,x
+	lda gr_vzh,x
+	cmp #$80
+	ror gr_vzh,x
+	ror gr_vzl,x
+	rts
+.halfy
+	lda gr_vyh,x
+	cmp #$80
+	ror gr_vyh,x
+	ror gr_vyl,x
 	rts
 
 ; Old frame in en_sfx_old, new frame in en_frame. A = 0: this bank owns the decision.
@@ -265,3 +370,8 @@ ai_zombie_entry
 	sta en_frame,x
 .rts
 	rts
+
+; Data after all code so genaimeta's opcode walk stays aligned.
+zc_dx	!byte 0
+zc_dz	!byte 0
+zc_dy	!byte 0

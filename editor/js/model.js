@@ -2030,6 +2030,10 @@ export function clampObject(obj) {
   if (obj.kind === "enemy" || obj.kind === "spawn" || obj.kind === "teleporter_dest") {
     obj.rot = clampEnemyRot(obj.rot ?? 0);
   }
+  if (obj.kind === "teleporter_dest") {
+    if (obj.keepFacing) obj.keepFacing = true;
+    else delete obj.keepFacing;
+  }
   if (obj.kind === "trigger") {
     obj.purpose = clampTriggerPurpose(obj.purpose);
     obj.text = clampTriggerText(obj.text);
@@ -2104,6 +2108,7 @@ export function createObject(kind, x, y, z, extra = {}) {
   if (kind === "spawn" || kind === "enemy" || kind === "teleporter_dest") {
     obj.rot = clampEnemyRot(extra.rot ?? 0);
   }
+  if (kind === "teleporter_dest" && extra.keepFacing) obj.keepFacing = true;
   if (kind === "spawn") obj.enabled = extra.enabled === true;
   if (kind === "enemy") {
     const name = extra.enemy || "Grunt";
@@ -3419,6 +3424,7 @@ function parseObjects(list) {
       patrol: o.patrol,
       shootable: o.shootable,
       rot: o.rot,
+      keepFacing: o.keepFacing,
       text: o.text,
       purpose: o.purpose,
       name: o.name,

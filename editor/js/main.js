@@ -2920,6 +2920,13 @@ function renderLayoutObjectFields(root, objs) {
     root.appendChild(rotateRow(() => apply((obj) => (obj.rot = cycleEnemyRot(obj.rot ?? 0)))));
   }
 
+  if (kind === "teleporter_dest") {
+    const allKeep = objs.every((o) => !!o.keepFacing);
+    root.appendChild(
+      toggleField("Keep facing", allKeep, () => apply((obj) => (obj.keepFacing = !allKeep)))
+    );
+  }
+
   if (kind === "trigger") {
     const purpose = unanimous(objs, (o) => clampTriggerPurpose(o.purpose));
     root.appendChild(

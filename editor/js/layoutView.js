@@ -866,6 +866,13 @@ export class LayoutView {
     }
     if (obj.kind === "teleporter_dest") {
       const c = aabbCenter(obj);
+      if (obj.keepFacing) {
+        segs.push(
+          { a: { x: c.x - 1.5, y: c.y, z: c.z }, b: { x: c.x + 1.5, y: c.y, z: c.z } },
+          { a: { x: c.x, y: c.y, z: c.z - 1.5 }, b: { x: c.x, y: c.y, z: c.z + 1.5 } }
+        );
+        return segs;
+      }
       const rot = clampEnemyRot(obj.rot ?? 0);
       const th = (rot * Math.PI) / 4;
       const fx = Math.sin(th);

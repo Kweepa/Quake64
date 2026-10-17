@@ -913,7 +913,10 @@ def cook_one(level: dict, map_key: str) -> bytes:
         td_x.append((int(d["x"]) + int(d["sx"]) // 2) & 0xFF)
         td_y.append(int(d["y"]) & 0xFF)
         td_z.append((int(d["z"]) + int(d["sz"]) // 2) & 0xFF)
-        td_rot.append(int(d.get("rot") or 0) & 7)
+        rot = int(d.get("rot") or 0) & 7
+        if d.get("keepFacing"):
+            rot |= 0x80  # TD_KEEP: leave player yaw
+        td_rot.append(rot)
         td_room.append(ri)
 
     # Triggers
@@ -1250,6 +1253,7 @@ ELEV_MAX	= 4
 TRIG_MAX	= 16
 TRIG_ROOM_MAX	= 8
 DEST_MAX	= 16
+TD_KEEP	= $80
 ROOM_MAX_TYPES	= 2
 MAP_MAX_BYTES	= 4096
 ENEMY_POSE_MAX	= 7680

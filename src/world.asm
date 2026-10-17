@@ -2370,13 +2370,15 @@ trig_enter
 	+lda_my td_y
 	adc #EYE_HEIGHT
 	sta cam_yh
-	+lda_my td_rot
+	+lda_my td_rot			; bits 0-2 = octant; TD_KEEP leaves yaw
+	bmi .te_kyaw
 	asl
 	asl
 	asl
 	asl
 	asl
 	sta yaw
+.te_kyaw
 	+lda_my td_room
 	jsr set_room_idx
 	lda #$ff

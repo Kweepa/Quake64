@@ -5139,7 +5139,23 @@
           "dir": 1,
           "rot": 6,
           "roomId": "556258d2-1afa-4f17-bf9f-0faf9c90ba17",
-          "tag": "ddbot"
+          "tag": "ddbot",
+          "keepFacing": true
+        },
+        {
+          "id": "26058bc5-7ae8-4a64-b7b4-6f0fc82b686d",
+          "kind": "pickup",
+          "x": 141,
+          "y": 111,
+          "z": 80,
+          "sx": 0.9270509831248422,
+          "sy": 1.5,
+          "sz": 0.8028497019894523,
+          "face": "+z",
+          "axis": "z",
+          "dir": 1,
+          "roomId": "93272be8-ca62-4b8b-b183-5af142e877b9",
+          "pickup": "shells"
         }
       ]
     },
@@ -7761,7 +7777,8 @@
           "dir": 1,
           "rot": 4,
           "roomId": "6630f0ea-8abd-4c03-8f72-073c736c3f2a",
-          "tag": "dropdown"
+          "tag": "dropdown",
+          "keepFacing": true
         },
         {
           "id": "ca14fef7-7e02-4a77-a136-c8f8cfb83013",
@@ -9739,7 +9756,8 @@
           "dir": 1,
           "rot": 4,
           "roomId": "82533313-7848-44cd-a8c7-31238fa2d7c6",
-          "tag": "drop"
+          "tag": "drop",
+          "keepFacing": true
         },
         {
           "id": "9c397fe9-661f-41c4-95ea-b2053a2bb8cc",

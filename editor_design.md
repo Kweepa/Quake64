@@ -37,7 +37,7 @@
   * **Summon elevator** — destination **tag** targets an elevator; on entry, if idle, sends it to the stop nearer the player’s feet (no-op if already there or moving).
 * There is no separate teleporter entry object — teleport entry is a trigger with purpose **Teleport**.
 * Optional **Armed by** tag: if set, the volume does nothing until a switch with that tag is used. One switch can arm every trigger that shares the tag. Destination **tag** (teleport / elevator / unlock) is independent.
-* **Teleport dest** stays its own placeable (exit point + facing + tag). The dest object's room is the arrival room. Editor marks the dest; the game does not draw it.
+* **Teleport dest** stays its own placeable (exit point + facing + tag). The dest object's room is the arrival room. Editor marks the dest; the game does not draw it. **Keep facing** (off by default) leaves the player's yaw unchanged on arrival; the dest facing is then unused. Layout draws a cross instead of the facing arrow.
 
 ## Patrol
 * Enemies have a **Patrol** checkbox. When set, an idle enemy picks a random cardinal, walks at least 6 units if that ray is clear of walls, then idles 1–2 seconds and repeats. Failed rays stay idle and retry next frame.

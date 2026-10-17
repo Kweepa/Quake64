@@ -2258,7 +2258,11 @@ gun_hitscan
 	clc
 	adc #1
 .sh_xabs
-	cmp scan_hit_x
+	sta rot0
+	jsr sham_hit_lim
+	sta rot2
+	lda rot0
+	cmp rot2
 	beq .sh_xok
 	bcs .sh_n
 .sh_xok
@@ -2362,6 +2366,36 @@ gun_hitscan
 	tax
 	jsr fire_switch
 .sh_rts
+	rts
+
+; A = |sx−CX| limit. Shambler adds a 400/z band, capped at half the screen.
+; Clobbers X, Y. Preserves rot0, rot1.
+sham_hit_lim
+	lda scan_hit_x
+	ldx enemy_idx
+	+ldy_mx en_type
+	cpy #ENT_SHAMBLER
+	bne .shl_rts
+	ldy gidx
+	lda #96
+	cpy #5
+	bcc .shl_add
+	lda #50
+	cpy #8
+	bcc .shl_add
+	lda #25
+	cpy #16
+	bcc .shl_add
+	lda #12
+.shl_add
+	clc
+	adc scan_hit_x
+	bcs .shl_cap
+	cmp #SCREEN_CX + 1
+	bcc .shl_rts
+.shl_cap
+	lda #SCREEN_CX
+.shl_rts
 	rts
 
 ; Mid-body blood splat on shot_hit_i (view trig loaded).

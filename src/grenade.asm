@@ -206,11 +206,18 @@ gren_tick
 	jsr gren_move_y
 	ldx obj_i
 	lda gr_owner,x
-	beq .gt_tick
+	bne .gt_vspl
+	jsr gren_hit_enemies
+	jmp .gt_hitd
+.gt_vspl
 	jsr gren_hit_player
+.gt_hitd
 	ldx obj_i
 	lda gr_on,x
 	beq .gt_rts
+	lda gr_flags,x
+	and #GREN_F_PEND
+	bne .gt_tdone
 	jmp .gt_tick
 .gt_tdone
 	ldx obj_i
@@ -435,7 +442,16 @@ gren_move_y
 	lda gr_yh,x
 	sta fb_probe_y
 	ldy col_room
+	lda proc_tmp0			; tick ms remainder: peek_rc_floor zeroes it
+	pha
+	lda gr_flags,x
+	and #GREN_F_LAVA
+	sta fb_nocrate
 	jsr floor_below_y
+	pla
+	sta proc_tmp0			; PLA/STA keep C
+	lda #0
+	sta fb_nocrate			; LDA/STA keep C
 	bcc gren_try_y
 	lda proc_tmp2
 	cmp save_xh
@@ -506,7 +522,11 @@ gren_solid_at
 	lda gr_yh,x
 	adc #EYE_HEIGHT
 	sta cam_yh
-	ldy #0
+	lda gr_flags,x
+	and #GREN_F_LAVA
+	lsr
+	lsr
+	tay				; Y=2 lava (passes crates), 0 otherwise
 	jsr solid_at_col
 	pla
 	sta cam_yh
@@ -946,5 +966,7 @@ gdo_cxh	!byte 0
 gdo_cy	!byte 0
 gdo_cyh	!byte 0
 gdo_r	!byte 0
+
+fb_nocrate	!byte 0			; nonzero: floor_below ignores crates (lava only)
 
 grenade_end = *

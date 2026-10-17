@@ -12,6 +12,8 @@
 
 CHTHON_LAVA_VERT = 14		; arm tip (edge 4-14) on fire frame 5
 CHTHON_LAVA_VERT2 = 13		; other arm tip (edge 12-13) on fire frame 17
+CHTHON_FIRE1 = 5		; first throw; keep in sync with genenemies FIRE_FRAME[Chthon]
+CHTHON_LAVA_SPEED = 32		; units/s
 
 *= AI_LINK_BASE
 ai_chthon_entry
@@ -149,16 +151,7 @@ ai_chthon_entry
 	jsr gren_alloc
 	bcc .ch_fire_rts
 	stx obj_i
-	lda cam_xh
-	sec
-	sbc org_xh
-	sta rot0
-	lda cam_zh
-	sec
-	sbc org_zh
-	sta rot1
-	jsr atan2_yaw
-	sta rot2
+	; rot2 is any index: .ch_aim overwrites every velocity byte
 	ldx obj_i
 	lda #GREN_OWN_EN
 	jsr gren_fill_slot
@@ -220,89 +213,104 @@ ai_chthon_entry
 .chu_rts
 	rts
 
-; Replace the lob with vy aimed at the chest. Same speed scale as GREN_SPEED.
+; Straight line to the chest at CHTHON_LAVA_SPEED (8.8 per tick = speed<<8 * a / L).
+; d = chest - slot; L ~ max + 3/8 (sum - max). Velocity bytes are 4 apart per
+; slot, axes 8 apart: gr_vxl/vxh, gr_vyl/vyh, gr_vzl/vzh.
+!if CHTHON_LAVA_SPEED != 32 {
+	!error "numerator below is a << 13"
+}
+!if (gr_vxh != gr_vxl + 4) | (gr_vyl != gr_vxl + 8) | (gr_vzl != gr_vxl + 16) | (gr_vzh != gr_vxl + 20) {
+	!error "gr_v* layout"
+}
 .ch_aim
 	ldx obj_i
-	lda cam_yh
-	sec
-	sbc #1
-	sbc gr_yh,x
-	sta rot2			; signed dy
 	lda cam_xh
 	sec
 	sbc gr_xh,x
-	jsr .ch_abs
-	sta rot0
-	ldx obj_i
+	sta ch_sg
+	lda cam_yh
+	clc
+	sbc gr_yh,x			; cam_yh - gr_yh - 1: chest
+	sta ch_sg+1
 	lda cam_zh
 	sec
 	sbc gr_zh,x
+	sta ch_sg+2
+	ldy #2
+.cha_abs
+	lda ch_sg,y
 	jsr .ch_abs
-	cmp rot0
+	sta ch_ad,y
+	dey
+	bpl .cha_abs
+	lda ch_ad
+	clc
+	adc ch_ad+1
+	adc ch_ad+2
+	sta ch_t			; sum
+	lda ch_ad
+	cmp ch_ad+1
 	bcs +
-	lda rot0
+	lda ch_ad+1
 +
+	cmp ch_ad+2
+	bcs +
+	lda ch_ad+2
++
+	sta ch_mx
+	lda ch_t
+	sec
+	sbc ch_mx
+	lsr
+	lsr
+	sta ch_t			; (sum-max)/4
+	lsr
+	clc
+	adc ch_t
+	clc
+	adc ch_mx
 	bne +
 	lda #1
 +
 	sta dlo
-	lda rot2
-	php
-	jsr .ch_abs
-	sta rot0
+	ldy #0
+.cha_ax
 	lda #0
-	sta rot1
-	jsr .ch_mul30
-	lda rot0
 	sta div_n0
-	lda rot1
 	sta div_n1
-	lda #0
+	lda ch_ad,y
+	lsr
+	ror div_n1
+	lsr
+	ror div_n1
+	lsr
+	ror div_n1
 	sta div_n2
-	jsr div24u8
-	plp
-	php
-	ldx obj_i
-	lda div_n1
-	beq +
-	lda #$7f
-	sta div_n0
-+
-	plp
-	bpl +
-	lda div_n0
-	eor #$ff
-	clc
-	adc #1
-	sta div_n0
-+
-	lda div_n0
-	sta gr_vyh,x
-	lda #0
-	sta gr_vyl,x
-	rts
-
-; rot0:rot1 = rot0 * 30. rot1 enters 0.
-.ch_mul30
-	lda rot0
-	asl
-	sta nlo
-	lda #0
-	rol
-	sta nhi
-	ldy #5
-.ch_m
-	asl rot0
-	rol rot1
-	dey
-	bne .ch_m
+	jsr div24u8			; keeps Y
+	lda ch_sg,y
+	bpl .cha_pos
 	sec
-	lda rot0
-	sbc nlo
-	sta rot0
-	lda rot1
-	sbc nhi
-	sta rot1
+	lda #0
+	sbc div_n0
+	sta div_n0
+	lda #0
+	sbc div_n1
+	sta div_n1
+.cha_pos
+	tya
+	asl
+	asl
+	asl
+	clc
+	adc obj_i
+	tax
+	lda div_n0
+	sta gr_vxl,x
+	lda div_n1
+	sta gr_vxh,x
+	iny
+	cpy #3
+	bne .cha_ax
 	rts
 
 .ch_abs
@@ -481,7 +489,6 @@ ai_chthon_entry
 .chd_out
 	rts
 +
-	jsr load_view_trig
 	ldx #0
 	jsr .ch_center
 	ldx #1
@@ -707,6 +714,7 @@ ai_chthon_entry
 	rts
 
 .ch_project
+	jsr load_view_trig		; proj_cam_to_proj overwrites set A (cos)
 	lda #0
 	sta org_xl
 	sta org_yl
@@ -724,8 +732,7 @@ ai_chthon_entry
 ; Frame 5 comes from enemy_fire_frame. Frame 17 is the second throw.
 ; A = 0: this bank owns both, so the resident table must not also fire.
 .ch_anim_fire
-	ldy #ENT_CHTHON
-	lda enemy_fire_frame,y
+	lda #CHTHON_FIRE1		; enemy_fire_frame is meta-slot indexed, not by type
 	jsr .ch_crossed
 	bcs .ch_af_go
 	lda #CHTHON_FIRE2
@@ -927,3 +934,9 @@ ch_elec
 	sta ch_acc_l,x
 	sta ch_acc_h,x
 	rts
+
+; Data after all code so genaimeta's opcode walk stays aligned.
+ch_sg	!byte 0, 0, 0		; signed dx, dy, dz
+ch_ad	!byte 0, 0, 0		; magnitudes
+ch_t	!byte 0
+ch_mx	!byte 0

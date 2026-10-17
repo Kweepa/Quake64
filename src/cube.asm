@@ -545,6 +545,9 @@ ent_vert_world
 	jsr ent_set_pose
 	ldx obj_i
 	+lda_mx en_rot
+	eor #$ff			; drawn bones use R(yaw - rot): world offset is R(-rot)
+	clc
+	adc #1
 	tay
 	lda COSTAB,y
 	jsr mulset_a
@@ -2099,6 +2102,13 @@ draw_enemies
 	jsr enemy_in_view
 	bcs .de_vis
 	ldx obj_i
+	+ldy_mx en_type
+	cpy #ENT_CHTHON
+	bne .de_nch
+	lda #AI_CMD_DRAW		; electrode bolt does not depend on Chthon being on screen
+	jsr ai_invoke
+	jmp .de_one_rts
+.de_nch
 	lda spit_on
 	beq .de_cull
 	cpx spit_owner

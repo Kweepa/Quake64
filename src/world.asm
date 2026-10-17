@@ -400,6 +400,8 @@ floor_below_y
 	lda #0
 	sta proc_tmp0
 .fb_surf
+	lda fb_nocrate			; lava: crate tops are not floor (electrodes)
+	bne .fb_p
 	ldx #0
 .fb_c
 	cpx	map_ncrates
@@ -889,6 +891,8 @@ solid_at_col
 	bcc .sa_cstart
 	jmp .sa_yes
 .sa_cstart
+	cpy #2
+	beq .sa_p			; Y=2: lava ignores crates (electrodes)
 	; crates — solid on Y overlap (not when on/above top or under)
 	ldx #0
 .sa_c

@@ -149,10 +149,10 @@ ending2_text
 	!byte 0
 
 ending3_text
-	!scr "or are you? if you don't register quake,",0
-	!scr "you'll never know what awaits you in",0
-	!scr "the realm of black magic, the netherworld,",0
-	!scr "and the elder world!",0
+	!scr "or are you? if you don't register",0
+	!scr "quake, you'll never know what awaits",0
+	!scr "you in the realm of black magic, the",0
+	!scr "netherworld, and the elder world!",0
 	!byte 0
 
 ending_lo

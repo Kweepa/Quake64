@@ -218,9 +218,10 @@ export const SOUND_LOCKED = [
   {
     alias: "BAREXP",
     path: "sound/weapons/r_exp3.wav",
-    voice: 0,
-    priority: 50,
-    origin: "empty",
+    voice: 1,
+    priority: 80,
+    origin: "doom",
+    library: "DPRXPLOD",
   },
   { alias: "OOF", path: "sound/player/land.wav", voice: 0, priority: 50, origin: "doom", library: "DPOOF" },
 ];

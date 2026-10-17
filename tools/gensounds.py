@@ -60,7 +60,7 @@ LOCKED_VOICE = {
     "SWITCH": 0,
     "BONUS1": 0,
     "SHOTGN": 0,
-    "BAREXP": 0,
+    "BAREXP": 1,
     "OOF": 0,
 }
 LOCKED_PRI = {
@@ -77,10 +77,10 @@ LOCKED_PRI = {
     "SWITCH": 1,
     "BONUS1": 70,
     "SHOTGN": 50,
-    "BAREXP": 50,
+    "BAREXP": 80,
     "OOF": 50,
 }
-# Locked path → (origin, library name). BAREXP exports no samples.
+# Locked path → (origin, library name). Used when the json entry is missing.
 LOCKED_LIB = {
     "HITWALL": ("wolf", "HITWALL"),
     "PLAYERDEATH": ("wolf", "PLAYERDEATH"),
@@ -95,7 +95,7 @@ LOCKED_LIB = {
     "SWITCH": ("wolf", "MOVEGUN1"),
     "BONUS1": ("wolf", "BONUS1"),
     "SHOTGN": ("doom", "DPSHOTGN"),
-    "BAREXP": None,
+    "BAREXP": ("doom", "DPRXPLOD"),
     "OOF": ("doom", "DPOOF"),
 }
 LIBRARY_ORIGINS = {"wolf", "doom", "dave", "keen"}
@@ -148,8 +148,8 @@ def clamp_u8(n: int, lo: int, hi: int) -> int:
 def library_freq(path: str, raw: dict, locked_alias: str | None) -> list[int]:
     origin = str(raw.get("origin") or "").strip().lower()
     library = str(raw.get("library") or "").strip().upper()
-    # Empty cue (BAREXP, or a placeholder export with no library yet): no samples.
-    if locked_alias == "BAREXP" or origin in ("", "empty"):
+    # Placeholder export with no library yet: no samples.
+    if origin in ("", "empty"):
         return []
     if origin in LIBRARY_ORIGINS:
         if not library:

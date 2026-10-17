@@ -14637,10 +14637,11 @@
     },
     "sound/weapons/r_exp3.wav": {
       "export": true,
-      "voice": 0,
-      "priority": 50,
+      "voice": 1,
+      "priority": 80,
       "attack": 0,
-      "origin": "empty",
+      "origin": "doom",
+      "library": "DPRXPLOD",
       "alias": "BAREXP"
     },
     "sound/player/land.wav": {

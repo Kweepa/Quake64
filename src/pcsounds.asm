@@ -92,11 +92,11 @@ pc_weapons_shotgn2
 	!byte 16, 0, 50, 31, 22, 26, 21, 26, 24, 19, 18, 22, 17, 16, 15, 17
 	!byte 18, 15, 11
 pc_weapons_r_exp3
-	!byte 0, 0, 50
+	!byte 13, 1, 80, 13, 18, 24, 24, 21, 23, 17, 16, 26, 31, 16, 21, 17
 pc_player_land
 	!byte 4, 0, 50, 15, 16, 16, 14
 
-; resident sound payload 260 bytes
+; resident sound payload 273 bytes
 ; copied into sound_table[0..SOUND_RESIDENT_N-1] by play_sound_init
 sound_res_words
 	!word pc_weapons_tink1

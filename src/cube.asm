@@ -628,8 +628,8 @@ cube_project
 	cmp #2
 	bne .col_front
 	ldx vindex			; column already known behind
-	lda #1
-	sta VBEHIND,x
+	lda #OC_NEAR
+	sta VOC,x
 	jmp .pnext
 .col_new
 	jsr .zbcam
@@ -638,8 +638,8 @@ cube_project
 	lda #2
 	sta COL_DONE,x
 	ldx vindex
-	lda #1
-	sta VBEHIND,x
+	lda #OC_NEAR
+	sta VOC,x
 	jmp .pnext
 .col_calc
 	jsr .invz			; z_eye set by .zbcam
@@ -701,14 +701,12 @@ cube_project
 +
 	rts
 
-; Per-vertex clip data hoisted out of mesh_clip: behind flag (0 here),
-; outcode from 16-bit PROJ, and screen coords when fully inside.
-; Window ox -96..95, oy -64..63; inside needs no clamp.
+; Per-vertex clip data hoisted out of mesh_clip: outcode from 16-bit PROJ,
+; and screen coords when fully inside. Behind verts get OC_NEAR in
+; mesh_project instead. Window ox -96..95, oy -64..63; inside needs no clamp.
 vert_hoist
 	ldx vindex
-	lda #0
-	sta VBEHIND,x
-	tay				; Y = outcode
+	ldy #0				; Y = outcode
 	lda PROJ_XH,x
 	beq .hx0
 	bpl .hxr
@@ -884,468 +882,185 @@ proj_cam_to_proj
 	rts
 
 ; Near-plane interpolate, then 16-bit screen Cohen-Sutherland.
-; Trivial accept/reject runs on per-vertex VOC/VBEHIND/VSX/VSY hoisted
-; into mesh_project — no CAM/PROJ copies unless an edge needs real work.
+; Trivial accept/reject runs on per-vertex VOC/VSX/VSY hoisted into
+; mesh_project — no PROJ/CAM reads unless an edge needs real work.
 mesh_clip
 cube_clip
 	lda mesh_ne
 	sta mesh_nwork
+	sta clip_n
 !if PROFILE = 1 {
 	ldx #NV_CLIP
 	jsr prof_add_nv
 }
 	lda #0
-	sta vindex
+	sta vindex			; edge byte offset
 .cel
-	lda vindex
-	asl
-	tay
+	ldy vindex
 	lda (edge_ptr),y
-	sta ei0
+	tax
 	iny
 	lda (edge_ptr),y
-	sta ei1
-	ldy vindex
-	lda (edge_vert_ptr),y
-	beq .cgen
-	jmp .clip_v
-.cgen
-	ldy ei0
-	lda VBEHIND,y
-	beq .b0f
-	ldy ei1
-	lda VBEHIND,y
-	beq .n0
-	jmp .reject			; both behind near plane
-.n0
-	jsr .load_cam
-	jsr .near0
-	jmp .near_oc
-.b0f
-	ldy ei1
-	lda VBEHIND,y
-	beq .bothf
-	jsr .load_cam
-	jsr .near1
-.near_oc
-	jsr .projpair
-	ldx #0
-	jsr .mkoc
-	sta oc0
-	ldx #1
-	jsr .mkoc
-	sta oc1
-	jsr .csrun
-	bcc .clip_out
-	jmp .reject
-.bothf
-	ldy ei0
-	lda VOC,y
-	sta oc0
-	ldy ei1
-	lda VOC,y
-	sta oc1
-	ora oc0
-	beq .accept
-	lda oc0
-	and oc1
-	beq .cswk
-	jmp .reject
-.cswk
-	jsr .load_proj
-	jsr .csrun
-	bcc .clip_out
-	jmp .reject
-.accept
-	ldy ei0
-	lda VSX,y
+	iny
+	sty vindex
+	tay
+	lda VOC,x
+	ora VOC,y
+	bne .work
+	lda VSX,x
 	sta x0
-	lda VSY,y
+	lda VSY,x
 	sta y0
-	ldy ei1
 	lda VSX,y
 	sta x1
 	lda VSY,y
 	sta y1
 	jsr draw_line
-	jmp .next
-.clip_out
-	lda ox0l
-	ldy ox0h
-	jsr .to_sx
-	sta x0
-	lda oy0l
-	ldy oy0h
-	jsr .to_sy
-	sta y0
-	lda ox1l
-	ldy ox1h
-	jsr .to_sx
-	sta x1
-	lda oy1l
-	ldy oy1h
-	jsr .to_sy
-	sta y1
-	jsr draw_line
-	jmp .next
-.clip_v
-	ldy ei0
-	lda VBEHIND,y			; vertical edge shares z — one check
-	bne .reject
-	lda VOC,y
-	sta oc0
-	ldy ei1
-	lda VOC,y
-	sta oc1
-	ora oc0
-	beq .accept2
-	lda oc0
-	and oc1
-	bne .reject
-	jsr .load_proj
-	jsr .csrun_v
-	bcc .clip_out2
-	jmp .reject
-.accept2
-	jmp .accept
-.clip_out2
-	jmp .clip_out
-.reject
 .next
-	inc vindex
-	lda vindex
-	cmp mesh_ne
-	beq +
-	jmp .cel
-+
+	dec clip_n
+	bne .cel
 	rts
 
-; CAM endpoints → e0*/e1* (near-clip path only)
-.load_cam
-	ldy ei0
-	lda CAM_X,y
-	sta e0x
-	lda CAM_XH,y
-	sta e0xh
-	lda CAM_Y,y
-	sta e0y
-	lda CAM_YH,y
-	sta e0yh
-	lda CAM_Z,y
-	sta e0z
-	lda CAM_ZH,y
-	sta e0zh
-	ldy ei1
-	lda CAM_X,y
-	sta e1x
-	lda CAM_XH,y
-	sta e1xh
-	lda CAM_Y,y
-	sta e1y
-	lda CAM_YH,y
-	sta e1yh
-	lda CAM_Z,y
-	sta e1z
-	lda CAM_ZH,y
-	sta e1zh
-	rts
-
-; PROJ endpoints → ox/oy (screen-clip path only)
-.load_proj
-	ldy ei0
-	lda PROJ_X,y
-	sta ox0l
-	lda PROJ_XH,y
-	sta ox0h
-	lda PROJ_Y,y
-	sta oy0l
-	lda PROJ_YH,y
-	sta oy0h
-	ldy ei1
-	lda PROJ_X,y
-	sta ox1l
-	lda PROJ_XH,y
-	sta ox1h
-	lda PROJ_Y,y
-	sta oy1l
-	lda PROJ_YH,y
-	sta oy1h
-	rts
-
-.near0
-	jsr .nd01
-	lda nlo
-	pha
-	lda nhi
-	pha
-	lda dlo
-	pha
-	lda dhi
-	pha
-	jsr .nlx0
-	pla
-	sta dhi
-	pla
-	sta dlo
-	pla
-	sta nhi
-	pla
-	sta nlo
-	jsr .nly0
-	lda #<ZCLIP
-	sta e0z
-	lda #>ZCLIP
-	sta e0zh
-	rts
-
-.near1
-	jsr .nd10
-	lda nlo
-	pha
-	lda nhi
-	pha
-	lda dlo
-	pha
-	lda dhi
-	pha
-	jsr .nlx1
-	pla
-	sta dhi
-	pla
-	sta dlo
-	pla
-	sta nhi
-	pla
-	sta nlo
-	jsr .nly1
-	lda #<ZCLIP
-	sta e1z
-	lda #>ZCLIP
-	sta e1zh
-	rts
-
-.nlx0
-	sec
-	lda e1x
-	sbc e0x
-	sta ylo
-	lda e1xh
-	sbc e0xh
-	sta yhi
-	jsr .nlrun
-	clc
-	adc e0x
-	sta e0x
-	lda div_n1
-	adc e0xh
-	sta e0xh
-	rts
-
-.nly0
-	sec
-	lda e1y
-	sbc e0y
-	sta ylo
-	lda e1yh
-	sbc e0yh
-	sta yhi
-	jsr .nlrun
-	clc
-	adc e0y
-	sta e0y
-	lda div_n1
-	adc e0yh
-	sta e0yh
-	rts
-
-.nlx1
-	sec
-	lda e0x
-	sbc e1x
-	sta ylo
-	lda e0xh
-	sbc e1xh
-	sta yhi
-	jsr .nlrun
-	clc
-	adc e1x
-	sta e1x
-	lda div_n1
-	adc e1xh
-	sta e1xh
-	rts
-
-.nly1
-	sec
-	lda e0y
-	sbc e1y
-	sta ylo
-	lda e0yh
-	sbc e1yh
-	sta yhi
-	jsr .nlrun
-	clc
-	adc e1y
-	sta e1y
-	lda div_n1
-	adc e1yh
-	sta e1yh
-	rts
-
-.nd01
-	sec
-	lda e1z
-	sbc e0z
-	sta dlo
-	lda e1zh
-	sbc e0zh
-	sta dhi
-	sec
-	lda #<ZCLIP
-	sbc e0z
-	sta nlo
-	lda #>ZCLIP
-	sbc e0zh
-	sta nhi
-	rts
-
-.nd10
-	sec
-	lda e0z
-	sbc e1z
-	sta dlo
-	lda e0zh
-	sbc e1zh
-	sta dhi
-	sec
-	lda #<ZCLIP
-	sbc e1z
-	sta nlo
-	lda #>ZCLIP
-	sbc e1zh
-	sta nhi
-	rts
-
-.nlrun
-	jsr scale_nd
-	lda dlo
-	ora dhi
-	bne +
-	lda #0
-	sta div_n0
-	sta div_n1
-	rts
-+
-	jmp lerp16			; div_n0:div_n1 = (ylo:yhi * n) / d; A=div_n0
-
-.projpair
-	lda e0z
-	sta z_eye
-	lda e0zh
-	sta z_eye_h
-	jsr .invz
-	lda e0x
-	sta nlo
-	lda e0xh
-	sta nhi
-	jsr .cam_to_proj
-	lda nlo
-	sta ox0l
-	lda nhi
-	sta ox0h
-	lda e0y
-	sta nlo
-	lda e0yh
-	sta nhi
-	jsr .cam_to_proj_m
-	lda nlo
-	sta oy0l
-	lda nhi
-	sta oy0h
-	lda e1z
-	sta z_eye
-	lda e1zh
-	sta z_eye_h
-	jsr .invz
-	lda e1x
-	sta nlo
-	lda e1xh
-	sta nhi
-	jsr .cam_to_proj
-	lda nlo
-	sta ox1l
-	lda nhi
-	sta ox1h
-	lda e1y
-	sta nlo
-	lda e1yh
-	sta nhi
-	jsr .cam_to_proj_m
-	lda nlo
-	sta oy1l
-	lda nhi
-	sta oy1h
-	rts
-
-; Vertical edge: L/R trivial reject (same X); top/bottom set Y only.
-; oc0/oc1 preloaded; only the moved endpoint's outcode is recomputed.
-.csrun_v
-	lda #16
-	sta cs_n
-.cvlp
-	lda oc0
-	ora oc1
-	bne .cvneed
-	clc
-	rts
-.cvneed
-	lda oc0
-	and oc1
-	beq .cvwork
-	sec
-	rts
-.cvwork
-	dec cs_n
-	bne +
-	sec
-	rts
-+
-	lda oc0
-	bne .cvp0
-	lda oc1
-	ldx #1
-	bne .cvbit
-.cvp0
-	ldx #0
-.cvbit
-	lsr
-	bcs .cvrej
-	lsr
-	bcs .cvrej
-	lsr
-	bcs .cvtop
-	lda #$3f
-	ldy #0
-	jmp .cvsety
-.cvtop
-	lda #$c0
-	ldy #$ff
-.cvsety
-	cpx #0
-	bne .cv1
-	sta oy0l
-	sty oy0h
-	jsr .mkoc
+.work
+	lda VOC,x
+	and VOC,y
+	bne .next			; same outside side, or both behind
+	stx ei0
+	sty ei1
+	lda VOC,x
 	sta oc0
-	jmp .cvlp
-.cv1
-	sta oy1l
-	sty oy1h
-	jsr .mkoc
+	lda VOC,y
 	sta oc1
-	jmp .cvlp
-.cvrej
+	ora oc0
+	bmi .near
+	lda PROJ_X,x
+	sta ox0l
+	lda PROJ_XH,x
+	sta ox0h
+	lda PROJ_Y,x
+	sta oy0l
+	lda PROJ_YH,x
+	sta oy0h
+	lda PROJ_X,y
+	sta ox1l
+	lda PROJ_XH,y
+	sta ox1h
+	lda PROJ_Y,y
+	sta oy1l
+	lda PROJ_YH,y
+	sta oy1h
+.cs
+	jsr .csrun
+	bcs .next
+	jsr .stroke
+	jmp .next
+
+!if CAM_Y - CAM_X != $10 {
+	!error ".near indexes CAM_Y as CAM_X + $10"
+}
+!if CAM_YH - CAM_XH != $10 {
+	!error ".near indexes CAM_YH as CAM_XH + $10"
+}
+!if MESH_MAX_VERTS > $10 {
+	!error ".near ORs $10 into a vertex index"
+}
+
+; One endpoint behind ZCLIP. Lerp it onto the plane and project it at
+; ZCLIP; the front one keeps its PROJ and VOC. Both stay in their edge
+; slots (CS clips endpoint 0 first). ei0 = behind, ei1 = front from here.
+.near
+	lda #0
+	bit oc0
+	bmi .nr0
+	stx ei1
+	sty ei0
+	lda #4
+.nr0
+	sta nc_s
+	eor #4
+	tax
+	ldy ei1
+	lda PROJ_X,y
+	sta ox0l,x
+	lda PROJ_XH,y
+	sta ox0h,x
+	lda PROJ_Y,y
+	sta oy0l,x
+	lda PROJ_YH,y
+	sta oy0h,x
+	ldx ei0
 	sec
+	lda #<ZCLIP
+	sbc CAM_Z,x
+	sta nlo
+	lda #>ZCLIP
+	sbc CAM_ZH,x
+	sta nhi
+	sec
+	lda CAM_Z,y
+	sbc CAM_Z,x
+	sta dlo
+	lda CAM_ZH,y
+	sbc CAM_ZH,x
+	sta dhi
+	jsr scale_nd
+	lda nlo
+	sta nc_n
+	lda dlo
+	sta nc_d
+	lda #<ZCLIP
+	sta z_eye
+	lda #>ZCLIP
+	sta z_eye_h
+	jsr .invz
+	ldx ei0
+	ldy ei1
+	jsr .nlerp
+	jsr .cam_to_proj
+	ldx nc_s
+	lda nlo
+	sta ox0l,x
+	lda nhi
+	sta ox0h,x
+	lda ei0
+	ora #CAM_Y - CAM_X
+	tax
+	lda ei1
+	ora #CAM_Y - CAM_X
+	tay
+	jsr .nlerp
+	jsr .cam_to_proj_m
+	ldx nc_s
+	lda nlo
+	sta oy0l,x
+	lda nhi
+	sta oy0h,x
+	jsr .mkoc
+	jmp .cs
+
+; X = behind CAM index, Y = front (both + CAM_Y-CAM_X for the Y axis).
+; CAM[X] + (CAM[Y] - CAM[X]) * nc_n / nc_d → nlo:nhi.
+.nlerp
+	stx nc_v
+	sec
+	lda CAM_X,y
+	sbc CAM_X,x
+	sta ylo
+	lda CAM_XH,y
+	sbc CAM_XH,x
+	sta yhi
+	lda nc_n
+	sta nlo
+	lda nc_d
+	sta dlo
+	jsr lerp16
+	ldx nc_v
+	clc
+	adc CAM_X,x
+	sta nlo
+	lda div_n1
+	adc CAM_XH,x
+	sta nhi
 	rts
 
 ; C=0 accept (ox/oy inside), C=1 reject. oc0/oc1 preloaded by caller;
@@ -1362,347 +1077,169 @@ cube_clip
 .csneed
 	lda oc0
 	and oc1
-	beq .cswork
-	sec
-	rts
-.cswork
+	bne .csrej
 	dec cs_n
-	bne +
-	sec
-	rts
-+
-	lda oc0
-	bne .csp0
-	lda oc1
-	ldx #1
-	bne .csbit
-.csp0
+	beq .csrej
 	ldx #0
+	lda oc0
+	bne .csbit
+	ldx #4
+	lda oc1
 .csbit
+	ldy #$ff			; Y = lowest set outcode bit: L R T B
+-	iny
 	lsr
-	bcs .csleft
-	lsr
-	bcs .csright
-	lsr
-	bcs .cstop
-	jmp .csbot
-
-.csleft
-	lda #$a0
+	bcc -
+	lda .cs_plane,y
 	sta rot0
-	lda #$ff
-	sta rot2
-	jsr .csx
-	jmp .csupd
-.csright
-	lda #$5f
-	sta rot0
+	asl
 	lda #0
-	sta rot2
-	jsr .csx
-	jmp .csupd
-.cstop
-	lda #$c0
-	sta rot0
-	lda #$ff
-	sta rot2
-	jsr .csy
-	jmp .csupd
-.csbot
-	lda #$3f
-	sta rot0
-	lda #0
-	sta rot2
-	jsr .csy
-.csupd
-	jsr .mkoc			; X = moved endpoint (preserved by .csx/.csy)
-	cpx #0
-	bne .csu1
-	sta oc0
+	adc #$ff
+	eor #$ff
+	sta rot2			; sign-extend the plane
+	cpy #2
+	bcc +
+	inx				; T/B clip oy
+	inx
++	jsr .csclip
+	jsr .mkoc
 	jmp .cslp
-.csu1
-	sta oc1
-	jmp .cslp
+.csrej
+	sec
+	rts
 
-; rot0:rot2 = 16-bit plane, X = 0 (p0) or 1 (p1).
-; Quotient of the lerp is div_n*, not rot*.
-.csx
+.cs_plane
+	!byte <CLIP_XMIN, CLIP_XMAX, <CLIP_YMIN, CLIP_YMAX
+
+; X = moved endpoint + clip axis: 0 ox0, 2 oy0, 4 ox1, 6 oy1. rot0:rot2 =
+; plane. That axis goes to the plane; the other moves toward the far
+; endpoint. Returns X = moved endpoint (0/4).
+.csclip
+	txa
+	eor #4
+	tay
+	sec
+	lda ox0l,y
+	sbc ox0l,x
+	sta dlo
+	lda ox0h,y
+	sbc ox0h,x
+	sta dhi
+	sec
+	lda rot0
+	sbc ox0l,x
+	sta nlo
+	lda rot2
+	sbc ox0h,x
+	sta nhi
+	lda rot0
+	sta ox0l,x
+	lda rot2
+	sta ox0h,x
+	txa
+	eor #2
+	tax
+	eor #4
+	tay
+	sec
+	lda ox0l,y
+	sbc ox0l,x
+	sta ylo
+	lda ox0h,y
+	sbc ox0h,x
+	sta yhi
+	ora ylo
+	beq .ccdone			; other axis level (vertical / horizontal edge)
 	txa
 	pha
-	lda rot0
-	pha
-	lda rot2
-	pha
-	jsr .ylerp
-	pla
-	sta rot2
-	pla
-	sta rot0
+	jsr scale_nd
+	jsr lerp16
 	pla
 	tax
-	cpx #0
-	bne .csx1
-	lda rot0
-	sta ox0l
-	lda rot2
-	sta ox0h
-	rts
-.csx1
-	lda rot0
-	sta ox1l
-	lda rot2
-	sta ox1h
-	rts
-
-.csy
+	clc
+	lda div_n0
+	adc ox0l,x
+	sta ox0l,x
+	lda div_n1
+	adc ox0h,x
+	sta ox0h,x
+.ccdone
 	txa
-	pha
-	lda rot0
-	pha
-	lda rot2
-	pha
-	jsr .xlerp
-	pla
-	sta rot2
-	pla
-	sta rot0
-	pla
+	and #4
 	tax
-	cpx #0
-	bne .csy1
-	lda rot0
-	sta oy0l
-	lda rot2
-	sta oy0h
-	rts
-.csy1
-	lda rot0
-	sta oy1l
-	lda rot2
-	sta oy1h
 	rts
 
-.ylerp
-	cpx #0
-	bne .yl1
-	sec
-	lda ox1l
-	sbc ox0l
-	sta dlo
-	lda ox1h
-	sbc ox0h
-	sta dhi
-	sec
-	lda rot0
-	sbc ox0l
-	sta nlo
-	lda rot2
-	sbc ox0h
-	sta nhi
-	sec
-	lda oy1l
-	sbc oy0l
-	sta ylo
-	lda oy1h
-	sbc oy0h
-	sta yhi
-	jsr .nlrun
-	jmp .addoy0
-.yl1
-	sec
-	lda ox0l
-	sbc ox1l
-	sta dlo
-	lda ox0h
-	sbc ox1h
-	sta dhi
-	sec
-	lda rot0
-	sbc ox1l
-	sta nlo
-	lda rot2
-	sbc ox1h
-	sta nhi
-	sec
-	lda oy0l
-	sbc oy1l
-	sta ylo
-	lda oy0h
-	sbc oy1h
-	sta yhi
-	jsr .nlrun
-	jmp .addoy1
-
-.xlerp
-	cpx #0
-	bne .xl1
-	sec
-	lda oy1l
-	sbc oy0l
-	sta dlo
-	lda oy1h
-	sbc oy0h
-	sta dhi
-	sec
-	lda rot0
-	sbc oy0l
-	sta nlo
-	lda rot2
-	sbc oy0h
-	sta nhi
-	sec
-	lda ox1l
-	sbc ox0l
-	sta ylo
-	lda ox1h
-	sbc ox0h
-	sta yhi
-	jsr .nlrun
-	jmp .addox0
-.xl1
-	sec
-	lda oy0l
-	sbc oy1l
-	sta dlo
-	lda oy0h
-	sbc oy1h
-	sta dhi
-	sec
-	lda rot0
-	sbc oy1l
-	sta nlo
-	lda rot2
-	sbc oy1h
-	sta nhi
-	sec
-	lda ox0l
-	sbc ox1l
-	sta ylo
-	lda ox0h
-	sbc ox1h
-	sta yhi
-	jsr .nlrun
-	jmp .addox1
-
-.addoy0
-	clc
-	lda oy0l
-	adc div_n0
-	sta oy0l
-	lda oy0h
-	adc div_n1
-	sta oy0h
-	rts
-.addoy1
-	clc
-	lda oy1l
-	adc div_n0
-	sta oy1l
-	lda oy1h
-	adc div_n1
-	sta oy1h
-	rts
-.addox0
-	clc
-	lda ox0l
-	adc div_n0
-	sta ox0l
-	lda ox0h
-	adc div_n1
-	sta ox0h
-	rts
-.addox1
-	clc
-	lda ox1l
-	adc div_n0
-	sta ox1l
-	lda ox1h
-	adc div_n1
-	sta ox1h
-	rts
-
-; X=0 p0, X=1 p1. e0x/e0y = ox, e1x/e1y = oy
+; X = endpoint (0/4). Outcode of ox/oy[X] → oc0 / oc1 and A. X kept.
 .mkoc
-	cpx #1
-	beq .m1
-	lda ox0l
-	sta e0x
-	lda ox0h
-	sta e0y
-	lda oy0l
-	sta e1x
-	lda oy0h
-	sta e1y
-	jmp .md
-.m1
-	lda ox1l
-	sta e0x
-	lda ox1h
-	sta e0y
-	lda oy1l
-	sta e1x
-	lda oy1h
-	sta e1y
-.md
-	lda #0
-	sta oc_tmp
-	lda e0y
+	ldy #0
+	lda ox0h,x
+	bmi .mkxn
+	bne .mkr
+	lda ox0l,x
+	cmp #CLIP_XMAX+1
+	bcc .mky
+.mkr
+	ldy #OC_RIGHT
+	bne .mky
+.mkxn
 	cmp #$ff
-	bne .lhi
-	lda e0x
-	cmp #$a0
-	bcc .left
-	jmp .nl
-.lhi
-	bmi .left
-	jmp .nl
-.left
-	lda #OC_LEFT
-	sta oc_tmp
-.nl
-	lda e0y
-	bne .rhi
-	lda e0x
-	cmp #$60
-	bcs .right
-	jmp .nr
-.rhi
-	bmi .nr
-.right
-	lda oc_tmp
-	ora #OC_RIGHT
-	sta oc_tmp
-.nr
-	lda e1y
-	cmp #$ff
-	bne .thi
-	lda e1x
-	cmp #$c0
-	bcc .top
-	jmp .nt
-.thi
-	bmi .top
-	jmp .nt
-.top
-	lda oc_tmp
-	ora #OC_TOP
-	sta oc_tmp
-.nt
-	lda e1y
-	bne .bhi
-	lda e1x
-	cmp #$40
-	bcs .bot
-	jmp .nb
-.bhi
-	bmi .nb
-.bot
-	lda oc_tmp
+	bne .mkl
+	lda ox0l,x
+	cmp #<CLIP_XMIN
+	bcs .mky
+.mkl
+	ldy #OC_LEFT
+.mky
+	lda oy0h,x
+	bmi .mkyn
+	bne .mkb
+	lda oy0l,x
+	cmp #CLIP_YMAX+1
+	bcc .mkin
+.mkb
+	tya
 	ora #OC_BOT
-	sta oc_tmp
-.nb
-	lda oc_tmp
+	bne .mkst
+.mkyn
+	cmp #$ff
+	bne .mkt
+	lda oy0l,x
+	cmp #<CLIP_YMIN
+	bcs .mkin
+.mkt
+	tya
+	ora #OC_TOP
+	bne .mkst
+.mkin
+	tya
+.mkst
+	cpx #0
+	bne .mk1
+	sta oc0
 	rts
+.mk1
+	sta oc1
+	rts
+
+; ox/oy inside the window (outcodes 0) → x0..y1, stroke.
+.stroke
+	lda ox0l
+	clc
+	adc #SCREEN_CX
+	sta x0
+	lda ox1l
+	clc
+	adc #SCREEN_CX
+	sta x1
+	lda #63
+	sec
+	sbc oy0l
+	sta y0
+	lda #63
+	sec
+	sbc oy1l
+	sta y1
+	jmp draw_line
 
 ; A=ox lo Y=ox hi → screen x 0..191
 .to_sx
@@ -1760,33 +1297,13 @@ cube_clip
 clip_draw_xy
 	ldx #0
 	jsr .mkoc
-	sta oc0
-	ldx #1
+	ldx #4
 	jsr .mkoc
-	sta oc1
 	jsr .csrun
 	bcs .cd_no
-	lda ox0l
-	ldy ox0h
-	jsr .to_sx
-	sta x0
-	lda oy0l
-	ldy oy0h
-	jsr .to_sy
-	sta y0
-	lda ox1l
-	ldy ox1h
-	jsr .to_sx
-	sta x1
-	lda oy1l
-	ldy oy1h
-	jsr .to_sy
-	sta y1
-	jsr draw_line
+	jsr .stroke
 	clc
-	rts
 .cd_no
-	sec
 	rts
 
 ; X = CAM slot; world int ent_wx/wy/wz → view CAM[X]
@@ -2617,10 +2134,6 @@ draw_enemies
 	sta edge_ptr
 	lda #>enemy_edges
 	sta edge_ptr+1
-	lda #<enemy_edge_vert
-	sta edge_vert_ptr
-	lda #>enemy_edge_vert
-	sta edge_vert_ptr+1
 	lda #<ident_col			; enemy verts: no shared XZ columns
 	sta col_ptr
 	lda #>ident_col
@@ -2653,8 +2166,6 @@ SKEL_CMD_LERP = 1
 ; Shift-0 custom mesh, one batch, 12..16 slots. Same rotate as the stick.
 ; Slot 11 is the feet (pinned at export). Falls into the stick LOD tail.
 ; ent_type set, CAM[0] is the origin.
-batch_evert	!fill MESH_MAX_EDGES, 0
-
 draw_one_batch
 	jsr ent_set_pose
 	sec
@@ -2744,10 +2255,6 @@ draw_one_batch
 	ldy #PROF_ROT
 	jsr prof_add_bucket
 }
-	lda #<batch_evert
-	sta edge_vert_ptr
-	lda #>batch_evert
-	sta edge_vert_ptr+1
 	lda #<ident_col
 	sta col_ptr
 	lda #>ident_col

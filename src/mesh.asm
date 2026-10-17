@@ -28,16 +28,6 @@ quad_edges
 tri_edges
 	!byte 0,1, 1,2, 2,0
 
-; World-vertical edges (same xid/zid, different Y) — 1 = Y-only clip
-box_edge_vert
-	!byte 0,0,0,0, 0,0,0,0, 1,1,1,1
-ramp_side_vert
-	!byte 0,0, 0,0
-quad_vert
-	!byte 0,0,0,0
-tri_vert
-	!byte 0,0,0
-
 ; Per-vert XZ column ids for mesh_project (verts sharing x,z share a column).
 ; box_col doubles as identity for ≤4-vert meshes with distinct columns.
 box_col
@@ -92,10 +82,6 @@ draw_box
 	sta edge_ptr
 	lda #>box_vis_edges
 	sta edge_ptr+1
-	lda #<box_vis_vert
-	sta edge_vert_ptr
-	lda #>box_vis_vert
-	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
 stroke_mesh
@@ -283,8 +269,6 @@ cull_box_faces
 box_pack_edges
 	ldx #0
 	ldy #0
-	lda #0
-	sta rot1
 .pe
 	lda box_edge_faces,x
 	and face_bits
@@ -299,11 +283,6 @@ box_pack_edges
 	lda box_edges+1,x
 	sta box_vis_edges,y
 	iny
-	ldx rot0
-	lda box_edge_vert,x
-	ldx rot1
-	sta box_vis_vert,x
-	inc rot1
 	ldx rot0
 .pe_n
 	inx
@@ -606,10 +585,6 @@ stroke_tri
 	sta edge_ptr
 	lda #>tri_edges
 	sta edge_ptr+1
-	lda #<tri_vert
-	sta edge_vert_ptr
-	lda #>tri_vert
-	sta edge_vert_ptr+1
 	lda #<ident_col
 	sta col_ptr
 	lda #>ident_col
@@ -638,10 +613,6 @@ draw_slope_mesh
 	sta edge_ptr
 	lda ramp_ed_hi,x
 	sta edge_ptr+1
-	lda #<ramp_side_vert
-	sta edge_vert_ptr
-	lda #>ramp_side_vert
-	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
 draw_plat_mesh
@@ -655,10 +626,6 @@ draw_plat_mesh
 	sta edge_ptr
 	lda #>quad_edges
 	sta edge_ptr+1
-	lda #<quad_vert
-	sta edge_vert_ptr
-	lda #>quad_vert
-	sta edge_vert_ptr+1
 	jmp stroke_mesh
 
 ; C=1 if room_idx holds a Chthon. X restored from obj_i.
@@ -797,14 +764,6 @@ fill_item_verts
 	lda #>item_edges
 	adc #0
 	sta edge_ptr+1
-	lda item_eo,y
-	lsr
-	clc
-	adc #<item_evert
-	sta edge_vert_ptr
-	lda #>item_evert
-	adc #0
-	sta edge_vert_ptr+1
 	; All pickups yaw-spin about box+ITEM_BIAS.
 	lda item_spin
 	sta ent_rot
@@ -958,14 +917,6 @@ fill_door_type_verts
 	lda #>door_edges
 	adc #0
 	sta edge_ptr+1
-	lda door_eo,y
-	lsr
-	clc
-	adc #<door_evert
-	sta edge_vert_ptr
-	lda #>door_evert
-	adc #0
-	sta edge_vert_ptr+1
 	jsr fill_door_origin
 	jmp xform_item_at
 
@@ -1305,9 +1256,6 @@ draw_room_mesh
 	sta room_pack_edges,y
 	iny
 	sty pv2
-	ldy pv3
-	+lda_mx room_evert
-	sta room_pack_vert,y
 	inc pv3
 .drm_pkn
 	inc pv1
@@ -1396,10 +1344,6 @@ draw_room_mesh
 	sta edge_ptr
 	lda #>room_pack_edges
 	sta edge_ptr+1
-	lda #<room_pack_vert
-	sta edge_vert_ptr
-	lda #>room_pack_vert
-	sta edge_vert_ptr+1
 	lda pv3
 	sta mesh_ne
 	jmp stroke_mesh

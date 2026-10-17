@@ -1427,7 +1427,7 @@ export function itemMeshStats(mesh) {
     ne,
     nx,
     nz,
-    bytes: nx + nz + nv * 4 + ne * 3,
+    bytes: nx + nz + nv * 4 + ne * 2,
     over: nx > ITEM_MAX_UNIQUE || nz > ITEM_MAX_UNIQUE || nv > ITEM_MAX_VERTS || ne > ITEM_MAX_LINES,
   };
 }
@@ -2745,7 +2745,7 @@ export function mapStats(doc) {
         meshEdges += g.edges.length;
         const nx = new Set(g.verts.map((v) => v.x)).size;
         const nz = new Set(g.verts.map((v) => v.z)).size;
-        c64Bytes += nx + nz + g.verts.length * 4 + g.edges.length * 4;
+        c64Bytes += nx + nz + g.verts.length * 4 + g.edges.length * 3;
       }
     }
     if (kind === "trigger" && clampTriggerPurpose(obj.purpose) === "message") {

@@ -27,7 +27,6 @@ skel_draw_entry
 !source "_skel_body.asm"
 
 ; Data after all code so genaimeta's opcode walk stays aligned.
-skel_ezrun	!fill MESH_MAX_EDGES, 0	; per-edge vertical flags, all zero
 skel_sh		!byte 0
 skel_cs		!byte 0			; raw cos / sin (bit 7 = sign)
 skel_ss		!byte 0

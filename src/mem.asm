@@ -220,10 +220,8 @@ enemy_gy_hi	= enemy_gy_lo + ENEMY_PTR_N
 enemy_gz_lo	= enemy_gy_hi + ENEMY_PTR_N
 enemy_gz_hi	= enemy_gz_lo + ENEMY_PTR_N
 box_vis_edges	= enemy_gz_hi + ENEMY_PTR_N	; 24
-box_vis_vert	= box_vis_edges + 24		; 12
-room_pack_edges	= box_vis_vert + 12		; 64
-room_pack_vert	= room_pack_edges + 64		; 32
-pose_gx		= room_pack_vert + 32		; 13 — lerp scratch (ent_set_pose)
+room_pack_edges	= box_vis_edges + 24		; 64
+pose_gx		= room_pack_edges + 64		; 13 — lerp scratch (ent_set_pose)
 pose_gy		= pose_gx + 13
 pose_gz		= pose_gy + 13
 pose_map_lo	= pose_gz + 13			; patched at pose load (logical → packed)
@@ -234,7 +232,8 @@ en_sfx_old	= enemy_sfx_evt_hi + ENEMY_PTR_N	; local frame before this anim step;
 en_sfx_new	= en_sfx_old + 1		; logical frame after the step
 en_sfx_n	= en_sfx_new + 1		; remaining events while scanning
 en_sfx_armed	= en_sfx_n + 1			; 1 = frame changed this anim step
-; next free is en_sfx_armed + 1. genenemies.py ENEMY_DATA_BASE must match.
+play_bss_free	= en_sfx_armed + 1		; 44 free, up to ENEMY_DATA_BASE
+; genenemies.py ENEMY_DATA_BASE must match.
 ; Per-type cue ids ride on the pose heap, not here: enemy_sfx_evt_* points at the
 ; 5-byte cue block, and the clip event table follows it (CUE_N bytes in).
 CUE_SIGHT	= 0			; generic: enemy_enter_alert (Chthon: the rise)
@@ -244,7 +243,7 @@ CUE_SHOOT	= 3			; clip-timed
 CUE_DEATH	= 4			; generic: kill_enemy
 CUE_N		= 5
 CUE_NONE	= $ff			; $00 is a real sound
-ENEMY_DATA_BASE	= en_sfx_armed + 1	; boot-loaded enemy_data_blob.asm
+ENEMY_DATA_BASE	= play_bss_free + 44	; boot-loaded enemy_data_blob.asm
 !if ENEMY_DATA_BASE != $0701 {
 	!error "tools/genenemies.py ENEMY_DATA_BASE must be $0701"
 }
@@ -448,6 +447,7 @@ OC_LEFT		= 1
 OC_RIGHT	= 2
 OC_TOP		= 4
 OC_BOT		= 8
+OC_NEAR		= $80			; VOC only: z < ZCLIP (screen bits not set)
 
 ; Player / world
 EYE_HEIGHT	= 3
@@ -761,8 +761,13 @@ bind_n		= $CC5D
 reloc_base	= $CC5E			; word: reloc dest words in the map prefix
 
 ; Per-vertex clip data hoisted out of mesh_clip (16 slots each)
-VOC		= $CC60			; Cohen–Sutherland outcode (front verts)
-VBEHIND		= $CC70			; 1 = z < ZCLIP
+VOC		= $CC60			; Cohen–Sutherland outcode, or OC_NEAR
+clip_n		= $CC70			; mesh_clip edges left
+nc_n		= $CC71			; near clip: scaled (ZCLIP - zB) / (zF - zB)
+nc_d		= $CC72
+nc_v		= $CC73			; near clip: CAM index across lerp16
+nc_s		= $CC74			; near clip: behind endpoint's ox/oy slot (0/4)
+; $CC75–$CC7F free
 VSX		= $CC80			; screen X/Y (front verts with outcode 0)
 VSY		= $CC90
 

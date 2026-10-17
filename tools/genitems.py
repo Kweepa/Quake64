@@ -288,14 +288,8 @@ def cook(mesh: dict, name: str) -> dict:
                 raise SystemExit(f"item {name!r} has >16 unique XZ columns")
             pairs.append(p)
         col.append(pairs.index(p))
-    e0, e1, evert = [], [], []
-    for a, b in lines:
-        e0.append(a)
-        e1.append(b)
-        va, vb = verts[a], verts[b]
-        evert.append(1 if va["x"] == vb["x"] and va["z"] == vb["z"] and va["y"] != vb["y"] else 0)
     edges: list[int] = []
-    for a, b in zip(e0, e1):
+    for a, b in lines:
         edges.extend([a, b])
     return {
         "nv": len(verts),
@@ -309,7 +303,6 @@ def cook(mesh: dict, name: str) -> dict:
         "zid": zid,
         "col": col,
         "edges": edges,
-        "evert": evert,
     }
 
 
@@ -342,7 +335,7 @@ def main() -> None:
     bp = cook(items["backpack"], "backpack")
     ux_blob, uz_blob, vy_blob = [], [], []
     xid_blob, zid_blob, col_blob = [], [], []
-    edge_blob, evert_blob = [], []
+    edge_blob: list[int] = []
 
     def append_mesh(c: dict) -> tuple[int, int, int, int]:
         vo, eo, uo, zo = len(vy_blob), len(edge_blob), len(ux_blob), len(uz_blob)
@@ -353,7 +346,6 @@ def main() -> None:
         zid_blob.extend(c["zid"])
         col_blob.extend(c["col"])
         edge_blob.extend(c["edges"])
-        evert_blob.extend(c["evert"])
         return vo, eo, uo, zo
 
     bp_vo, bp_eo, bp_uo, bp_zo = append_mesh(bp)
@@ -388,7 +380,7 @@ def main() -> None:
 
     d_ux, d_uz, d_vy = [], [], []
     d_xid, d_zid, d_col = [], [], []
-    d_edge, d_evert = [], []
+    d_edge: list[int] = []
 
     def append_door(c: dict) -> tuple[int, int, int, int]:
         dvo, deo, duo, dzo = len(d_vy), len(d_edge), len(d_ux), len(d_uz)
@@ -399,7 +391,6 @@ def main() -> None:
         d_zid.extend(c["zid"])
         d_col.extend(c["col"])
         d_edge.extend(c["edges"])
-        d_evert.extend(c["evert"])
         return dvo, deo, duo, dzo
 
     d_nv, d_ne, d_nx, d_nz = [], [], [], []
@@ -440,7 +431,6 @@ def main() -> None:
         btable("item_zid", zid_blob or [0]).rstrip(),
         btable("item_col", col_blob or [0]).rstrip(),
         btable("item_edges", edge_blob or [0]).rstrip(),
-        btable("item_evert", evert_blob or [0]).rstrip(),
         "",
         btable("door_nv", d_nv).rstrip(),
         btable("door_ne", d_ne).rstrip(),
@@ -458,7 +448,6 @@ def main() -> None:
         btable("door_zid", d_zid or [0]).rstrip(),
         btable("door_col", d_col or [0]).rstrip(),
         btable("door_edges", d_edge or [0]).rstrip(),
-        btable("door_evert", d_evert or [0]).rstrip(),
         "",
     ]
     OUT.write_text("\n".join(parts), encoding="utf-8")

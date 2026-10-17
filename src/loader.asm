@@ -1518,10 +1518,6 @@ game_zp_init
 	sta edge_ptr
 	lda #>enemy_edges
 	sta edge_ptr+1
-	lda #<enemy_edge_vert
-	sta edge_vert_ptr
-	lda #>enemy_edge_vert
-	sta edge_vert_ptr+1
 	rts
 
 ; Player died: freeze, wait for scream + 1s, starting loadout, reload this map.

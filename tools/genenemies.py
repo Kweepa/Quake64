@@ -27,7 +27,7 @@ MESH_BATCH_EDGES = 32
 TYPES = ["Grunt", "Knight", "Rottweiler", "Scrag", "Ogre", "Shambler", "Chthon", "Zombie", "Demon"]
 DOS_NAME = ["grunt", "knight", "rott", "scrag", "ogre", "shambl", "chthon", "zombie", "demon"]
 ENEMY_POSE_MAX = 7680
-ENEMY_DATA_BASE = 0x0701  # mem.asm asserts en_sfx_armed+1 == $0701
+ENEMY_DATA_BASE = 0x0701  # mem.asm asserts its ENEMY_DATA_BASE == $0701
 META_ROW = 41  # mem.asm META_ROW; prepended to every .pose
 PAIN_MAX = 4
 PAIN_KEY = re.compile(r"^pain[a-z]?$")
@@ -1135,8 +1135,6 @@ def main() -> None:
         edge_bytes.append(int(b))
     parts.append("enemy_edges")
     parts.append("\t!byte " + ",".join(str(b) for b in edge_bytes))
-    parts.append("enemy_edge_vert")
-    parts.append("\t!byte " + ",".join("0" for _ in all_edges))
     hp_bytes = ", ".join(str(enemy_hp_byte(by_name[t], t)) for t in TYPES)
     parts.append(f"enemy_hp_init\t!byte {hp_bytes}")
     parts.append("")

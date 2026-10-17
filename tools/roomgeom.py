@@ -439,13 +439,11 @@ def _dissolve_collinear(verts: list[dict], edges: list[dict]) -> None:
             if not _axis_collinear(verts[oa], verts[v], verts[ob]):
                 continue
             drop = {ia, ib}
-            va, vb = verts[oa], verts[ob]
             nxt = [e for i, e in enumerate(edges) if i not in drop]
             nxt.append(
                 {
                     "a": oa,
                     "b": ob,
-                    "vert": 1 if va["x"] == vb["x"] and va["z"] == vb["z"] and va["y"] != vb["y"] else 0,
                     "faces": edges[ia]["faces"] | edges[ib]["faces"],
                 }
             )
@@ -549,7 +547,6 @@ def _union_hull(colliders: list[dict], outer: dict) -> dict:
             {
                 "a": ia,
                 "b": ib,
-                "vert": 1 if va["x"] == vb["x"] and va["z"] == vb["z"] and va["y"] != vb["y"] else 0,
                 "faces": _outer_face_bits(outer, va, vb),
             }
         )

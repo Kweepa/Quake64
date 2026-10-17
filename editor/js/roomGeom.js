@@ -660,13 +660,10 @@ function dissolveCollinear(verts, edges) {
       if (ia.o === ib.o) continue;
       if (!axisCollinear(verts[ia.o], verts[v], verts[ib.o])) continue;
       const drop = new Set([ia.i, ib.i]);
-      const va = verts[ia.o];
-      const vb = verts[ib.o];
       const next = edges.filter((_, i) => !drop.has(i));
       next.push({
         a: ia.o,
         b: ib.o,
-        vert: va.x === vb.x && va.z === vb.z && va.y !== vb.y ? 1 : 0,
         faces: edges[ia.i].faces | edges[ib.i].faces,
       });
       edges.length = 0;
@@ -788,7 +785,6 @@ function unionHull(colliders, outer) {
     kept.push({
       a: ia,
       b: ib,
-      vert: va.x === vb.x && va.z === vb.z && va.y !== vb.y ? 1 : 0,
       faces: outerFaceBits(outer, va, vb),
     });
   }
@@ -914,12 +910,7 @@ export function roomGeometry(room) {
       [1, 5, 0x12],
       [2, 6, 0x22],
       [3, 7, 0x21],
-    ].map(([a, b, faces]) => ({
-      a,
-      b,
-      vert: a < 4 && b >= 4 ? 1 : 0,
-      faces,
-    }));
+    ].map(([a, b, faces]) => ({ a, b, faces }));
     const hullFaces = aabbFaces(outer).map((f) => ({
       ...f,
       corners: [

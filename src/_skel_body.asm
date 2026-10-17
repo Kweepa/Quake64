@@ -348,10 +348,6 @@ draw_custom_enemy
 	ldy #PROF_ROT
 	jsr prof_add_bucket
 }
-	lda .dce_zv+1
-	sta edge_vert_ptr
-	lda .dce_zv+2
-	sta edge_vert_ptr+1
 	lda #<ident_col
 	sta col_ptr
 	lda #>ident_col
@@ -364,8 +360,6 @@ draw_custom_enemy
 	lda skel_base_hi,x
 	adc #0
 	sta skel_bp+1
-	jmp .db_batch
-.dce_zv	bit skel_ezrun
 
 ; Baked batch: nslot, nedge, slot→vert[nslot], slot pairs[nedge*2].
 ; Terminated by nslot = 0.
@@ -442,10 +436,6 @@ draw_custom_enemy
 	sta edge_ptr
 	lda #>enemy_edges
 	sta edge_ptr+1
-	lda #<enemy_edge_vert
-	sta edge_vert_ptr
-	lda #>enemy_edge_vert
-	sta edge_vert_ptr+1
 .dce_bolt
 	lda ent_type
 	cmp #ENT_CHTHON

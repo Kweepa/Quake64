@@ -96,7 +96,7 @@ dlo		= $60
 dhi		= $61
 ylo		= $62
 yhi		= $63
-e0x		= $50			; per-edge camera / clip scratch
+e0x		= $50			; rotate / xform / line-hit scratch
 e0y		= $51
 e0z		= $52
 e1x		= $53
@@ -163,7 +163,7 @@ mesh_nx		= $c7			; unique X count
 mesh_nz		= $c8
 xid_ptr		= $c9			; + $ca → per-vert X slot
 zid_ptr		= $cb			; + $cc → per-vert Z slot
-edge_vert_ptr	= $cd			; + $ce → per-edge vertical flags
+; $cd/$ce free
 
 ; Clip / project / enemy-rotate hoist scratch
 ei0		= $cf			; mesh_clip edge endpoint indices

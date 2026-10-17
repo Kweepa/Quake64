@@ -573,7 +573,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     mesh_col: list[int] = []
     mesh_e0: list[int] = []
     mesh_e1: list[int] = []
-    mesh_evert: list[int] = []
     mesh_efaces: list[int] = []
 
     for r in rooms:
@@ -646,7 +645,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
         for e in edges:
             mesh_e0.append(int(e["a"]) & 0xFF)
             mesh_e1.append(int(e["b"]) & 0xFF)
-            mesh_evert.append(1 if e["vert"] else 0)
             mesh_efaces.append(int(e["faces"]) & 0xFF)
 
     # Doors — one baked instance per owning room, face toward that room
@@ -1136,7 +1134,6 @@ def cook_one(level: dict, map_key: str) -> bytes:
     add(mesh_col)
     add(mesh_e0)
     add(mesh_e1)
-    add(mesh_evert)
     add(mesh_efaces)
     add(door_x)
     add(door_y)

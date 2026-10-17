@@ -39,20 +39,19 @@ Caps used by the mesh path: **16 verts**, **32 edges**, **6 unique world X** and
 | :--- | ---: | :--- |
 | `$0524`–`$058D` | 106 | `frame13_lo` |
 | `$058E`–`$05F7` | 106 | `frame13_hi` |
-| `$05F8`–`$0627` | 48 | `enemy_gx/y/z` lo/hi (`ENEMY_PTR_N`=8) |
-| `$0628`–`$063F` | 24 | `box_vis_edges` |
-| `$0640`–`$064B` | 12 | `box_vis_vert` |
-| `$064C`–`$068B` | 64 | `room_pack_edges` |
-| `$068C`–`$06AB` | 32 | `room_pack_vert` |
-| `$06AC`–`$06B8` | 13 | `pose_gx` |
-| `$06B9`–`$06C5` | 13 | `pose_gy` |
-| `$06C6`–`$06D2` | 13 | `pose_gz` |
-| `$06D3`–`$06DA` | 8 | `pose_map_lo` |
-| `$06DB`–`$06E2` | 8 | `pose_map_hi` |
-| `$06E3`–`$06F2` | 16 | streamed clip-SFX event pointers |
-| `$06F3`–`$06F6` | 4 | clip-SFX animation scratch/latch |
-| `$06F7`–`$0875` | 383 | immutable enemy metadata |
-| `$0876`–`$0895` | 32 | streamed AI entry and fused-bank pointers |
+| `$05F8`–`$062D` | 54 | `enemy_gx/y/z` lo/hi (`ENEMY_PTR_N`=9) |
+| `$062E`–`$0645` | 24 | `box_vis_edges` |
+| `$0646`–`$0685` | 64 | `room_pack_edges` |
+| `$0686`–`$0692` | 13 | `pose_gx` |
+| `$0693`–`$069F` | 13 | `pose_gy` |
+| `$06A0`–`$06AC` | 13 | `pose_gz` |
+| `$06AD`–`$06B5` | 9 | `pose_map_lo` |
+| `$06B6`–`$06BE` | 9 | `pose_map_hi` |
+| `$06BF`–`$06D0` | 18 | streamed clip-SFX event pointers |
+| `$06D1`–`$06D4` | 4 | clip-SFX animation scratch/latch |
+| `$06D5`–`$0700` | 44 | `play_bss_free` — unused (was `box_vis_vert` / `room_pack_vert`) |
+| `$0701`–`$084F` | 335 | immutable enemy metadata (`ENEMY_DATA_BASE`..`ENEMY_DATA_LIMIT`) |
+| `$0850`–`$0873` | 36 | streamed AI entry and fused-bank pointers |
 
 ### GAME `$0900`–`end_game`
 
@@ -271,8 +270,12 @@ Vertex tables are 16 slots. Edge clip tables are 32 slots. Unique-X/Z product ta
 | `$CC4A` | 1 | `emuz_on` | |
 | `$CC4B` | 1 | `emuz_xmsb` | |
 | `$CC4C` | 20 | — | Unused (was 8-slot door view SoA) |
-| `$CC60` | 16 | `VOC` | Cohen–Sutherland outcode |
-| `$CC70` | 16 | `VBEHIND` | 1 = z < ZCLIP |
+| `$CC60` | 16 | `VOC` | Cohen–Sutherland outcode, or `OC_NEAR` ($80) when z < ZCLIP |
+| `$CC70` | 1 | `clip_n` | `mesh_clip` edges left |
+| `$CC71` | 2 | `nc_n` / `nc_d` | Near clip: scaled (ZCLIP − zB) / (zF − zB) |
+| `$CC73` | 1 | `nc_v` | Near clip: CAM index across `lerp16` |
+| `$CC74` | 1 | `nc_s` | Near clip: behind endpoint's ox/oy slot (0/4) |
+| `$CC75` | 11 | — | Unused |
 | `$CC80` | 16 | `VSX` | Front-vert screen X |
 | `$CC90` | 16 | `VSY` | Front-vert screen Y |
 | `$CCA0` | 16 | `COL_DONE` | XZ-column project cache |

@@ -20,7 +20,7 @@ MAP_FIELDS = {
     "room_nv", "room_ne", "room_vo", "room_eo", "room_nx", "room_nz",
     "room_uo", "room_zo", "room_door_o", "room_ndoor", "room_ux", "room_uz", "room_vy",
     "room_xid", "room_zid", "room_col",
-    "room_e0", "room_e1", "room_evert", "room_efaces",
+    "room_e0", "room_e1", "room_efaces",
     "door_x", "door_y", "door_z", "door_sx", "door_sy", "door_sz",
     "door_face", "door_key", "door_type", "door_id", "door_other", "door_tag",
     "crate_x", "crate_y", "crate_z", "crate_sx", "crate_sy", "crate_sz",

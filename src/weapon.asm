@@ -8,7 +8,7 @@ POSE_FIRE = 1
 POSE_RECOIL = 2
 POSE_ANIM = 3
 
-AXE_NSTEPS = 5
+AXE_NSTEPS = 4
 AXE_F_OOF = $40
 AXE_F_HIT = $20
 AXE_F_SPARK = $80
@@ -109,15 +109,15 @@ fx_exp_hi
 
 ; Axe fire keyframes (right prepare → left/down arc). Idle is not in this table.
 axe_step_x
-	!byte 200, 172, 144, 120, 104
+	!byte 200, 144, 120, 104
 axe_step_y
-	!byte WPN_Y_FLUSH, 210, 214, 229, 250
+	!byte WPN_Y_FLUSH, 214, 229, 250
 axe_step_ms_lo
-	!byte <180, <45, <50, <55, <40
+	!byte <180, <50, <55, <40
 axe_step_ms_hi
-	!byte >180, >45, >50, >55, >40
+	!byte >180, >50, >55, >40
 axe_step_flags
-	!byte AXE_F_OOF, 0, AXE_F_SPARK | AXE_F_HIT, 0, 0
+	!byte AXE_F_OOF, AXE_F_SPARK | AXE_F_HIT, 0, 0
 
 ; Shotgun: snap up for shot, kick down, settle. Grenade: snap down, recover.
 recoil_shot_y

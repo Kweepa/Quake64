@@ -96,14 +96,12 @@ ai_shambler_entry
 	bcc .ranged
 	jmp .pick_melee
 .ranged
-	jsr .trace
-	bcc .ranged_ok
-	rts
-.ranged_ok
 	lda #SHAM_VAR_MAGIC
 	jmp enemy_enter_shambler_attack
 
 .pick_melee
+	jsr enemy_shot_clear
+	bcc .ranged
 	ldx enemy_idx
 	lda en_pain_i,x
 	cmp #SHAM_VAR_SWINGR
@@ -176,6 +174,11 @@ ai_shambler_entry
 	bcc .fire_near
 	rts
 .fire_near
+	jsr enemy_shot_clear
+	bcs .fire_see
+	rts
+.fire_see
+	ldx enemy_idx
 	lda en_pain_i,x
 	bne .claw
 	lda #7

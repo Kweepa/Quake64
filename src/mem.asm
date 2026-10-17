@@ -50,10 +50,13 @@ LOCODE_BASE	= $0900			; MENU overlay, then game
 ; Mid-split delay count, written by menu rb_calibrate, read by irq rb_delay
 ; (rbdelay.asm). lo = first-pass count (0 = 256), hi = number of passes
 ; (1..RB_HI_LIM; 0 or above is invalid and init_irq restores the 1 MHz count).
-; n = lo + 256*(hi-1) loop units of 5 CPU cycles. $08F7-$08F8 free.
+; n = lo + 256*(hi-1) loop units of 5 CPU cycles.
+; $08F7-$08F8 are near_box_xz scratch (play only; rb_calibrate stores with X=0).
 RB_CELL		= $08F5
 rb_n_lo		= $08F5
 rb_n_hi		= $08F6
+nb_hi		= $08F7			; exclusive max of the axis under test
+nb_lim		= $08F8			; Chebyshev range passed in A
 RB_HI_LIM	= 8			; n up to 2048
 RB_K_SPLIT	= 3			; 1 MHz mid split: write at poll edge + 48..54
 REBOOT_STUB	= $08F9			; 3-byte JMP reboot_game (installed at start)
@@ -799,6 +802,7 @@ HP_PACK_50		= 50
 BP_FOOT_SX		= 2			; AABB around equilateral-ish base
 BP_FOOT_SZ		= 2
 BP_FOOT_SY		= 2			; ≈ 1.5 tall (C64 int)
+BP_GRAB_R		= 3			; Chebyshev pad outside that footprint
 BP_MAX			= 32		; MAP_NBACKPACKS ≤ this
 
 HAVE_AXE	= 1

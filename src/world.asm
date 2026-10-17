@@ -1675,7 +1675,8 @@ try_backpack_pickup
 	sta col_x
 	lda cam_zh
 	sta col_z
-	jsr point_in_box_xz
+	lda #BP_GRAB_R
+	jsr near_box_xz
 	bcc .tbp_n
 	jsr player_overlaps_y
 	bcc .tbp_n
@@ -1729,7 +1730,8 @@ try_backpack_pickup
 	sta col_x
 	lda cam_zh
 	sta col_z
-	jsr point_in_box_xz
+	lda #BP_GRAB_R
+	jsr near_box_xz
 	bcc .tdp_n
 	jsr player_overlaps_y
 	bcc .tdp_n
@@ -1945,6 +1947,7 @@ pickup_sound
 	sta col_x
 	lda cam_zh
 	sta col_z
+	lda #SW_USE_RANGE
 	jsr near_box_xz
 	bcc .ps_no
 	ldx obj_i
@@ -1963,18 +1966,19 @@ pickup_sound
 	ldx obj_i
 	rts
 
-; col_x/col_z within SW_USE_RANGE of [box_x,box_x+sx) × [box_z,box_z+sz)
-; Chebyshev: each axis distance to AABB ≤ SW_USE_RANGE. C=1 near.
+; A = Chebyshev range. C=1 if col_x/col_z are within A of
+; [box_x, box_x+sx) × [box_z, box_z+sz). Scratch is nb_hi / nb_lim.
 near_box_xz
+	sta nb_lim
 	lda col_x
 	cmp box_x
 	bcc .nb_xlo
 	clc
 	lda box_x
 	adc box_sx
-	sta col_y
+	sta nb_hi
 	lda col_x
-	cmp col_y
+	cmp nb_hi
 	bcs .nb_xhi
 	lda #0
 	beq .nb_xd
@@ -1986,19 +1990,21 @@ near_box_xz
 .nb_xhi
 	lda col_x
 	sec
-	sbc col_y
+	sbc nb_hi
 .nb_xd
-	cmp #SW_USE_RANGE + 1
-	bcs .nb_no
+	cmp nb_lim
+	bcc .nb_z
+	bne .nb_no
+.nb_z
 	lda col_z
 	cmp box_z
 	bcc .nb_zlo
 	clc
 	lda box_z
 	adc box_sz
-	sta col_y
+	sta nb_hi
 	lda col_z
-	cmp col_y
+	cmp nb_hi
 	bcs .nb_zhi
 	lda #0
 	beq .nb_zd
@@ -2010,10 +2016,12 @@ near_box_xz
 .nb_zhi
 	lda col_z
 	sec
-	sbc col_y
+	sbc nb_hi
 .nb_zd
-	cmp #SW_USE_RANGE + 1
-	bcs .nb_no
+	cmp nb_lim
+	bcc .nb_yes
+	bne .nb_no
+.nb_yes
 	sec
 	rts
 .nb_no

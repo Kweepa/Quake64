@@ -515,6 +515,11 @@ LoadLevel
 } else {
 	; LoadPrg owns SETNAM/SETLFS/LOAD/CLOSE under load_irq_off.
 	jsr blank_screen
+	lda $d011
+	and #%11101111				; DEN off through the map load
+	sta $d011
+	lda #1
+	sta den_arm
 }
 .ll_dos
 	lda #BANK_IO
@@ -1617,8 +1622,12 @@ next_level
 	cmp #MAP_NLEVELS
 	bcs episode_done
 	inc level_num
+	lda #0					; keys are per-map
+	sta have_keys
 	jsr restart_level
 	bcs episode_done
+	lda #1
+	sta den_arm				; DEN stays off until the next published frame
 	rts
 
 episode_done

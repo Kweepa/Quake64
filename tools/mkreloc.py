@@ -51,12 +51,33 @@ def parse_labels(lbl: Path) -> dict[str, int]:
     return out
 
 
-def scan(body: bytes, load: int, sentinel: int, max_id: int) -> list[tuple[int, int]]:
+def scan(
+    body: bytes, load: int, sentinel: int, max_id: int, targets: set[int] | None = None
+) -> list[tuple[int, int]]:
     recs: list[tuple[int, int]] = []
     i = 0
     n = len(body)
     while i + 2 < n:
         op, lo, hi = body[i], body[i + 1], body[i + 2]
+        if (
+            op in ABS_OPS
+            and hi == sentinel
+            and lo in (0x20, 0x4C)
+            and targets
+            and i + 3 < n
+            and (body[i + 2] | (body[i + 3] << 8)) in targets
+        ):
+            # jsr/jmp to a label at $xx02 preceded by a zp operand that is an abs
+            # opcode: `sta $79` ($85 $79) + `jsr $4f02` ($20 $02 $4f) aliases
+            # adc $0220,y. The loader then patched the jsr (build 2:35, update_floor
+            # at $4f02 broke world_init, room palette never applied).
+            print(
+                f"mkreloc: skipped phantom site at ${load + i + 1:04X} "
+                f"(jsr/jmp ${body[i + 2] | (body[i + 3] << 8):04X})",
+                file=sys.stderr,
+            )
+            i += 1
+            continue
         if op in ABS_OPS and hi == sentinel and lo <= max_id:
             # Nobody emits eor_mx / eor_my ($5D / $59). Unaligned windows alias them:
             #   adc abs,y ($79 id $5D) ; sta src_ptr ($85 $02) -> eor $0285,x
@@ -173,7 +194,7 @@ def main() -> None:
             print("map pointer table field id out of range", file=sys.stderr)
             sys.exit(1)
 
-    recs = scan(body, load, sentinel, max_id)
+    recs = scan(body, load, sentinel, max_id, set(labels.values()))
     if not recs:
         print("mkreloc: zero SMC sites (macros not emitting sentinel?)", file=sys.stderr)
         sys.exit(1)

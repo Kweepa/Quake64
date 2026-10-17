@@ -9,6 +9,7 @@
 !to "menu.prg", cbm
 
 MENU_HELP_ENDINGS = 0			; 1 = Read This! shows ending1/2 (spacing)
+MENU_WIP_SPR	= 0			; 1 = bouncing WIP watermark on sprite 0
 
 !source "mem.asm"
 
@@ -220,7 +221,9 @@ run_menu
 	lda #15
 	sta effects_vol
 	jsr copy_menu_sprites
+!if MENU_WIP_SPR {
 	jsr setup_wip_spr
+}
 	jsr sync_juke_title
 	jsr menu_sfx_init
 	jsr detect_mouse
@@ -1427,6 +1430,7 @@ copy_menu_sprites
 	sta CURSOR_SPR_RAM + $500,x
 	inx
 	bne .cms4
+!if MENU_WIP_SPR {
 	ldx #0
 .cms_w
 	lda menu_wip_spr,x
@@ -1434,8 +1438,10 @@ copy_menu_sprites
 	inx
 	cpx #(WIP_SPR_COUNT * 64)
 	bne .cms_w
+}
 	rts
 
+!if MENU_WIP_SPR {
 ; Sprite 0: WIP watermark. Mux never touches ptr/X/Y/colour.
 setup_wip_spr
 	lda #WIP_SPR_PTR0
@@ -1462,6 +1468,7 @@ setup_wip_spr
 	lda wip_spr_xmsb
 	sta $d010
 	rts
+}
 
 ; Raster IRQ A — white QUAKE highlights on sprites 1–5 (WIP stays 0).
 mux_logo_spr
@@ -2396,8 +2403,12 @@ menu_unblank
 	lda $d011
 	ora #%00010000				; DEN on
 	sta $d011
+!if MENU_WIP_SPR {
 	lda #%01111111
 	ora wip_spr_en
+} else {
+	lda #%01111110
+}
 	sta $d015
 	rts
 
@@ -2415,7 +2426,9 @@ wait_frame
 .wf_lo
 	lda $d011
 	bmi .wf_lo
+!if MENU_WIP_SPR {
 	jsr update_wip_spr
+}
 	inc cursor_tick
 	lda cursor_tick
 	cmp #5				; ~10 Hz on PAL, same as Quake menudot
@@ -2433,6 +2446,7 @@ wait_frame
 
 !source "rbcal.asm"
 
+!if MENU_WIP_SPR {
 ; DVD bounce on sprite 0. X is 16-bit (low + $d010 bit 0).
 update_wip_spr
 	lda wip_dx
@@ -2506,6 +2520,7 @@ update_wip_spr
 	plp
 .uw_rts
 	rts
+}
 
 wait_frames_x
 .wf
@@ -2641,10 +2656,12 @@ cursor_spr_en	!byte 0
 wip_spr_en	!byte 0
 wip_spr_xmsb	!byte 0
 mux_msb		!byte 0				; non-WIP $d010 bits set by the current mux phase
+!if MENU_WIP_SPR {
 wip_x		!byte 0
 wip_y		!byte 0
 wip_dx		!byte 0
 wip_dy		!byte 0
+}
 cursor_frame	!byte 0
 cursor_tick	!byte 0
 menu_mux_phase	!byte 0
@@ -2766,7 +2783,9 @@ menu_str_hi
 !source "menu_title.asm"
 !source "menu_hint_spr.asm"
 !source "menu_cursor_spr.asm"
+!if MENU_WIP_SPR {
 !source "menu_wip_spr.asm"
+}
 !source "uifont_data.asm"
 !source "menu_sfx.asm"
 !source "menu_music.asm"

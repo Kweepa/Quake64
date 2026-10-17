@@ -295,7 +295,8 @@ apply_kfa
 	sta ammo_grenades
 	lda #PLAYER_ARMOUR_MAX
 	sta player_armour
-	lda #HAVE_SILVER | HAVE_GOLD | HAVE_EARTH
+	lda have_keys
+	ora #HAVE_SILVER | HAVE_GOLD
 	sta have_keys
 	jsr hud_ammo
 	lda #<cheat_msg_kfa

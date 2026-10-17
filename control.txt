@@ -10,3 +10,4 @@ you can turn and shoot with it.
 
 Walk into doors to open them.
 Walk over items to pick them up.
+Some switches must be shot.

@@ -45,8 +45,35 @@ SFX are PC-speaker envelopes on all three SID voices (player / enemy / world).
 ```bat
 build.bat          :: generate listings, assemble PRGs, write quake64.d64
 make.bat           :: build and autostart quake64.d64 in VICE
+make-cart.bat      :: pack quake64.d64 into an EasyFlash quake64.crt
 run-editor.bat     :: local map / skeleton / item editor
 ```
+
+The Krill disk (`quake64-krill.d64`) needs a real 1541-class drive or VICE true drive emulation. EasyFlash stays on the KERNAL disk.
+
+## EasyFlash cartridge
+
+To pack the disk image into an EasyFlash `.crt` for real hardware or emulation:
+
+1. Download **Disk2Easyflash v1.1** from [milasoft64/Disk2Easyflash-v1](https://github.com/milasoft64/Disk2Easyflash-v1) (file: `v1.1/disk2easyflash_v1.1.py`) or [CSDb](https://csdb.dk/release/?id=260920).
+2. Save it as `3rdparty/disk2easyflash.py`. Keep this file locally for `make-cart.bat`; the whole `3rdparty/` directory is gitignored and not pushed to GitHub.
+3. Run after building the disk:
+
+```bat
+build.bat
+make-cart.bat
+```
+
+Output: `quake64.crt`.
+
+### Third-party tool — Disk2Easyflash
+
+`3rdparty/disk2easyflash.py` is **not included** in this repository (kept separate from the project's own `tools/` scripts). Obtain it from upstream:
+
+- **v1.1 (recommended):** [GitHub — milasoft64/Disk2Easyflash-v1](https://github.com/milasoft64/Disk2Easyflash-v1) / [CSDb release](https://csdb.dk/release/?id=260920) — enhancements by MilaSoft
+- **Original logic:** [alexkazik/disk2easyflash](https://github.com/alexkazik/disk2easyflash) — licensed under [0BSD](https://opensource.org/license/0bsd)
+
+MilaSoft's v1.1 release does not declare a separate license on GitHub; the original Alex Kazik code is 0BSD. The EasyFlash cart is built from the KERNAL disk (`quake64.d64`); Krill drive code is 1541-only.
 
 Keys: **WASD** move / strafe, **J/L** turn, **K** use, **SPACE** fire, **1–4** axe / shotgun / nailgun / grenade launcher. Enable the mouse in Options to turn and shoot from port 1.
 

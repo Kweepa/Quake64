@@ -23,6 +23,9 @@ src/qsyms.asm
 __pycache__/
 *.pyc
 
+# Third-party tools, not redistributed
+3rdparty/
+
 # Debugging stuff
 *.log
 *.vsf

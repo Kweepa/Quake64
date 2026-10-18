@@ -16,7 +16,8 @@
 ; tools/sim_rbsplit.py runs these bytes against a raster model at 1-64x.
 ; HUD→view is untimed (see .view).
 ; Entered at/after L (stalled IRQ, sei tail): write immediately, no poll/burn.
-; Mid-split then: accum_keys, flush SFX, update_sfx, snapshot holds.
+; Mid-split then: accum_keys (1351 POTX first, mux parked $7F after), flush
+; SFX, update_sfx, snapshot holds.
 ; Flyback stays ASAP on 251.
 !zone irq
 !source "rbdelay.asm"
@@ -112,6 +113,17 @@ init_irq
 	lda #RB_K_SPLIT
 	sta rb_n_lo
 .rbi_ok
+	; Caller has I/O in and I=1. Park the pot mux. The SID reading is not
+	; settled until the next mid-split, so that sample only baselines mouse_x.
+	; mouse_en stays (menu Options).
+	lda #$7f
+	sta $dc00
+	lda #0
+	sta mouse_ok
+	sta mouse_turn
+	sta mouse_turn_h
+	sta mouse_rem
+	sta mouse_v
 	rts
 
 +rb_delay_body
@@ -225,6 +237,7 @@ irq_entry
 	ora #%00010000				; DEN on after viewport charset
 	sta $d011
 .view_pop
+	jsr mouse_sample			; pot parked since the last scan
 	pla
 	tay
 	pla
@@ -260,6 +273,7 @@ irq_entry
 	sta vic_border
 .top_ok
 	jsr irq_publish_vic
+	jsr mouse_sample			; pot parked since the last scan
 	pla
 	tay
 	pla
@@ -285,9 +299,97 @@ irq_add_ms
 +
 	rts
 
+; 1351 POTX sample. Called from all three raster IRQs (3x/frame); only valid
+; while $DC00 is parked $7F, i.e. never inside accum_keys' scan. A,X,Y clobbered.
+; VICE's POTX is $40..$BF: 128 raw = 32 quanta after >>2, so a delta is only
+; known mod 32 (−15..+16). Faster than that aliases to the wrong direction, so
+; the raw delta is unwrapped to the alias nearest the previous velocity mouse_v.
+; The sum is 16-bit signed; read_input does the /4 and the rate clamp.
+mouse_sample
+	lda mouse_en
+	beq .ms_rts
+	lda $d419
+	lsr					; POTX >> 2: the low two bits are noise
+	lsr
+	ldx mouse_ok
+	bne .ms_delta
+	sta mouse_x				; first sample after load = baseline
+	lda #1
+	sta mouse_ok
+.ms_rts
+	rts
+.ms_delta
+	tax
+	sec
+	sbc mouse_x
+	stx mouse_x
+	and #$1f
+	cmp #$11
+	bcc .ms_dpos
+	ora #$e0				; A = d, −15..+16
+.ms_dpos
+	tay					; Y = d
+	sec
+	sbc mouse_v				; A = d − v (|v| <= 47: no overflow)
+	bmi .ms_lo
+	cmp #17
+	bcc .ms_keep
+	tya					; d is >16 above v: alias d−32
+	sec
+	sbc #32
+	jmp .ms_have
+.ms_lo
+	cmp #$f0				; d − v < −16 (A < $F0 unsigned)
+	bcs .ms_keep
+	tya
+	clc
+	adc #32					; alias d+32
+	jmp .ms_have
+.ms_keep
+	tya
+.ms_have				; A = c, signed, |c| <= 63
+	tay
+	bne .ms_vset
+	lda mouse_v				; no motion this sample: velocity decays
+	cmp #$80
+	ror
+	sta mouse_v
+	rts
+.ms_vset
+	tya
+	bmi .ms_vneg
+	cmp #48
+	bcc .ms_vstore
+	lda #47
+	bne .ms_vstore
+.ms_vneg
+	cmp #$d1
+	bcs .ms_vstore
+	lda #$d1
+.ms_vstore
+	sta mouse_v
+	ldx #0					; add c (Y) to the 16-bit sum
+	cpy #$80
+	bcc .ms_ext
+	dex
+.ms_ext
+	tya
+	clc
+	adc mouse_turn
+	sta mouse_turn
+	txa
+	adc mouse_turn_h
+	sta mouse_turn_h
+	rts
+
 accum_keys
 	lda #0
 	sta keys
+	; 1351 POTX before anything below touches $DC00. Previous mid-split / init
+	; parked $7F (PA6=1, PA7=0 selects port 1) for a whole frame.
+	jsr mouse_sample
+	lda #0
+	sta mouse_pb0			; PB0 bits: 3 | 5 | 1 (1351 RMB = all three)
 	; W/A/S PA1 $FD
 	lda #$fd
 	sta $dc00
@@ -320,10 +422,11 @@ accum_keys
 	jsr irq_add_ms
 .nos
 	txa
-	and #$01				; 3 = nailgun
+	and #$01				; 3 = nailgun (PB0); defer — may be RMB
 	bne .no3
-	lda #1
-	sta in_wpn_nail
+	lda mouse_pb0
+	ora #$01
+	sta mouse_pb0
 .no3
 	txa
 	and #$08				; 4 = grenade launcher
@@ -331,10 +434,11 @@ accum_keys
 	lda #1
 	sta in_wpn_gren
 .no4
-	; D PA2 $FB
+	; D / 5 PA2 $FB. 5 is not a weapon; PB0 is the third RMB column.
 	lda #$fb
 	sta $dc00
 	lda $dc01
+	tax
 	and #$04
 	bne .nod
 	lda keys
@@ -343,6 +447,13 @@ accum_keys
 	ldy #in_strafer - in_fwd
 	jsr irq_add_ms
 .nod
+	txa
+	and #$01				; 5 (PB0); defer — may be RMB
+	bne .no5
+	lda mouse_pb0
+	ora #$02
+	sta mouse_pb0
+.no5
 	; J/K share PA4 $EF — J look left, K use (SquareDoom)
 	lda #$ef
 	sta $dc00
@@ -382,11 +493,34 @@ accum_keys
 	sta $dc00
 	lda $dc01
 	tax
-	and #$01				; 1 = axe
+	and #$01				; 1 = axe (PB0); defer — may be RMB
 	bne .no1
+	lda mouse_pb0
+	ora #$04
+	sta mouse_pb0
+.no1
+	; 1351 RMB grounds PB0 on every column. Real 1/3/5 set one bit.
+	lda mouse_pb0
+	cmp #$07
+	bne .pb0_keys
+	lda mouse_en
+	beq .pb0_keys
+	lda #1
+	sta in_use
+	bne .pb0_done			; A = 1
+.pb0_keys
+	lda mouse_pb0
+	and #$01
+	beq .no_nail
+	lda #1
+	sta in_wpn_nail
+.no_nail
+	lda mouse_pb0
+	and #$04
+	beq .pb0_done
 	lda #1
 	sta in_wpn_axe
-.no1
+.pb0_done
 	txa
 	and #$08				; 2 = shotgun
 	bne .no2
@@ -415,7 +549,10 @@ accum_keys
 	lda #1
 	sta in_qload
 .nof7
-	jmp check_cheats
+	jsr check_cheats
+	lda #$7f
+	sta $dc00				; mux parked for the next POTX sample
+	rts
 
 ; Publish in_* → hold_* / key_* then clear (main, once per game frame).
 ; IRQ only accumulates into in_* each mid-split — do not snapshot there or
@@ -528,6 +665,78 @@ read_input
 	adc yaw
 	sta yaw
 .tnone
+	; Mouse: ticks = sum / 4 (remainder carried), clamped to 2x the keyboard
+	; rate. Keyboard is 64 ticks/s = dt/16 per frame, so the limit is dt/8.
+	php
+	sei
+	lda dt_msh
+	cmp #8
+	bcs .m_lsat
+	asl
+	asl
+	asl
+	asl
+	asl
+	sta mouse_lim
+	lda dt_ms
+	lsr
+	lsr
+	lsr
+	ora mouse_lim
+	bne .m_lset
+	lda #1					; never a zero limit
+	bne .m_lset
+.m_lsat
+	lda #255
+.m_lset
+	sta mouse_lim
+	lda mouse_turn
+	and #3
+	sta mouse_rem
+	lda mouse_turn_h			; arithmetic >> 2 of the 16-bit sum
+	cmp #$80
+	ror mouse_turn_h
+	ror mouse_turn
+	lda mouse_turn_h
+	cmp #$80
+	ror mouse_turn_h
+	ror mouse_turn
+	lda mouse_turn_h
+	bmi .m_neg
+	bne .m_pclamp
+	lda mouse_turn
+	cmp mouse_lim
+	bcc .m_apply				; below the limit: A = ticks
+.m_pclamp
+	lda #0
+	sta mouse_rem				; clamped: drop the excess, no wind-up
+	lda mouse_lim
+	bne .m_apply
+.m_neg
+	lda mouse_lim				; mouse_lim = -limit from here on
+	eor #$ff
+	clc
+	adc #1
+	sta mouse_lim
+	lda mouse_turn_h
+	cmp #$ff
+	bne .m_nclamp
+	lda mouse_turn
+	cmp mouse_lim
+	bcs .m_apply				; ticks >= -limit: A = ticks
+.m_nclamp
+	lda #0
+	sta mouse_rem
+	lda mouse_lim
+.m_apply
+	clc
+	adc yaw
+	sta yaw
+	lda mouse_rem
+	sta mouse_turn
+	lda #0
+	sta mouse_turn_h
+	plp
 	rts
 
 ; turn_acc += vel_ms<<6 (24-bit); A = min(sum>>10, 255); turn_acc &= $03FF

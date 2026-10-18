@@ -7,6 +7,8 @@ control_text
 	!scr "^Space...^ Fire",0
 	!scr "^K.......^ Use switch (triangle)",0
 	!scr "^1234....^ Change weapon",0
+	!scr "^F5......^ Quick save (non-krill)",0
+	!scr "^F7......^ Quick load",0
 	!scr " ",0
 	!scr "If you have a mouse in port 1 and",0
 	!scr "you have enabled it in the options,",0

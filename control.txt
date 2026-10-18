@@ -3,6 +3,8 @@
 ^Space...^ Fire
 ^K.......^ Use switch (triangle)
 ^1234....^ Change weapon
+^F5......^ Quick save (non-krill)
+^F7......^ Quick load
 
 If you have a mouse in port 1 and
 you have enabled it in the options,

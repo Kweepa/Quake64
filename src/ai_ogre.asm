@@ -101,8 +101,8 @@ ai_ogre_entry
 	bcs .rts
 	jsr rnd8
 	and #3
-	clc
-	adc #OGRE_SAW_DMG
+	asl			; 0/2/4/6, carry clear
+	adc #OGRE_SAW_DMG	; 12/14/16/18
 	sta rot0
 	lda player_hp
 	beq .rts

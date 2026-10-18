@@ -163,7 +163,7 @@ mesh_nx		= $c7			; unique X count
 mesh_nz		= $c8
 xid_ptr		= $c9			; + $ca → per-vert X slot
 zid_ptr		= $cb			; + $cc → per-vert Z slot
-; $cd/$ce free
+; $cd = mouse_en (mem.asm). $ce free.
 
 ; Clip / project / enemy-rotate hoist scratch
 ei0		= $cf			; mesh_clip edge endpoint indices

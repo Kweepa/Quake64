@@ -95,7 +95,7 @@ tmp4		= $06
 tmp5		= $07
 aux_l		= $fd
 aux_h		= $fe
-mouse_en	= $38			; match zp.asm — 1351 on/off (survives locode LOAD)
+; mouse_en is $cd in mem.asm. $38 is dt_ms once GAME is running.
 
 *= LOCODE_BASE
 	jmp run_menu

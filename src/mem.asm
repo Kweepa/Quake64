@@ -10,7 +10,8 @@
 ;
 ; Boot $0801: koala cover (splashc/splash), then menu overlay, then game at $0900.
 ; Survives GAME load: rb_n $08F5-$08F6, reboot stub $08F9, level_num $08FC,
-; selectors $08FD–$08FF.
+; selectors $08FD–$08FF, mouse_en at $cd (not the play hole under rb_n —
+; boot still owns that while the menu runs).
 ; $01: $30 = 64K RAM (game / copy_tab). $36 = I/O + KERNAL, BASIC out (init/IRQ).
 ; $34 is not I/O — PLA gives RAM at $D000 when LORAM=HIRAM=0.
 BANK_RAM	= $30
@@ -64,6 +65,10 @@ level_num	= $08FC			; 1..8 → e1m1..e1m8
 effects_vol	= $08FD			; menu SFX level 0..15 → SID $d418
 game_complete	= $08FE
 difficulty	= $08FF			; menu skill 0..2 (Flesh / Nails / Nightmare)
+; 1351 Port 1 on/off (menu detect/toggle). Not $38 — GAME uses that for dt_ms,
+; so a flag left there is overwritten every frame and look never runs.
+; Not KERNAL ZP $90–$bf. init_irq / LoadLevel must not clear it.
+mouse_en	= $cd
 MENU_COPY_TAB	= LOCODE_BASE + 3
 
 ; Menu overlay (VIC bank 1). Unused by the game image.
@@ -338,8 +343,18 @@ cheat_b		= cheat_a + 1
 cheat_c		= cheat_b + 1
 cheat_req	= cheat_c + 1		; 0 / CHEAT_REQ_*
 CHEAT_BSS_END	= cheat_req + 1
-!if CHEAT_BSS_END > RB_CELL {
-	!error "cheat BSS overlaps rb_n"
+; 1351 POTX. Play only (boot is finished). mouse_en itself is ZP $cd.
+mouse_x		= CHEAT_BSS_END		; last SID POTX >> 2 (6-bit)
+mouse_turn	= mouse_x + 1		; 16-bit signed sum of 5-bit pot deltas (4 = 1 yaw tick)
+mouse_turn_h	= mouse_turn + 1
+mouse_pb0	= mouse_turn_h + 1	; accum_keys PB0 bits (RMB vs 1/3/5)
+mouse_ok	= mouse_pb0 + 1		; 0 = next POTX is a baseline, not a delta
+mouse_rem	= mouse_ok + 1		; sub-tick remainder (0..3) carried between frames
+mouse_lim	= mouse_rem + 1		; read_input: max |ticks| this frame (2x keyboard rate)
+mouse_v		= mouse_lim + 1		; last unwrapped delta, clamped ±47 (alias picker)
+MOUSE_BSS_END	= mouse_v + 1
+!if MOUSE_BSS_END > RB_CELL {
+	!error "mouse BSS overlaps rb_n"
 }
 
 SKEL_MAX_VERTS	= 48
@@ -521,7 +536,7 @@ SHAM_HIT_H	= 10		; grenade Y span above feet (exclusive)
 SHAM_PAIN_MS	= 2000		; Q1 pain_finished = time + 2
 SHAM_PAIN_ALWAYS	= 80		; damage/80 flinch; 400÷5 because HP is ÷5
 CHTHON_FIRE2	= 17		; second throw in the attack clip (vert 13)
-OGRE_SAW_DMG	= 6		; 6–9 with rnd&3
+OGRE_SAW_DMG	= 12		; 12/14/16/18 = 2×(6+(rnd&3))
 KNIGHT_SLASH_DMG	= 4		; 4–7 with rnd&3 (Quake ai_melee *3 vs ogre *4)
 KNIGHT_RUNATK_FIRE	= 5		; runattack clip-local hit (0-indexed)
 KNIGHT_ATKB_FIRE	= 7		; attackb clip-local hit (0-indexed)
